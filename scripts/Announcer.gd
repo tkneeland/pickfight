@@ -21,6 +21,7 @@ extends Node
 
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
 ## The MATCH POINT plate (#825), shown as each round starts.
 const MatchPointPlateScript := preload("res://scripts/MatchPointPlate.gd")
 const RoundWinRingScript := preload("res://scripts/RoundWinRing.gd")
@@ -55,8 +56,7 @@ var _round_manager: Node = null
 var _lengths: Dictionary = {}
 
 func _ready() -> void:
-	get_tree().node_added.connect(_on_node_added)
-	_watch_subtree(get_tree().root)
+	HookUtilScript.watch_tree(get_tree(), _on_node_added)
 
 func _process(_delta: float) -> void:
 	var now: int = GameClockScript.now_msec()
@@ -113,11 +113,6 @@ func _length(sound: StringName) -> float:
 	return _lengths[sound]
 
 # --- Watching the tree ---------------------------------------------------------
-
-func _watch_subtree(node: Node) -> void:
-	_on_node_added(node)
-	for child in node.get_children():
-		_watch_subtree(child)
 
 func _on_node_added(node: Node) -> void:
 	# A lobby how-to-play demo's puppets (#219) are never announced.

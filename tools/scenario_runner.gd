@@ -1160,6 +1160,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_keeps_same_podium_and_resets_title_colour_review_ui",
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
+	"event_cooldown_keeps_out_of_tree_players_refactor_audio",
+	"expanding_rings_share_base_and_free_refactor_audio",
+	"hit_feedback_and_music_quit_guard_refactor_audio",
+	"night_glow_rehung_after_other_night_exits_refactor_audio",
 	"lobby_kick_needs_second_press",
 	"join_screen_remembers_last_room_code",
 	"join_screen_hints_when_a_code_letter_is_dropped",
@@ -3915,6 +3919,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_settings_language_change_rewords_every_label_review_ui()
 		"credits_cover_the_settings_toggle_review_ui":
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
+		"event_cooldown_keeps_out_of_tree_players_refactor_audio":
+			return await _scenario_event_cooldown_keeps_out_of_tree_players_refactor_audio()
+		"expanding_rings_share_base_and_free_refactor_audio":
+			return await _scenario_expanding_rings_share_base_and_free_refactor_audio()
+		"hit_feedback_and_music_quit_guard_refactor_audio":
+			return await _scenario_hit_feedback_and_music_quit_guard_refactor_audio()
+		"night_glow_rehung_after_other_night_exits_refactor_audio":
+			return await _scenario_night_glow_rehung_after_other_night_exits_refactor_audio()
 		"lobby_kick_needs_second_press":
 			return await _scenario_lobby_kick_needs_second_press()
 		"join_screen_remembers_last_room_code":
@@ -54233,6 +54245,182 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	await process_frame
 	PadMenuScript368.reset()
 	_scenario_completed = true
+	return failures
+## Refactor (audio/juice): the shared EventCooldown guards one source per
+## channel, and its VelocityTracker keeps a player that leaves the tree (a
+## persistent player between stages) and drops it only once freed -- the
+## behaviour SfxHooks now shares with Juice.
+func _scenario_event_cooldown_keeps_out_of_tree_players_refactor_audio() -> Array[String]:
+	var failures: Array[String] = []
+	var cooldown_script: GDScript = preload("res://scripts/EventCooldown.gd")
+	var cooldown: RefCounted = cooldown_script.new()
+	var source := Node.new()
+	if not cooldown.ready(source, 5):
+		failures.append("a source's first event was held back by the cooldown")
+	if cooldown.ready(source, 5):
+		failures.append("a second event in the same frame passed the cooldown")
+	if not cooldown.ready(source, 5, "grunt"):
+		failures.append("another channel of the same source was muted by its first event")
+	await _await_ticks(6)
+	if not cooldown.ready(source, 5):
+		failures.append("the source was still on cooldown after 6 physics frames")
+	source.free()
+	var body_script := GDScript.new()
+	body_script.source_code = "extends RigidBody2D\nvar alive: bool = true\n"
+	body_script.reload()
+	var body := RigidBody2D.new()
+	body.set_script(body_script)
+	body.freeze = true
+	root.add_child(body)
+	var floor_node := Node2D.new()
+	var tracker: RefCounted = cooldown_script.VelocityTracker.new()
+	tracker.track(body)
+	body.linear_velocity = Vector2(0.0, 800.0)
+	tracker.step()
+	if not is_equal_approx(tracker.landing_speed(floor_node, body, 350.0), 800.0):
+		failures.append("a body arriving at 800 px/s was not a landing at 800")
+	if tracker.landing_speed(floor_node, body, 900.0) >= 0.0:
+		failures.append("a body below the minimum speed counted as a landing")
+	root.remove_child(body)
+	tracker.step()
+	if not tracker.players.has(body):
+		failures.append("a player out of the tree was dropped from tracking")
+	root.add_child(body)
+	body.linear_velocity = Vector2(0.0, 600.0)
+	tracker.step()
+	if not is_equal_approx(tracker.landing_speed(floor_node, body, 350.0), 600.0):
+		failures.append("a player back in the tree was not tracked again")
+	body.free()
+	tracker.step()
+	if not tracker.players.is_empty():
+		failures.append("a freed player was kept in tracking")
+	floor_node.free()
+	_scenario_completed = true
+	return failures
+## Refactor (audio/juice): the pickup spawn ring and the round-win rings are
+## both ExpandingRing.gd, keep their own look, and free themselves once their
+## lifetime is up; PlayOfRound reads ReplayBuffer's capture rate.
+func _scenario_expanding_rings_share_base_and_free_refactor_audio() -> Array[String]:
+	var failures: Array[String] = []
+	var pickup_script: GDScript = preload("res://scripts/PickupSpawnRing.gd")
+	var win_script: GDScript = preload("res://scripts/RoundWinRing.gd")
+	var pickup: Node2D = pickup_script.new()
+	var win: Node2D = win_script.new()
+	for ring: Node2D in [pickup, win]:
+		if not (ring.get_script() as Script).get_base_script().resource_path.ends_with("ExpandingRing.gd"):
+			failures.append("%s does not extend ExpandingRing.gd" % ring.name)
+	if not is_equal_approx(float(pickup.get("lifetime_sec")), 0.5) or int(pickup.get("ring_count")) != 1:
+		failures.append("the pickup ring lost its 0.5 s single-ring look")
+	if not is_equal_approx(float(win.get("lifetime_sec")), 0.8) or int(win.get("ring_count")) != 2:
+		failures.append("the round-win ring lost its 0.8 s two-ring look")
+	if pickup.get("color") != Color(1.0, 0.85, 0.3, 1.0):
+		failures.append("the pickup ring is no longer gold")
+	root.add_child(pickup)
+	root.add_child(win)
+	var ok: bool = await _await_condition(func() -> bool:
+		return not is_instance_valid(pickup) and not is_instance_valid(win), 3000)
+	if not ok:
+		failures.append("a ring did not free itself after its lifetime")
+		for ring: Variant in [pickup, win]:
+			if is_instance_valid(ring):
+				(ring as Node).free()
+	var play_of_round: GDScript = preload("res://scripts/PlayOfRound.gd")
+	var replay: GDScript = preload("res://scripts/ReplayBuffer.gd")
+	if int(play_of_round.get_script_constant_map()["CAPTURE_FPS"]) != int(replay.get_script_constant_map()["CAPTURE_FPS"]):
+		failures.append("PlayOfRound's CAPTURE_FPS no longer matches ReplayBuffer's")
+	_scenario_completed = true
+	return failures
+## Refactor (audio/juice) small fixes: a window close while Music is already
+## quitting goes through the `_quitting` guard (no second release-and-quit);
+## pooled damage numbers are marked to skip Text size; and the 0-damage
+## cooldown keys on an int and forgets expired pairs.
+func _scenario_hit_feedback_and_music_quit_guard_refactor_audio() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	var fresh: Node = (preload("res://scripts/Music.gd") as Script).new()
+	root.add_child(fresh)
+	await process_frame
+	fresh.set("_current", "lobby")
+	fresh.set("_quitting", true)
+	var accept_was: bool = auto_accept_quit
+	auto_accept_quit = false
+	fresh.notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
+	auto_accept_quit = accept_was
+	if String(fresh.get("_current")) != "lobby":
+		failures.append("a window close while already quitting started a second release-and-quit")
+	fresh.free()
+	if music != null:
+		music.set_volume(music.volume, false)
+	var feedback_script: GDScript = preload("res://scripts/HitFeedback.gd")
+	var number: Label = feedback_script.DamageNumber.new()
+	number.setup(Vector2.ZERO, 12.0, 20)
+	if not number.has_meta(preload("res://scripts/TextScale.gd").META_SKIP):
+		failures.append("a damage number is not marked to skip Text size")
+	number.free()
+	var feedback: Node2D = feedback_script.new()
+	var attacker := Node.new()
+	var victims: Array[Node] = []
+	for i in 70:
+		victims.append(Node.new())
+	if not feedback._zero_allowed(attacker, victims[0]):
+		failures.append("the first 0 for a pair was held back")
+	if feedback._zero_allowed(attacker, victims[0]):
+		failures.append("a second 0 for the same pair in the same frame was shown")
+	if not feedback._zero_allowed(victims[0], attacker):
+		failures.append("the reversed pair shared the first pair's cooldown")
+	for i in range(1, 70):
+		feedback._zero_allowed(attacker, victims[i])
+	await _await_ticks(feedback_script.ZERO_COOLDOWN_FRAMES + 1)
+	feedback._zero_allowed(attacker, victims[0])
+	var kept: int = (feedback.get("_last_zero_frame") as Dictionary).size()
+	if kept != 1:
+		failures.append("the 0-damage cooldown kept %d pairs after they all expired, want 1" % kept)
+	for victim: Node in victims:
+		victim.free()
+	attacker.free()
+	feedback.free()
+	_scenario_completed = true
+	return failures
+## Refactor (audio/juice): NightLighting finds players once, not by a group
+## scan every frame. A persistent player lit by one night stage whose glow is
+## taken off when an earlier night stage leaves gets it hung again, and a
+## player added later is lit with a head glow that follows it.
+func _scenario_night_glow_rehung_after_other_night_exits_refactor_audio() -> Array[String]:
+	var failures: Array[String] = []
+	var holder: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(holder, Vector2(0.0, -2000.0))
+	var lamps: Array[Vector2] = []
+	var first_stage := Node2D.new()
+	get_root().add_child(first_stage)
+	var first: Node2D = NightLightingScript_review_gp.new()
+	first_stage.add_child(first)
+	first.setup(lamps)
+	await _await_ticks(2)
+	var second_stage := Node2D.new()
+	get_root().add_child(second_stage)
+	var second: Node2D = NightLightingScript_review_gp.new()
+	second_stage.add_child(second)
+	second.setup(lamps)
+	await _await_ticks(2)
+	first_stage.queue_free()
+	await _await_ticks(3)
+	if player.get_node_or_null("NightGlow") == null:
+		failures.append("the player lost its glow when the earlier night stage left while another was up")
+	var late: RigidBody2D = _spawn_player(holder, Vector2(300.0, -2000.0))
+	await _await_ticks(3)
+	if late.get_node_or_null("NightGlow") == null:
+		failures.append("a player added after the night stage was never lit")
+	var head: PointLight2D = second.head_glows.get(late.get_instance_id())
+	if head == null:
+		failures.append("a player added after the night stage got no head glow")
+	elif late.has_method("weapon_head_position") and head.global_position.distance_to(late.weapon_head_position()) > 40.0:
+		failures.append("the late player's head glow does not follow its weapon head")
+	second_stage.queue_free()
+	await _await_ticks(3)
+	if player.get_node_or_null("NightGlow") != null or late.get_node_or_null("NightGlow") != null:
+		failures.append("a player kept its night glow after the last night stage left")
+	await _teardown(holder)
+	return failures
 	return failures
 
 ## Issue #992: the lobby's Kick button is two-step. One press only arms it

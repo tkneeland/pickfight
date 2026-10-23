@@ -38,6 +38,13 @@ var head_glows: Dictionary = {}
 var _attached_glows: Array[Node] = []
 var _texture: GradientTexture2D
 var _time: float = 0.0
+## The players and pickups this node lights, found once when it enters the
+## tree and then as each one is added, never by a per-frame group scan:
+## instance ids, whether each is a player, and the glow hung on each (re-hung
+## if another night stage's exit took it off).
+var _lit_ids: PackedInt64Array = []
+var _lit_is_player: Array[bool] = []
+var _lit_glows: Array = []
 
 ## Builds the lights. `lamp_points` are world positions for stage lamps.
 func setup(lamp_points: Array[Vector2]) -> void:
@@ -75,48 +82,100 @@ func _on_stage_exiting() -> void:
 func _ready() -> void:
 	set_process(true)
 
+## Lights every player and pickup already in the tree, then each one added.
+func _enter_tree() -> void:
+	var tree: SceneTree = get_tree()
+	if not tree.node_added.is_connected(_on_node_added):
+		tree.node_added.connect(_on_node_added)
+	for player: Node in tree.get_nodes_in_group("players"):
+		_consider(player)
+	for pickup: Node in tree.get_nodes_in_group("pickups"):
+		_consider(pickup)
+
+func _exit_tree() -> void:
+	var tree: SceneTree = get_tree()
+	if tree.node_added.is_connected(_on_node_added):
+		tree.node_added.disconnect(_on_node_added)
+
+## Players and pickups join their group in their own `_ready`, after the tree
+## reports them added: a node not yet ready is looked at once it is.
+func _on_node_added(node: Node) -> void:
+	if not node is Node2D or node is PointLight2D:
+		return
+	if node.is_node_ready():
+		_consider(node)
+	else:
+		node.ready.connect(_consider.bind(node), CONNECT_ONE_SHOT)
+
+func _consider(node: Node) -> void:
+	if not is_instance_valid(node) or not node.is_inside_tree():
+		return
+	var is_player: bool = node.is_in_group("players")
+	if not is_player and not node.is_in_group("pickups"):
+		return
+	if is_player and not node is Node2D:
+		return
+	var id: int = node.get_instance_id()
+	if _lit_ids.has(id):
+		return
+	_lit_ids.append(id)
+	_lit_is_player.append(is_player)
+	_lit_glows.append(_hang_glow(node, is_player))
+	if is_player:
+		var head: PointLight2D = _make_light(GLOW_COLOR, HEAD_GLOW_SCALE, GLOW_ENERGY)
+		head.name = "HeadGlow%d" % id
+		add_child(head)
+		head_glows[id] = head
+		_place_head_glow(node as Node2D, head)
+
+## The glow `holder` carries: its own if it has one already, else a new one.
+func _hang_glow(holder: Node, is_player: bool) -> Node:
+	var existing: Node = holder.get_node_or_null(GLOW_NAME)
+	if existing != null and not existing.is_queued_for_deletion():
+		return existing
+	var glow: PointLight2D = _make_light(GLOW_COLOR, PLAYER_GLOW_SCALE if is_player else PICKUP_GLOW_SCALE, GLOW_ENERGY)
+	glow.name = GLOW_NAME
+	holder.add_child(glow)
+	_attached_glows.append(glow)
+	return glow
+
 func _process(delta: float) -> void:
 	_time += delta
 	var steady: bool = PartKitScript.reduce_flash(self)
 	for i in lamps.size():
 		var flicker: float = 0.0 if steady else 0.08 * sin(_time * 5.0 + i * 1.7)
 		lamps[i].energy = LAMP_ENERGY + flicker
-	for player in get_tree().get_nodes_in_group("players"):
-		_light_player(player as Node2D)
-	for pickup in get_tree().get_nodes_in_group("pickups"):
-		if pickup.get_node_or_null(GLOW_NAME) == null:
-			var glow: PointLight2D = _make_light(GLOW_COLOR, PICKUP_GLOW_SCALE, GLOW_ENERGY)
-			glow.name = GLOW_NAME
-			pickup.add_child(glow)
-			_attached_glows.append(glow)
-	for id in head_glows.keys():
-		if not is_instance_valid(instance_from_id(id)):
-			(head_glows[id] as Node).queue_free()
-			head_glows.erase(id)
+	var k: int = _lit_ids.size() - 1
+	while k >= 0:
+		var id: int = _lit_ids[k]
+		var holder: Node = instance_from_id(id) as Node
+		if holder == null:
+			# Freed: drop it, and its head glow, which is this node's own.
+			if head_glows.has(id):
+				(head_glows[id] as Node).queue_free()
+				head_glows.erase(id)
+			_lit_ids.remove_at(k)
+			_lit_is_player.remove_at(k)
+			_lit_glows.remove_at(k)
+		elif holder.is_inside_tree() and holder.is_in_group("players" if _lit_is_player[k] else "pickups"):
+			var glow: Variant = _lit_glows[k]
+			if not is_instance_valid(glow) or (glow as Node).get_parent() != holder:
+				_lit_glows[k] = _hang_glow(holder, _lit_is_player[k])
+			if _lit_is_player[k]:
+				_place_head_glow(holder as Node2D, head_glows[id])
+		k -= 1
 
-func _light_player(player: Node2D) -> void:
-	if player == null:
-		return
-	if player.get_node_or_null(GLOW_NAME) == null:
-		var glow: PointLight2D = _make_light(GLOW_COLOR, PLAYER_GLOW_SCALE, GLOW_ENERGY)
-		glow.name = GLOW_NAME
-		player.add_child(glow)
-		_attached_glows.append(glow)
-	var id: int = player.get_instance_id()
-	if not head_glows.has(id):
-		var head: PointLight2D = _make_light(GLOW_COLOR, HEAD_GLOW_SCALE, GLOW_ENERGY)
-		head.name = "HeadGlow%d" % id
-		add_child(head)
-		head_glows[id] = head
-	# The head glow is not the player's child: hide it with the player.
+## The head glow is not the player's child: it follows the weapon head, and
+## hides with the player.
+func _place_head_glow(player: Node2D, head: PointLight2D) -> void:
 	var lit: bool = player.visible and player.get("alive") != false
-	(head_glows[id] as PointLight2D).visible = lit
+	head.visible = lit
 	if not lit:
 		return
 	if player.has_method("weapon_head_position"):
-		(head_glows[id] as PointLight2D).global_position = player.weapon_head_position()
+		head.global_position = player.weapon_head_position()
 	else:
-		(head_glows[id] as PointLight2D).global_position = player.global_position
+		head.global_position = player.global_position
 
 func _glow_hazards(node: Node) -> void:
 	for child in node.get_children():

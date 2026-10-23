@@ -22,7 +22,9 @@ const SLOW_FACTOR: float = 0.5
 const MIN_PLAY_SEC: float = 1.5
 ## Kept free at the end of the pause, so the clip is gone before it is.
 const END_MARGIN_MSEC: int = 250
-const CAPTURE_FPS: int = 12
+const ReplayBufferScript := preload("res://scripts/ReplayBuffer.gd")
+## The replay buffer's capture rate: the clip's frames are its frames.
+const CAPTURE_FPS: int = ReplayBufferScript.CAPTURE_FPS
 
 signal finished
 

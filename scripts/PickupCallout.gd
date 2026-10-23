@@ -6,6 +6,7 @@ extends Node2D
 ## the name tags. At most one per fighter: a new grab replaces the old label.
 ## Self-contained: `Pickup._on_body_entered` is the only caller.
 
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const EffectStreamScript := preload("res://scripts/EffectStream.gd")
@@ -49,8 +50,7 @@ static func show_at(parent: Node, at: Vector2, weapon_id: String, tint: Color, k
 	if parent == null or not parent.is_inside_tree():
 		return null
 	# Settings > Pickup callouts (#882); on when there is no Sfx autoload.
-	var sfx: Node = parent.get_node_or_null("/root/Sfx")
-	if sfx != null and not bool(sfx.get("pickup_callouts")):
+	if not HookUtilScript.sfx_flag(parent, &"pickup_callouts", true):
 		return null
 	for old: Node in parent.get_tree().get_nodes_in_group(GROUP):
 		if int(old.get("owner_key")) == key:

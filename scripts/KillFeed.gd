@@ -39,6 +39,7 @@ const ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
 ## with an ink outline and a hard shadow; text is cream, the accent or the
 ## player's colour.
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
 const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 const PLATE_FILL: Color = UiThemeScript.INDIGO_PANEL
 ## Victory cards and the stats table hold small coloured text, so they take a
@@ -112,8 +113,7 @@ func _process(delta: float) -> void:
 func push_ko(killer_name: String, killer_color: Color, victim_name: String, victim_color: Color) -> void:
 	if not mirror:
 		EffectStreamScript.record("feed_ko", {"kn": killer_name, "kc": killer_color, "vn": victim_name, "vc": victim_color})
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	if sfx != null and not bool(sfx.get("kill_feed")):
+	if not HookUtilScript.sfx_flag(self, &"kill_feed", true):
 		return
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", UiThemeScript.plate(PLATE_FILL, 12, 1, true, 8))
