@@ -1120,6 +1120,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_keeps_same_podium_and_resets_title_colour_review_ui",
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
+	"stage_platform_geometry_unchanged_refactor_platforms",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3789,6 +3790,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_settings_language_change_rewords_every_label_review_ui()
 		"credits_cover_the_settings_toggle_review_ui":
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
+		"stage_platform_geometry_unchanged_refactor_platforms":
+			return await _scenario_stage_platform_geometry_unchanged_refactor_platforms()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -53073,3 +53076,137 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	PadMenuScript368.reset()
 	_scenario_completed = true
 	return failures
+# --- Stage platform parts (refactor_platforms) -----------------------------------
+## The table every stage's static terrain must still match, one line per
+## fact: recorded from the stages before their plain platforms and floor kill
+## zones became `scenes/parts/Platform.tscn` and `scenes/parts/KillFloor.tscn`
+## instances, so that migration is provably lossless.
+const STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS: String = "res://tools/stage_platform_geometry.txt"
+## Where the scenario writes the table it measured, to diff against or to copy
+## over the committed one after a deliberate geometry change.
+const STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS: String = "user://stage_platform_geometry_actual.txt"
+## Every stage's static bodies and its KillZone, as authored (instanced, not in
+## the tree): global transform, layers, z, every collision shape (size, one-way)
+## and polygon (points, colour) under them; then, in the tree, the colour each
+## of those polygons takes from the stage mood. Compared line for line with
+## the committed table. A stage newer than the table is measured but not
+## compared; a stage in the table that no longer loads fails.
+func _scenario_stage_platform_geometry_unchanged_refactor_platforms() -> Array[String]:
+	var failures: Array[String] = []
+	var expected: Dictionary = {}
+	for raw: String in FileAccess.get_file_as_string(STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS).split("\n", false):
+		var line: String = raw.strip_edges(false, true)
+		if line.is_empty() or line.begins_with("#"):
+			continue
+		var stage_name: String = line.get_slice("|", 0)
+		# Packed arrays are values: append to a copy and store it back.
+		var stage_lines: PackedStringArray = expected.get(stage_name, PackedStringArray())
+		stage_lines.append(line)
+		expected[stage_name] = stage_lines
+	if expected.size() < 40:
+		failures.append("geometry table %s covers %d stages, wants 40+" % [STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS, expected.size()])
+	var stages: PackedStringArray = []
+	for file: String in DirAccess.get_files_at("res://scenes/stages"):
+		if file.ends_with(".tscn"):
+			stages.append(file.get_basename())
+	stages.sort()
+	var measured: PackedStringArray = []
+	for stage_name: String in stages:
+		var lines: PackedStringArray = await _stage_geometry_lines_refactor_platforms(stage_name)
+		measured.append_array(lines)
+		if not expected.has(stage_name):
+			continue
+		var want: PackedStringArray = expected[stage_name]
+		if lines == want:
+			continue
+		var shown: int = 0
+		for i in maxi(lines.size(), want.size()):
+			var got_line: String = lines[i] if i < lines.size() else "<nothing>"
+			var want_line: String = want[i] if i < want.size() else "<nothing>"
+			if got_line != want_line:
+				failures.append("%s line %d: got %s, wanted %s" % [stage_name, i, got_line, want_line])
+				shown += 1
+				if shown >= 3:
+					break
+	for stage_name: String in expected:
+		if not stages.has(stage_name):
+			failures.append("%s is in the geometry table but not in scenes/stages" % stage_name)
+	var out := FileAccess.open(STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS, FileAccess.WRITE)
+	if out != null:
+		out.store_string("\n".join(measured) + "\n")
+		out.close()
+	if not failures.is_empty():
+		failures.append("measured table written to %s" % ProjectSettings.globalize_path(STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS))
+	_scenario_completed = true
+	return failures
+
+func _stage_geometry_lines_refactor_platforms(stage_name: String) -> PackedStringArray:
+	var out: PackedStringArray = []
+	var instance: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate()
+	var nodes: Array[Node] = instance.find_children("*", "StaticBody2D", true, false)
+	var kill_zone: Node = instance.get_node_or_null("KillZone")
+	if kill_zone != null:
+		nodes.append(kill_zone)
+	for node: Node in nodes:
+		var path: String = _geometry_path_refactor_platforms(instance, node)
+		var body: CollisionObject2D = node as CollisionObject2D
+		var head: String = "%s|%s|%s|%s|%s|layer=%d|mask=%d|z=%d|zrel=%s|visible=%s" % [stage_name,
+				"body" if node is StaticBody2D else "kill", path, node.get_class(),
+				var_to_str(_geometry_xform_refactor_platforms(instance, body)),
+				body.collision_layer, body.collision_mask, body.z_index, body.z_as_relative, body.visible]
+		if node is StaticBody2D:
+			var static_body: StaticBody2D = node
+			head += "|material=%s|vel=%s|spin=%s" % [static_body.physics_material_override != null,
+					var_to_str(static_body.constant_linear_velocity), static_body.constant_angular_velocity]
+		else:
+			var script: Script = node.get_script()
+			head += "|script=%s" % (script.resource_path if script != null else "")
+			for prop: Dictionary in node.get_property_list():
+				if int(prop["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE and int(prop["usage"]) & PROPERTY_USAGE_STORAGE:
+					head += "|%s=%s" % [prop["name"], var_to_str(node.get(prop["name"]))]
+		out.append(head)
+		for child: Node in node.get_children():
+			if child is CollisionShape2D:
+				var shape_node: CollisionShape2D = child
+				var shape: Shape2D = shape_node.shape
+				out.append("%s|shape|%s/%s|%s|%s|%s|oneway=%s|disabled=%s" % [stage_name, path, child.name,
+						var_to_str(shape_node.transform), shape.get_class() if shape != null else "null",
+						var_to_str(shape.get("size")) if shape != null else "", shape_node.one_way_collision,
+						shape_node.disabled])
+			elif child is Polygon2D:
+				var poly: Polygon2D = child
+				out.append("%s|poly|%s/%s|%s|%s|%s|z=%d|visible=%s|texture=%s|offset=%s" % [stage_name, path,
+						child.name, var_to_str(poly.transform), var_to_str(poly.polygon), var_to_str(poly.color),
+						poly.z_index, poly.visible, poly.texture != null, var_to_str(poly.offset)])
+			else:
+				out.append("%s|child|%s/%s|%s" % [stage_name, path, child.name, child.get_class()])
+	# In the tree under a fixed mood: what colour the stage paints each of them.
+	instance.set("stage_index", 0)
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	holder.add_child(instance)
+	for node: Node in instance.find_children("*", "StaticBody2D", true, false):
+		for child: Node in node.get_children():
+			if child is Polygon2D:
+				out.append("%s|tinted|%s/%s|%s" % [stage_name, _geometry_path_refactor_platforms(instance, node),
+						child.name, var_to_str((child as Polygon2D).color)])
+	holder.queue_free()
+	await process_frame
+	return out
+
+func _geometry_path_refactor_platforms(root: Node, node: Node) -> String:
+	var parts: PackedStringArray = []
+	var at: Node = node
+	while at != null and at != root:
+		parts.insert(0, String(at.name))
+		at = at.get_parent()
+	return "/".join(parts)
+
+func _geometry_xform_refactor_platforms(root: Node, node: Node2D) -> Transform2D:
+	var xform: Transform2D = Transform2D.IDENTITY
+	var at: Node = node
+	while at != null and at != root:
+		if at is Node2D:
+			xform = (at as Node2D).transform * xform
+		at = at.get_parent()
+	return xform

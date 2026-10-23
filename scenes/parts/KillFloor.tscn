@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/KillZone.gd" id="1"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
+size = Vector2(8000, 40)
+
+; The floor kill zone every stage has (ADR-0008, ADR-0012): an 8000 px wide
+; box of KillZone.gd beneath the stage. Each stage instances it as a child
+; named `KillZone` and sets only its position; RoundManager rises the node
+; of that name, so keep the name.
+
+[node name="KillFloor" type="Area2D"]
+script = ExtResource("1")
+
+[node name="KillZoneShape" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_kill")
