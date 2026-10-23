@@ -377,6 +377,10 @@ const DIFFICULTY: Dictionary = {
 	"hard": {"react": 0.6, "aim_error": 0.0, "pickup": 1.5},
 }
 
+## The skill level name this bot plays at.
+func difficulty_level() -> String:
+	return difficulty if DIFFICULTY.has(difficulty) else str(HostSettingsScript.shared().bot_difficulty)
+
 ## The multipliers row for this bot's level.
 func skill() -> Dictionary:
 	var level: String = difficulty if DIFFICULTY.has(difficulty) else str(HostSettingsScript.shared().bot_difficulty)
@@ -463,6 +467,9 @@ func think(delta: float) -> Vector2:
 	var canopy: Vector2 = _umbrella_drive()
 	if canopy != Vector2.INF:
 		return canopy
+	var gun: Vector2 = _gun_drive()
+	if gun != Vector2.INF:
+		return gun
 	if mode == "attack" and _alive(_target):
 		_hooked_for = 0.0
 		var brake: Vector2 = _brake()
@@ -1098,6 +1105,28 @@ func _umbrella_drive() -> Vector2:
 	_canopy_up = true
 	var lean: float = clampf((goal.x - me.x) / 400.0, -0.6, 0.6)
 	return Vector2(lean, -1.0).normalized()
+
+## Issue #952: a bot holding a weapon that fires on its own (the boomstick),
+## within GUN_AIM_WINDOW_SEC of its shot, points the head along the line to its
+## target when that is within GUN_RANGE and in clear line of sight. Easy never
+## aims. Vector2.INF when it has no say: any other weapon, shot not near, no
+## clear line, or the Easy level.
+const GUN_AIM_WINDOW_SEC: float = 0.4
+const GUN_RANGE: float = 1200.0
+func _gun_drive() -> Vector2:
+	if not player.has_method("fire_ready_in") or player.fire_ready_in() > GUN_AIM_WINDOW_SEC:
+		return Vector2.INF
+	if difficulty_level() == "easy":
+		return Vector2.INF
+	if not _alive(_target) or not _target.is_in_group("players"):
+		return Vector2.INF
+	if player.has_method("is_teammate") and player.is_teammate(_target):
+		return Vector2.INF
+	var me: Vector2 = player.global_position
+	var to: Vector2 = _target.global_position - me
+	if to.length() > GUN_RANGE or to.length() < 1.0 or _ray_hits(me, _target.global_position):
+		return Vector2.INF
+	return to.normalized()
 
 # --- Moving --------------------------------------------------------------------
 

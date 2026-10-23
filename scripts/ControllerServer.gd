@@ -1861,7 +1861,7 @@ func leave(slot: int) -> bool:
 
 ## Whether `slot`'s phone has pressed Ready (and not un-readied since).
 func slot_ready(slot: int) -> bool:
-	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1 or (slot == _host_pc_slot and not _solo_host_must_ready()))
+	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1 or (slot == _host_pc_slot and not _solo_host_must_ready() and not _online_host_must_start()))
 
 ## Whether `slot`'s own Ready tap is in, ignoring bots and the host-PC seat's
 ## automatic ready (#704: a tap during the play of the round skips it).
@@ -1875,6 +1875,13 @@ func slot_pressed_ready(slot: int) -> bool:
 func _solo_host_must_ready() -> bool:
 	var phase: String = _phase()
 	return room_closed() and (SOLO_PHASES.has(phase) or phase == "victory") # the lone human must Continue too, or the podium never shows (#522)
+
+## Issue #936: in an Online lobby the host PC seat is not ready by itself, or the
+## last remote client to press Ready would start the match. The host's Start
+## (button, Enter, gamepad menu) readies it, so only the host starts. Elsewhere
+## (Couch has no host seat; between rounds, the victory screen) nothing changes.
+func _online_host_must_start() -> bool:
+	return _match_kind == KIND_ONLINE and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby")))
 
 ## Mark `slot` ready or not, as its phone's Ready button would: Solo
 ## practice readies the host (issue #152).
@@ -1943,6 +1950,10 @@ func set_lobby_state(state: Dictionary) -> void:
 	_lobby_state["t"] = "lobby"
 	if MATCH_PHASES.has(str(_lobby_state.get("phase", ""))) and not MATCH_PHASES.has(was):
 		_match_serial += 1
+	# Issue #936: a cancelled Online countdown (someone un-readied) needs the host's
+	# Start again, so a remote client readying back up cannot restart it alone.
+	if was == "countdown" and str(_lobby_state.get("phase", "")) == "lobby" and _online_host_must_start() and _host_pc_slot != -1:
+		_slot_ready[_host_pc_slot] = 0
 	_sync_steam_presence()
 	_send_lobby_to_all()
 	_update_mouse_capture()
