@@ -227,6 +227,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_spots_skip_player_spawns",
 	"every_stage_has_pickup_spot_clear_of_spawns",
 	"spawn_protection_blocks_damage_then_expires",
+	"meteor_does_not_knock_spawn_protected",
+	"rock_does_not_shove_spawn_protected",
 	"roster_heads_do_not_clip_platform_in_play",
 	"trapped_head_phases_home_after_release",
 	"wedged_head_swung_into_wall_frees_on_release",
@@ -2035,6 +2037,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_every_stage_has_pickup_spot_clear_of_spawns()
 		"spawn_protection_blocks_damage_then_expires":
 			return await _scenario_spawn_protection_blocks_damage_then_expires()
+		"meteor_does_not_knock_spawn_protected":
+			return await _scenario_meteor_does_not_knock_spawn_protected()
+		"rock_does_not_shove_spawn_protected":
+			return await _scenario_rock_does_not_shove_spawn_protected()
 		"roster_heads_do_not_clip_platform_in_play":
 			return await _scenario_roster_heads_do_not_clip_platform_in_play()
 		"trapped_head_phases_home_after_release":
@@ -41612,6 +41618,72 @@ func _scenario_umbrella_canopy_reduces_a_meteor_569() -> Array[String]:
 		failures.append("the meteor never hit the umbrella holder")
 	elif player.damage > 20.0:
 		failures.append("a meteor on the canopy face took %.1f of 40, expected it reduced" % player.damage)
+	await _teardown(stage)
+	return failures
+## #991: a spawn-protected fighter is neither hurt nor knocked by a meteor. The
+## unprotected control beside it is both, so the check cannot pass vacuously.
+func _scenario_meteor_does_not_knock_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var speeds: Array[float] = []
+	var damages: Array[float] = []
+	for protected_flag: bool in [true, false]:
+		var player: RigidBody2D = _spawn_player(stage, Vector2(600.0, GROUND_TOP - PLAYER_RADIUS))
+		await _await_ticks(SETTLE_TICKS)
+		player.spawn_protected = protected_flag
+		var meteor: Node2D = preload("res://scripts/Meteor.gd").new()
+		meteor.setup(player.global_position + Vector2(-8.0, -300.0), Vector2(0.0, 900.0), 40.0, 650.0, 16.0, 4000.0)
+		stage.add_child(meteor)
+		var peak: float = 0.0
+		for _i in 40:
+			await physics_frame
+			peak = maxf(peak, absf(player.linear_velocity.x))
+		speeds.append(peak)
+		damages.append(player.damage)
+		player.queue_free()
+		await physics_frame
+	print("      meteor: protected speed %.0f dmg %.0f; unprotected speed %.0f dmg %.0f" % [speeds[0], damages[0], speeds[1], damages[1]])
+	if damages[1] <= 0.0 or speeds[1] < 200.0:
+		failures.append("control: the unprotected fighter was not hurt and knocked (dmg %.1f, speed %.0f)" % [damages[1], speeds[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a meteor" % damages[0])
+	if speeds[0] > 50.0:
+		failures.append("the protected fighter was knocked to %.0f px/s by a meteor" % speeds[0])
+	await _teardown(stage)
+	return failures
+## #991: the same for a falling rock.
+func _scenario_rock_does_not_shove_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var speeds: Array[float] = []
+	var damages: Array[float] = []
+	for protected_flag: bool in [true, false]:
+		var rock: Node2D = FallingRockScene.instantiate()
+		rock.auto_drop = false
+		rock.one_shot = true
+		rock.warning_sec = 0.1
+		rock.damage = 40.0
+		rock.position = ROCK_COLUMN_TOP
+		stage.add_child(rock)
+		var player: RigidBody2D = _spawn_player(stage, Vector2(ROCK_COLUMN_TOP.x + 10.0, GROUND_TOP - PLAYER_RADIUS))
+		await _await_ticks(SETTLE_TICKS)
+		player.spawn_protected = protected_flag
+		rock.drop_now()
+		var peak: float = 0.0
+		for _i in ROCK_FALL_TICKS + 60:
+			await physics_frame
+			peak = maxf(peak, absf(player.linear_velocity.x))
+		speeds.append(peak)
+		damages.append(player.damage)
+		player.queue_free()
+		await physics_frame
+	print("      rock: protected speed %.0f dmg %.0f; unprotected speed %.0f dmg %.0f" % [speeds[0], damages[0], speeds[1], damages[1]])
+	if damages[1] <= 0.0 or speeds[1] < 200.0:
+		failures.append("control: the unprotected fighter was not hurt and shoved (dmg %.1f, speed %.0f)" % [damages[1], speeds[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a rock" % damages[0])
+	if speeds[0] > 50.0:
+		failures.append("the protected fighter was shoved to %.0f px/s by a rock" % speeds[0])
 	await _teardown(stage)
 	return failures
 ## #569: in Sudden Death a hit on the shield face or open canopy face does not

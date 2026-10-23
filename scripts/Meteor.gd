@@ -109,7 +109,7 @@ func _strike(victim: Node) -> void:
 	# Report what the hit actually took off (issue #162): a spawn-protected
 	# player takes nothing, and a report of the full damage would put a
 	# phantom number on screen and buzz their phone. Nothing dealt, nothing
-	# reported; the knock still lands.
+	# reported; a protected fighter is not knocked either (#991).
 	var before: Variant = victim.get("damage")
 	if victim.has_method("mark_hazard"):
 		victim.mark_hazard("meteor")  # achievements (#689)
@@ -120,7 +120,7 @@ func _strike(victim: Node) -> void:
 		dealt = float(after) - float(before)
 	if dealt > 0.0 and victim.has_signal("strike_landed"):
 		victim.emit_signal("strike_landed", victim, dealt, point, not victim.alive)
-	if not victim.alive:
+	if not victim.alive or victim.get("spawn_protected") == true:
 		return
 	# Sideways away from where the meteor came down, with some lift: a meteor
 	# landing square on a player's crown would otherwise drive them into the
