@@ -950,6 +950,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_blocked_by_shield_face_631",
 	"boomerang_passes_through_other_weapon_head_631",
 	"boomerang_passes_through_shield_back_631",
+	"shield_block_plays_sound_and_spark",
 	"career_match_end_sends_per_seat_deltas_503",
 	"career_ko_of_bot_is_not_counted_503",
 	"career_abandoned_match_sends_rounds_not_match_503",
@@ -3442,6 +3443,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_fishing_rod_reel_breaks_on_release()
 		"fishing_rod_reels_teammate_undamaged":
 			return await _scenario_fishing_rod_reels_teammate_undamaged()
+		"shield_block_plays_sound_and_spark":
+			return await _scenario_shield_block_plays_sound_and_spark()
 		"bullet_blocked_by_shield_face_631":
 			return await _scenario_bullet_blocked_by_shield_face_631()
 		"bullet_passes_through_other_weapon_head_631":
@@ -43675,6 +43678,48 @@ func _shot_at_holder(shot: String, weapon_path: String, toward_shooter: bool) ->
 	var taken: float = holder.damage
 	await _teardown(stage)
 	return taken
+var _spark_bursts: int = 0
+func _count_spark_burst(node: Node) -> void:
+	var script: Script = node.get_script()
+	if script != null and script.resource_path == "res://scripts/ShieldSpark.gd":
+		_spark_bursts += 1
+## One shot at a shield holder: how many `shield_block` sounds and spark
+## bursts it caused (#969).
+func _shield_block_counts(shot: String, toward_shooter: bool) -> Dictionary:
+	var sfx: Node = _sfx()
+	_spark_bursts = 0
+	node_added.connect(_count_spark_burst)
+	sfx.start_recording()
+	await _shot_at_holder(shot, SHIELD_PATH, toward_shooter)
+	sfx.stop_recording()
+	node_added.disconnect(_count_spark_burst)
+	var res: Dictionary = {"sound": _sfx_count(sfx, "shield_block"), "sparks": _spark_bursts}
+	return res
+## Issue #969: a shield face stopping a bullet, hook or boomerang plays one
+## `shield_block` and throws one spark burst; the back does neither; Reduce
+## flashes drops the sparks but keeps the sound.
+func _scenario_shield_block_plays_sound_and_spark() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"shield_block"):
+		return ["shield_block is not in the sound table"]
+	var saved: bool = bool(sfx.get("reduce_flash"))
+	sfx.set("reduce_flash", false)
+	for shot: String in ["bullet", "hook", "boomerang"]:
+		var face: Dictionary = await _shield_block_counts(shot, true)
+		print("      shield_block_plays_sound_and_spark: %s face %s" % [shot, face])
+		if face["sound"] != 1 or face["sparks"] != 1:
+			failures.append("%s stopped by the face: %s, expected 1 sound and 1 burst" % [shot, face])
+		var back: Dictionary = await _shield_block_counts(shot, false)
+		if back["sound"] != 0 or back["sparks"] != 0:
+			failures.append("%s past the back: %s, expected none" % [shot, back])
+	sfx.set("reduce_flash", true)
+	var calm: Dictionary = await _shield_block_counts("bullet", true)
+	if calm["sound"] != 1 or calm["sparks"] != 0:
+		failures.append("Reduce flashes on: %s, expected 1 sound and 0 bursts" % calm)
+	sfx.set("reduce_flash", saved)
+	_scenario_completed = true
+	return failures
 func _scenario_bullet_blocked_by_shield_face_631() -> Array[String]:
 	var failures: Array[String] = []
 	var damage: float = await _shot_at_holder("bullet", SHIELD_PATH, true)

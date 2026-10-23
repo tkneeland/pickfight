@@ -122,6 +122,10 @@ const SOUNDS: Dictionary = {
 	"hit_shield": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",
 		"kenney_impact/impactPlate_shield_001.ogg"], "db": 0.0},
+	# A shield face stopping a shot (issue #969): short metal ring, once per block.
+	"shield_block": {"files": [
+		"kenney_impact/impactMetal_medium_000.ogg",
+		"kenney_impact/impactMetal_medium_001.ogg"], "db": -3.0, "max_sec": 0.5},
 	# --- Firing -------------------------------------------------------------
 	"fire_boomstick": {"files": [
 		"kenney_scifi/explosionCrunch_000.ogg",
