@@ -22935,9 +22935,9 @@ func _scenario_controller_page_refused_phone_waits_for_slot() -> Array[String]:
 		failures.append("the close handler does not remember the reason before redrawing")
 	if not _js_function_body(page, "setSlot").contains('if (n >= 0) { closeReason = ""; }'):
 		failures.append("being given a slot does not forget the old refusal")
-	var hint_at: int = state.find('getElementById("hint").style.display = ')
+	var hint_at: int = state.find("var hintShown = ")
 	var hint_line: String = state.substr(hint_at, state.find(";", hint_at) - hint_at) if hint_at >= 0 else ""
-	if not hint_line.contains("= slot >= 0 && ("):
+	if not hint_line.contains("= slot >= 0 && (") or not state.contains("hintEl.style.display = hintDisplay"):
 		failures.append("the 'Drag to swing' hint shows on a phone with no slot: %s" % hint_line)
 	_scenario_completed = true
 	return failures

@@ -229,12 +229,13 @@
     pointer-events: none;
   }
   #modchip.show { display: block; }
-  /* Weak connection (#777): a small non-blocking chip in the top-right corner,
-     clear of the drag area and the hill / lives readouts on the left. */
+  /* Weak connection (#777): a small non-blocking chip on the right, under the
+     Stock lives count (top right) and the gear (44px tall at +44px), so it
+     covers neither; the hill and modifier chips sit on the left. */
   #weak-chip {
     position: fixed;
     z-index: 3;
-    top: 8px;
+    top: calc(env(safe-area-inset-top, 0px) + 96px);
     right: 10px;
     display: none;
     padding: 3px 10px;
@@ -820,6 +821,7 @@
         "LOBBY_TITLE": "Lobby",
         "PHONE_FIRST_TO": "First to",
         "CAREER_LINE": "Matches {0} \u00b7 Wins {1} \u00b7 KOs {2}",
+        "HILL_LINE": "Hill {0} / {1} s",
         "CAREER_MATCHES": "Matches played: {0}",
         "CAREER_MATCH_WINS": "Match wins: {0}",
         "CAREER_ROUND_WINS": "Round wins: {0}",
@@ -965,6 +967,7 @@
       "LOBBY_TITLE": "Lobby",
       "PHONE_FIRST_TO": "Erster bis",
       "CAREER_LINE": "Matches {0} · Siege {1} · KOs {2}",
+      "HILL_LINE": "Hügel {0} / {1} s",
       "CAREER_MATCHES": "Gespielte Matches: {0}",
       "CAREER_MATCH_WINS": "Match-Siege: {0}",
       "CAREER_ROUND_WINS": "Rundensiege: {0}",
@@ -1110,6 +1113,7 @@
       "LOBBY_TITLE": "Lobby",
       "PHONE_FIRST_TO": "Premier à",
       "CAREER_LINE": "Matchs {0} · Victoires {1} · KO {2}",
+      "HILL_LINE": "Colline {0} / {1} s",
       "CAREER_MATCHES": "Matchs joués : {0}",
       "CAREER_MATCH_WINS": "Matchs gagnés : {0}",
       "CAREER_ROUND_WINS": "Manches gagnées : {0}",
@@ -1255,6 +1259,7 @@
       "LOBBY_TITLE": "Lobby",
       "PHONE_FIRST_TO": "El primero a",
       "CAREER_LINE": "Partidas {0} · Victorias {1} · KO {2}",
+      "HILL_LINE": "Colina {0} / {1} s",
       "CAREER_MATCHES": "Partidas jugadas: {0}",
       "CAREER_MATCH_WINS": "Partidas ganadas: {0}",
       "CAREER_ROUND_WINS": "Rondas ganadas: {0}",
@@ -1400,6 +1405,7 @@
       "LOBBY_TITLE": "Lobby",
       "PHONE_FIRST_TO": "O primeiro a",
       "CAREER_LINE": "Partidas {0} · Vitórias {1} · KOs {2}",
+      "HILL_LINE": "Colina {0} / {1} s",
       "CAREER_MATCHES": "Partidas jogadas: {0}",
       "CAREER_MATCH_WINS": "Partidas vencidas: {0}",
       "CAREER_ROUND_WINS": "Rodadas vencidas: {0}",
@@ -1545,6 +1551,7 @@
       "LOBBY_TITLE": "大厅",
       "PHONE_FIRST_TO": "先到",
       "CAREER_LINE": "对局 {0} · 胜场 {1} · 击倒 {2}",
+      "HILL_LINE": "山丘 {0} / {1} 秒",
       "CAREER_MATCHES": "对局场数:{0}",
       "CAREER_MATCH_WINS": "对局胜场:{0}",
       "CAREER_ROUND_WINS": "回合胜场:{0}",
@@ -1690,6 +1697,7 @@
       "LOBBY_TITLE": "ロビー",
       "PHONE_FIRST_TO": "先取",
       "CAREER_LINE": "マッチ {0} · 勝利 {1} · KO {2}",
+      "HILL_LINE": "ヒル {0} / {1} 秒",
       "CAREER_MATCHES": "プレイしたマッチ: {0}",
       "CAREER_MATCH_WINS": "マッチ勝利: {0}",
       "CAREER_ROUND_WINS": "ラウンド勝利: {0}",
@@ -1835,6 +1843,7 @@
       "LOBBY_TITLE": "로비",
       "PHONE_FIRST_TO": "선취",
       "CAREER_LINE": "대전 {0} · 승리 {1} · KO {2}",
+      "HILL_LINE": "언덕 {0} / {1}초",
       "CAREER_MATCHES": "플레이한 대전: {0}",
       "CAREER_MATCH_WINS": "대전 승리: {0}",
       "CAREER_ROUND_WINS": "라운드 승리: {0}",
@@ -1980,6 +1989,7 @@
       "LOBBY_TITLE": "Лобби",
       "PHONE_FIRST_TO": "До",
       "CAREER_LINE": "Матчей {0} · Побед {1} · Нокаутов {2}",
+      "HILL_LINE": "Гора {0} / {1} с",
       "CAREER_MATCHES": "Сыграно матчей: {0}",
       "CAREER_MATCH_WINS": "Побед в матчах: {0}",
       "CAREER_ROUND_WINS": "Побед в раундах: {0}",
@@ -2687,7 +2697,9 @@
   var leftOut = false;
   // Set once the host refused this phone for the match kind (close code 4003, #509).
   var refusedOut = false;
-  var stateTimer = null;
+  var stateTimer = null; // runs only while the round_end countdown is on screen (showState)
+  var hintEl = document.getElementById("hint");
+  var mousePanelEl = document.getElementById("mouse-panel");
   // Issue #194: why the host last closed this phone's socket, kept until it
   // is given a slot, so a refused phone keeps saying so while it retries.
   var closeReason = "";
@@ -2721,16 +2733,22 @@
         text = t("STATE_ELIMINATED") + "\n" + t("STATE_GHOST_HINT");
       }
     }
-    stateEl.textContent = text;
-    stateEl.style.pointerEvents = leftOut ? "auto" : "";
+    if (stateEl.textContent !== text) { stateEl.textContent = text; }
+    var pointerEvents = leftOut ? "auto" : "";
+    if (stateEl.style.pointerEvents !== pointerEvents) { stateEl.style.pointerEvents = pointerEvents; }
+    // Only the round_end countdown changes by itself; everything else calls showState when it changes.
+    var counting = slot >= 0 && !!lobby && lobby.phase === "round_end" && !lobby.paused;
+    if (counting && stateTimer === null) { stateTimer = setInterval(showState, 250); }
+    else if (!counting && stateTimer !== null) { clearInterval(stateTimer); stateTimer = null; }
     nameEl.classList.toggle("locked", inPlay());
     showCareer();
     // Issue #194: no "Drag to swing" on a phone that has no player to swing.
-    document.getElementById("hint").style.display = slot >= 0 && ((lobby && lobby.phase === "playing" &&
-      (lobby.alive || []).indexOf(slot) !== -1) || !lobby) ? "" : "none";
-    var hintShown = document.getElementById("hint").style.display === "";
+    var hintShown = slot >= 0 && ((lobby && lobby.phase === "playing" &&
+      (lobby.alive || []).indexOf(slot) !== -1) || !lobby);
+    var hintDisplay = hintShown ? "" : "none";
+    if (hintEl.style.display !== hintDisplay) { hintEl.style.display = hintDisplay; }
     // Issue #244: the capture affordance, for a desktop pointer only.
-    document.getElementById("mouse-panel").classList.toggle("show",
+    mousePanelEl.classList.toggle("show",
       finePointer && hintShown && !mouseLocked());
   }
 
@@ -2826,7 +2844,7 @@
   function showHill(msg) {
     var n = typeof msg.v === "number" ? msg.v : -1;
     hillEl.classList.toggle("show", n >= 0);
-    hillEl.textContent = "Hill " + n + " / " + (typeof msg.win === "number" ? msg.win : 15) + " s";
+    hillEl.textContent = t("HILL_LINE", n, typeof msg.win === "number" ? msg.win : 15);
   }
 
   // Round modifier chip (issue #908): {t:"mod", v:<title>}; "" hides it. The host sends the translated title.
@@ -2921,7 +2939,6 @@
     lobby = msg;
     var phase = msg.phase;
     if (phase === "round_end") { nextRoundAt = Date.now() + (msg.next || 0) * 1000; }
-    if (stateTimer === null) { stateTimer = setInterval(showState, 250); }
     showState();
     refreshHostControls();
     refreshRulesSummary();
@@ -3845,10 +3862,13 @@
   }
 
   // ---- render + send loop -------------------------------------------------
+  // Whether the last frame drew anything: an idle pad skips clearing a canvas that is already clear.
+  var drewLast = true;
   function draw() {
-    var w = window.innerWidth, h = window.innerHeight;
-    ctx.clearRect(0, 0, w, h);
-    if (!anchor || !point) { return; }
+    var drawing = !!(anchor && point);
+    if (drawing || drewLast) { ctx.clearRect(0, 0, window.innerWidth, window.innerHeight); }
+    drewLast = drawing;
+    if (!drawing) { return; }
     var color = colorOf(slot);
 
     ctx.strokeStyle = color;
@@ -3881,17 +3901,27 @@
 
   // Stream continuously at display rate rather than on pointer events, so the
   // host always has the newest value and a dropped move event costs nothing.
+  // One reused input packet per transport (send() copies the bytes): the bare
+  // 8 bytes on the LAN, [KIND_INPUT][8 bytes] over the relay. Still sent every
+  // frame, changed or not: the host expects a stream at display rate (ADR-0002).
+  var inputBuf = new ArrayBuffer(8), inputView = new DataView(inputBuf);
+  var relayInputBuf = new ArrayBuffer(9), relayInputView = new DataView(relayInputBuf);
+  relayInputView.setUint8(0, KIND_INPUT);
   function frame() {
     if (ws && ws.readyState === WebSocket.OPEN) {
       // Explicit little-endian, because that is what the wire format promises
       // and what the host's decode_float expects. A Float32Array would use
       // platform endianness, which happens to agree on every phone shipping
       // today but is not the contract.
-      var buf = new ArrayBuffer(8);
-      var view = new DataView(buf);
-      view.setFloat32(0, vx, true);
-      view.setFloat32(4, vy, true);
-      if (!RELAY) { ws.send(buf); } else if (relayJoined) { xmit(KIND_INPUT, new Uint8Array(buf)); }
+      if (!RELAY) {
+        inputView.setFloat32(0, vx, true);
+        inputView.setFloat32(4, vy, true);
+        ws.send(inputBuf);
+      } else if (relayJoined) {
+        relayInputView.setFloat32(1, vx, true);
+        relayInputView.setFloat32(5, vy, true);
+        ws.send(relayInputBuf);
+      }
     }
     draw();
     window.requestAnimationFrame(frame);
