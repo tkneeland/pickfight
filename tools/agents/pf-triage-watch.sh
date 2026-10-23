@@ -15,7 +15,8 @@ SEEN=$PF_STATE/.pf-triage-seen; touch "$SEEN"
 [ -f "$PF_STATE/.msg-wake-handled" ] || pf_mtime "$PF_STATE/msg-wake.txt" > "$PF_STATE/.msg-wake-handled" 2>/dev/null
 META_TICKETS=${META_TICKETS:-"702 720 619"}   # meta tickets that never count as a peer's dev queue
 while true; do
-  issues=$(gh api "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null)
+  issues=$(gh api --paginate "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null | jq -s 'add // []' 2>/dev/null)   # every page, one array
+  [ "$issues" = "[]" ] && issues=""
   if [ -n "$issues" ]; then
     if pf_is_triagemaster; then
       u=$(echo "$issues" | jq -r '.[] | select(.pull_request==null and .number!=432) | select(((.labels|map(.name)|map(test("^p[123]$"))|any)|not) or ((.assignees|length)==0)) | .number' | tr '\n' ' ')
@@ -39,7 +40,8 @@ while true; do
   fi
   for peer in ${WATCH_PEERS:-agage-JG}; do
     grep -qx "beacon-$peer" "$SEEN" && continue
-    t=$(gh api "repos/$REPO/issues/432/comments" --jq ".[] | select(.user.login==\"$peer\") | .body" 2>/dev/null | sed -n 's/.*usage @ \([0-9TZ:-]*\).*/\1/p' | head -1)
+    # every page, oldest first: the last match is the peer's newest beacon
+    t=$(gh api --paginate "repos/$REPO/issues/432/comments?per_page=100" --jq ".[] | select(.user.login==\"$peer\") | .body" 2>/dev/null | sed -n 's/.*usage @ \([0-9TZ:-]*\).*/\1/p' | tail -1)
     if [ -n "$t" ] && [ $(( $(date +%s) - $(pf_iso_to_epoch "$t" || echo 0) )) -lt 21600 ]; then
       echo "beacon-$peer" >> "$SEEN"; echo "PEER_BEACON $peer fresh at $t"; exit 0
     fi

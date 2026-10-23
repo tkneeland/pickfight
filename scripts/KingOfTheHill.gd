@@ -58,7 +58,8 @@ var _spot_index: int = 0
 var _since_move: float = 0.0
 var _won: bool = false
 ## The round's time limit (0 for none) and what is left of it. At zero the most
-## hold time wins; a tie sets `overtime` until someone holds the hill alone.
+## hold time wins; a tie sets `overtime`, and then whoever holds the hill alone
+## first wins (anyone, in free-for-all, not only the tied leaders).
 var time_limit_sec: float = 180.0
 var time_left: float = 180.0
 var overtime: bool = false
@@ -263,6 +264,8 @@ func _physics_process(delta: float) -> void:
 		else:
 			hold_time[holder] = hold_of(holder) + delta
 		var held: float = team_hold_of(holder) if teams else hold_of(holder)
+		# In overtime whoever holds the hill alone wins at once: in free-for-all
+		# that is anyone, not only the players tied on hold time (owner's call).
 		if held >= seconds_to_win or overtime:
 			_win(holder, teams)
 	if not _won and time_limit_sec > 0.0 and not overtime:
@@ -314,7 +317,9 @@ func _win(unit: int, teams: bool) -> void:
 	_update_hud()
 
 ## The clock ran out: the most hold time wins (a team's total in Teams); level
-## on top, it is overtime until someone holds the hill alone.
+## on top, it is overtime, and the first player (or team) to hold the hill alone
+## wins. In free-for-all that is anyone on the hill alone, not only the players
+## tied for the lead.
 func _timeout(teams: bool) -> void:
 	var best: float = -1.0
 	var leaders: Array[int] = []

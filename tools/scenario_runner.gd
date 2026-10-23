@@ -161,6 +161,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"conveyor_two_more_stages",
 	"teleporter_moves_player_to_twin",
 	"teleporter_plays_own_sound",
+	"stage_teleporters_pair_up",
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_two_more_stages_spawns_clear",
@@ -1101,7 +1102,16 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"structure_changed_on_new_entity_and_hud_change_review_net",
 	"controller_page_review_fixes_review_net",
 	"stage_check_and_join_urls_cached_review_perf",
+	"bot_chops_wall_at_every_difficulty_review_bp",
+	"pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp",
+	"rebuilt_rig_resets_head_and_swing_state_review_bp",
+	"relay_throttles_bad_room_guesses_review_relay",
+	"relay_rate_limits_client_frames_review_relay",
+	"relay_caps_rooms_and_pending_per_ip_review_relay",
+	"feedback_issue_fences_text_and_defuses_mentions_review_relay",
+	"relay_prunes_empty_rate_limit_keys_review_relay",
 	"online_remote_seats_cannot_start_or_run_the_match_936",
+	"online_host_pc_sets_its_nickname_937",
 	"pad_reaches_invite_and_your_look_picks_review_ui",
 	"esc_closes_any_lobby_popup_review_ui",
 	"restore_defaults_resizes_the_window_review_ui",
@@ -1883,6 +1893,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_teleporter_moves_player_to_twin()
 		"teleporter_plays_own_sound":
 			return await _scenario_teleporter_plays_own_sound()
+		"stage_teleporters_pair_up":
+			return await _scenario_stage_teleporters_pair_up()
 		"ice_patch_slides_player_and_restores":
 			return await _scenario_ice_patch_slides_player_and_restores()
 		"ice_patch_summit_spawns_clear":
@@ -3739,8 +3751,26 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_review_fixes_review_net()
 		"stage_check_and_join_urls_cached_review_perf":
 			return await _scenario_stage_check_and_join_urls_cached_review_perf()
+		"bot_chops_wall_at_every_difficulty_review_bp":
+			return await _scenario_bot_chops_wall_at_every_difficulty_review_bp()
+		"pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp":
+			return await _scenario_pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp()
+		"rebuilt_rig_resets_head_and_swing_state_review_bp":
+			return await _scenario_rebuilt_rig_resets_head_and_swing_state_review_bp()
+		"relay_throttles_bad_room_guesses_review_relay":
+			return await _scenario_relay_throttles_bad_room_guesses_review_relay()
+		"relay_rate_limits_client_frames_review_relay":
+			return await _scenario_relay_rate_limits_client_frames_review_relay()
+		"relay_caps_rooms_and_pending_per_ip_review_relay":
+			return await _scenario_relay_caps_rooms_and_pending_per_ip_review_relay()
+		"feedback_issue_fences_text_and_defuses_mentions_review_relay":
+			return _scenario_feedback_issue_fences_text_and_defuses_mentions_review_relay()
+		"relay_prunes_empty_rate_limit_keys_review_relay":
+			return await _scenario_relay_prunes_empty_rate_limit_keys_review_relay()
 		"online_remote_seats_cannot_start_or_run_the_match_936":
 			return await _scenario_online_remote_seats_cannot_start_or_run_the_match_936()
+		"online_host_pc_sets_its_nickname_937":
+			return await _scenario_online_host_pc_sets_its_nickname_937()
 		"pad_reaches_invite_and_your_look_picks_review_ui":
 			return await _scenario_pad_reaches_invite_and_your_look_picks_review_ui()
 		"esc_closes_any_lobby_popup_review_ui":
@@ -11066,6 +11096,36 @@ func _scenario_teleporter_plays_own_sound() -> Array[String]:
 		failures.append("teleport played for a fighter in the re-entry window")
 	sfx.stop_recording()
 	await _teardown(stage)
+	return failures
+## Stage teleporters (#960): on every stage each Teleporter's twin resolves to
+## a Teleporter whose twin is the first; Islands and Highrise carry one pair
+## each, and no end sits on a spawn or pickup spot.
+func _scenario_stage_teleporters_pair_up() -> Array[String]:
+	var failures: Array[String] = []
+	for f: String in DirAccess.get_files_at("res://scenes/stages"):
+		if not f.ends_with(".tscn"):
+			continue
+		var stage_name: String = f.get_basename()
+		var stage: Node2D = (load("res://scenes/stages/%s" % f) as PackedScene).instantiate() as Node2D
+		get_root().add_child(stage)
+		var ends: Array[Node] = []
+		for child: Node in stage.get_children():
+			if child.get_script() != null and str(child.get_script().resource_path).ends_with("Teleporter.gd"):
+				ends.append(child)
+		for end: Node in ends:
+			var other: Node = end.get_node_or_null(end.get("twin"))
+			if other == null or other == end:
+				failures.append("%s %s has no twin" % [stage_name, end.name])
+			elif other.get_script() != end.get_script() or other.get_node_or_null(other.get("twin")) != end:
+				failures.append("%s %s twin does not point back" % [stage_name, end.name])
+			for marker: Node in stage.get_children():
+				if marker is Marker2D and (marker.name.begins_with("Spawn") or marker.name.begins_with("PickupSpawn")):
+					if (marker as Node2D).position.distance_to((end as Node2D).position) < 50.0:
+						failures.append("%s %s is within 50 px of %s" % [stage_name, end.name, marker.name])
+		if stage_name in ["Islands", "Highrise"] and ends.size() != 2:
+			failures.append("%s has %d teleporters, want 2" % [stage_name, ends.size()])
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## Conveyor drift (#842): drops a player onto a belt (or plain ground), lets
 ## them settle, then returns how far they travelled along x in 90 ticks. The
@@ -30006,13 +30066,14 @@ func _scenario_feedback_relay_builds_github_issue() -> Array[String]:
 				failures.append("labels were %s" % [sent["labels"]])
 			if sent["title"] != "Feedback: Hello world":
 				failures.append("title was '%s'" % sent["title"])
-			var expect_body: String = "Hello world\nsecond line\n\n---\nBuild: 0.3\nOS: macOS\nStage: Ice\n\n_Sent from the in-game feedback button._"
+			var expect_body: String = "```\nHello world\nsecond line\n```\n\n---\nBuild: 0.3\nOS: macOS\nStage: Ice\n\n_Sent from the in-game feedback button._"
 			if sent["body"] != expect_body:
 				failures.append("body was '%s'" % sent["body"])
 	seen.clear()
 	await relay.handle_feedback("2.2.2.2", {"text": long_text})
 	var capped: Variant = JSON.parse_string(seen[0]["body"]) if seen.size() == 1 else {}
-	var head: String = str(capped.get("body", "")).split("\n")[0] if capped is Dictionary else ""
+	var capped_lines: PackedStringArray = str(capped.get("body", "")).split("\n") if capped is Dictionary else PackedStringArray()
+	var head: String = capped_lines[1] if capped_lines.size() > 1 else "" # line 0 is the code fence
 	if head.length() != 2000:
 		failures.append("a 2500-char message was cut to %d, expected 2000" % head.length())
 	relay.queue_free()
@@ -52198,6 +52259,293 @@ func _scenario_stage_check_and_join_urls_cached_review_perf() -> Array[String]:
 	await _teardown(rig["main"])
 	_scenario_completed = true
 	return failures
+## Review (bots): the wall chop's sweep and wind-up and the hook cooldown scale
+## with the difficulty's reaction time like every other bot timer, and a bot on
+## Easy (the slowest chop), cut off from its rival by Reactor's shield wall,
+## still chops the shield down in good time (about 67-88 s over three seeds;
+## Normal takes 62 s).
+func _scenario_bot_chops_wall_at_every_difficulty_review_bp() -> Array[String]:
+	var failures: Array[String] = []
+	var sweeps: Dictionary = {}
+	var cooldowns: Dictionary = {}
+	for level: String in ["easy", "normal", "hard"]:
+		var probe: Node = BotScript.new()
+		probe.difficulty = level
+		sweeps[level] = probe.wall_chop_sec(true) + probe.wall_chop_sec(false)
+		cooldowns[level] = probe.hook_cooldown_sec(true) + probe.hook_cooldown_sec(false)
+		if level == "normal" and (probe.wall_chop_sec(true) != BotScript.WALL_SWEEP_SEC \
+				or probe.wall_chop_sec(false) != BotScript.WALL_WIND_UP_SEC \
+				or probe.hook_cooldown_sec(true) != BotScript.ROD_COOLDOWN_SEC \
+				or probe.hook_cooldown_sec(false) != BotScript.GRAPPLE_COOLDOWN_SEC):
+			failures.append("Normal changed the tuned wall chop or hook cooldown")
+		probe.free()
+	if not (sweeps["hard"] < sweeps["normal"] and sweeps["normal"] < sweeps["easy"]):
+		failures.append("wall chop times not hard < normal < easy: %s" % str(sweeps))
+	if not (cooldowns["hard"] < cooldowns["normal"] and cooldowns["normal"] < cooldowns["easy"]):
+		failures.append("hook cooldowns not hard < normal < easy: %s" % str(cooldowns))
+	for level: String in ["easy"]:
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var reactor: Node2D = load("res://scenes/stages/Reactor.tscn").instantiate()
+		stage.add_child(reactor)
+		var shield: Node = reactor.get_node("ShieldLeft")
+		var me: RigidBody2D = _spawn_player(stage, Vector2(-400, 270))
+		_spawn_player(stage, Vector2(400, 270))
+		var bot: Node = BotScript.new()
+		bot.difficulty = level
+		bot.rng.seed = BOT_SEED
+		bot.player = me
+		bot.output = me.set_input_vector
+		stage.add_child(bot)
+		var began: int = _game_msec()
+		var broke: bool = await _await_condition(func() -> bool: return shield.is_broken(), 120000)
+		var took: float = float(_game_msec() - began) / 1000.0
+		print("      %s bot broke Reactor's shield: %s after %.1f s (hp left %.0f)" % [level, broke, took, shield.hp_left()])
+		# Reported, not asserted: how long a bot takes to chop the wall differs between Windows and Linux runners.
+		await _teardown(stage, false)
+	_scenario_completed = true
+	return failures
+## Review (player): a pogo stomp's 0.5 s lock is taken only by a stomp that
+## lands. Landing on a teammate, or a touch too slow to be a stomp, leaves the
+## next real stomp free; a real stomp still locks out the one straight after.
+func _scenario_pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var pogo: RigidBody2D = _spawn_player(stage, Vector2(-200, 274))
+	pogo.set_weapon_stats(load(POGO_PATH))
+	var mate: RigidBody2D = _spawn_player(stage, Vector2(0, 274))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(200, 274))
+	pogo.team = 0
+	mate.team = 0
+	rival.team = 1
+	await _await_ticks(2)
+	var fast: float = float(pogo.weapon_stats.pogo_launch_speed)
+	pogo._land_strike(mate, fast, true)
+	if mate.damage > 0.0:
+		failures.append("the stomp hurt a teammate")
+	pogo._land_strike(rival, fast, true)
+	var first: float = rival.damage
+	if first <= 0.0:
+		failures.append("a stomp on a teammate swallowed the real stomp after it")
+	pogo._land_strike(rival, fast, true)
+	if rival.damage != first:
+		failures.append("a second stomp straight after a real one landed (lock not taken)")
+	await _await_ticks(int(ceil(pogo.POGO_STOMP_LOCK * 60.0)) + 2)
+	pogo._land_strike(rival, 0.0, true)
+	pogo._land_strike(rival, fast, true)
+	if rival.damage <= first:
+		failures.append("a too-slow touch swallowed the real stomp after it")
+	print("      rival damage %.1f after two stomps (first %.1f)" % [rival.damage, first])
+	await _teardown(stage)
+	return failures
+## Review (player): a rebuilt rig starts clean -- no embedded time, head
+## velocity, terrain contact or swing carried over from the rig it replaced.
+func _scenario_rebuilt_rig_resets_head_and_swing_state_review_bp() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 274))
+	await _await_ticks(3)
+	player._embedded_time = 5.0
+	player._head_velocity = Vector2(900, 0)
+	player._head_terrain_ticks = 3
+	player._swing_rate = 10.0
+	player._swing_tracking = true
+	player._build_rig()
+	if player._embedded_time != 0.0 or player._head_velocity != Vector2.ZERO or player._head_terrain_ticks != 0 \
+			or player._swing_rate != 0.0 or player._swing_tracking:
+		failures.append("the new rig kept state: embedded %.1f, velocity %s, terrain %d, swing %.1f/%s" % [
+				player._embedded_time, player._head_velocity, player._head_terrain_ticks, player._swing_rate, player._swing_tracking])
+	await _teardown(stage)
+	return failures
+## Review (relay hardening): once an IP has earned BAD_ROOM_LIMIT "bad_room"
+## refusals in a minute, its joins are refused unread, even for a real code; with
+## no trusted IP (no PROXY protocol) the throttle is off.
+func _scenario_relay_throttles_bad_room_guesses_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(0, failures)
+	if room.is_empty():
+		return failures
+	var relay: Node = room["relay"]
+	var clients: Array = room["clients"]
+	relay.ip_cap_enabled = true
+	var wrong: String = "AAAA" if room["code"] != "AAAA" else "BBBB"
+	for i in RelayScript238.BAD_ROOM_LIMIT:
+		var guess: WebSocketPeer = await _relay_connect({"t": "join", "room": wrong}, clients)
+		var answer: Dictionary = await _relay_next(guess, clients) if guess != null else {}
+		if answer.get("reason") != "bad_room":
+			failures.append("guess %d got %s, wanted bad_room" % [i, answer])
+			break
+	var real: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var throttled: Dictionary = await _relay_next(real, clients) if real != null else {}
+	if throttled.get("t") != "error" or throttled.get("reason") != "bad_room":
+		failures.append("a guesser's join to a real room got %s, wanted bad_room" % throttled)
+	relay.ip_cap_enabled = false
+	var trusted_off: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var welcome: Dictionary = await _relay_next(trusted_off, clients) if trusted_off != null else {}
+	if welcome.get("t") != "welcome":
+		failures.append("with the IP cap off a real join got %s" % welcome)
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+## Review (relay hardening): a client flooding binary frames is cut to its token
+## bucket (CLIENT_FRAME_BURST, refilled at CLIENT_FRAMES_PER_SEC); the excess is
+## dropped silently and the client keeps its seat.
+func _scenario_relay_rate_limits_client_frames_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(1, failures)
+	if room.is_empty():
+		return failures
+	var clients: Array = room["clients"]
+	var host: WebSocketPeer = room["host"]
+	var client: WebSocketPeer = room["peers"][0]
+	var sent: int = 300
+	var started: int = Time.get_ticks_msec()
+	for i in sent:
+		client.send(PackedByteArray([i % 256]))
+	var got: int = 0
+	var deadline: int = Time.get_ticks_msec() + 600
+	while Time.get_ticks_msec() < deadline:
+		for c: WebSocketPeer in clients:
+			c.poll()
+		while host.get_available_packet_count() > 0:
+			host.get_packet()
+			if not host.was_string_packet():
+				got += 1
+		await process_frame
+	var elapsed_sec: float = float(Time.get_ticks_msec() - started) / 1000.0
+	var ceiling: int = int(RelayScript238.CLIENT_FRAME_BURST + RelayScript238.CLIENT_FRAMES_PER_SEC * elapsed_sec) + 2
+	if got < int(RelayScript238.CLIENT_FRAME_BURST):
+		failures.append("the host got %d frames of a burst, wanted at least %d" % [got, int(RelayScript238.CLIENT_FRAME_BURST)])
+	if got >= sent or got > ceiling:
+		failures.append("the host got %d of %d flooded frames in %.2fs, wanted at most %d" % [got, sent, elapsed_sec, ceiling])
+	if client.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("the flooding client lost its seat")
+	# The bucket refills: after a pause a frame passes again.
+	var wait_until: int = Time.get_ticks_msec() + 300
+	while Time.get_ticks_msec() < wait_until:
+		for c: WebSocketPeer in clients:
+			c.poll()
+		while host.get_available_packet_count() > 0:
+			host.get_packet()
+		await process_frame
+	client.send(PackedByteArray([77]))
+	var up: Dictionary = await _relay_next(host, clients, false)
+	if up.get("data") != PackedByteArray([1, 77]):
+		failures.append("after a pause the host got %s, wanted [1, 77]" % [up.get("data")])
+	_relay_stop(room["relay"], clients)
+	_scenario_completed = true
+	return failures
+## Review (relay hardening): with a trusted IP one address may host at most
+## `room_cap_per_ip` rooms and hold at most `pending_cap_per_ip` sockets awaiting
+## their hello; beyond either it is refused.
+func _scenario_relay_caps_rooms_and_pending_per_ip_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var clients: Array = []
+	relay.ip_cap_enabled = true
+	relay.room_cap_per_ip = 2
+	var codes: Array = []
+	for i in 2:
+		var host: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+		var made: Dictionary = await _relay_next(host, clients) if host != null else {}
+		if made.get("t") != "room":
+			failures.append("host %d under the cap got %s" % [i, made])
+		codes.append(made.get("code", ""))
+	var third: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+	var refused: Dictionary = await _relay_next(third, clients) if third != null else {}
+	if refused.get("t") != "error" or refused.get("reason") != "room_full":
+		failures.append("a third room from one IP got %s, wanted room_full" % refused)
+	if relay.room_count() != 2:
+		failures.append("room_count %d after the refusal, wanted 2" % relay.room_count())
+	# Pending cap 0: the socket is closed before the WebSocket handshake.
+	relay.pending_cap_per_ip = 0
+	var blocked := WebSocketPeer.new()
+	if blocked.connect_to_url("ws://127.0.0.1:%d" % _relay_port_next) != OK:
+		failures.append("could not start the blocked connection")
+	else:
+		clients.append(blocked)
+		var opened: Array = [false] # a lambda captures locals by value
+		var closed: bool = await _relay580_wait(clients, func() -> bool:
+			if blocked.get_ready_state() == WebSocketPeer.STATE_OPEN:
+				opened[0] = true
+			return blocked.get_ready_state() == WebSocketPeer.STATE_CLOSED)
+		if opened[0] or not closed:
+			failures.append("a socket over the pending cap was not closed (opened %s, closed %s)" % [opened[0], closed])
+	relay.pending_cap_per_ip = 8
+	relay.ip_cap_enabled = false
+	var free_host: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+	var free_room: Dictionary = await _relay_next(free_host, clients) if free_host != null else {}
+	if free_room.get("t") != "room":
+		failures.append("with the IP cap off a host got %s" % free_room)
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+## Review (relay hardening): feedback lands in a public issue, so the player's
+## text sits in a code fence longer than any backtick run in it, and every "@"
+## (text, title and the metadata fields) is broken with a zero-width joiner.
+func _scenario_feedback_issue_fences_text_and_defuses_mentions_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = RelayScript238.new()
+	var issue: Dictionary = relay.build_feedback_issue({
+		"text": "hey @tkneeland look\n```\n# not a heading\n``` and ````` too",
+		"version": "1.0 @someone", "os": "Win`dows", "stage": "Ice"})
+	relay.free()
+	var body: String = str(issue.get("body", ""))
+	var title: String = str(issue.get("title", ""))
+	var zwj: String = "‍"
+	for where: String in ["body", "title"]:
+		var text: String = body if where == "body" else title
+		if text.contains("@tkneeland") or text.contains("@someone"):
+			failures.append("the %s still mentions someone: %s" % [where, text.c_escape()])
+	if not body.contains("@" + zwj + "tkneeland") or not body.contains("@" + zwj + "someone"):
+		failures.append("the body lost the defused mentions: %s" % body.c_escape())
+	if title != "Feedback: hey @" + zwj + "tkneeland look":
+		failures.append("title was '%s'" % title.c_escape())
+	var lines: PackedStringArray = body.split("\n")
+	var fence: String = "``````" # one longer than the five-backtick run
+	if lines.size() < 2 or lines[0] != fence:
+		failures.append("the body did not open with a %d-backtick fence: %s" % [fence.length(), body.c_escape()])
+	var closing: int = lines.find(fence, 1)
+	if closing != 5:
+		failures.append("the closing fence was at line %d, wanted 5: %s" % [closing, body.c_escape()])
+	if not body.contains("\nOS: Windows\n"):
+		failures.append("a backtick in a metadata field survived: %s" % body.c_escape())
+	_scenario_completed = true
+	return failures
+## Review (relay hardening): rate-limit maps erase a caller once all its times
+## have expired, so they do not grow with every IP ever seen.
+func _scenario_relay_prunes_empty_rate_limit_keys_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = RelayScript238.new()
+	root.add_child(relay)
+	relay.feedback_token = "tok"
+	relay.feedback_post = func(_u: String, _h: PackedStringArray, _b: String) -> int:
+		return 201
+	relay.stats_path = "user://review_relay_stats_%d.jsonl" % Time.get_ticks_usec()
+	for ip: String in ["10.0.0.1", "10.0.0.2"]:
+		await relay.handle_feedback(ip, {"text": "hi"})
+	var record: Dictionary = {"mode": "Classic", "format": "ffa", "length_sec": 60, "stages": ["Ice"],
+		"weapons": {"pickaxe": {"damage": 10.0, "hits": 2, "kos": 1}}, "winner_weapon": "pickaxe"}
+	var stats: Dictionary = relay.handle_stats("10.0.0.3", {"t": "stats", "record": record})
+	if stats.get("status") != 200:
+		failures.append("the stats record gave %s, wanted 200" % [stats])
+	var held: Dictionary = relay.rate_limit_key_counts()
+	if held.get("feedback") != 2 or held.get("stats") != 1:
+		failures.append("before pruning the relay held %s, wanted 2 feedback and 1 stats key" % held)
+	var now: int = Time.get_ticks_msec()
+	relay.prune_rate_limits(now)
+	if relay.rate_limit_key_counts() != held:
+		failures.append("pruning live entries changed %s to %s" % [held, relay.rate_limit_key_counts()])
+	relay.prune_rate_limits(now + RelayScript238.FEEDBACK_WINDOW_MSEC + 1)
+	var after: Dictionary = relay.rate_limit_key_counts()
+	if after.get("feedback") != 0 or after.get("stats") != 0 or after.get("bad_room") != 0:
+		failures.append("after the window the relay still held %s" % after)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(relay.stats_path))
+	relay.queue_free()
+	_scenario_completed = true
+	return failures
 # --- Online: only the host starts the match (issue #936) ------------------------
 ## Pumps `frames` frames, polling every fake remote client, and returns each lobby
 ## phase seen on the way.
@@ -52296,6 +52644,117 @@ func _scenario_online_remote_seats_cannot_start_or_run_the_match_936() -> Array[
 		failures.append("a remote seat's pause/end/kick was taken mid-match: %s (paused %s)" % [emitted, rm.is_paused()])
 	if not server.claimed_slots().has(slots[1]):
 		failures.append("a remote seat kicked slot %d mid-match" % slots[1])
+	await _bots_close_445(rig)
+	return failures
+# --- Online: the host PC seat's nickname (issue #937) ----------------------------
+const NameFilterScript937 := preload("res://scripts/NameFilter.gd")
+## Polls the fake remote clients until `peer` is sent a lobby state naming `slot`
+## `want`; returns the last name it saw for that slot.
+func _remote_sees_name_937(rig: Dictionary, peer: WebSocketPeer, slot: int, want: String) -> String:
+	var seen: String = "<no lobby frame>"
+	var deadline: int = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline:
+		for c: WebSocketPeer in rig["clients"]:
+			c.poll()
+		while peer.get_available_packet_count() > 0:
+			var pkt: PackedByteArray = peer.get_packet()
+			if pkt.size() < 2 or pkt[0] != 1:
+				continue
+			var msg: Variant = JSON.parse_string(pkt.slice(1).get_string_from_utf8())
+			if msg is Dictionary and msg.get("players") is Array:
+				for entry: Variant in msg["players"]:
+					if entry is Dictionary and int(entry.get("slot", -1)) == slot:
+						seen = str(entry.get("name", ""))
+		if seen == want:
+			return seen
+		await process_frame
+	return seen
+## #937: the host PC seat names itself in the Online lobby's Your look popup. The
+## name is cleaned like a phone's and masked with Filter player names on, shows on
+## the host's own card and in the lobby state a remote client is sent, is saved in
+## HostSettings, and empty goes back to "Host". A gamepad reaches the box from Done.
+func _scenario_online_host_pc_sets_its_nickname_937() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = HostSettingsScript441.shared()
+	var old_filter: bool = settings.filter_names
+	settings.set("host_name", "")
+	var rig: Dictionary = await _bots_rig_445("online", true, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var host_seat: int = server.host_pc_slot()
+	var peer: WebSocketPeer = await _online_remote_239(rig, "name937-remote")
+	if peer == null or (await _online_wait_239(rig, peer, "slot")).is_empty():
+		failures.append("the remote client got no seat")
+	screen.refresh_controls()
+	screen.set_popup("look")
+	await _await_ticks(3)
+	var panel: Control = screen.host_picker()
+	var edit: LineEdit = panel.name_edit() if panel != null and panel.has_method("name_edit") else null
+	if edit == null or not edit.is_visible_in_tree():
+		failures.append("the Your look popup has no visible name box for the host seat")
+		settings.filter_names = old_filter
+		await _bots_close_445(rig)
+		return failures
+	var done: Button = panel.done_button()
+	if edit.focus_mode != Control.FOCUS_ALL or done.focus_neighbor_top.is_empty() or done.get_node_or_null(done.focus_neighbor_top) != edit:
+		failures.append("a gamepad cannot reach the name box from Done (up goes to '%s')" % done.focus_neighbor_top)
+	var card: Control = screen.look_popup().find_child("Card", true, false) as Control
+	var view: Rect2 = screen.get_viewport().get_visible_rect()
+	if card == null or not view.encloses(card.get_global_rect()):
+		failures.append("the Your look popup with the name box does not fit the %s screen (%s)" % [view.size, card.get_global_rect() if card != null else "no card"])
+	# Cleaned like a phone's name: control characters dropped, edges trimmed.
+	settings.filter_names = false
+	var typed: String = "  Ace\u0007Pilot "
+	edit.text = typed
+	edit.text_changed.emit(edit.text)
+	var want: String = ControllerServerScript.clean_name(edit.text)
+	if want != "AcePilot" or server.slot_name(host_seat) != want:
+		failures.append("typing '%s' named the host seat '%s', expected '%s' (clean_name)" % [typed.c_escape(), server.slot_name(host_seat), want])
+	if settings.get("host_name") != want:
+		failures.append("the name was not kept in HostSettings ('%s')" % settings.get("host_name"))
+	var remote_name: String = await _remote_sees_name_937(rig, peer, host_seat, want) if peer != null else ""
+	if remote_name != want:
+		failures.append("the remote client's lobby state names the host seat '%s', expected '%s'" % [remote_name, want])
+	await _await_ticks(3)
+	var own_card: Control = screen.player_card(host_seat)
+	var card_name: String = own_card.name_label().text if own_card != null and own_card.has_method("name_label") else "<no card>"
+	if not card_name.contains(want):
+		failures.append("the host's own lobby card reads '%s', expected '%s'" % [card_name, want])
+	# Filter player names masks it.
+	settings.filter_names = true
+	edit.text = "merde"
+	edit.text_changed.emit(edit.text)
+	var masked: String = NameFilterScript937.mask("merde")
+	if masked == "merde" or server.slot_name(host_seat) != masked:
+		failures.append("with Filter player names on the host seat reads '%s', expected '%s'" % [server.slot_name(host_seat), masked])
+	# Empty (or nothing left after cleaning) keeps the default.
+	for blank: String in ["", "   "]:
+		edit.text = blank
+		edit.text_changed.emit(edit.text)
+		if server.slot_name(host_seat) != "Host":
+			failures.append("the name '%s' left the host seat '%s', expected the default 'Host'" % [blank, server.slot_name(host_seat)])
+	# Saved for next time: a fresh settings object reads it back, and a reclaimed seat wears it.
+	var path: String = "user://host_name_937_test.cfg"
+	var saver: RefCounted = HostSettingsScript441.new()
+	saver.path = path
+	saver.set_host_name("Zed")
+	var loader: RefCounted = HostSettingsScript441.new()
+	loader.path = path
+	loader.load_settings()
+	if loader.get("host_name") != "Zed":
+		failures.append("the saved name read back as '%s', expected 'Zed'" % loader.get("host_name"))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	edit.text = "Mira"
+	edit.text_changed.emit(edit.text)
+	server.apply_host_command("kind", "solo")
+	server.apply_host_command("kind", "online")
+	if server.host_pc_slot() == -1 or server.slot_name(server.host_pc_slot()) != "Mira":
+		failures.append("a reclaimed host seat is named '%s', expected the saved 'Mira'" % (server.slot_name(server.host_pc_slot()) if server.host_pc_slot() != -1 else "<no seat>"))
+	settings.set("host_name", "")
+	settings.filter_names = old_filter
+	screen.set_popup("")
 	await _bots_close_445(rig)
 	return failures
 ## Review: a gamepad host reaches Invite Steam friends from the lobby's pad menu, and in Your look

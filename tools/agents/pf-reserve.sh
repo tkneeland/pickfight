@@ -111,7 +111,23 @@ if [ "$take_new" = 0 ] && [ -n "$best" ]; then
 fi
 [ "$take_new" = 1 ] || ready=()
 [ "$run_any" = 1 ] || exit 0
-work=("${inflight[@]}" "${ready[@]}"); [ ${#work[@]} -gt 0 ] || exit 0
+# The session runs unattended with every permission and reads the ticket text: only tickets whose author and last
+# editor are in TRUSTED_TICKET_AUTHORS (_shared.conf) go in, so a stranger's edit cannot steer it (prompt injection).
+trusted_login() { case " ${TRUSTED_TICKET_AUTHORS:-} " in *" $1 "*) [ -n "$1" ];; *) return 1;; esac; }
+trusted_ticket() {   # trusted_ticket <n>: 0 when the author and the last editor (if any) are trusted
+  local who a e
+  who=$(gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){author{login} editor{login}}}}' \
+    -f o="${REPO%%/*}" -f r="${REPO#*/}" -F n="$1" \
+    --jq '.data.repository.issue | "\(.author.login // "-") \(.editor.login // "")"' 2>/dev/null) || return 1
+  a=${who%% *}; e=${who#* }
+  trusted_login "$a" || return 1
+  [ -z "$e" ] || trusted_login "$e"
+}
+work=()
+for n in "${inflight[@]}" "${ready[@]}"; do
+  if trusted_ticket "$n"; then work+=("$n"); else log "skipping #$n: its author or last editor is not in TRUSTED_TICKET_AUTHORS (or the check failed)"; fi
+done
+[ ${#work[@]} -gt 0 ] || exit 0
 # relaunch only when the ticket set changed since the last session, or 6h passed; a session that leaves the same
 # tickets in flight (blocked, waiting on a human) is not restarted every pass
 sig="${work[*]}"

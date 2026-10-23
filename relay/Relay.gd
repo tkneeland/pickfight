@@ -69,6 +69,21 @@ const INBOUND_BUFFER_BYTES: int = 1 << 18
 const CLIENT_FRAME_MAX_BYTES: int = 4096
 ## Longest PROXY protocol v1 line, bytes (the spec's own limit).
 const PROXY_LINE_MAX_BYTES: int = 108
+## Most sockets the relay holds before they say host or join (awaiting a hello
+## plus awaiting a PROXY line). A connection beyond it is closed at once.
+const MAX_PENDING_SOCKETS: int = 512
+## Tries at drawing an unused room code before the relay refuses the host.
+const NEW_CODE_MAX_TRIES: int = 64
+## Client binary frames forwarded to the host: a token bucket per client seat.
+## Refill rate (frames per second) and bucket size; frames beyond it are dropped.
+const CLIENT_FRAMES_PER_SEC: float = 120.0
+const CLIENT_FRAME_BURST: float = 60.0
+## "bad_room" refusals one IP may earn per window before every join from it is
+## refused unread (a room-code guesser). Only when the IP is real (`ip_cap_enabled`).
+const BAD_ROOM_LIMIT: int = 20
+const BAD_ROOM_WINDOW_MSEC: int = 60 * 1000
+## How often expired rate-limit entries are swept, msec.
+const RATE_PRUNE_INTERVAL_MSEC: int = 60 * 1000
 
 ## Whether each connection starts with a PROXY protocol v1 line from the front
 ## proxy (Fly's `proxy_proto` handler), which carries the real client IP. Off by
@@ -78,6 +93,10 @@ const PROXY_LINE_MAX_BYTES: int = 108
 ## is the real one (`ip_cap_enabled`): behind a proxy without PROXY protocol every
 ## caller shares one address and a cap would throttle everybody together.
 @export var join_cap_per_ip: int = 12
+## Most sockets one IP may have awaiting a hello, and most rooms one IP may host,
+## when `ip_cap_enabled`.
+@export var pending_cap_per_ip: int = 8
+@export var room_cap_per_ip: int = 8
 var ip_cap_enabled: bool = proxy_protocol
 
 ## How long a room waits for its host to reclaim it after the host's socket
@@ -109,6 +128,8 @@ var feedback_token: String = OS.get_environment("GITHUB_FEEDBACK_TOKEN")
 var feedback_post: Callable = Callable()
 
 var _feedback_times: Dictionary = {} # ip -> Array[int] of msec
+var _bad_room_times: Dictionary = {} # ip -> Array[int] of msec
+var _next_prune_msec: int = 0
 
 ## Match telemetry (issue #372).
 const STATS_MAX_BYTES: int = 8192
@@ -124,7 +145,7 @@ const STATS_MAX_ROUNDS: int = 1000
 ## volume (see fly.toml) for them to survive a deploy.
 var stats_path: String = _default_stats_path()
 var _stats_times: Dictionary = {} # salted hash of the caller (int) -> Array[int] of msec
-var _stats_salt: String = str(randi()) + str(Time.get_ticks_usec())
+var _stats_salt: String = Crypto.new().generate_random_bytes(16).hex_encode()
 
 static func _default_stats_path() -> String:
 	var configured: String = OS.get_environment("PICKFIGHT_STATS_PATH")
@@ -146,6 +167,8 @@ class Room:
 	var host: WebSocketPeer
 	var clients: Dictionary = {} # peer id (int) -> WebSocketPeer
 	var client_ips: Dictionary = {} # peer id (int) -> IP String
+	var client_buckets: Dictionary = {} # peer id (int) -> [tokens float, last refill msec int]
+	var host_ip: String = ""
 	var last_traffic_msec: int = 0
 	var token: String = ""
 	## When the host socket was lost, msec; 0 while the host is present.
@@ -214,6 +237,9 @@ func _process(_delta: float) -> void:
 		var tcp: StreamPeerTCP = _server.take_connection()
 		if tcp == null:
 			continue
+		if _pending.size() + _proxy_pending.size() >= MAX_PENDING_SOCKETS:
+			tcp.disconnect_from_host()
+			continue
 		tcp.set_no_delay(true)
 		if proxy_protocol:
 			_proxy_pending.append([tcp, PackedByteArray(), now + int(HANDSHAKE_TIMEOUT_SEC * 1000.0)])
@@ -252,8 +278,33 @@ func _process(_delta: float) -> void:
 			_close_room(room, "host_left", true)
 		elif now - room.last_traffic_msec > int(idle_timeout_sec * 1000.0):
 			_close_room(room, "idle_timeout", true)
+	if now >= _next_prune_msec:
+		_next_prune_msec = now + RATE_PRUNE_INTERVAL_MSEC
+		prune_rate_limits(now)
+
+## Drops expired rate-limit times and every key left with none, so the maps do
+## not grow with each caller the relay has ever seen.
+func prune_rate_limits(now: int) -> void:
+	_prune_times(_feedback_times, now, FEEDBACK_WINDOW_MSEC)
+	_prune_times(_stats_times, now, FEEDBACK_WINDOW_MSEC)
+	_prune_times(_bad_room_times, now, BAD_ROOM_WINDOW_MSEC)
+
+static func _prune_times(map: Dictionary, now: int, window_msec: int) -> void:
+	for key: Variant in map.keys():
+		var times: Array = (map[key] as Array).filter(func(t: int) -> bool: return now - t < window_msec)
+		if times.is_empty():
+			map.erase(key)
+		else:
+			map[key] = times
+
+## Rate-limit keys currently held, for tests: {"feedback","stats","bad_room"} -> int.
+func rate_limit_key_counts() -> Dictionary:
+	return {"feedback": _feedback_times.size(), "stats": _stats_times.size(), "bad_room": _bad_room_times.size()}
 
 func _accept(tcp: StreamPeerTCP, ip: String, now: int) -> void:
+	if ip_cap_enabled and not ip.is_empty() and _pending_held_by(ip) >= pending_cap_per_ip:
+		tcp.disconnect_from_host()
+		return
 	var peer := WebSocketPeer.new()
 	peer.heartbeat_interval = HEARTBEAT_SEC
 	peer.inbound_buffer_size = INBOUND_BUFFER_BYTES
@@ -320,7 +371,7 @@ func _read_hello(p: Pending, now: int) -> bool:
 		match str(msg.get("t", "")):
 			"host":
 				if not _reclaim_room(p.peer, msg, now):
-					_open_room(p.peer, now)
+					_open_room(p.peer, now, p.ip)
 				return true
 			"feedback":
 				_start_feedback(p, msg, now)
@@ -458,18 +509,41 @@ func handle_feedback(ip: String, msg: Dictionary) -> Dictionary:
 	var status: int = int(await _post(FEEDBACK_URL, headers, JSON.stringify(build_feedback_issue(msg))))
 	return {"status": 200 if status >= 200 and status < 300 else 502}
 
-## The GitHub issue body for a feedback message.
+## The GitHub issue body for a feedback message. The issue is public and the
+## text is a stranger's: it goes inside a fenced code block (the fence is longer
+## than any backtick run in it, so it cannot close early) and every `@` gets a
+## zero-width joiner after it so nobody is mentioned.
 func build_feedback_issue(msg: Dictionary) -> Dictionary:
-	var text: String = clean_feedback_text(str(msg.get("text", "")), FEEDBACK_MAX_CHARS, true).strip_edges()
+	var text: String = defuse_mentions(clean_feedback_text(str(msg.get("text", "")), FEEDBACK_MAX_CHARS, true).strip_edges())
 	var first_line: String = text.split("\n")[0].strip_edges()
 	if first_line.length() > 60:
 		first_line = first_line.substr(0, 60) + "..."
-	var body: String = "%s\n\n---\nBuild: %s\nOS: %s\nStage: %s\n\n_Sent from the in-game feedback button._" % [
-		text,
-		clean_feedback_text(str(msg.get("version", "")), FEEDBACK_FIELD_MAX_CHARS, false),
-		clean_feedback_text(str(msg.get("os", "")), FEEDBACK_FIELD_MAX_CHARS, false),
-		clean_feedback_text(str(msg.get("stage", "")), FEEDBACK_FIELD_MAX_CHARS, false)]
+	var fence: String = "`".repeat(maxi(3, longest_backtick_run(text) + 1))
+	var body: String = "%s\n%s\n%s\n\n---\nBuild: %s\nOS: %s\nStage: %s\n\n_Sent from the in-game feedback button._" % [
+		fence, text, fence,
+		_feedback_field(msg, "version"), _feedback_field(msg, "os"), _feedback_field(msg, "stage")]
 	return {"title": "Feedback: " + first_line, "body": body, "labels": FEEDBACK_LABELS}
+
+## A one-line metadata field, outside the fence: mentions defused and backticks
+## dropped so it renders as plain text.
+static func _feedback_field(msg: Dictionary, key: String) -> String:
+	return defuse_mentions(clean_feedback_text(str(msg.get(key, "")), FEEDBACK_FIELD_MAX_CHARS, false).replace("`", ""))
+
+## `text` with a zero-width joiner after every "@", so GitHub links no user.
+static func defuse_mentions(text: String) -> String:
+	return text.replace("@", "@‍")
+
+## Length of the longest run of backticks in `text`.
+static func longest_backtick_run(text: String) -> int:
+	var longest: int = 0
+	var run: int = 0
+	for i in text.length():
+		if text[i] == "`":
+			run += 1
+			longest = maxi(longest, run)
+		else:
+			run = 0
+	return longest
 
 ## Caps the length and drops control characters; newlines survive when `multiline`.
 static func clean_feedback_text(text: String, max_chars: int, multiline: bool) -> String:
@@ -498,10 +572,20 @@ func _post(url: String, headers: PackedStringArray, body: String) -> Variant:
 	http.queue_free()
 	return result[1] if result[0] == HTTPRequest.RESULT_SUCCESS else 0
 
-func _open_room(peer: WebSocketPeer, now: int) -> void:
+func _open_room(peer: WebSocketPeer, now: int, ip: String = "") -> void:
+	# Reuses "room_full" so an older host shows a known reason; a host treats any
+	# error as a failed link.
+	if ip_cap_enabled and not ip.is_empty() and _rooms_hosted_by(ip) >= room_cap_per_ip:
+		_refuse(peer, "room_full")
+		return
+	var code: String = _new_code()
+	if code.is_empty():
+		_refuse(peer, "room_full")
+		return
 	var room := Room.new()
-	room.code = _new_code()
+	room.code = code
 	room.host = peer
+	room.host_ip = ip
 	room.last_traffic_msec = now
 	_rooms[room.code] = room
 	room.token = _new_token()
@@ -528,8 +612,24 @@ func _reclaim_room(peer: WebSocketPeer, msg: Dictionary, now: int) -> bool:
 	return true
 
 func _join_room(peer: WebSocketPeer, code: String, now: int, ip: String = "") -> void:
+	var throttle: bool = ip_cap_enabled and not ip.is_empty()
+	if throttle:
+		var bad: Array = (_bad_room_times.get(ip, []) as Array).filter(
+				func(t: int) -> bool: return now - t < BAD_ROOM_WINDOW_MSEC)
+		if bad.is_empty():
+			_bad_room_times.erase(ip)
+		else:
+			_bad_room_times[ip] = bad
+		if bad.size() >= BAD_ROOM_LIMIT:
+			# A room-code guesser: refused unread, even for a code that exists.
+			_refuse(peer, "bad_room")
+			return
 	var room: Room = _rooms.get(code)
 	if room == null:
+		if throttle:
+			var times: Array = _bad_room_times.get(ip, [])
+			times.append(now)
+			_bad_room_times[ip] = times
 		_refuse(peer, "bad_room")
 		return
 	if room.clients.size() >= MAX_CLIENTS:
@@ -544,9 +644,38 @@ func _join_room(peer: WebSocketPeer, code: String, now: int, ip: String = "") ->
 		id += 1
 	room.clients[id] = peer
 	room.client_ips[id] = ip
+	room.client_buckets[id] = [CLIENT_FRAME_BURST, now]
 	room.last_traffic_msec = now
 	_send_json(peer, {"t": "welcome", "peer": id})
 	_send_json(room.host, {"t": "joined", "peer": id})
+
+## Sockets from the IP still awaiting their hello.
+func _pending_held_by(ip: String) -> int:
+	var held: int = 0
+	for p: Pending in _pending:
+		if p.ip == ip:
+			held += 1
+	return held
+
+## Rooms the IP hosts (including one waiting for its host to reclaim it).
+func _rooms_hosted_by(ip: String) -> int:
+	var held: int = 0
+	for room: Room in _rooms.values():
+		if room.host_ip == ip:
+			held += 1
+	return held
+
+## Takes one frame from the client's bucket; false when it is empty (the frame is
+## dropped). Refills at CLIENT_FRAMES_PER_SEC up to CLIENT_FRAME_BURST.
+static func _take_frame_token(room: Room, id: int, now: int) -> bool:
+	var bucket: Array = room.client_buckets.get(id, [CLIENT_FRAME_BURST, now])
+	var tokens: float = minf(CLIENT_FRAME_BURST,
+			float(bucket[0]) + float(now - int(bucket[1])) * CLIENT_FRAMES_PER_SEC / 1000.0)
+	var ok: bool = tokens >= 1.0
+	if ok:
+		tokens -= 1.0
+	room.client_buckets[id] = [tokens, now]
+	return ok
 
 ## Client seats the IP holds across every room.
 func _seats_held_by(ip: String) -> int:
@@ -595,12 +724,15 @@ func _pump_room(room: Room, now: int) -> void:
 					continue
 				if pkt.size() > CLIENT_FRAME_MAX_BYTES:
 					continue # #580: never forward what could overflow the host's buffer
+				if not _take_frame_token(room, id, now):
+					continue # a client flooding the host: excess dropped silently
 				var framed := PackedByteArray([id])
 				framed.append_array(pkt)
 				_send_binary(room.host, framed)
 		elif state == WebSocketPeer.STATE_CLOSED:
 			room.clients.erase(id)
 			room.client_ips.erase(id)
+			room.client_buckets.erase(id)
 			_send_json(room.host, {"t": "left", "peer": id})
 
 ## A host control message (issue #580). Only {"t":"drop","peer":N} exists.
@@ -614,6 +746,7 @@ func _host_control(room: Room, text: String, now: int) -> void:
 	var client: WebSocketPeer = room.clients[id]
 	room.clients.erase(id)
 	room.client_ips.erase(id)
+	room.client_buckets.erase(id)
 	# Closed through _closing so what the host sent it first (the "closed" notice)
 	# is flushed before the socket goes.
 	_closing.append(Pending.new(client, now + CLOSE_GRACE_MSEC))
@@ -626,6 +759,8 @@ func _close_room(room: Room, reason: String, erase: bool) -> void:
 		else:
 			client.close()
 	room.clients.clear()
+	room.client_ips.clear()
+	room.client_buckets.clear()
 	if room.host.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		if reason == "idle_timeout":
 			_refuse(room.host, reason)
@@ -634,17 +769,18 @@ func _close_room(room: Room, reason: String, erase: bool) -> void:
 	if erase:
 		_rooms.erase(room.code)
 
+## A reclaim token: 16 hex characters from a CSPRNG.
 func _new_token() -> String:
-	var token: String = ""
-	for i in 8:
-		token += "%02x" % (randi() % 256)
-	return token
+	return Crypto.new().generate_random_bytes(8).hex_encode()
 
+## An unused room code, or "" after NEW_CODE_MAX_TRIES draws all collided.
 func _new_code() -> String:
-	while true:
+	var crypto := Crypto.new()
+	for attempt in NEW_CODE_MAX_TRIES:
+		var bytes: PackedByteArray = crypto.generate_random_bytes(CODE_LENGTH)
 		var code: String = ""
 		for i in CODE_LENGTH:
-			code += CODE_LETTERS[randi() % CODE_LETTERS.length()]
+			code += CODE_LETTERS[bytes[i] % CODE_LETTERS.length()]
 		if not _rooms.has(code):
 			return code
 	return ""

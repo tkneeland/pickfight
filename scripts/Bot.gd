@@ -176,7 +176,8 @@ const WALL_BLOCKED_SEC: float = 1.0
 ## against it a swing has no room to build speed.
 const WALL_STAND_OFF: float = 0.6
 ## The chop at a wall: wound up behind and above the line to it, short, then
-## swept through to just past its face. Measured on Reactor's shield walls.
+## swept through to just past its face. Measured on Reactor's shield walls at
+## Normal; `wall_chop_sec` scales both with the level like every bot timer.
 const WALL_SWEEP_SEC: float = 0.2
 const WALL_WIND_UP_SEC: float = 0.3
 const WALL_SWEEP_BACK: float = 1.6
@@ -198,6 +199,8 @@ const EDGE_KEEP: float = 75.0
 const ATTACK_EDGE_ROOM: float = 200.0
 ## Hazard zones count as this much bigger than they are.
 const HAZARD_MARGIN: float = 50.0
+## Physics ticks of a saw's last-tick motion its danger zone is grown by (#950).
+const SAW_LOOKAHEAD_TICKS: float = 40.0
 ## Room either side of a falling rock's column, past the rock and a body.
 const ROCK_MARGIN: float = 45.0
 ## How far either way the bot looks for solid ground to leave unstable
@@ -354,6 +357,9 @@ var _pads: Array[Node2D] = []
 ## the blade is now) and stage gusts (found by duck typing, so a gust part that
 ## lands later is handled without Bot knowing its script).
 var _saws: Array[Node2D] = []
+## Each saw's position the last time its zone was built, by instance id, so
+## the zone can lead the blade (#950).
+var _saw_previous: Dictionary = {}
 var _gusts: Array[Node2D] = []
 ## Off, the bot ignores spikes and saws; for scenarios that compare.
 var avoid_damage_hazards: bool = true
@@ -390,6 +396,10 @@ func skill() -> Dictionary:
 ## Seconds a think or swing/aim timer really lasts: `seconds` on Normal.
 func react_sec(seconds: float) -> float:
 	return seconds * float(skill()["react"])
+
+## Seconds of the wall chop's sweep (`sweep`) or wind-up on this bot's level.
+func wall_chop_sec(sweep: bool) -> float:
+	return react_sec(WALL_SWEEP_SEC if sweep else WALL_WIND_UP_SEC)
 var _last_head: Vector2 = Vector2.ZERO
 var _unhook_left: float = 0.0
 var _unhook_side: float = 1.0
@@ -951,8 +961,12 @@ func _hook_drive(delta: float) -> Vector2:
 	_hook_phase = 1
 	_hook_ticks = 0
 	var reels: bool = bool((stats as Resource).get("hook_reels_players"))
-	_hook_cd = ROD_COOLDOWN_SEC if reels else GRAPPLE_COOLDOWN_SEC
+	_hook_cd = hook_cooldown_sec(reels)
 	return Vector2.ZERO
+
+## Seconds between hook casts on this bot's level: the rod's or the grapple's.
+func hook_cooldown_sec(reels: bool) -> float:
+	return react_sec(ROD_COOLDOWN_SEC if reels else GRAPPLE_COOLDOWN_SEC)
 
 ## Issue #932: the boomerang's flick aim at the current target, or Vector2.INF.
 ## A living rival (never a teammate) within BOOMERANG_RANGE_FRACTION of the
@@ -1017,7 +1031,7 @@ func _swing(delta: float) -> Vector2:
 		_phase_left -= delta
 		if _phase_left <= 0.0:
 			_phase = 1 - _phase
-			_phase_left = WALL_SWEEP_SEC if _phase == 1 else WALL_WIND_UP_SEC
+			_phase_left = wall_chop_sec(_phase == 1)
 		var sweep: float = WALL_SWEEP_BACK if _phase == 0 else WALL_SWEEP_FRONT
 		var face_reach: float = absf(to_target.x) - (_target.get("size") as Vector2).x * 0.5 + WALL_SWEEP_PAST
 		return Vector2.RIGHT.rotated(to_target.angle() + wall_up * sweep) * (_length_for(face_reach) if _phase == 1 else WALL_SWEEP_WIND_UP)
@@ -1546,7 +1560,24 @@ func _danger_rects() -> Array[Rect2]:
 	for saw: Node2D in ([] as Array[Node2D]) if _soft_pass_left > 0.0 else _saws:
 		if is_instance_valid(saw) and saw.is_inside_tree():
 			var reach: float = float(saw.get("radius")) + BODY_RADIUS + HAZARD_MARGIN
-			_danger.append(Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0))
+			var zone := Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0)
+			# A patrolling saw is where it is going as much as where it is
+			# (#950): a bot hopping about inside the margin of a saw's turn
+			# was hit as the blade came on, on one runner image and not
+			# another, because the zone only ever covered the blade's
+			# current spot and the bot's jerky hops (300 px/s bursts) cover
+			# more ground than the blade did in the tick it was shown. The
+			# zone is grown ahead of the blade's last tick's motion, so the
+			# flee starts a lookahead earlier.
+			var id: int = saw.get_instance_id()
+			if _saw_previous.has(id):
+				# Capped: the zone is not rebuilt while a soft pass is on, and
+				# a stale position would otherwise throw it across the stage.
+				var step: Vector2 = (saw.global_position - Vector2(_saw_previous[id])).limit_length(4.0)
+				var lead: Vector2 = step * SAW_LOOKAHEAD_TICKS
+				zone = zone.merge(Rect2(zone.position + lead, zone.size))
+			_saw_previous[id] = saw.global_position
+			_danger.append(zone)
 	# The stage's rocks first, then any not in the stage read: rocks spawned
 	# mid-round (the overtime rain, #611). Same order as before, no copy.
 	for rock: Node2D in _rocks:
