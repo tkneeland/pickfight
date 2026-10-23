@@ -1547,6 +1547,26 @@ const SFX_RESTORED_FIELDS: PackedStringArray = [
 	"window_mode_probe", "fullscreen_sync_grace_msec", "settings_path", "persist_settings",
 ]
 const MUSIC_RESTORED_FIELDS: PackedStringArray = ["settings_path", "persist_settings"]
+## The SteamPlatform autoload's test seams (#298, #538), restored like Sfx's.
+const STEAM_RESTORED_FIELDS: PackedStringArray = [
+	"fake_running_for_test", "fake_persona_for_test", "calls_for_test", "pending_join_code",
+]
+## Every script variable of `obj` (the shared HostSettings), deep-copied, so
+## a scenario that changes one -- and fails before it puts it back -- leaves
+## the next scenario the settings this one started from.
+func _statics_fields(obj: Object) -> Dictionary:
+	var fields: Dictionary = {}
+	for prop: Dictionary in obj.get_property_list():
+		if int(prop["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE:
+			fields[prop["name"]] = _statics_copy(obj.get(prop["name"]))
+	return fields
+## A copy of `value` a later change to the original cannot reach.
+func _statics_copy(value: Variant) -> Variant:
+	if value is Array or value is Dictionary:
+		return value.duplicate(true)
+	if typeof(value) > TYPE_ARRAY:
+		return value.duplicate()
+	return value
 ## Gives the root viewport a new World2D -- a new physics space -- and returns
 ## the one it had, for the caller to put back (#180).
 ##
@@ -1574,7 +1594,18 @@ func _snapshot_statics() -> Dictionary:
 		"physics_ticks_per_second": Engine.physics_ticks_per_second,
 		"time_scale": Engine.time_scale,
 		"paused": paused,
+		"host_settings": _statics_fields(HostSettingsScript352.shared()),
+		"demo_forced": DemoBuildScript361.forced,
+		"demo_store_app_id": DemoBuildScript361.store_app_id_for_test,
+		"quit_action": QuitGameScript718.quit_action,
+		"pad_menu_open": PadMenuScript368._open.duplicate(),
+		"relay_url": ProjectSettings.get_setting("pickfight/relay_url", ""),
 	}
+	var steam: Node = get_root().get_node_or_null(^"SteamPlatform")
+	if steam != null:
+		snapshot["steam"] = {}
+		for field: String in STEAM_RESTORED_FIELDS:
+			snapshot["steam"][field] = _statics_copy(steam.get(field))
 	var sfx: Node = get_root().get_node_or_null(SFX_AUTOLOAD_PATH)
 	if sfx != null:
 		snapshot["sfx"] = {}
@@ -1592,6 +1623,18 @@ func _restore_statics(snapshot: Dictionary) -> void:
 	Engine.physics_ticks_per_second = snapshot["physics_ticks_per_second"]
 	Engine.time_scale = snapshot["time_scale"]
 	paused = snapshot["paused"]
+	var host: RefCounted = HostSettingsScript352.shared()
+	for field: String in snapshot["host_settings"]:
+		host.set(field, _statics_copy(snapshot["host_settings"][field]))
+	DemoBuildScript361.forced = snapshot["demo_forced"]
+	DemoBuildScript361.store_app_id_for_test = snapshot["demo_store_app_id"]
+	QuitGameScript718.quit_action = snapshot["quit_action"]
+	PadMenuScript368._open = (snapshot["pad_menu_open"] as Dictionary).duplicate()
+	ProjectSettings.set_setting("pickfight/relay_url", snapshot["relay_url"])
+	var steam: Node = get_root().get_node_or_null(^"SteamPlatform")
+	if steam != null and snapshot.has("steam"):
+		for field: String in snapshot["steam"]:
+			steam.set(field, _statics_copy(snapshot["steam"][field]))
 	var sfx: Node = get_root().get_node_or_null(SFX_AUTOLOAD_PATH)
 	if sfx != null and snapshot.has("sfx"):
 		for field: String in snapshot["sfx"]:
