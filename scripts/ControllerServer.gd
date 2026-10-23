@@ -2685,11 +2685,32 @@ func _set_host_pc_seat(on: bool) -> bool:
 	_host_mouse.reset()
 	_claim_for_phone(_rejoin_slot(HOST_PC_ID, slot), HOST_PC_ID, _host_pc_seat)
 	_host_pc_slot = _slot_peers.find(_host_pc_seat)
-	_slot_name[_host_pc_slot] = HOST_PC_NAME
+	_slot_name[_host_pc_slot] = host_pc_display_name()
 	_apply_saved_host_pick()
 	_update_mouse_capture()
 	_send_lobby_to_all()
 	return true
+
+## Issue #937: the host PC seat's name as everyone sees it: the saved nickname,
+## cleaned like a phone's and masked with Filter player names on, or "Host" when
+## none is saved (or nothing of it survives cleaning).
+func host_pc_display_name() -> String:
+	var nickname: String = clean_name(HostSettingsScript.shared().host_name)
+	if nickname.is_empty():
+		return HOST_PC_NAME
+	return NameFilterScript.mask(nickname) if HostSettingsScript.shared().filter_names else nickname
+
+## Issue #937: the nickname the host typed for its own seat (the Your look popup's
+## Name box), "" for the default.
+func host_pc_nickname() -> String:
+	return HostSettingsScript.shared().host_name
+
+## Issue #937: the host typed `text` as its seat's nickname. It is cleaned, saved
+## for next time and shown on the seat at once; empty goes back to "Host".
+func set_host_pc_name(text: String) -> void:
+	HostSettingsScript.shared().set_host_name(clean_name(text))
+	if _host_pc_slot != -1:
+		_slot_name[_host_pc_slot] = host_pc_display_name()
 
 ## Issue #441: the host PC's saved look goes on its seat as it is claimed, by the
 ## phone's own rules (a colour another seat holds is refused, the automatic one stays).

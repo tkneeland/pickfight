@@ -1090,6 +1090,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"controller_page_review_fixes_review_net",
 	"stage_check_and_join_urls_cached_review_perf",
 	"online_remote_seats_cannot_start_or_run_the_match_936",
+	"online_host_pc_sets_its_nickname_937",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3643,6 +3644,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_check_and_join_urls_cached_review_perf()
 		"online_remote_seats_cannot_start_or_run_the_match_936":
 			return await _scenario_online_remote_seats_cannot_start_or_run_the_match_936()
+		"online_host_pc_sets_its_nickname_937":
+			return await _scenario_online_host_pc_sets_its_nickname_937()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -51582,5 +51585,116 @@ func _scenario_online_remote_seats_cannot_start_or_run_the_match_936() -> Array[
 		failures.append("a remote seat's pause/end/kick was taken mid-match: %s (paused %s)" % [emitted, rm.is_paused()])
 	if not server.claimed_slots().has(slots[1]):
 		failures.append("a remote seat kicked slot %d mid-match" % slots[1])
+	await _bots_close_445(rig)
+	return failures
+# --- Online: the host PC seat's nickname (issue #937) ----------------------------
+const NameFilterScript937 := preload("res://scripts/NameFilter.gd")
+## Polls the fake remote clients until `peer` is sent a lobby state naming `slot`
+## `want`; returns the last name it saw for that slot.
+func _remote_sees_name_937(rig: Dictionary, peer: WebSocketPeer, slot: int, want: String) -> String:
+	var seen: String = "<no lobby frame>"
+	var deadline: int = Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline:
+		for c: WebSocketPeer in rig["clients"]:
+			c.poll()
+		while peer.get_available_packet_count() > 0:
+			var pkt: PackedByteArray = peer.get_packet()
+			if pkt.size() < 2 or pkt[0] != 1:
+				continue
+			var msg: Variant = JSON.parse_string(pkt.slice(1).get_string_from_utf8())
+			if msg is Dictionary and msg.get("players") is Array:
+				for entry: Variant in msg["players"]:
+					if entry is Dictionary and int(entry.get("slot", -1)) == slot:
+						seen = str(entry.get("name", ""))
+		if seen == want:
+			return seen
+		await process_frame
+	return seen
+## #937: the host PC seat names itself in the Online lobby's Your look popup. The
+## name is cleaned like a phone's and masked with Filter player names on, shows on
+## the host's own card and in the lobby state a remote client is sent, is saved in
+## HostSettings, and empty goes back to "Host". A gamepad reaches the box from Done.
+func _scenario_online_host_pc_sets_its_nickname_937() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = HostSettingsScript441.shared()
+	var old_filter: bool = settings.filter_names
+	settings.set("host_name", "")
+	var rig: Dictionary = await _bots_rig_445("online", true, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var host_seat: int = server.host_pc_slot()
+	var peer: WebSocketPeer = await _online_remote_239(rig, "name937-remote")
+	if peer == null or (await _online_wait_239(rig, peer, "slot")).is_empty():
+		failures.append("the remote client got no seat")
+	screen.refresh_controls()
+	screen.set_popup("look")
+	await _await_ticks(3)
+	var panel: Control = screen.host_picker()
+	var edit: LineEdit = panel.name_edit() if panel != null and panel.has_method("name_edit") else null
+	if edit == null or not edit.is_visible_in_tree():
+		failures.append("the Your look popup has no visible name box for the host seat")
+		settings.filter_names = old_filter
+		await _bots_close_445(rig)
+		return failures
+	var done: Button = panel.done_button()
+	if edit.focus_mode != Control.FOCUS_ALL or done.focus_neighbor_top.is_empty() or done.get_node_or_null(done.focus_neighbor_top) != edit:
+		failures.append("a gamepad cannot reach the name box from Done (up goes to '%s')" % done.focus_neighbor_top)
+	var card: Control = screen.look_popup().find_child("Card", true, false) as Control
+	var view: Rect2 = screen.get_viewport().get_visible_rect()
+	if card == null or not view.encloses(card.get_global_rect()):
+		failures.append("the Your look popup with the name box does not fit the %s screen (%s)" % [view.size, card.get_global_rect() if card != null else "no card"])
+	# Cleaned like a phone's name: control characters dropped, edges trimmed.
+	settings.filter_names = false
+	var typed: String = "  Ace\u0007Pilot "
+	edit.text = typed
+	edit.text_changed.emit(edit.text)
+	var want: String = ControllerServerScript.clean_name(edit.text)
+	if want != "AcePilot" or server.slot_name(host_seat) != want:
+		failures.append("typing '%s' named the host seat '%s', expected '%s' (clean_name)" % [typed.c_escape(), server.slot_name(host_seat), want])
+	if settings.get("host_name") != want:
+		failures.append("the name was not kept in HostSettings ('%s')" % settings.get("host_name"))
+	var remote_name: String = await _remote_sees_name_937(rig, peer, host_seat, want) if peer != null else ""
+	if remote_name != want:
+		failures.append("the remote client's lobby state names the host seat '%s', expected '%s'" % [remote_name, want])
+	await _await_ticks(3)
+	var own_card: Control = screen.player_card(host_seat)
+	var card_name: String = own_card.name_label().text if own_card != null and own_card.has_method("name_label") else "<no card>"
+	if not card_name.contains(want):
+		failures.append("the host's own lobby card reads '%s', expected '%s'" % [card_name, want])
+	# Filter player names masks it.
+	settings.filter_names = true
+	edit.text = "merde"
+	edit.text_changed.emit(edit.text)
+	var masked: String = NameFilterScript937.mask("merde")
+	if masked == "merde" or server.slot_name(host_seat) != masked:
+		failures.append("with Filter player names on the host seat reads '%s', expected '%s'" % [server.slot_name(host_seat), masked])
+	# Empty (or nothing left after cleaning) keeps the default.
+	for blank: String in ["", "   "]:
+		edit.text = blank
+		edit.text_changed.emit(edit.text)
+		if server.slot_name(host_seat) != "Host":
+			failures.append("the name '%s' left the host seat '%s', expected the default 'Host'" % [blank, server.slot_name(host_seat)])
+	# Saved for next time: a fresh settings object reads it back, and a reclaimed seat wears it.
+	var path: String = "user://host_name_937_test.cfg"
+	var saver: RefCounted = HostSettingsScript441.new()
+	saver.path = path
+	saver.set_host_name("Zed")
+	var loader: RefCounted = HostSettingsScript441.new()
+	loader.path = path
+	loader.load_settings()
+	if loader.get("host_name") != "Zed":
+		failures.append("the saved name read back as '%s', expected 'Zed'" % loader.get("host_name"))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	edit.text = "Mira"
+	edit.text_changed.emit(edit.text)
+	server.apply_host_command("kind", "solo")
+	server.apply_host_command("kind", "online")
+	if server.host_pc_slot() == -1 or server.slot_name(server.host_pc_slot()) != "Mira":
+		failures.append("a reclaimed host seat is named '%s', expected the saved 'Mira'" % (server.slot_name(server.host_pc_slot()) if server.host_pc_slot() != -1 else "<no seat>"))
+	settings.set("host_name", "")
+	settings.filter_names = old_filter
+	screen.set_popup("")
 	await _bots_close_445(rig)
 	return failures
