@@ -24,7 +24,8 @@ while true; do
     fi
     for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | select(any(.labels[]; .name=="ready-for-agent")) | .number'); do
       # skip tickets already in progress: a local or remote branch for the issue exists
-      git -C "$ROOT" branch -a --list "*issue-$n-*" | grep -q . && continue
+      # (feat/issue-N-slug from workers, or fix/N-slug from the owner's main terminal)
+      git -C "$ROOT" branch -a --list "*issue-$n-*" "*/$n-*" | grep -q . && continue
       # only when I am idle: no Atlas state file (removed at closeout)
       [ -z "$(ls "$ROOT"/.claude/atlas-state/*.json 2>/dev/null)" ] && { echo "MYTICKET $n"; exit 0; }
     done

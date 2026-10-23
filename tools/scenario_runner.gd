@@ -172,6 +172,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"speed_strip_boosts_run_distance",
 	"stage_speed_strips_placed",
 	"mud_patch_slows_player",
+	"mud_patch_plays_squelch_once_on_entry",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -316,6 +317,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"magnet_pushes_with_negative_force",
 	"magnet_ignores_wielder_dead_and_dropped",
 	"magnet_does_not_pull_through_solid_terrain",
+	"magnet_plays_pull_sound_rate_limited",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -882,6 +884,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"burst_of_action_taps_counts_each_press_601",
 	"respawn_skips_spawns_with_no_floor_605",
 	"respawn_stays_on_own_half_605",
+	"respawn_avoids_hazard_adjacent_spawn",
 	"respawn_alone_does_not_always_pick_spawn0_605",
 	"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648",
 	"soccer_respawn_never_lands_in_a_goal_648",
@@ -1923,6 +1926,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_speed_strips_placed()
 		"mud_patch_slows_player":
 			return await _scenario_mud_patch_slows_player()
+		"mud_patch_plays_squelch_once_on_entry":
+			return await _scenario_mud_patch_plays_squelch_once_on_entry()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -2211,6 +2216,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_magnet_ignores_wielder_dead_and_dropped()
 		"magnet_does_not_pull_through_solid_terrain":
 			return await _scenario_magnet_does_not_pull_through_solid_terrain()
+		"magnet_plays_pull_sound_rate_limited":
+			return await _scenario_magnet_plays_pull_sound_rate_limited()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -3339,6 +3346,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_respawn_skips_spawns_with_no_floor_605()
 		"respawn_stays_on_own_half_605":
 			return await _scenario_respawn_stays_on_own_half_605()
+		"respawn_avoids_hazard_adjacent_spawn":
+			return await _scenario_respawn_avoids_hazard_adjacent_spawn()
 		"respawn_alone_does_not_always_pick_spawn0_605":
 			return await _scenario_respawn_alone_does_not_always_pick_spawn0_605()
 		"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648":
@@ -11751,6 +11760,68 @@ func _scenario_mud_patch_slows_player() -> Array[String]:
 		# leaving, the runner need only be clearly above the mud pace.
 		if runner.linear_velocity.x <= on_mud * 1.3:
 			failures.append("speed %.1f px/s 0.3 s after leaving the mud, still near the mud pace %.1f" % [runner.linear_velocity.x, on_mud])
+	await _teardown(stage)
+	return failures
+## Issue #987: wading onto mud plays mud_squelch once; staying is silent; a
+## second entry within 1 s is silent, after 1 s plays again; a dead fighter
+## (ghost) plays none.
+func _mud_squelch_drop(stage: Node2D, player: RigidBody2D, mud: StaticBody2D, sfx: Node) -> int:
+	# Lift the player clear of the strip, then drop it back on.
+	player.global_position = mud.position + Vector2(0, -60)
+	player.linear_velocity = Vector2.ZERO
+	var before: int = _sfx_count(sfx, "mud_squelch")
+	for _tick in 40:
+		await physics_frame
+	return _sfx_count(sfx, "mud_squelch") - before
+func _scenario_mud_patch_plays_squelch_once_on_entry() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"mud_squelch"):
+		return ["mud_squelch is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var mud: StaticBody2D = _mud_ground(stage, Vector2(1600, 10), PART_POSITION, true)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	sfx.start_recording()
+	for _tick in 90:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "mud_squelch")
+	var last: Dictionary = _sfx_last(sfx, "mud_squelch")
+	# Stay on the mud 1.5 s more: nothing further.
+	for _tick in 90:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "mud_squelch") - first
+	# Step off (lift) and back: the first drop is long after the entry, so it
+	# plays; the next one lands within 1 s of it and is rate-limited.
+	var again: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	var quick: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	# Wait past 1 s, then step off and on again.
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	# A dead fighter is silent.
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	sfx.stop_recording()
+	print("      squelches: entry %d, staying %d, quick re-entry %d, later re-entry %d, dead %d" % [first, stayed, quick, later, dead])
+	if first != 1:
+		failures.append("walking onto mud played mud_squelch %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("mud_squelch was not positional")
+	if stayed != 0:
+		failures.append("staying on the mud played %d more squelches" % stayed)
+	if again != 1:
+		failures.append("re-entering after more than 1 s (first drop) played %d squelches, want 1" % again)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d squelches" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s played %d squelches, want 1" % later)
+	if dead != 0:
+		failures.append("a dead fighter played %d squelches" % dead)
 	await _teardown(stage)
 	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
@@ -21491,6 +21562,59 @@ func _magnet_wall_trial(wielder_stats: Resource, wall: bool) -> Array[float]:
 	var moved: Array[float] = [victim.global_position.x - start]
 	await _teardown(stage, false)
 	return moved
+## Issue #978: a magnet with a rival in range and clear line plays magnet_pull
+## at the start and at most once per 1.5 s after; nobody in range, or a wall
+## in the way, is silent.
+func _scenario_magnet_plays_pull_sound_rate_limited() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"magnet_pull"):
+		return ["magnet_pull is not in the sound table"]
+	var stats: Resource = load(MAGNET_PATH)
+	var open_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_NEAR, false)
+	var far_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_OUTSIDE, false)
+	var wall_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_NEAR, true)
+	print("      pull sounds: open %d, out of range %d, walled %d" % [open_n, far_n, wall_n])
+	if open_n < 1:
+		failures.append("a rival in range and clear line: magnet_pull never played")
+	# 200 ticks at 60 Hz is 3.3 s, so the 1.5 s limit allows at most 3.
+	if open_n > 3:
+		failures.append("magnet_pull played %d times in about 3.3 s; limit is one per 1.5 s" % open_n)
+	if far_n != 0:
+		failures.append("a rival out of range still played magnet_pull %d times" % far_n)
+	if wall_n != 0:
+		failures.append("a rival behind a wall still played magnet_pull %d times" % wall_n)
+	_scenario_completed = true
+	return failures
+## Counts magnet_pull plays over 200 ticks with one victim at `offset`.
+func _magnet_sound_trial(sfx: Node, wielder_stats: Resource, offset: Vector2, wall: bool) -> int:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + offset)
+	if wall:
+		var slab := StaticBody2D.new()
+		slab.collision_layer = 1
+		slab.collision_mask = 0
+		var slab_shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(20, 400)
+		slab_shape.shape = rect
+		slab.add_child(slab_shape)
+		slab.position = DEEP_PARK_POSITION + offset * 0.5
+		stage.add_child(slab)
+	await _await_ticks(2)
+	sfx.start_recording()
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	victim.linear_velocity = Vector2.ZERO
+	await _await_ticks(200)
+	var played: int = _sfx_count(sfx, "magnet_pull")
+	sfx.stop_recording()
+	await _teardown(stage, false)
+	return played
 func _scenario_magnet_ignores_wielder_dead_and_dropped() -> Array[String]:
 	var failures: Array[String] = []
 	# Unbraced wielder alone: with nobody to pull, the field must not shove its own
@@ -42842,6 +42966,51 @@ func _scenario_respawn_stays_on_own_half_605() -> Array[String]:
 				failures.append("%s hands its Respawn no own-half filter" % mode_name)
 		await _teardown(mrig["stage"], false)
 	_scenario_completed = true
+	return failures
+## #982: a spawn within 120 px of spikes or a saw is passed over while another
+## is clear; with every spawn near a hazard the old choice stands.
+func _scenario_respawn_avoids_hazard_adjacent_spawn() -> Array[String]:
+	var failures: Array[String] = []
+	var points: Array[Vector2] = [Vector2(-300.0, 400.0), Vector2(300.0, 400.0), Vector2(900.0, 400.0)]
+	var rig: Dictionary = await _respawn_rig_605(points, [-300.0, 300.0, 900.0])
+	if rig.is_empty():
+		return ["the round never started"]
+	rig["players"][1].global_position = Vector2(-300.0, 400.0)
+	var respawn: RefCounted = rig["respawn"]
+	var stage: Node = rig["stage"]
+	# The rig's fighter drifts between ticks; pin it where the scenario wants it.
+	var _pick := func(slot: int) -> Vector2:
+		rig["players"][1].global_position = Vector2(-300.0, 400.0)
+		return respawn.farthest_spawn(slot)
+	# Control: no hazard, the farthest spawn wins as before.
+	if _pick.call(0) != points[2]:
+		failures.append("without a hazard the pick was %s, want the farthest %s" % [_pick.call(0), points[2]])
+	var spikes: Node2D = preload("res://scripts/Spikes.gd").new()
+	spikes.position = Vector2(960.0, 400.0)
+	stage.add_child(spikes)
+	await _await_ticks(2)
+	if _pick.call(0) != points[1]:
+		failures.append("a spawn 60 px from spikes was still picked: %s" % _pick.call(0))
+	# A saw counts at its current position.
+	spikes.position = Vector2(960.0, -2000.0)
+	var saw: Node2D = preload("res://scripts/Saw.gd").new()
+	saw.position = Vector2(900.0, 330.0)
+	stage.add_child(saw)
+	await _await_ticks(2)
+	if _pick.call(0) != points[1]:
+		failures.append("a spawn 70 px from a saw was still picked: %s" % _pick.call(0))
+	saw.position = Vector2(900.0, -2000.0)
+	if _pick.call(0) != points[2]:
+		failures.append("a saw that moved away still blocked the spawn")
+	# Every spawn near a hazard: today's choice.
+	for point: Vector2 in points:
+		var extra: Node2D = preload("res://scripts/Saw.gd").new()
+		extra.position = point + Vector2(0.0, -50.0)
+		stage.add_child(extra)
+	await _await_ticks(2)
+	if _pick.call(0) != points[2]:
+		failures.append("with every spawn near a hazard the pick was %s, want today's %s" % [_pick.call(0), points[2]])
+	await _teardown(stage)
 	return failures
 func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 	var failures: Array[String] = []
