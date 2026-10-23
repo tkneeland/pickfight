@@ -170,6 +170,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mud_patch_overpass_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
+	"stage_speed_strips_placed",
 	"mud_patch_slows_player",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
@@ -1912,6 +1913,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_restores_when_stage_freed()
 		"speed_strip_boosts_run_distance":
 			return await _scenario_speed_strip_boosts_run_distance()
+		"stage_speed_strips_placed":
+			return await _scenario_stage_speed_strips_placed()
 		"mud_patch_slows_player":
 			return await _scenario_mud_patch_slows_player()
 		"bounce_pad_launches_body":
@@ -11598,6 +11601,36 @@ func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
 	if not was_boosted or not left:
 		failures.append("the runner was never boosted or never left the strip (boosted=%s)" % was_boosted)
 	await _teardown(stage)
+	return failures
+## Speed strips on two more stages (#961): Flatlands carries one on its floor
+## and Switchyard a mirrored pair, each inside the floor's width, at least 100 px
+## from either floor edge, with no spawn, pickup spot or hill spot over it.
+func _scenario_stage_speed_strips_placed() -> Array[String]:
+	var failures: Array[String] = []
+	var floors: Dictionary = {"Flatlands": 720.0, "Switchyard": 1100.0}
+	for stage_name: String in floors:
+		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
+		get_root().add_child(stage)
+		var strips: Array[StaticBody2D] = []
+		for child: Node in stage.get_children():
+			if child is StaticBody2D and child.has_method("is_boosting"):
+				strips.append(child as StaticBody2D)
+		if strips.is_empty():
+			failures.append("%s has no speed strip" % stage_name)
+		for strip: StaticBody2D in strips:
+			var half_x: float = strip.size.x / 2.0
+			if strip.position.x - half_x < -floors[stage_name] + 100.0 or strip.position.x + half_x > floors[stage_name] - 100.0:
+				failures.append("%s %s is not 100 px inside the floor" % [stage_name, strip.name])
+			for child: Node in stage.get_children():
+				if not (child is Marker2D) or not (child.name.begins_with("Spawn") or child.name.begins_with("PickupSpawn") or child.name.begins_with("HillSpot")):
+					continue
+				var marker: Node2D = child as Node2D
+				if marker.position.y < strip.position.y - 120.0:
+					continue
+				if absf(marker.position.x - strip.position.x) <= half_x + PLAYER_RADIUS:
+					failures.append("%s %s at x=%.0f is over %s" % [stage_name, child.name, marker.position.x, strip.name])
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## Mud patch (#880): a body is pushed along a strip of mud (or plain ground)
 ## by a steady force, standing in for running, and the fastest it gets is
