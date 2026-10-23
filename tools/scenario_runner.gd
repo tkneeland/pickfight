@@ -160,6 +160,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"conveyor_flatlands_spawns_clear",
 	"conveyor_two_more_stages",
 	"teleporter_moves_player_to_twin",
+	"teleporter_plays_own_sound",
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_two_more_stages_spawns_clear",
@@ -1810,6 +1811,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_conveyor_two_more_stages()
 		"teleporter_moves_player_to_twin":
 			return await _scenario_teleporter_moves_player_to_twin()
+		"teleporter_plays_own_sound":
+			return await _scenario_teleporter_plays_own_sound()
 		"ice_patch_slides_player_and_restores":
 			return await _scenario_ice_patch_slides_player_and_restores()
 		"ice_patch_summit_spawns_clear":
@@ -10872,6 +10875,37 @@ func _scenario_teleporter_moves_player_to_twin() -> Array[String]:
 		await physics_frame
 	if ghost.global_position.distance_to(TELEPORTER_A) > 40.0:
 		failures.append("a dead player was teleported")
+	await _teardown(stage)
+	return failures
+## Issue #941: a trip through a portal plays `teleport` at the entry and at
+## the twin, never `wind_gust`; a fighter ignored during the re-entry window
+## makes no sound.
+func _scenario_teleporter_plays_own_sound() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"teleport"):
+		return ["teleport is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	_teleporter_pair(stage)
+	var player: RigidBody2D = _spawn_player(stage, TELEPORTER_A)
+	sfx.start_recording()
+	for _tick in 20:
+		await physics_frame
+	var played: int = _sfx_count(sfx, "teleport")
+	if played != 2:
+		failures.append("one trip: teleport played %d times, expected 2 (entry and exit)" % played)
+	if _sfx_count(sfx, "wind_gust") != 0:
+		failures.append("the teleporter still plays wind_gust")
+	# Held on the exit portal inside the 1 s window: ignored, so silent.
+	for _tick in 30:
+		player.global_position = TELEPORTER_B
+		player.linear_velocity = Vector2.ZERO
+		await physics_frame
+	if _sfx_count(sfx, "teleport") != played:
+		failures.append("teleport played for a fighter in the re-entry window")
+	sfx.stop_recording()
 	await _teardown(stage)
 	return failures
 ## Conveyor drift (#842): drops a player onto a belt (or plain ground), lets
