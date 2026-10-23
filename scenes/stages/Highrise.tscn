@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
@@ -9,9 +9,6 @@
 size = Vector2(1440, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ledge"]
-size = Vector2(240, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_summit"]
 size = Vector2(240, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
@@ -120,7 +117,7 @@ polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
 position = Vector2(0, -242)
 
 [node name="SummitShape" type="CollisionShape2D" parent="Summit"]
-shape = SubResource("RectangleShape2D_summit")
+shape = SubResource("RectangleShape2D_ledge")
 
 [node name="SummitVisual" type="Polygon2D" parent="Summit"]
 color = Color(0.35, 0.35, 0.4, 1)
