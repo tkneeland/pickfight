@@ -41,7 +41,15 @@ const _DETECTOR_ABOVE: float = 6.0
 const _DETECTOR_BELOW: float = 2.0
 const _STREAK_SPACING: float = 36.0
 
+## Issue #993: a skid when a living fighter's body first loses grip on the
+## ice, at most once per fighter per second. Played on the host only; online
+## clients hear it through the generic Sfx snapshot trailer, so nothing here
+## is replicated.
+const SKID_INTERVAL_SEC: float = 1.0
+
 var _detector: Area2D
+## Instance id -> seconds until that fighter may skid again.
+var _skid_wait: Dictionary = {}
 ## body -> the material it had before the ice (may be null).
 var _saved: Dictionary = {}
 ## The one low-friction material put on bodies; compared by identity on restore.
@@ -93,7 +101,13 @@ func _ready() -> void:
 	_detector.add_child(detector_shape)
 	add_child(_detector)
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	for id: int in _skid_wait.keys():
+		var left: float = float(_skid_wait[id]) - delta
+		if left <= 0.0:
+			_skid_wait.erase(id)
+		else:
+			_skid_wait[id] = left
 	var on_ice: Array[RigidBody2D] = []
 	for body: Node2D in _detector.get_overlapping_bodies():
 		if body is RigidBody2D and body.is_in_group("players") and _touching(body):
@@ -122,6 +136,20 @@ func _grip_off(body: RigidBody2D) -> void:
 		return  # already as slippery (the modifier); nothing to swap or restore
 	_saved[body] = before
 	body.physics_material_override = _ice_material
+	_skid(body)
+
+## Plays `ice_skid` at `body` unless it is a ghost or skidded within the last
+## second.
+func _skid(body: RigidBody2D) -> void:
+	if not bool(body.get("alive")):
+		return
+	var id: int = body.get_instance_id()
+	if _skid_wait.has(id):
+		return
+	_skid_wait[id] = SKID_INTERVAL_SEC
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(&"ice_skid", body.global_position, 1.0)
 
 func _restore(body: Variant) -> void:
 	var before: PhysicsMaterial = _saved.get(body)
