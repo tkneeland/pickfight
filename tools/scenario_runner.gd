@@ -1120,6 +1120,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_keeps_same_podium_and_resets_title_colour_review_ui",
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
+	"event_cooldown_keeps_out_of_tree_players_refactor_audio",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3789,6 +3790,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_settings_language_change_rewords_every_label_review_ui()
 		"credits_cover_the_settings_toggle_review_ui":
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
+		"event_cooldown_keeps_out_of_tree_players_refactor_audio":
+			return await _scenario_event_cooldown_keeps_out_of_tree_players_refactor_audio()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -53071,5 +53074,56 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	credits.queue_free()
 	await process_frame
 	PadMenuScript368.reset()
+	_scenario_completed = true
+	return failures
+## Refactor (audio/juice): the shared EventCooldown guards one source per
+## channel, and its VelocityTracker keeps a player that leaves the tree (a
+## persistent player between stages) and drops it only once freed -- the
+## behaviour SfxHooks now shares with Juice.
+func _scenario_event_cooldown_keeps_out_of_tree_players_refactor_audio() -> Array[String]:
+	var failures: Array[String] = []
+	var cooldown_script: GDScript = preload("res://scripts/EventCooldown.gd")
+	var cooldown: RefCounted = cooldown_script.new()
+	var source := Node.new()
+	if not cooldown.ready(source, 5):
+		failures.append("a source's first event was held back by the cooldown")
+	if cooldown.ready(source, 5):
+		failures.append("a second event in the same frame passed the cooldown")
+	if not cooldown.ready(source, 5, "grunt"):
+		failures.append("another channel of the same source was muted by its first event")
+	await _await_ticks(6)
+	if not cooldown.ready(source, 5):
+		failures.append("the source was still on cooldown after 6 physics frames")
+	source.free()
+	var body_script := GDScript.new()
+	body_script.source_code = "extends RigidBody2D\nvar alive: bool = true\n"
+	body_script.reload()
+	var body := RigidBody2D.new()
+	body.set_script(body_script)
+	body.freeze = true
+	root.add_child(body)
+	var floor_node := Node2D.new()
+	var tracker: RefCounted = cooldown_script.VelocityTracker.new()
+	tracker.track(body)
+	body.linear_velocity = Vector2(0.0, 800.0)
+	tracker.step()
+	if not is_equal_approx(tracker.landing_speed(floor_node, body, 350.0), 800.0):
+		failures.append("a body arriving at 800 px/s was not a landing at 800")
+	if tracker.landing_speed(floor_node, body, 900.0) >= 0.0:
+		failures.append("a body below the minimum speed counted as a landing")
+	root.remove_child(body)
+	tracker.step()
+	if not tracker.players.has(body):
+		failures.append("a player out of the tree was dropped from tracking")
+	root.add_child(body)
+	body.linear_velocity = Vector2(0.0, 600.0)
+	tracker.step()
+	if not is_equal_approx(tracker.landing_speed(floor_node, body, 350.0), 600.0):
+		failures.append("a player back in the tree was not tracked again")
+	body.free()
+	tracker.step()
+	if not tracker.players.is_empty():
+		failures.append("a freed player was kept in tracking")
+	floor_node.free()
 	_scenario_completed = true
 	return failures
