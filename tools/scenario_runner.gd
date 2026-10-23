@@ -149,6 +149,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomstick_charge_ring_tracks_fire_clock",
 	"roster_heads_do_not_tunnel_thin_platform",
 	"round_modifier_low_gravity_applies_and_undoes",
+	"round_modifier_heavy_gravity_applies_and_undoes",
 	"round_modifier_heavy_weapons_applies_and_undoes",
 	"round_modifier_big_heads_applies_and_undoes",
 	"round_modifier_fast_lava_applies_and_undoes",
@@ -747,6 +748,23 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_hud_scoreboard_and_round_result",
 	"remote_client_hud_king_of_the_hill_and_mode_lines",
 	"remote_client_hud_match_result_podium_and_leave",
+	"effect_stream_trailer_round_trip_976",
+	"remote_client_plays_host_round_effects_976",
+	"remote_effects_wait_for_interp_delay_976",
+	"remote_effects_ko_burst_and_hitmarker_976",
+	"remote_effects_shake_dust_sparks_976",
+	"remote_effects_pickup_callout_976",
+	"remote_effects_shield_spark_and_win_ring_976",
+	"remote_effects_kill_feed_976",
+	"remote_effects_stage_title_and_pause_976",
+	"remote_effects_match_point_976",
+	"remote_effects_final_ko_976",
+	"remote_effects_play_of_round_976",
+	"remote_effects_head_trails_976",
+	"remote_effects_edge_arrows_976",
+	"remote_client_host_hud_mirror_976",
+	"remote_client_mode_huds_976",
+	"remote_client_victory_awards_976",
 	"remote_client_removed_body_is_gone_after_one_snapshot",
 	"hud_top_gap_reclaimed_kill_feed_and_score_line",
 	"bot_stays_on_stage_over_jittered_starts",
@@ -985,6 +1003,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952",
 	"bot_faces_shield_at_incoming_shot",
 	"bot_shield_ignores_shot_on_easy_or_other_weapon_977",
+	"bot_faces_umbrella_at_incoming_shot",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -1142,6 +1161,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
 	"stage_platform_geometry_unchanged_refactor_platforms",
+	"controller_page_review_fixes_refactor_phone",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1895,6 +1915,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_roster_heads_do_not_tunnel_thin_platform()
 		"round_modifier_low_gravity_applies_and_undoes":
 			return await _scenario_round_modifier_low_gravity_applies_and_undoes()
+		"round_modifier_heavy_gravity_applies_and_undoes":
+			return await _scenario_round_modifier_heavy_gravity_applies_and_undoes()
 		"round_modifier_heavy_weapons_applies_and_undoes":
 			return await _scenario_round_modifier_heavy_weapons_applies_and_undoes()
 		"round_modifier_big_heads_applies_and_undoes":
@@ -3085,6 +3107,40 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_hud_king_of_the_hill_and_mode_lines()
 		"remote_client_hud_match_result_podium_and_leave":
 			return await _scenario_remote_client_hud_match_result_podium_and_leave()
+		"effect_stream_trailer_round_trip_976":
+			return await _scenario_effect_stream_trailer_round_trip_976()
+		"remote_client_plays_host_round_effects_976":
+			return await _scenario_remote_client_plays_host_round_effects_976()
+		"remote_effects_wait_for_interp_delay_976":
+			return await _scenario_remote_effects_wait_for_interp_delay_976()
+		"remote_effects_ko_burst_and_hitmarker_976":
+			return await _scenario_remote_effects_ko_burst_and_hitmarker_976()
+		"remote_effects_shake_dust_sparks_976":
+			return await _scenario_remote_effects_shake_dust_sparks_976()
+		"remote_effects_pickup_callout_976":
+			return await _scenario_remote_effects_pickup_callout_976()
+		"remote_effects_shield_spark_and_win_ring_976":
+			return await _scenario_remote_effects_shield_spark_and_win_ring_976()
+		"remote_effects_kill_feed_976":
+			return await _scenario_remote_effects_kill_feed_976()
+		"remote_effects_stage_title_and_pause_976":
+			return await _scenario_remote_effects_stage_title_and_pause_976()
+		"remote_effects_match_point_976":
+			return await _scenario_remote_effects_match_point_976()
+		"remote_effects_final_ko_976":
+			return await _scenario_remote_effects_final_ko_976()
+		"remote_effects_play_of_round_976":
+			return await _scenario_remote_effects_play_of_round_976()
+		"remote_effects_head_trails_976":
+			return await _scenario_remote_effects_head_trails_976()
+		"remote_effects_edge_arrows_976":
+			return await _scenario_remote_effects_edge_arrows_976()
+		"remote_client_host_hud_mirror_976":
+			return await _scenario_remote_client_host_hud_mirror_976()
+		"remote_client_mode_huds_976":
+			return await _scenario_remote_client_mode_huds_976()
+		"remote_client_victory_awards_976":
+			return await _scenario_remote_client_victory_awards_976()
 		"remote_client_removed_body_is_gone_after_one_snapshot":
 			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
 		"hud_top_gap_reclaimed_kill_feed_and_score_line":
@@ -3557,6 +3613,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_faces_shield_at_incoming_shot()
 		"bot_shield_ignores_shot_on_easy_or_other_weapon_977":
 			return await _scenario_bot_shield_ignores_shot_977()
+		"bot_faces_umbrella_at_incoming_shot":
+			return await _scenario_bot_faces_umbrella_at_incoming_shot()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -3855,6 +3913,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
 		"stage_platform_geometry_unchanged_refactor_platforms":
 			return await _scenario_stage_platform_geometry_unchanged_refactor_platforms()
+		"controller_page_review_fixes_refactor_phone":
+			return _scenario_controller_page_review_fixes_refactor_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -10168,6 +10228,7 @@ const MODIFIER_RIG_TICKS: int = 5
 ## the names the announcement must show for them.
 const MODIFIER_TITLES: Dictionary = {
 	"low_gravity": "Low Gravity",
+	"heavy_gravity": "Heavy Gravity",
 	"heavy_weapons": "Heavy Weapons",
 	"big_heads": "Big Heads",
 	"fast_lava": "Fast Lava",
@@ -10186,6 +10247,9 @@ const MODIFIER_TITLES: Dictionary = {
 const LOW_GRAVITY_FALL_TICKS: int = 20
 const LOW_GRAVITY_RATIO_MIN: float = 0.35
 const LOW_GRAVITY_RATIO_MAX: float = 0.65
+## Heavy gravity is 1.5x gravity: the same fall gains about 1.5x the speed.
+const HEAVY_GRAVITY_RATIO_MIN: float = 1.3
+const HEAVY_GRAVITY_RATIO_MAX: float = 1.7
 ## Heavy weapons put 1.6x the mass in every head. Extending the weapon in clear
 ## air throws the body back by momentum: with the pickaxe's 0.25 head against
 ## a 1.0 body, about 0.25/1.25 of the relative speed plain and 0.4/1.4 heavy,
@@ -10353,6 +10417,40 @@ func _scenario_round_modifier_low_gravity_applies_and_undoes() -> Array[String]:
 				failures.append("low gravity: fell at %.2fx the plain speed, expected about half (%.2f..%.2f)" % [
 					ratio, LOW_GRAVITY_RATIO_MIN, LOW_GRAVITY_RATIO_MAX])
 		_check_undone(failures, "low gravity", values, "fall speed")
+	await _teardown(loop["stage"])
+	return failures
+## Heavy gravity (#840): falls about 1.5x faster, and gravity is back after.
+func _scenario_round_modifier_heavy_gravity_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var saved: Array[float] = []
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		var player: RigidBody2D = players[0]
+		player.set_input_vector(Vector2.ZERO)
+		player.teleport_to(MODIFIER_AIR)
+		await _await_ticks(LOW_GRAVITY_FALL_TICKS)
+		return player.linear_velocity.y
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 0:
+			saved.assign([players[0].gravity_scale, players[1].gravity_scale])
+		elif round_index == 2:
+			for i in 2:
+				if players[i].gravity_scale != saved[i]:
+					found.append("P%d's gravity_scale is %.3f after the heavy-gravity round, %.3f before it" % [i, players[i].gravity_scale, saved[i]])
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "heavy_gravity", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] <= 0.0:
+			failures.append("a player in clear air did not fall (%.3f px/s)" % values[0])
+		else:
+			var ratio: float = values[1] / values[0]
+			if ratio < HEAVY_GRAVITY_RATIO_MIN or ratio > HEAVY_GRAVITY_RATIO_MAX:
+				failures.append("heavy gravity: fell at %.2fx the plain speed, expected about 1.5x (%.2f..%.2f)" % [
+					ratio, HEAVY_GRAVITY_RATIO_MIN, HEAVY_GRAVITY_RATIO_MAX])
+		_check_undone(failures, "heavy gravity", values, "fall speed")
 	await _teardown(loop["stage"])
 	return failures
 ## Heavy weapons: the body's recoil from extending the weapon in clear air,
@@ -16068,11 +16166,11 @@ func _scenario_controller_page_prompts_for_nickname_first() -> Array[String]:
 	if not open_body.contains("nameInput.value = myName"):
 		failures.append("the prompt is not prefilled with the default name: %s" % open_body)
 	var commit_body: String = _js_function_body(page, "commitName")
-	for needed: String in ["cleanName(nameInput.value)", "localStorage.setItem(NAME_KEY, name)",
-			"localStorage.setItem(NAME_CHOSEN_KEY, \"1\")", "classList.remove(\"show\")", "sendName()"]:
+	for needed: String in ["cleanName(nameInput.value)", "store(NAME_KEY, name)",
+			"store(NAME_CHOSEN_KEY, \"1\")", "classList.remove(\"show\")", "sendName()"]:
 		if not commit_body.contains(needed):
 			failures.append("picking a name does not do %s" % needed)
-	if not _js_function_body(page, "nameChosen").contains("localStorage.getItem(NAME_CHOSEN_KEY)"):
+	if not _js_function_body(page, "nameChosen").contains("stored(NAME_CHOSEN_KEY)"):
 		failures.append("whether a name was chosen is not read back from localStorage")
 	if not page.contains("nameEl.addEventListener(\"click\", openNamePrompt)"):
 		failures.append("tapping the name does not open the prompt to edit it")
@@ -17532,9 +17630,14 @@ func _scenario_controller_page_look_picker_after_name() -> Array[String]:
 		if not server_src.contains(arm):
 			failures.append("ControllerServer does not handle the page's %s frame" % arm.strip_edges())
 	var render: String = _js_function_body(page, "renderLookPrompt")
-	for needed: String in ["sw.disabled = holder >= 0", '"taken"', 't: "color", v: index', 't: "hat", v: id', "drawHat(preview"]:
+	for needed: String in ["sw.disabled = holder >= 0", '"taken"', 't: "color", v: index', 'drawHat, tint, HAT_KEY, "hat")']:
 		if not render.contains(needed):
 			failures.append("the picker does not do %s" % needed)
+	# The hat and eyes grids share buildPicker(): it draws each preview and sends the pick as a `kind` frame.
+	var picker: String = _js_function_body(page, "buildPicker")
+	for needed: String in ["t: kind, v: item.id", "draw(preview, item.id, tint)"]:
+		if not picker.contains(needed):
+			failures.append("the picker grid does not do %s" % needed)
 	if not _js_function_body(page, "colorOf").contains("looks.palette[look.color]"):
 		failures.append("the phone does not take its colour from the host")
 	for old: String in ["SLOT_COLORS[slot % SLOT_COLORS.length]", "SLOT_COLORS[p.slot % SLOT_COLORS.length]"]:
@@ -19473,7 +19576,7 @@ func _scenario_controller_page_stale_confirms_close() -> Array[String]:
 		failures.append("the kick does not name the target's claim")
 	if not kick_body.contains("return claimHolder(target, claim) !== null;"):
 		failures.append("the kick confirm does not check its target still holds that claim")
-	if not _js_function_body(page, "claimHolder").contains("lobby.players[i].claim === claim"):
+	if not _js_function_body(page, "claimHolder").contains("p.claim === claim"):
 		failures.append("claimHolder does not compare claims")
 	var end_at: int = page.find('menuEndBtn.addEventListener("click"')
 	var end_to: int = page.find("menuKickBtn.addEventListener", end_at)
@@ -23259,9 +23362,9 @@ func _scenario_controller_page_refused_phone_waits_for_slot() -> Array[String]:
 		failures.append("the close handler does not remember the reason before redrawing")
 	if not _js_function_body(page, "setSlot").contains('if (n >= 0) { closeReason = ""; }'):
 		failures.append("being given a slot does not forget the old refusal")
-	var hint_at: int = state.find('getElementById("hint").style.display = ')
+	var hint_at: int = state.find("var hintShown = ")
 	var hint_line: String = state.substr(hint_at, state.find(";", hint_at) - hint_at) if hint_at >= 0 else ""
-	if not hint_line.contains("= slot >= 0 && ("):
+	if not hint_line.contains("= slot >= 0 && (") or not state.contains("hintEl.style.display = hintDisplay"):
 		failures.append("the 'Drag to swing' hint shows on a phone with no slot: %s" % hint_line)
 	_scenario_completed = true
 	return failures
@@ -26016,7 +26119,7 @@ func _online_close_239(rig: Dictionary) -> void:
 	await _teardown(rig["stage"])
 ## A fake remote client: joins the room and sends its hello envelope.
 ## `proto` < 0 leaves the field out. Null if the relay handshake failed.
-func _online_remote_239(rig: Dictionary, id: String, proto: int = 1) -> WebSocketPeer:
+func _online_remote_239(rig: Dictionary, id: String, proto: int = ControllerServerScript.PROTOCOL_VERSION) -> WebSocketPeer:
 	var clients: Array = rig["clients"]
 	var peer: WebSocketPeer = await _relay_connect({"t": "join", "room": rig["code"]}, clients)
 	if peer == null:
@@ -26249,7 +26352,7 @@ func _scenario_online_version_mismatch_refused() -> Array[String]:
 	if rig.is_empty():
 		return failures
 	var server: Node = rig["server"]
-	for proto in [2, -1]:
+	for proto in [ControllerServerScript.PROTOCOL_VERSION + 1, -1]:
 		var remote: WebSocketPeer = await _online_remote_239(rig, "version-%d" % proto, proto)
 		var err: Dictionary = await _online_wait_239(rig, remote, "reason")
 		if err.get("t") != "error" or err.get("reason") != "version":
@@ -29603,9 +29706,9 @@ func _scenario_remote_client_renders_stage_projectiles_and_pickups() -> Array[St
 		failures.append("player 1 puppet is wrong")
 	if client._stage != null and client._camera.global_position.distance_to(client._stage.get_view_rect().get_center()) > 1.0:
 		failures.append("the camera does not frame the stage (at %s)" % client._camera.global_position)
-	var hud_text: String = client._feed_label.text + client._banner_label.text
-	if not hud_text.contains("knocked out") or not hud_text.contains("Low gravity") or client._score_box.get_child_count() != 2:
-		failures.append("HUD shows feed/banner '%s' and %d score rows" % [hud_text, client._score_box.get_child_count()])
+	# Issue #976: the modifier banner is the host's own ModifierBanner label.
+	if client.modifier_label().text != "Low gravity" or not client.modifier_label().visible:
+		failures.append("the modifier banner shows '%s' (visible %s)" % [client.modifier_label().text, client.modifier_label().visible])
 	var first_stage: Node = client._stage
 	var other_index: int = mini(3, paths.size() - 1)
 	client.apply_snapshot(_rc_codec_241(_rc_world_241(other_index, 1)))
@@ -31981,9 +32084,11 @@ func _scenario_controller_page_has_once_per_device_tip() -> Array[String]:
 			failures.append("the controller page has no '%s'" % needle)
 	var stores := 0
 	for line: String in page.split("\n"):
-		if line.contains("TIP_SEEN_KEY") and (line.contains("getItem") or line.contains("setItem")):
+		if line.contains("TIP_SEEN_KEY") and (line.contains("getItem") or line.contains("setItem")
+				or line.contains("stored(TIP_SEEN_KEY)") or line.contains("store(TIP_SEEN_KEY")):
 			stores += 1
-			if not line.contains("try {"):
+			# Direct access needs its own try/catch; stored()/store() are the page's try/catch helpers.
+			if (line.contains("getItem") or line.contains("setItem")) and not line.contains("try {"):
 				failures.append("a tip localStorage access is not inside try/catch: %s" % line.strip_edges())
 	if stores < 2:
 		failures.append("the tip is not both read and written in localStorage (%d accesses)" % stores)
@@ -37494,11 +37599,25 @@ func _scenario_remote_client_hud_scoreboard_and_round_result() -> Array[String]:
 		failures.append("the scoreboard has %d rows, expected 8" % board.size())
 	elif int(board[0][0]) != winner or int(board[0][2]) != rm.score_of(winner) or rm.score_of(winner) < 1:
 		failures.append("scoreboard leader is %s, expected slot %d on %d" % [board[0], winner, rm.score_of(winner)])
-	var want: String = "%s takes the round" % _hud_436_name(rm, winner)
-	if client.round_result_text() != want or client._result_label.text != want:
-		failures.append("result line '%s' / label '%s', expected '%s'" % [client.round_result_text(), client._result_label.text, want])
-	if client._score_box.get_child_count() != 8:
-		failures.append("the score box shows %d rows, expected 8" % client._score_box.get_child_count())
+	# Issue #976: the joiner's copy of the host's HUD scene shows the host's
+	# round-end scoreboard, entry for entry.
+	var host_board: Node = rig["main"].get_node("UI/Scoreboard")
+	var ok: bool = await _wait_for_239(func() -> bool:
+		var board_node: Node = client.host_hud().get_node("Scoreboard")
+		if not board_node.visible or not client.host_hud().visible:
+			return false
+		for i in host_board.get_child_count():
+			var h: Node = host_board.get_child(i)
+			var c: Node = board_node.get_child(i)
+			if (h as CanvasItem).visible != (c as CanvasItem).visible or (h.get_node("Score") as Label).text != (c.get_node("Score") as Label).text \
+					or (h.get_node("Name") as Label).text != (c.get_node("Name") as Label).text or (h.get_node("Icon") as ColorRect).color != (c.get_node("Icon") as ColorRect).color:
+				return false
+		return true, 4000)
+	if not ok:
+		failures.append("the joiner's scoreboard never matched the host's")
+	var host_label: Label = rig["main"].get_node("UI/ScoreLabel")
+	if (client.host_hud().get_node("ScoreLabel") as Label).text != host_label.text:
+		failures.append("the score line reads '%s', host '%s'" % [(client.host_hud().get_node("ScoreLabel") as Label).text, host_label.text])
 	await _rc_close_241(rig)
 	return failures
 ## King of the Hill hold times reach the remote client's mode line; the other
@@ -37525,24 +37644,17 @@ func _scenario_remote_client_hud_king_of_the_hill_and_mode_lines() -> Array[Stri
 	var holder: int = int(rm.get("_in_round")[0])
 	hill.seconds_to_win = 10.0
 	hill.hold_time[holder] = 4.0
-	var want: String = "%s 4/10s" % _hud_436_name(rm, holder)
-	if not await _wait_for_239(func() -> bool: return client.mode_text().contains(want), 4000):
-		failures.append("the mode line is '%s', expected it to hold '%s'" % [client.mode_text(), want])
-	if client._mode_label.text != client.mode_text():
-		failures.append("the mode label shows '%s'" % client._mode_label.text)
-	client.hud = {"board": [[0, "Ann", 0], [1, "Bo", 0]], "mode": "capture_the_flag",
-		"m": {"score": [1, 2], "flag": [0, 1], "carrier": [-1, 0], "win": 3}}
-	if client.mode_text() != "Red 1 - Blue 2  Flags: red home / blue carried":
-		failures.append("CTF line reads '%s'" % client.mode_text())
-	client.hud = {"board": [], "mode": "soccer", "m": {"score": [2, 0], "win": 3}}
-	if client.mode_text() != "Red 2 - Blue 0 (first to 3)":
-		failures.append("Soccer line reads '%s'" % client.mode_text())
-	client.hud = {"board": [[1, "Bo", 0]], "mode": "hot_potato", "m": {"it": 1, "fuse": 7}}
-	if client.mode_text() != "Bo has the potato: 7s":
-		failures.append("Hot Potato line reads '%s'" % client.mode_text())
-	client.hud = {"board": [[0, "Ann", 0], [1, "Bo", 0]], "mode": "stock", "m": {"lives": {0: 3, 1: 1}, "clock": "1:30"}}
-	if client.mode_text() != "1:30  Ann x3  Bo x1":
-		failures.append("Stock line reads '%s'" % client.mode_text())
+	# Issue #976: the joiner builds the hill's own HUD layer and shows the
+	# host's text in it.
+	var host_label: Label = hill.get("_holds_label")
+	if not await _wait_for_239(func() -> bool:
+		var layer: CanvasLayer = client.effects.mode_hud
+		if layer == null or layer.name != "HillHud":
+			return false
+		var mine: Label = layer.get_node_or_null("HillHolds")
+		return mine != null and host_label.visible and mine.visible and mine.text == host_label.text and mine.text.contains("4"), 4000):
+		var layer2: CanvasLayer = client.effects.mode_hud
+		failures.append("the joiner's hill HUD is %s, host reads '%s'" % [layer2.name if layer2 != null else "missing", host_label.text])
 	rig["server"].set_game_mode("")
 	await _rc_close_241(rig)
 	return failures
@@ -37562,18 +37674,25 @@ func _scenario_remote_client_hud_match_result_podium_and_leave() -> Array[String
 	scores[winner] = int(rm.get("_match_target")) - 1
 	rm.set("_scores", scores)
 	_hud_436_eliminate_all_but(rig, winner)
-	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 5 and client.podium_text() != "", 8000):
-		failures.append("the client never got a podium (host state %d, hud state %s)" % [int(rm.get("_state")), client.hud.get("state")])
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 5 and client.victory_visible(), 8000):
+		failures.append("the client never showed the victory screen (host state %d, hud state %s)" % [int(rm.get("_state")), client.hud.get("state")])
 		await _rc_close_241(rig)
 		return failures
-	var lines: PackedStringArray = client.podium_text().split("\n")
-	var name: String = _hud_436_name(rm, winner)
-	if lines[0] != "%s wins the match" % name:
-		failures.append("the podium opens with '%s', expected '%s wins the match'" % [lines[0], name])
-	if lines.size() != 9 or lines[1] != "1. %s  %d" % [name, rm.score_of(winner)]:
-		failures.append("podium rows: %d lines, first '%s'" % [lines.size(), lines[1] if lines.size() > 1 else ""])
-	if not client.lobby_visible() or not client._leave_button.is_visible_in_tree() or not client._podium_label.is_visible_in_tree():
-		failures.append("the victory panel does not show the podium and a Leave button")
+	# Issue #976: the host's own VictoryScreen, title, podium, every award and
+	# the stats table, on the joiner.
+	var lobby_screen: Node = rm.get("_lobby_screen")
+	var mine: RefCounted = client.effects.victory
+	if mine.victory_title().text != lobby_screen.victory_title().text:
+		failures.append("victory title '%s', host '%s'" % [mine.victory_title().text, lobby_screen.victory_title().text])
+	var host_awards: PackedStringArray = _texts_976(lobby_screen.awards_row())
+	if _texts_976(mine.awards_row()) != host_awards:
+		failures.append("awards %s, host %s" % [_texts_976(mine.awards_row()), host_awards])
+	if _texts_976(mine.stats_table()) != _texts_976(lobby_screen.stats_table()):
+		failures.append("the stats table differs from the host's")
+	if _texts_976(mine._podium) != _texts_976(lobby_screen._victory._podium):
+		failures.append("the podium differs from the host's")
+	if client.lobby_visible():
+		failures.append("the joiner's lobby panel covers the victory screen")
 	client._leave_button.pressed.emit()
 	if client.state != RcState241.JOIN or not client.join_screen_visible():
 		failures.append("Leave did not return to the join screen (state %d)" % client.state)
@@ -45047,6 +45166,55 @@ func _scenario_bot_shield_ignores_shot_977() -> Array[String]:
 		failures.append("the Easy control faced the bullet (%.1f degrees), so the fixture does not show the old behaviour" % easy["best"])
 	_scenario_completed = true
 	return failures
+## Issue #1014: a bot holding `weapon` with a rival 600 px to its left (its
+## target) and a boomstick bullet flying left at it from 400 px on the right.
+## Returns whether the canopy faced the bullet when it was last 60 px or more
+## away, and the damage the bot took.
+func _bot_umbrella_shot_run_1014(weapon: String, level: String) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(-600.0, 274.0))
+	await _await_ticks(2)
+	await _equip(player, weapon)
+	var gun: Resource = load(BOOMSTICK_PATH)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	await _await_ticks(30)
+	var bullet: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+	bullet.setup(rival, player.global_position + Vector2(400.0, 0.0), Vector2.LEFT, gun)
+	stage.add_child(bullet)
+	var before: float = player.damage
+	var faced: bool = false
+	for t in 60:
+		await physics_frame
+		if not is_instance_valid(bullet) or bullet.is_queued_for_deletion():
+			break
+		if bullet.global_position.x - player.global_position.x >= 60.0:
+			faced = player.canopy_open() and player.canopy_faces(bullet.global_position)
+	await _await_ticks(20)
+	var out: Dictionary = {"faced": faced, "taken": player.damage - before, "damage": float(gun.projectile_damage)}
+	await _teardown(stage, false)
+	return out
+## A Normal bot holding the umbrella, a bullet coming from 400 px: the open
+## canopy faces it as it arrives and the bullet is turned aside. Control: an
+## Easy bot keeps its canopy pointing at nothing.
+func _scenario_bot_faces_umbrella_at_incoming_shot() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _bot_umbrella_shot_run_1014(UMBRELLA_PATH, "normal")
+	var easy: Dictionary = await _bot_umbrella_shot_run_1014(UMBRELLA_PATH, "easy")
+	print("      bot_faces_umbrella_at_incoming_shot: normal faced=%s taken=%.1f of %.1f, easy faced=%s taken=%.1f" % [run["faced"], run["taken"], run["damage"], easy["faced"], easy["taken"]])
+	if not run["faced"]:
+		failures.append("the canopy did not face the bullet as it arrived")
+	if run["taken"] > run["damage"] * 0.3:
+		failures.append("the bullet was not turned aside (took %.1f of %.1f)" % [run["taken"], run["damage"]])
+	if easy["faced"]:
+		failures.append("the Easy control faced the bullet, so it does not show the old behaviour")
+	_scenario_completed = true
+	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
 const SOCCER_PITCH_PATHS: Array[String] = [
 	"res://scenes/stages/Pitch.tscn", "res://scenes/stages/Dunes.tscn", "res://scenes/stages/Cage.tscn"]
@@ -46674,7 +46842,7 @@ func _scenario_internet_phone_binds_pc_client_refused_683() -> Array[String]:
 		failures.append("the LAN phone got no seat with the fallback on: %s" % lan_join)
 	# A PC client's hello is refused with the Couch refusal.
 	var refused_before: int = server.refused_joins
-	var pc: WebSocketPeer = await _internet_phone_683(rig, {"id": "pc-683", "proto": 1, "demo": false})
+	var pc: WebSocketPeer = await _internet_phone_683(rig, {"id": "pc-683", "proto": ControllerServerScript447.PROTOCOL_VERSION, "demo": false})
 	var closed: Dictionary = await _online_wait_239(rig, pc, "code") if pc != null else {}
 	if int(closed.get("code", 0)) != 4003 or str(closed.get("reason", "")) != "couch match":
 		failures.append("PC client not refused with 4003 / couch match: %s" % closed)
@@ -50981,7 +51149,9 @@ func _scenario_phone_swing_reach_slider_817() -> Array[String]:
 		failures.append("computeDragRadius does not multiply by the reach")
 	if not page.contains("var reachScale = 1;"):
 		failures.append("the reach does not default to 1.0")
-	if not page.contains("setReach(stored(REACH_KEY));") or not page.contains("store(REACH_KEY, String(reachScale));"):
+	var slider: String = _js_function_body(page, "bindSlider")
+	if not page.contains("bindSlider(reachEl, reachValueEl, REACH_KEY, REACH_MIN, REACH_MAX, applyReach);") \
+			or not slider.contains("set(stored(key));") or not slider.contains("store(key, String(set(inputEl.value)));"):
 		failures.append("the reach is not read from and saved to the try/catch storage helpers")
 	if not page.contains("if (!isFinite(v) || v <= 0) { v = 1; }"):
 		failures.append("a zero or garbage stored reach does not fall back to 1.0")
@@ -54192,3 +54362,490 @@ func _geometry_xform_refactor_platforms(root: Node, node: Node2D) -> Transform2D
 func _geometry_name_refactor_platforms(node: Node) -> String:
 	var auto := RegEx.create_from_string("^@(\\w+)@\\d+$")
 	return auto.sub(String(node.name), "@$1@")
+## Phone page review fixes, read off controller/index.html as shipped: the input
+## packet is reused but still sent every frame (ADR-0002), an idle pad skips its
+## clear, the state timer runs only for the round_end countdown, the weak-link
+## chip sits clear of the Stock lives, the hill chip is translated, and the
+## launch site closes its <head>.
+func _scenario_controller_page_review_fixes_refactor_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	var frame_body: String = _js_function_body(page, "frame")
+	if frame_body.contains("new ArrayBuffer") or frame_body.contains("new DataView") or frame_body.contains("new Uint8Array"):
+		failures.append("frame() allocates a new input packet every frame")
+	if not frame_body.contains("ws.send(inputBuf);") or not frame_body.contains("ws.send(relayInputBuf);"):
+		failures.append("frame() does not send the input on both transports every frame")
+	if not page.contains("relayInputView.setUint8(0, KIND_INPUT);"):
+		failures.append("the relay input packet does not carry the input kind byte")
+	var draw_body: String = _js_function_body(page, "draw")
+	if not draw_body.contains("if (drawing || drewLast) { ctx.clearRect("):
+		failures.append("draw() clears the canvas even when nothing was or will be drawn")
+	if _js_function_body(page, "showLobby").contains("setInterval"):
+		failures.append("a lobby frame still starts the state timer")
+	var state_body: String = _js_function_body(page, "showState")
+	if not state_body.contains('lobby.phase === "round_end"') or not state_body.contains("clearInterval(stateTimer)"):
+		failures.append("the state timer is not limited to the round_end countdown")
+	if state_body.contains("getElementById"):
+		failures.append("showState() looks elements up on every call")
+	var top_re := RegEx.create_from_string("(?:^|[;\\s])top:\\s*([^;]+);")
+	var lives_m: RegExMatch = top_re.search(_css_rule_231(page, "#lives"))
+	var weak_m: RegExMatch = top_re.search(_css_rule_231(page, "#weak-chip"))
+	if lives_m == null or weak_m == null or lives_m.get_string(1) == weak_m.get_string(1):
+		failures.append("the weak connection chip sits on top of the Stock lives count")
+	var hill_keys: int = page.count("\"HILL_LINE\":")
+	if hill_keys != 9:
+		failures.append("HILL_LINE is in %d language tables, wanted 9" % hill_keys)
+	if not _js_function_body(page, "showHill").contains("t(\"HILL_LINE\""):
+		failures.append("the King of the Hill chip is not translated")
+	var site: String = FileAccess.get_file_as_string("res://site/index.html")
+	var head_end: int = site.find("</head>")
+	if head_end < 0 or head_end > site.find("<body>"):
+		failures.append("site/index.html does not close its <head> before <body>")
+	_scenario_completed = true
+	return failures
+# --- Issue #976 part B: the host's effects, screens and HUD on the joiner -------
+const EffectStreamScript976 := preload("res://scripts/EffectStream.gd")
+const SnapshotCaptureScript976 := preload("res://scripts/SnapshotCapture.gd")
+const UiMirrorScript976 := preload("res://scripts/UiMirror.gd")
+const RemoteHudScript976 := preload("res://scripts/RemoteHud.gd")
+const JuiceScript976 := preload("res://scripts/Juice.gd")
+const DeathBurstScript976 := preload("res://scripts/DeathBurst.gd")
+const HostHudScene976: PackedScene = preload("res://scenes/HostHud.tscn")
+## Every Label's text under `node`, depth first ([] for null).
+func _texts_976(node: Node) -> PackedStringArray:
+	var out := PackedStringArray()
+	if node == null:
+		return out
+	for child: Node in node.get_children():
+		if child is Label:
+			out.append((child as Label).text)
+		out.append_array(_texts_976(child))
+	return out
+## A joiner on its own (no host), its effects played at once.
+func _fx_client_976(rig: Dictionary) -> Node:
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	client.effects.delay_msec = 0
+	return client
+func _fx_play_976(client: Node, events: Array) -> void:
+	client.effects.queue(events)
+	client.effects.flush()
+func _fx_children_976(client: Node, script: Script) -> int:
+	var n: int = 0
+	for child: Node in client.effects.get_children():
+		if child.get_script() == script:
+			n += 1
+	return n
+## EffectStream bytes and the sound trailer's effects block decode to what was
+## encoded; an old trailer (no effects block) still parses; recording is gated.
+func _scenario_effect_stream_trailer_round_trip_976() -> Array[String]:
+	var failures: Array[String] = []
+	var events: Array = [{"k": "ko", "p": Vector2(12, -40), "c": Color(0.2, 0.4, 0.6)},
+		{"k": "hit", "p": Vector2(1, 2), "a": 17.0, "l": true, "c": Color.RED},
+		{"k": "match_point", "lines": [{"text": "Ann", "color": Color.GREEN, "slot": 2}]}]
+	var decoded: Array = EffectStreamScript976.decode(EffectStreamScript976.encode(events))
+	if decoded != events:
+		failures.append("EffectStream round trip gave %s" % [decoded])
+	var sounds: Array = [{"name": "hit", "position": Vector2(10, 20), "strength": 0.5}]
+	var with_fx: Dictionary = SnapshotCaptureScript976.split_sound_trailer(PackedByteArray([7, 7]) + SnapshotCaptureScript976.encode_sound_trailer(sounds, "battle", events))
+	if with_fx["effects"] != events or str(with_fx["track"]) != "battle" or (with_fx["events"] as Array).size() != 1 or with_fx["snapshot"] != PackedByteArray([7, 7]):
+		failures.append("the trailer's effects block did not round-trip: %s" % [with_fx])
+	var old: Dictionary = SnapshotCaptureScript976.split_sound_trailer(PackedByteArray([7, 7]) + SnapshotCaptureScript976.encode_sound_trailer(sounds, "battle"))
+	if old["effects"] != [] or str(old["track"]) != "battle" or old["snapshot"] != PackedByteArray([7, 7]):
+		failures.append("a trailer with no effects parsed as %s" % [old])
+	if EffectStreamScript976.decode(PackedByteArray([1, 2, 3, 4, 5])) != []:
+		failures.append("garbage bytes decoded to events")
+	EffectStreamScript976.set_recording(false)
+	EffectStreamScript976.record("ko", {"p": Vector2.ZERO})
+	if not EffectStreamScript976.pending().is_empty():
+		failures.append("recording off still kept an event")
+	EffectStreamScript976.set_recording(true)
+	for i in EffectStreamScript976.MAX_EVENTS + 5:
+		EffectStreamScript976.record("dust", {"p": Vector2(i, 0), "s": 1.0})
+	var taken: Array = EffectStreamScript976.take()
+	EffectStreamScript976.set_recording(false)
+	if taken.size() != EffectStreamScript976.MAX_EVENTS or not EffectStreamScript976.pending().is_empty():
+		failures.append("the queue kept %d events (cap %d) and did not empty" % [taken.size(), EffectStreamScript976.MAX_EVENTS])
+	_scenario_completed = true
+	await physics_frame
+	return failures
+## A real Online round: the host's title card, KO bursts, shakes, kill feed,
+## banner and round-win ring reach the joiner through the stream and play there.
+func _scenario_remote_client_plays_host_round_effects_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var rm: Node = rig["rm"]
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var winner: int = int(rm.get("_in_round")[0])
+	_hud_436_eliminate_all_but(rig, winner)
+	var wants: Array[String] = ["title", "ko", "ko_jolt", "banner", "win_ring"]
+	var all_in: Callable = func() -> bool:
+		for k: String in wants:
+			if not client.effects.played.has(k):
+				return false
+		return true
+	if not await _wait_for_239(all_in, 8000):
+		failures.append("the joiner played %s, expected all of %s" % [client.effects.played, wants])
+	var host_feed: Control = rm.kill_feed()
+	if client.effects.kill_feed.entries() != host_feed.entries():
+		failures.append("kill feed %s, host %s" % [client.effects.kill_feed.entries(), host_feed.entries()])
+	var host_cards: RefCounted = rm.get("_lobby_screen").get("_cards")
+	if host_cards != null and host_cards.stage_title_label() != null and client.effects.cards.stage_title_label() != null \
+			and client.effects.cards.stage_title_label().text != host_cards.stage_title_label().text:
+		failures.append("stage title '%s', host '%s'" % [client.effects.cards.stage_title_label().text, host_cards.stage_title_label().text])
+	await _rc_close_241(rig)
+	return failures
+## Effects wait out the joiner's interpolation delay, then play.
+func _scenario_remote_effects_wait_for_interp_delay_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	if client.effects.delay_msec != RemoteClientScript241.INTERP_MSEC:
+		failures.append("delay %d, expected the interpolation delay %d" % [client.effects.delay_msec, RemoteClientScript241.INTERP_MSEC])
+	client.effects.queue([{"k": "ko", "p": Vector2.ZERO, "c": Color.RED}])
+	await process_frame
+	if client.effects.played.has("ko"):
+		failures.append("the KO burst played before the world reached it")
+	await _wait_for_239(func() -> bool: return client.effects.played.has("ko"), 1000)
+	if not client.effects.played.has("ko") or _fx_children_976(client, DeathBurstScript976) != 1:
+		failures.append("the KO burst never played after the delay")
+	await _rc_close_241(rig)
+	return failures
+## KO burst and hitmarker: the host's DeathBurst and HitFeedback draw them.
+func _scenario_remote_effects_ko_burst_and_hitmarker_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	_fx_play_976(client, [{"k": "ko", "p": Vector2(50, 60), "c": Color.BLUE}, {"k": "hit", "p": Vector2(5, 5), "a": 22.0, "l": false, "c": Color.GREEN}])
+	await process_frame
+	if _fx_children_976(client, DeathBurstScript976) != 1:
+		failures.append("no DeathBurst on the joiner")
+	if client.effects.hit_feedback.get_child_count() < 1:
+		failures.append("no hitmarker on the joiner")
+	await _rc_close_241(rig)
+	return failures
+## Shakes (strike and KO), landing dust, clash sparks and catch bursts, under
+## the joiner's own Screen shake and Reduce flashes.
+func _scenario_remote_effects_shake_dust_sparks_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var juice: Node = client.effects.juice
+	_fx_play_976(client, [{"k": "jolt", "a": 40.0}])
+	if float(juice.get("_shake_time")) <= 0.0:
+		failures.append("a heavy strike did not shake the joiner's camera")
+	_fx_play_976(client, [{"k": "ko_jolt"}])
+	if float(juice.get("_shake_time")) <= 0.0:
+		failures.append("a KO did not shake the joiner's camera")
+	if get_root().get_tree().paused:
+		failures.append("the joiner froze its own tree for a hit-stop")
+	_fx_play_976(client, [{"k": "dust", "p": Vector2(0, 0), "s": 1.0}, {"k": "clash", "p": Vector2(9, 9), "s": 1.0}, {"k": "catch", "p": Vector2(3, 3)}])
+	if juice.active_particle_count(JuiceScript976.Kind.DUST) == 0 or juice.active_particle_count(JuiceScript976.Kind.SPARK) == 0 or juice.active_particle_count(JuiceScript976.Kind.CATCH) == 0:
+		failures.append("dust/sparks/catch particles: %d/%d/%d" % [juice.active_particle_count(JuiceScript976.Kind.DUST), juice.active_particle_count(JuiceScript976.Kind.SPARK), juice.active_particle_count(JuiceScript976.Kind.CATCH)])
+	var sfx: Node = get_root().get_node_or_null("Sfx")
+	if sfx != null:
+		var was: bool = bool(sfx.get("reduce_flash"))
+		sfx.set("reduce_flash", true)
+		var before: int = juice.active_particle_count(JuiceScript976.Kind.CATCH)
+		_fx_play_976(client, [{"k": "catch", "p": Vector2(3, 3)}])
+		if juice.active_particle_count(JuiceScript976.Kind.CATCH) > before:
+			failures.append("Reduce flashes on the joiner still drew a catch burst")
+		sfx.set("reduce_flash", was)
+	await _rc_close_241(rig)
+	return failures
+## A pickup callout: the host records it, the joiner shows the same label.
+func _scenario_remote_effects_pickup_callout_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	_fx_play_976(client, [{"k": "callout", "p": Vector2(100, 100), "w": "fishing_rod", "c": Color.ORANGE, "o": 77}])
+	var found: Node = null
+	for node: Node in get_root().get_tree().get_nodes_in_group(&"pickup_callouts"):
+		if node.get_parent() == client.effects:
+			found = node
+	if found == null or str(found.get("text")).is_empty() or found.get("colour") != Color.ORANGE:
+		failures.append("the joiner's pickup callout is %s" % [found])
+	elif (found as Node2D).global_position.distance_to(Vector2(100, 100)) > 200.0:
+		failures.append("the callout sits at %s" % (found as Node2D).global_position)
+	await _rc_close_241(rig)
+	return failures
+## Shield sparks and the round-win ring: the host's scripts on the joiner.
+func _scenario_remote_effects_shield_spark_and_win_ring_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	_fx_play_976(client, [{"k": "shield", "p": Vector2(1, 1), "c": Color.CYAN}, {"k": "win_ring", "p": Vector2(2, 2), "c": Color.YELLOW}])
+	var sparks: int = 0
+	for node: Node in get_root().get_tree().get_nodes_in_group(&"shield_sparks"):
+		if node.get_parent() == client.effects:
+			sparks += 1
+	if sparks != 1 and not (get_root().get_node_or_null("Sfx") != null and bool(get_root().get_node("Sfx").get("reduce_flash"))):
+		failures.append("%d shield sparks on the joiner" % sparks)
+	if client.effects.get_node_or_null("RoundWinRing") == null:
+		failures.append("no round-win ring on the joiner")
+	await _rc_close_241(rig)
+	return failures
+## The kill feed and its banners: the joiner's copy of the host's KillFeed.
+func _scenario_remote_effects_kill_feed_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var feed: Control = client.effects.kill_feed
+	if feed == null or feed.get_parent() != client.host_hud() or not bool(feed.get("mirror")):
+		failures.append("the joiner's kill feed is not the host HUD's (mirror) KillFeed")
+		await _rc_close_241(rig)
+		return failures
+	_fx_play_976(client, [{"k": "feed_ko", "kn": "Ann", "kc": Color.RED, "vn": "Bo", "vc": Color.BLUE},
+		{"k": "banner", "h": "FIRST BLOOD", "w": "Ann", "c": Color.RED}])
+	var entries: PackedStringArray = feed.entries()
+	if entries.size() != 1 or not entries[0].contains("Ann") or not entries[0].contains("Bo"):
+		failures.append("feed entries %s" % [entries])
+	await process_frame
+	if not feed.banner().visible or not _texts_976(feed.banner()).has("FIRST BLOOD"):
+		failures.append("banner shows %s" % [_texts_976(feed.banner())])
+	_fx_play_976(client, [{"k": "feed_clear"}, {"k": "banner_clear"}])
+	await process_frame
+	if not feed.entries().is_empty():
+		failures.append("the feed was not cleared")
+	await _rc_close_241(rig)
+	return failures
+## The stage title card and the PAUSED banner: the host's RoundCards.
+func _scenario_remote_effects_stage_title_and_pause_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	_fx_play_976(client, [{"k": "title", "t": "Flatlands", "d": 1.0, "r": "Classic"}])
+	var title: Label = client.effects.cards.stage_title_label()
+	var sfx: Node = get_root().get_node_or_null("Sfx")
+	var cards_on: bool = sfx == null or bool(sfx.get("stage_title_card"))
+	if cards_on and (title == null or title.text != "Flatlands" or not title.visible):
+		failures.append("stage title card '%s'" % (title.text if title != null else "<none>"))
+	_fx_play_976(client, [{"k": "pause", "on": true}])
+	var paused: Label = client.effects.cards.pause_label()
+	if paused == null or not paused.is_visible_in_tree():
+		failures.append("no PAUSED banner on the joiner")
+	_fx_play_976(client, [{"k": "pause", "on": false}])
+	if paused != null and paused.is_visible_in_tree():
+		failures.append("the PAUSED banner stayed up")
+	await _rc_close_241(rig)
+	return failures
+## MATCH POINT plates: the host's MatchPointPlate with the host's lines.
+func _scenario_remote_effects_match_point_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	_fx_play_976(client, [{"k": "match_point", "lines": [{"text": "Ann", "color": Color.RED, "slot": 0}]}])
+	var plate: Node = null
+	for node: Node in get_root().get_tree().get_nodes_in_group(&"match_point_plates"):
+		if node.get_parent() == client.effects:
+			plate = node
+	var sfx: Node = get_root().get_node_or_null("Sfx")
+	if (sfx == null or bool(sfx.get("match_point_plate"))) and (plate == null or (plate.get("lines") as Array).size() != 1 or str(plate.get("lines")[0]["text"]) != "Ann"):
+		failures.append("the joiner's MATCH POINT plate is %s" % [plate])
+	await _rc_close_241(rig)
+	return failures
+## The final KO: the joiner's camera zooms on the point and flashes, then
+## goes back, with the host's FinalKoView.
+func _scenario_remote_effects_final_ko_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var cam: Camera2D = client._camera
+	var zoom_was: Vector2 = cam.zoom
+	var pos_was: Vector2 = cam.global_position
+	_fx_play_976(client, [{"k": "final_ko", "p": Vector2(300, -200)}])
+	if not cam.zoom.is_equal_approx(zoom_was * 1.5) or not cam.global_position.is_equal_approx(Vector2(300, -200)):
+		failures.append("final KO camera zoom %s at %s" % [cam.zoom, cam.global_position])
+	if client.effects.get_node_or_null("FinalKoFlash") == null:
+		failures.append("no final-KO flash on the joiner")
+	_fx_play_976(client, [{"k": "final_ko_end"}])
+	if not cam.zoom.is_equal_approx(zoom_was) or not cam.global_position.is_equal_approx(pos_was) or client.effects.final_ko.active():
+		failures.append("the final KO left the camera at %s / %s" % [cam.zoom, cam.global_position])
+	await _rc_close_241(rig)
+	return failures
+## Play of the Round: the same moment cut from the joiner's own replay buffer
+## by the host's PlayOfRound, dismissed when the host's ends; and the match-end
+## clip saved the way the host saves its own.
+func _scenario_remote_effects_play_of_round_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
+	for i in 36:
+		client.effects.replay.push_frame(img)
+	_fx_play_976(client, [{"k": "por", "age": 1000, "rem": 3000, "cap": "Play of the Round: Ann"}])
+	var por: CanvasLayer = client.effects.play_of_round
+	if por == null or not por.is_playing() or por.caption_text() != "Play of the Round: Ann":
+		failures.append("Play of the Round is not playing on the joiner")
+	_fx_play_976(client, [{"k": "por_end"}])
+	if por != null and por.is_playing():
+		failures.append("Play of the Round outlived the host's")
+	var dir: String = "user://scenario_clips_976"
+	client.effects.replay.clips_dir = dir
+	client.effects.replay.encode_gif = false
+	_fx_play_976(client, [{"k": "clip_save"}])
+	var settings: RefCounted = preload("res://scripts/HostSettings.gd").shared()
+	if bool(settings.get("auto_save_clips")) and str(client.effects.replay.autosaved_dir).is_empty():
+		failures.append("the match-end clip was not saved on the joiner")
+	if not str(client.effects.replay.autosaved_dir).is_empty():
+		var abs_dir: String = ProjectSettings.globalize_path(str(client.effects.replay.autosaved_dir))
+		for f: String in DirAccess.get_files_at(abs_dir):
+			DirAccess.remove_absolute(abs_dir.path_join(f))
+		DirAccess.remove_absolute(abs_dir)
+	await _rc_close_241(rig)
+	return failures
+## Head trails follow each player puppet's weapon head through the host's Juice.
+func _scenario_remote_effects_head_trails_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1)))
+	client._render()
+	client._track_heads()
+	if client.effects.head_anchor_count() != 2 or client.effects.juice.trail_count() != 2:
+		failures.append("%d head anchors, %d trails, expected 2 each" % [client.effects.head_anchor_count(), client.effects.juice.trail_count()])
+	var puppet: Node2D = client.player_puppet(1)
+	var anchor_at: Vector2 = puppet.global_position + puppet.head_offset
+	var found: bool = false
+	for child: Node in client.effects.get_children():
+		if child.name.begins_with("HeadAnchor") and (child as Node2D).global_position.is_equal_approx(anchor_at):
+			found = true
+	if not found:
+		failures.append("no anchor at player 1's weapon head %s" % anchor_at)
+	await _rc_close_241(rig)
+	return failures
+## Edge arrows: the host's OffscreenIndicators over stand-ins for the puppets,
+## seat numbers by the host's setting.
+func _scenario_remote_effects_edge_arrows_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var puppet := Node2D.new()
+	client.effects.add_child(puppet)
+	puppet.global_position = client._camera.global_position + Vector2(100000, 0)
+	client.effects.place_fighter(3, puppet, true, -1, Color.RED)
+	client.effects.set_numbers(true)
+	client.effects.edge_arrows.update_targets()
+	var wanted: Array = client.effects.edge_arrows.get("_wanted")
+	if not bool(wanted[3]) or client.effects.edge_arrows.get("_numbers")[3].number() != 4:
+		failures.append("no edge arrow (or seat number) for a fighter off screen")
+	client.effects.place_fighter(3, puppet, false, -1, Color.RED)
+	client.effects.edge_arrows.update_targets()
+	if bool(client.effects.edge_arrows.get("_wanted")[3]):
+		failures.append("a KO'd fighter still has an edge arrow")
+	await _rc_close_241(rig)
+	return failures
+## The host HUD scene mirrors onto the joiner's copy: text, visibility,
+## colours, and a label the host made at run time (the scoreboard's Ping).
+func _scenario_remote_client_host_hud_mirror_976() -> Array[String]:
+	var failures: Array[String] = []
+	var host: CanvasLayer = HostHudScene976.instantiate()
+	var joiner: CanvasLayer = HostHudScene976.instantiate()
+	get_root().add_child(host)
+	get_root().add_child(joiner)
+	(host.get_node("ScoreLabel") as Label).text = "P1: 3  P2: 1"
+	(host.get_node("Scoreboard") as Control).visible = true
+	(host.get_node("Scoreboard/Slot2/Icon") as ColorRect).color = Color.PURPLE
+	(host.get_node("Scoreboard/Slot2/Name") as Label).add_theme_color_override("font_color", Color.RED)
+	(host.get_node("Scoreboard/Slot5") as Control).visible = false
+	var ping := Label.new()
+	ping.name = "Ping"
+	ping.text = "42 ms"
+	host.get_node("Scoreboard/Slot1").add_child(ping)
+	var packed: String = RemoteHudScript976._pack(UiMirrorScript976.capture(host, PackedStringArray(["KillFeed"])))
+	UiMirrorScript976.apply(joiner, RemoteHudScript976.unpack(packed, {}))
+	if (joiner.get_node("ScoreLabel") as Label).text != "P1: 3  P2: 1" or not (joiner.get_node("Scoreboard") as Control).visible:
+		failures.append("the score line or scoreboard did not mirror")
+	if (joiner.get_node("Scoreboard/Slot2/Icon") as ColorRect).color != Color.PURPLE or (joiner.get_node("Scoreboard/Slot2/Name") as Label).get_theme_color("font_color") != Color.RED:
+		failures.append("colours did not mirror")
+	if (joiner.get_node("Scoreboard/Slot5") as Control).visible:
+		failures.append("a hidden entry showed")
+	var mine: Label = joiner.get_node_or_null("Scoreboard/Slot1/Ping")
+	if mine == null or mine.text != "42 ms":
+		failures.append("the run-time Ping label was not made on the joiner")
+	(host.get_node("Scoreboard/Slot2/Name") as Label).remove_theme_color_override("font_color")
+	UiMirrorScript976.apply(joiner, UiMirrorScript976.capture(host))
+	if (joiner.get_node("Scoreboard/Slot2/Name") as Label).has_theme_color_override("font_color"):
+		failures.append("a removed colour override stayed")
+	if not UiMirrorScript976.capture(joiner).has("ScoreLabel") or UiMirrorScript976.capture(host, PackedStringArray(["KillFeed"])).has("KillFeed"):
+		failures.append("capture paths are wrong")
+	host.queue_free()
+	joiner.queue_free()
+	_scenario_completed = true
+	await physics_frame
+	return failures
+## Every game mode's own HUD: the joiner builds it with the mode script's
+## `_build_hud()` and shows the host's state in it.
+func _scenario_remote_client_mode_huds_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	for path: String in ["res://scripts/KingOfTheHill.gd", "res://scripts/CaptureTheFlag.gd", "res://scripts/Soccer.gd", "res://scripts/Stock.gd"]:
+		var mode: Node = (load(path) as GDScript).new()
+		mode.call("_build_hud")
+		var layer: CanvasLayer = mode.get("_hud")
+		var touched: int = 0
+		for child: Node in layer.get_children():
+			if child is Label:
+				(child as Label).text = "%s 7 - 3" % child.name
+				(child as Label).visible = true
+				(child as Label).add_theme_color_override("font_color", Color.ORANGE)
+				(child as Label).scale = Vector2(1.2, 1.2)
+				touched += 1
+		var state: Dictionary = RemoteHudScript976.unpack(RemoteHudScript976._pack(UiMirrorScript976.capture(layer)), {})
+		client.effects.apply_mode_hud(path, state)
+		var mine: CanvasLayer = client.effects.mode_hud
+		if mine == null or mine.name != layer.name:
+			failures.append("%s: the joiner built %s, host %s" % [path, mine.name if mine != null else "nothing", layer.name])
+		else:
+			for child: Node in layer.get_children():
+				var copy: Label = mine.get_node_or_null(NodePath(child.name)) as Label
+				if child is Label and (copy == null or copy.text != (child as Label).text or not copy.visible \
+						or copy.get_theme_color("font_color") != Color.ORANGE or not copy.scale.is_equal_approx(Vector2(1.2, 1.2))):
+					failures.append("%s: %s did not mirror" % [path, child.name])
+		if touched == 0:
+			failures.append("%s: no labels on its HUD" % path)
+		mode.free()
+	client.effects.apply_mode_hud("", {})
+	if client.effects.mode_hud != null:
+		failures.append("leaving the mode did not remove its HUD")
+	client.effects.apply_mode_hud("res://scripts/../project.godot", {})
+	if client.effects.mode_hud != null:
+		failures.append("a path outside res://scripts built a HUD")
+	await _rc_close_241(rig)
+	return failures
+## The victory screen is the host's VictoryScreen fed `victory_data()`: every
+## award reaches it, including one the host adds later (#970's Jack of All
+## Trades only needs registering on the host side).
+func _scenario_remote_client_victory_awards_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var awards: Array[Dictionary] = [
+		{"category": "sharpshooter", "title": "Sharpshooter", "slot": 0, "detail": "9 hits"},
+		{"category": "combo", "title": "Combo King", "slot": 1, "detail": "4 hit combo"},
+		{"category": "jack_of_all_trades", "title": "Jack of All Trades", "slot": 1, "detail": "5 weapons"}]
+	var slots: Array[int] = [0, 1]
+	var data: Dictionary = {"slots": slots, "scores": PackedInt32Array([5, 2]), "winner": 0, "awards": awards,
+		"winner_team": -1, "teams": {}, "team_scores": PackedInt32Array(), "stats": [] as Array[Dictionary],
+		"inputs": PackedStringArray(["pc", "phone"]), "names": {0: ["Ann", Color.RED], 1: ["Bo", Color.BLUE]}, "end_card": false}
+	client.effects.show_victory(RemoteHudScript976.unpack(RemoteHudScript976._pack(data), {}))
+	var texts: PackedStringArray = _texts_976(client.effects.victory.awards_row())
+	for want: String in ["Sharpshooter", "Combo King", "Jack of All Trades"]:
+		if not texts.has(want):
+			failures.append("the award '%s' is missing from %s" % [want, texts])
+	if not client.effects.victory_visible() or not client.effects.victory.victory_title().text.contains("Ann"):
+		failures.append("victory title '%s'" % client.effects.victory.victory_title().text)
+	data["end_card"] = true
+	client.effects.show_victory(data)
+	if client.effects.victory.end_card_panel() != null and (client.effects.victory_visible() or not client.effects.victory.end_card_panel().visible):
+		failures.append("the end card did not replace the podium")
+	client.effects.show_victory({})
+	if client.effects.victory_visible():
+		failures.append("the victory screen stayed after the host left it")
+	await _rc_close_241(rig)
+	return failures

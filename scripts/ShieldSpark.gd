@@ -14,6 +14,20 @@ const GROUP := &"shield_sparks"
 
 var colour: Color = Color.WHITE
 var _age: float = 0.0
+
+## A burst in `tint` at `at` under `parent`, unless this machine has Reduce
+## flashes on (#317). Shared by the host and the Online joiner (#976).
+static func spawn_at(parent: Node, at: Vector2, tint: Color) -> Node2D:
+	if parent == null:
+		return null
+	var sfx: Node = parent.get_node_or_null(^"/root/Sfx") if parent.is_inside_tree() else null
+	if sfx != null and bool(sfx.get("reduce_flash")):
+		return null
+	var spark: Node2D = (load("res://scripts/ShieldSpark.gd") as GDScript).new()
+	spark.colour = tint
+	parent.add_child(spark)
+	spark.global_position = at
+	return spark
 var _sparks: Array[Vector2] = []
 
 func _ready() -> void:
