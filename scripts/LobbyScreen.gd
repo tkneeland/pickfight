@@ -255,13 +255,10 @@ func _add_mode_card(id: String, card_name: String, rule: String) -> Label:
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_theme_constant_override("separation", 0)
 	card.add_child(box)
-	var title: Label = ScreenKitScript.themed_label(card_name, 22, UiThemeScript.INK_HEADING_LABEL)
-	title.name = "Name"
+	var title: Label = ScreenKitScript.themed_label(card_name, 22, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "Name")
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # wraps instead of cutting a long name off at a large Text size (#751)
 	box.add_child(title)
-	var rule_label: Label = ScreenKitScript.themed_label(rule, DECK_MIN_FONT_SIZE, UiThemeScript.INK_BOLD_LABEL)
-	rule_label.name = "Rule"
-	rule_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var rule_label: Label = ScreenKitScript.themed_label(rule, DECK_MIN_FONT_SIZE, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "Rule", TextServer.AUTOWRAP_WORD_SMART)
 	rule_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(rule_label)
 	var click := Button.new()
@@ -669,9 +666,7 @@ func build_panels() -> void:
 	_lobby_right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_lobby_right.add_theme_constant_override("separation", 14)
 	columns.add_child(_lobby_right)
-	_lobby_status = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_lobby_status.name = "StartHint"
-	_lobby_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_lobby_status = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "StartHint", TextServer.AUTOWRAP_WORD_SMART)
 	_lobby_right.add_child(_lobby_status)
 	# Stages & Rules (#647): the summary for every seat and the host's button. The
 	# left column has no room for them under the mode cards at eight modes (#425).
@@ -680,15 +675,12 @@ func build_panels() -> void:
 	_stages_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stages_box.add_theme_constant_override("separation", 6)
 	_lobby_right.add_child(_stages_box)
-	_stages_summary = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_stages_summary.name = "StagesSummary"
-	_stages_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stages_summary = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "StagesSummary", TextServer.AUTOWRAP_WORD_SMART)
 	_stages_box.add_child(_stages_summary)
 	_stages_button = ScreenKitScript.themed_button(tr("SR_BUTTON"), UiThemeScript.ACTION_BUTTON, "stages_rules")
 	_stages_button.visible = false # the host's: HostControls shows it once attached
 	_stages_box.add_child(_stages_button)
-	_countdown_label = ScreenKitScript.themed_label("", 220, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_countdown_label.name = "Countdown"
+	_countdown_label = ScreenKitScript.themed_label("", 220, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "Countdown")
 	_countdown_label.set_anchors_preset(Control.PRESET_CENTER)
 	_countdown_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_countdown_label.grow_vertical = Control.GROW_DIRECTION_BOTH
@@ -723,8 +715,7 @@ func _build_top_bar() -> Control:
 	_lobby_logo.position = LOGO_DRAW_OFFSET
 	_lobby_logo.size = LOGO_DRAW_SIZE
 	logo_holder.add_child(_lobby_logo)
-	_lobby_target_label = ScreenKitScript.themed_label("", 28, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_RIGHT)
-	_lobby_target_label.name = "StatusLine"
+	_lobby_target_label = ScreenKitScript.themed_label("", 28, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_RIGHT, "StatusLine")
 	_lobby_target_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lobby_target_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_lobby_target_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -750,8 +741,7 @@ func _build_left_column() -> Control:
 	_join_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_join_box.add_theme_constant_override("separation", 8)
 	card.add_child(_join_box)
-	_join_title = ScreenKitScript.themed_label(tr("LOBBY_SCAN_TITLE"), 30, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_join_title.name = "JoinTitle"
+	_join_title = ScreenKitScript.themed_label(tr("LOBBY_SCAN_TITLE"), 30, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "JoinTitle")
 	_join_box.add_child(_join_title)
 	_lobby_qr = TextureRect.new()
 	_lobby_qr.name = "JoinQr"
@@ -761,13 +751,9 @@ func _build_left_column() -> Control:
 	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_join_box.add_child(_lobby_qr)
-	_lobby_url = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_lobby_url.name = "JoinUrl"
-	_lobby_url.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	_lobby_url = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "JoinUrl", TextServer.AUTOWRAP_ARBITRARY)
 	_join_box.add_child(_lobby_url)
-	_join_note = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_join_note.name = "JoinNote"
-	_join_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_join_note = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "JoinNote", TextServer.AUTOWRAP_WORD_SMART)
 	_join_note.visible = false
 	_join_box.add_child(_join_note)
 	_join_help_button = ScreenKitScript.themed_button(tr("JOIN_HELP_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinHelpButton")
@@ -784,8 +770,7 @@ func _build_left_column() -> Control:
 	_invite_button.visible = false
 	_invite_button.pressed.connect(_on_invite_pressed)
 	_join_box.add_child(_invite_button)
-	var mode_title: Label = ScreenKitScript.themed_label(tr("LOBBY_MODE_TITLE"), 26, UiThemeScript.HEADING_LABEL)
-	mode_title.name = "ModeTitle"
+	var mode_title: Label = ScreenKitScript.themed_label(tr("LOBBY_MODE_TITLE"), 26, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "ModeTitle")
 	left.add_child(mode_title)
 	# One card per game mode (#352), from `GameModes.picker_rows()`.
 	_mode_grid = GridContainer.new()

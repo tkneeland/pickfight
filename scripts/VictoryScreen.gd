@@ -151,8 +151,7 @@ func _build_end_card() -> void:
 	box.add_child(text)
 	# Wishlist on Steam (#793): a button once the store page exists; focused when the card shows, so A presses it.
 	if DemoBuildScript.wishlist_available():
-		var wishlist := ScreenKitScript.themed_button(_screen.tr("WISHLIST_BUTTON"), UiThemeScript.ACTION_BUTTON, "EndCard_wishlist")
-		wishlist.focus_mode = Control.FOCUS_ALL
+		var wishlist := ScreenKitScript.themed_button(_screen.tr("WISHLIST_BUTTON"), UiThemeScript.ACTION_BUTTON, "EndCard_wishlist", true)
 		wishlist.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		wishlist.pressed.connect(func() -> void: DemoBuildScript.open_wishlist(_screen.get_tree()))
 		box.add_child(wishlist)

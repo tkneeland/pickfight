@@ -88,8 +88,7 @@ func _init() -> void:
 	_preview = PreviewScript.new()
 	_preview.custom_minimum_size = PREVIEW_SIZE
 	_preview_frame.add_child(_preview)
-	_preview_note = ScreenKitScript.themed_label(tr("PICKER_LIVE_NOTE"), 17, UiThemeScript.HINT_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_preview_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_preview_note = ScreenKitScript.themed_label(tr("PICKER_LIVE_NOTE"), 17, UiThemeScript.HINT_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "", TextServer.AUTOWRAP_WORD_SMART)
 	_preview_note.visible = false
 	left.add_child(_preview_note)
 	var right := VBoxContainer.new()
@@ -126,9 +125,8 @@ func _init() -> void:
 	_done_row.alignment = BoxContainer.ALIGNMENT_END
 	_done_row.visible = false
 	right.add_child(_done_row)
-	var done: Button = ScreenKitScript.themed_button(tr("PICKER_DONE"), UiThemeScript.YELLOW_BUTTON, "Done")
+	var done: Button = ScreenKitScript.themed_button(tr("PICKER_DONE"), UiThemeScript.YELLOW_BUTTON, "Done", true)
 	done.add_theme_font_size_override("font_size", 30)
-	done.focus_mode = Control.FOCUS_ALL
 	done.pressed.connect(func() -> void: done_pressed.emit())
 	_done_row.add_child(done)
 	_apply_layout()

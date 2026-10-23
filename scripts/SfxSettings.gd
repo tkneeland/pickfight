@@ -224,68 +224,25 @@ func _ready() -> void:
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 	# Restore defaults (#750), above Credits: one press asks first, Yes resets.
-	_restore_button = Button.new()
-	_restore_button.name = "RestoreDefaults"
-	_restore_button.text = tr("SETTINGS_RESTORE_DEFAULTS")
-	_restore_button.focus_mode = Control.FOCUS_NONE
-	rows.add_child(_restore_button)
-	_restore_confirm = VBoxContainer.new()
-	_restore_confirm.name = "RestoreConfirm"
-	_restore_confirm.visible = false
-	rows.add_child(_restore_confirm)
-	_restore_label = Label.new()
-	_restore_label.text = tr("RESTORE_CONFIRM_TEXT")
-	_restore_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_restore_label.custom_minimum_size = Vector2(SLIDER_WIDTH + 24.0, 0.0)
-	_restore_confirm.add_child(_restore_label)
-	var restore_row := HBoxContainer.new()
-	_restore_confirm.add_child(restore_row)
-	_restore_yes = Button.new()
-	_restore_yes.name = "RestoreYes"
-	_restore_yes.text = tr("QUIT_YES")
-	_restore_yes.focus_mode = Control.FOCUS_NONE
-	_restore_yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	restore_row.add_child(_restore_yes)
-	_restore_no = Button.new()
-	_restore_no.name = "RestoreNo"
-	_restore_no.text = tr("QUIT_NO")
-	_restore_no.focus_mode = Control.FOCUS_NONE
-	_restore_no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	restore_row.add_child(_restore_no)	# Credits and licences (#721), above Quit.
+	var restore: Array = _add_confirm(rows, "RestoreDefaults", "Restore", "SETTINGS_RESTORE_DEFAULTS", "RESTORE_CONFIRM_TEXT")
+	_restore_button = restore[0]
+	_restore_confirm = restore[1]
+	_restore_label = restore[2]
+	_restore_yes = restore[3]
+	_restore_no = restore[4]
+	# Credits and licences (#721), above Quit.
 	_credits_button = Button.new()
 	_credits_button.name = "Credits"
 	_credits_button.text = tr("CREDITS_BUTTON")
 	_credits_button.focus_mode = Control.FOCUS_NONE
 	rows.add_child(_credits_button)
 	# Quit game (#718), last in the panel.
-	_quit_button = Button.new()
-	_quit_button.name = "QuitGame"
-	_quit_button.text = tr("SETTINGS_QUIT_GAME")
-	_quit_button.focus_mode = Control.FOCUS_NONE
-	rows.add_child(_quit_button)
-	_quit_confirm = VBoxContainer.new()
-	_quit_confirm.name = "QuitConfirm"
-	_quit_confirm.visible = false
-	rows.add_child(_quit_confirm)
-	_quit_label = Label.new()
-	_quit_label.text = tr("QUIT_CONFIRM_TEXT")
-	_quit_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_quit_label.custom_minimum_size = Vector2(SLIDER_WIDTH + 24.0, 0.0)
-	_quit_confirm.add_child(_quit_label)
-	var quit_row := HBoxContainer.new()
-	_quit_confirm.add_child(quit_row)
-	_quit_yes = Button.new()
-	_quit_yes.name = "QuitYes"
-	_quit_yes.text = tr("QUIT_YES")
-	_quit_yes.focus_mode = Control.FOCUS_NONE
-	_quit_yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	quit_row.add_child(_quit_yes)
-	_quit_no = Button.new()
-	_quit_no.name = "QuitNo"
-	_quit_no.text = tr("QUIT_NO")
-	_quit_no.focus_mode = Control.FOCUS_NONE
-	_quit_no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	quit_row.add_child(_quit_no)
+	var quit: Array = _add_confirm(rows, "QuitGame", "Quit", "SETTINGS_QUIT_GAME", "QUIT_CONFIRM_TEXT")
+	_quit_button = quit[0]
+	_quit_confirm = quit[1]
+	_quit_label = quit[2]
+	_quit_yes = quit[3]
+	_quit_no = quit[4]
 
 	_feedback_button = Button.new()
 	_feedback_button.name = "Feedback"
@@ -1008,6 +965,36 @@ func _add_slider(rows: VBoxContainer, node_name: String, title: String) -> HSlid
 	group.add_child(slider)
 	return slider
 
+## A settings button and the Yes / No confirm that replaces it while it asks (#718, #750), added
+## to `rows`: the button `button_name`, then "<prefix>Confirm" (hidden) holding the question and
+## "<prefix>Yes" / "<prefix>No". Returns [button, confirm, question label, yes, no].
+func _add_confirm(rows: VBoxContainer, button_name: String, prefix: String, button_key: String, text_key: String) -> Array:
+	var button := Button.new()
+	button.name = button_name
+	button.text = tr(button_key)
+	button.focus_mode = Control.FOCUS_NONE
+	rows.add_child(button)
+	var confirm := VBoxContainer.new()
+	confirm.name = prefix + "Confirm"
+	confirm.visible = false
+	rows.add_child(confirm)
+	var label := Label.new()
+	label.text = tr(text_key)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size = Vector2(SLIDER_WIDTH + 24.0, 0.0)
+	confirm.add_child(label)
+	var row := HBoxContainer.new()
+	confirm.add_child(row)
+	var out: Array = [button, confirm, label]
+	for answer: String in ["Yes", "No"]:
+		var choice := Button.new()
+		choice.name = prefix + answer
+		choice.text = tr("QUIT_YES" if answer == "Yes" else "QUIT_NO")
+		choice.focus_mode = Control.FOCUS_NONE
+		choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(choice)
+		out.append(choice)
+	return out
 func _add_box(rows: Container, node_name: String, title: String) -> CheckBox:
 	var box := CheckBox.new()
 	box.name = node_name
