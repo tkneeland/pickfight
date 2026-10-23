@@ -474,6 +474,9 @@ func think(delta: float) -> Vector2:
 	var canopy: Vector2 = _umbrella_drive()
 	if canopy != Vector2.INF:
 		return canopy
+	var plate: Vector2 = _shield_drive(delta)
+	if plate != Vector2.INF:
+		return plate
 	var gun: Vector2 = _gun_drive()
 	if gun != Vector2.INF:
 		return gun
@@ -1170,6 +1173,65 @@ func _strip_drive() -> Vector2:
 		return Vector2.ZERO
 	var dir := Vector2(side * 0.5, 0.87).normalized()
 	return dir * (PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0)
+
+## Issue #977: a bot holding the shield turns its face to the nearest incoming
+## threat instead of its melee target: a rival within SHIELD_RIVAL_RANGE whose
+## weapon head is moving at it, or a hostile bullet, hook or boomerang heading
+## for it. Normal and Hard only. Vector2.INF when it has no say: another
+## weapon, the Easy level, or no threat (then it plays as today).
+const SHIELD_RIVAL_RANGE: float = 250.0
+const SHIELD_HEAD_SPEED: float = 150.0
+const SHIELD_SHOT_RANGE: float = 1400.0
+const SHIELD_SHOT_MISS: float = 90.0
+const SHIELD_REACH_FRACTION: float = 0.6
+var _rival_heads: Dictionary = {}
+func _shield_drive(delta: float) -> Vector2:
+	var stats: Variant = player.get("weapon_stats")
+	if not (stats is Resource) or (stats as Resource).get("special") != &"shield":
+		return Vector2.INF
+	var me: Vector2 = player.global_position
+	var threat: Vector2 = Vector2.INF
+	var best: float = INF
+	for rival: Node in get_tree().get_nodes_in_group("players"):
+		if rival == player or not _alive(rival) or not rival.has_method("weapon_head_position"):
+			continue
+		var head: Vector2 = rival.weapon_head_position()
+		var key: int = rival.get_instance_id()
+		var last: Variant = _rival_heads.get(key)
+		_rival_heads[key] = head
+		if delta <= 0.0 or not (last is Vector2):
+			continue
+		if difficulty_level() == "easy" or (player.has_method("is_teammate") and player.is_teammate(rival)):
+			continue
+		var gap: float = ((rival as Node2D).global_position - me).length()
+		var vel: Vector2 = (head - (last as Vector2)) / delta
+		if gap <= SHIELD_RIVAL_RANGE and vel.length() >= SHIELD_HEAD_SPEED and vel.dot(me - head) > 0.0 and gap < best:
+			best = gap
+			threat = (head - me).normalized()
+	if difficulty_level() == "easy":
+		return Vector2.INF
+	for group: StringName in [&"projectiles", &"grapple_hooks", &"boomerangs"]:
+		for shot: Node in get_tree().get_nodes_in_group(group):
+			if not (shot is Node2D) or shot.get("shooter") == player:
+				continue
+			var owner_node: Variant = shot.get("shooter")
+			if owner_node is Node and player.has_method("is_teammate") and player.is_teammate(owner_node):
+				continue
+			var vel_dir: Variant = shot.get("velocity") if group == &"boomerangs" else shot.get("direction")
+			if not (vel_dir is Vector2) or (vel_dir as Vector2).length() < 0.1:
+				continue
+			var at: Vector2 = (shot as Node2D).global_position
+			var to_me: Vector2 = me - at
+			var along: Vector2 = (vel_dir as Vector2).normalized()
+			var ahead: float = to_me.dot(along)
+			if ahead <= 0.0 or ahead > SHIELD_SHOT_RANGE or absf(to_me.cross(along)) > SHIELD_SHOT_MISS:
+				continue
+			if ahead < best:
+				best = ahead
+				threat = (at - me).normalized()
+	if threat == Vector2.INF:
+		return Vector2.INF
+	return threat * _length_for(_min_reach() + (_reach() - _min_reach()) * SHIELD_REACH_FRACTION)
 
 ## Issue #952: a bot holding a weapon that fires on its own (the boomstick),
 ## within GUN_AIM_WINDOW_SEC of its shot, points the head along the line to its
