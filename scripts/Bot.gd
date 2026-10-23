@@ -468,6 +468,9 @@ func think(delta: float) -> Vector2:
 		_think_left = react_sec(lerpf(THINK_SEC, THINK_SEC_AGGRESSIVE, _aggression))
 		_choose_goal()
 	_track_progress(delta)
+	var dodge: Vector2 = _meteor_drive(delta)
+	if dodge != Vector2.INF:
+		return dodge
 	var hook_input: Vector2 = _hook_drive(delta)
 	if hook_input != Vector2.INF:
 		return hook_input
@@ -1174,6 +1177,73 @@ func _strip_drive() -> Vector2:
 	var dir := Vector2(side * 0.5, 0.87).normalized()
 	return dir * (PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0)
 
+## Issue #985: a Meteor shower meteor flies a straight line at a fixed
+## velocity, so the bot can tell from where it is whether it will pass
+## within the meteor's radius plus its own body within METEOR_LOOKAHEAD_SEC.
+## If so it runs sideways, away from where the meteor will cross its height,
+## at full input, never off an edge (the same `_safe_side` check the rock
+## dodge uses); with no safe side it stays. Vector2.INF when it has no say:
+## Easy, or no meteor on a line to it. Host-side only: it is ordinary input,
+## so online joiners see it through normal player state.
+const METEOR_LOOKAHEAD_SEC: float = 0.8
+const METEOR_MARGIN: float = 14.0
+## The side the bot is dodging to, and for how much longer (0 = not dodging).
+var _dodge_side: float = 0.0
+var _dodge_left: float = 0.0
+func _meteor_drive(delta: float) -> Vector2:
+	if difficulty_level() == "easy" or not player.is_inside_tree():
+		return Vector2.INF
+	_dodge_left = maxf(_dodge_left - delta, 0.0)
+	if _dodge_left > 0.0:
+		# Keep running the same way until the meteor has gone by.
+		return _vault(delta)
+	var me: Vector2 = player.global_position
+	var threat_x: float = NAN
+	var soonest: float = INF
+	for node: Node in player.get_tree().get_nodes_in_group(&"meteors"):
+		var meteor := node as Node2D
+		if meteor == null or not is_instance_valid(meteor) or meteor.is_queued_for_deletion():
+			continue
+		var vel: Vector2 = meteor.get("velocity")
+		var rad: float = float(meteor.get("radius"))
+		if vel.y <= 1.0:
+			continue
+		var t: float = (me.y - meteor.global_position.y) / vel.y
+		if t < -0.05 or t > METEOR_LOOKAHEAD_SEC:
+			continue
+		var cross_x: float = meteor.global_position.x + vel.x * t
+		if absf(cross_x - me.x) > rad + BODY_RADIUS + METEOR_MARGIN:
+			continue
+		# Stage between them: the meteor is gone before it arrives.
+		if _ray_hits(meteor.global_position, Vector2(cross_x, me.y - BODY_RADIUS)):
+			continue
+		if t < soonest:
+			soonest = t
+			threat_x = cross_x
+	if is_nan(threat_x):
+		return Vector2.INF
+	var away: float = signf(me.x - threat_x)
+	if away == 0.0:
+		away = 1.0 if _edge_room(1.0, EDGE_KEEP) >= _edge_room(-1.0, EDGE_KEEP) else -1.0
+	var side: float = _safe_side(away)
+	if side == 0.0:
+		side = _safe_side(-away)
+		if side == 0.0:
+			return Vector2.ZERO
+	# The run throws the head out behind and the body can recoil that way: with
+	# an edge close behind, the bot carries on as usual (which keeps it on the
+	# floor) rather than risk the ledge.
+	if _edge_room(-side, EDGE_KEEP) < EDGE_KEEP:
+		return Vector2.INF
+	# Start running at once: plant the head and push, skipping the aim phase.
+	_dodge_side = side
+	_dodge_left = METEOR_LOOKAHEAD_SEC
+	_phase = 0
+	_pick_anchor()
+	_phase = 1
+	_phase_left = react_sec(PUSH_SEC)
+	return _vault(delta)
+
 ## Issue #977: a bot holding the shield turns its face to the nearest incoming
 ## threat instead of its melee target: a rival within SHIELD_RIVAL_RANGE whose
 ## weapon head is moving at it, or a hostile bullet, hook or boomerang heading
@@ -1367,6 +1437,8 @@ func _plan_anchor() -> void:
 ## with nothing to land on, or the goal is up on something directly overhead,
 ## in which case it heads for the nearer way round it.
 func _travel_side() -> float:
+	if _dodge_left > 0.0:
+		return _dodge_side
 	var me: Vector2 = player.global_position
 	var to_goal: Vector2 = goal - me
 	var side: float = 0.0

@@ -55,6 +55,8 @@ func setup(from: Vector2, flight_velocity: Vector2, hit_damage: float, knock: fl
 
 func _ready() -> void:
 	z_index = 5
+	# So a bot can find the live meteors without knowing the stage (#985).
+	add_to_group(&"meteors")
 	var circle := CircleShape2D.new()
 	circle.radius = radius
 	_query = PhysicsShapeQueryParameters2D.new()
