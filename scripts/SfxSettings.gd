@@ -99,6 +99,8 @@ var _restore_confirm: VBoxContainer
 var _restore_label: Label
 var _restore_yes: Button
 var _restore_no: Button
+## What Restore defaults resizes the window with; unset, the real window. A scenario sets a recorder.
+var window_resizer: Callable = Callable()
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
 var _dragging: bool = false
@@ -378,6 +380,10 @@ func _input(event: InputEvent) -> void:
 func toggle_hit(point: Vector2) -> bool:
 	if not visible or not _toggle.is_visible_in_tree():
 		return false
+	# The credits screen (a higher layer) covers the corner: a click there is the credits' own.
+	var credits: Node = get_tree().root.get_node_or_null(CreditsScreenScript.NODE_NAME) if is_inside_tree() else null
+	if credits != null and credits.is_open():
+		return false
 	return _toggle.get_global_rect().has_point(point)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -428,7 +434,7 @@ func refresh() -> void:
 		_music_slider.set_value_no_signal(music.volume)
 	_mute.set_pressed_no_signal(sfx.muted)
 	_fullscreen.set_pressed_no_signal(sfx.fullscreen)
-	_toggle.text = tr("SETTINGS_MUTED") if sfx.muted else tr("SETTINGS")
+	_refresh_toggle_text()
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
 	_hit_pause_box.set_pressed_no_signal(sfx.hit_pause)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
@@ -455,6 +461,10 @@ func refresh() -> void:
 	_host_match.refresh()
 	if PadMenuScript.is_open():
 		_chain_pad_focus()
+
+## The corner toggle's caption: all a volume slider's step changes, so a drag does not redo the whole panel.
+func _refresh_toggle_text() -> void:
+	_toggle.text = tr("SETTINGS_MUTED") if sfx.muted else tr("SETTINGS")
 
 ## The host PC's match controls at the top of the panel (issue #458).
 func host_match_menu() -> VBoxContainer:
@@ -566,7 +576,22 @@ func confirm_restore() -> void:
 	if music != null:
 		music.restore_defaults()
 	host.restore_defaults()
+	_restore_window_size()
 	refresh()
+
+## Restore defaults puts a windowed host back to the project's own window size (owner decision):
+## the Default size is ZERO, which `apply_resolution()` leaves alone. A headless run never resizes.
+func _restore_window_size() -> void:
+	if host.resolution != Vector2i.ZERO or sfx.fullscreen:
+		return
+	var size := Vector2i(int(ProjectSettings.get_setting("display/window/size/viewport_width", 1600)),
+		int(ProjectSettings.get_setting("display/window/size/viewport_height", 900)))
+	if window_resizer.is_valid():
+		window_resizer.call(size) # a scenario's recorder
+		return
+	if DisplayServer.get_name() == "headless" or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+		return
+	DisplayServer.window_set_size(fit_resolution(size, DisplayServer.screen_get_size()))
 
 func cancel_restore() -> void:
 	_restore_confirm.visible = false
@@ -933,11 +958,14 @@ func _retranslate() -> void:
 	_replay_box.text = tr("SETTINGS_PLAY_OF_ROUND")
 	_autosave_box.text = tr("SETTINGS_AUTO_SAVE_CLIPS")
 	_filter_box.text = tr("SETTINGS_FILTER_NAMES")
+	_focus_box.text = tr("SETTINGS_PAUSE_ON_FOCUS_LOSS")
+	_vsync_box.text = tr("SETTINGS_VSYNC")
 	_feedback_button.text = tr("SETTINGS_FEEDBACK")
 	_credits_button.text = tr("CREDITS_BUTTON")
 	_quit_button.text = tr("SETTINGS_QUIT_GAME")
 	_quit_label.text = tr("QUIT_CONFIRM_TEXT")
 	_quit_yes.text = tr("QUIT_YES")
+	_quit_no.text = tr("QUIT_NO")
 	_restore_button.text = tr("SETTINGS_RESTORE_DEFAULTS")
 	_restore_label.text = tr("RESTORE_CONFIRM_TEXT")
 	_restore_yes.text = tr("QUIT_YES")
@@ -990,20 +1018,20 @@ func _add_box(rows: Container, node_name: String, title: String) -> CheckBox:
 
 func _on_volume_changed(value: float) -> void:
 	sfx.set_master_volume(value, not _dragging)
-	refresh()
+	_refresh_toggle_text()
 
 func _on_sfx_volume_changed(value: float) -> void:
 	sfx.set_sfx_volume(value, not _dragging)
-	refresh()
+	_refresh_toggle_text()
 
 func _on_voice_volume_changed(value: float) -> void:
 	sfx.set_voice_volume(value, not _dragging)
-	refresh()
+	_refresh_toggle_text()
 
 func _on_music_volume_changed(value: float) -> void:
 	if music != null:
 		music.set_volume(value, not _dragging)
-	refresh()
+	_refresh_toggle_text()
 
 func _on_drag_started() -> void:
 	_dragging = true
