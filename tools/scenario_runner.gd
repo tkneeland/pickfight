@@ -506,6 +506,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_stops_before_spikes",
 	"bot_dodges_moving_saw",
 	"bot_dodges_meteor",
+	"bot_sidesteps_incoming_bullet",
+	"bot_sidestep_bullet_keeps_footing_997",
 	"bot_braces_for_gust_warning",
 	"hazard_death_credits_last_hitter_within_window",
 	"hazard_death_after_window_gives_no_credit",
@@ -2600,6 +2602,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_dodges_moving_saw()
 		"bot_dodges_meteor":
 			return await _scenario_bot_dodges_meteor()
+		"bot_sidesteps_incoming_bullet":
+			return await _scenario_bot_sidesteps_incoming_bullet()
+		"bot_sidestep_bullet_keeps_footing_997":
+			return await _scenario_bot_sidestep_bullet_keeps_footing_997()
 		"bot_braces_for_gust_warning":
 			return await _scenario_bot_braces_for_gust_warning()
 		"hazard_death_credits_last_hitter_within_window":
@@ -30174,6 +30180,68 @@ func _scenario_bot_dodges_meteor() -> Array[String]:
 	if ledge_player.global_position.x > 600.0 or ledge_player.global_position.y > 330.0:
 		failures.append("the bot dodged off the floor's edge to x=%.0f" % ledge_player.global_position.x)
 	await _teardown(ledge[0], false)
+	_scenario_completed = true
+	return failures
+## Issue #997: a bot at (x, 274) with a rival 600 px to its left and a boomstick
+## bullet from `from` (relative to the bot) flying at it. Returns the damage the
+## bot took and where it ended.
+func _bot_bullet_run_997(level: String, bot_x: float, from: Vector2, weapon: String = "") -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(bot_x, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(bot_x - 600.0, 274.0))
+	await _await_ticks(2)
+	if weapon != "":
+		await _equip(player, weapon)
+	var gun: Resource = load(BOOMSTICK_PATH)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	player.spawn_protected = false
+	await _await_ticks(30)
+	var bullet: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+	# Aimed where the bot will be when it arrives, as a human leads a mover.
+	var target: Vector2 = player.global_position + Vector2(player.linear_velocity.x * from.length() / 900.0, 0.0)
+	bullet.setup(rival, target + from, -from.normalized(), gun)
+	stage.add_child(bullet)
+	var before: float = player.damage
+	await _await_ticks(80)
+	var out: Dictionary = {"taken": player.damage - before, "x": player.global_position.x, "y": player.global_position.y}
+	await _teardown(stage, false)
+	return out
+## A Normal and a Hard bot with a bullet coming flat at them from 350 px leave
+## the line and take nothing.
+func _scenario_bot_sidesteps_incoming_bullet() -> Array[String]:
+	var failures: Array[String] = []
+	var easy: Dictionary = await _bot_bullet_run_997("easy", 0.0, Vector2(350.0, 0.0))
+	var normal: Dictionary = await _bot_bullet_run_997("normal", 0.0, Vector2(350.0, 0.0))
+	var hard: Dictionary = await _bot_bullet_run_997("hard", 0.0, Vector2(350.0, 0.0))
+	print("      bot_sidesteps_incoming_bullet: taken easy %.1f normal %.1f hard %.1f" % [easy["taken"], normal["taken"], hard["taken"]])
+	if easy["taken"] <= 0.0:
+		failures.append("the control is empty: the Easy bot was not hit")
+	if normal["taken"] > 0.0:
+		failures.append("the Normal bot took %.1f from the bullet" % normal["taken"])
+	if hard["taken"] > 0.0:
+		failures.append("the Hard bot took %.1f from the bullet" % hard["taken"])
+	_scenario_completed = true
+	return failures
+## A bullet coming down at a slant is dodged sideways, and at the floor's edge
+## the bot does not leave the floor to do it; a bot holding the shield still
+## blocks it (#977), not dodges.
+func _scenario_bot_sidestep_bullet_keeps_footing_997() -> Array[String]:
+	var failures: Array[String] = []
+	var slant: Dictionary = await _bot_bullet_run_997("normal", 0.0, Vector2(60.0, -160.0))
+	var easy: Dictionary = await _bot_bullet_run_997("easy", 0.0, Vector2(60.0, -160.0))
+	var edge: Dictionary = await _bot_bullet_run_997("normal", 570.0, Vector2(-60.0, -160.0))
+	print("      bot_sidestep_bullet_keeps_footing_997: slant taken %.1f (easy %.1f), edge x=%.0f y=%.0f" % [slant["taken"], easy["taken"], edge["x"], edge["y"]])
+	if easy["taken"] <= 0.0:
+		failures.append("the control is empty: the Easy bot was not hit by the slanted bullet")
+	if slant["taken"] > 0.0:
+		failures.append("the Normal bot took %.1f from the slanted bullet" % slant["taken"])
+	if edge["x"] > 600.0 or edge["y"] > 330.0:
+		failures.append("the bot left the floor to dodge, ending at x=%.0f y=%.0f" % [edge["x"], edge["y"]])
 	_scenario_completed = true
 	return failures
 ## A saw patrolling the floor between a bot and its rival: the bot is hit with
