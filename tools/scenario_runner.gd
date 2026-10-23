@@ -11530,11 +11530,11 @@ func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
 	await _teardown(stage)
 	return failures
 ## Speed strips on two more stages (#961): Flatlands carries one on its floor
-## and Colosseum a mirrored pair, each inside the floor's width, at least 100 px
+## and Switchyard a mirrored pair, each inside the floor's width, at least 100 px
 ## from either floor edge, with no spawn, pickup spot or hill spot over it.
 func _scenario_stage_speed_strips_placed() -> Array[String]:
 	var failures: Array[String] = []
-	var floors: Dictionary = {"Flatlands": 720.0, "Colosseum": 1040.0}
+	var floors: Dictionary = {"Flatlands": 720.0, "Switchyard": 1100.0}
 	for stage_name: String in floors:
 		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
 		get_root().add_child(stage)
