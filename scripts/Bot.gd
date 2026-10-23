@@ -428,6 +428,14 @@ func think(delta: float) -> Vector2:
 		_leap_left = 0.0
 		_soft_pass_left = 0.0
 		_held_at_edge = false
+		# A new life starts with no hook, wiggle, flight or pickup chase in hand.
+		_unhook_left = 0.0
+		_wiggle_left = 0.0
+		_hooked_for = 0.0
+		_hook_phase = 0
+		_flee_side = 0.0
+		_holdoff_since = -1.0
+		_chasing = null
 		return Vector2.ZERO
 	_clock += delta
 	_desperate_left = maxf(_desperate_left - delta, 0.0)
@@ -1671,6 +1679,11 @@ func _lava_top_uncached() -> float:
 ## bounce pads. The stage is the lava's parent; with no lava there is no
 ## stage to read.
 func _read_stage() -> void:
+	# Shuns and ignored pickups that have run out: their ids would only pile up.
+	for table: Dictionary in [_shunned, _ignored_pickups]:
+		for id: int in table.keys():
+			if float(table[id]) <= _clock:
+				table.erase(id)
 	_hazard_rects.clear()
 	_soft_rects.clear()
 	_walls.clear()

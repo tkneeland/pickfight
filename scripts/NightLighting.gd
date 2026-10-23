@@ -31,6 +31,9 @@ var modulate_node: CanvasModulate
 var lamps: Array[PointLight2D] = []
 ## Weapon-head glows keyed by player instance id, owned by this node.
 var head_glows: Dictionary = {}
+## Glows hung on players and pickups, which can outlive the stage: taken off
+## when it goes, or the next (day) stage's players would still glow.
+var _attached_glows: Array[Node] = []
 var _texture: GradientTexture2D
 var _time: float = 0.0
 
@@ -56,6 +59,16 @@ func _on_stage_exiting() -> void:
 	if is_instance_valid(modulate_node):
 		modulate_node.get_parent().remove_child(modulate_node)
 		modulate_node.queue_free()
+	var stage: Node = get_parent()
+	for glow: Node in _attached_glows:
+		if not is_instance_valid(glow) or glow.is_queued_for_deletion():
+			continue
+		var holder: Node = glow.get_parent()
+		if holder == null or (stage != null and (holder == stage or stage.is_ancestor_of(holder))):
+			continue # goes with the stage
+		holder.remove_child(glow)
+		glow.queue_free()
+	_attached_glows.clear()
 
 func _ready() -> void:
 	set_process(true)
@@ -73,6 +86,7 @@ func _process(delta: float) -> void:
 			var glow: PointLight2D = _make_light(GLOW_COLOR, PICKUP_GLOW_SCALE, GLOW_ENERGY)
 			glow.name = GLOW_NAME
 			pickup.add_child(glow)
+			_attached_glows.append(glow)
 	for id in head_glows.keys():
 		if not is_instance_valid(instance_from_id(id)):
 			(head_glows[id] as Node).queue_free()
@@ -85,12 +99,18 @@ func _light_player(player: Node2D) -> void:
 		var glow: PointLight2D = _make_light(GLOW_COLOR, PLAYER_GLOW_SCALE, GLOW_ENERGY)
 		glow.name = GLOW_NAME
 		player.add_child(glow)
+		_attached_glows.append(glow)
 	var id: int = player.get_instance_id()
 	if not head_glows.has(id):
 		var head: PointLight2D = _make_light(GLOW_COLOR, HEAD_GLOW_SCALE, GLOW_ENERGY)
 		head.name = "HeadGlow%d" % id
 		add_child(head)
 		head_glows[id] = head
+	# The head glow is not the player's child: hide it with the player.
+	var lit: bool = player.visible and player.get("alive") != false
+	(head_glows[id] as PointLight2D).visible = lit
+	if not lit:
+		return
 	if player.has_method("weapon_head_position"):
 		(head_glows[id] as PointLight2D).global_position = player.weapon_head_position()
 	else:
