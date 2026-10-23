@@ -344,6 +344,21 @@ class WeaponStatsModifier extends RoundModifier:
 	## Scales what the three special weapons (issue #150) draw and hit with
 	## beyond the head: the loaded hook or boomerang's art and the flail's
 	## ball. Nothing for any other weapon, whose fields are empty.
+	## A copy of `stats` with the head -- its circles, art and polygon, the shot
+	## it fires and the special art -- scaled by `factor`.
+	func _scale_head(stats: Resource, factor: float) -> Resource:
+		var scaled: Resource = stats.duplicate()
+		var radii: PackedFloat32Array = stats.head_circle_radii.duplicate()
+		for i in radii.size():
+			radii[i] = radii[i] * factor
+		scaled.head_circle_offsets = _scaled_points(stats.head_circle_offsets, factor)
+		scaled.head_circle_radii = radii
+		scaled.art_outline = _scaled_points(stats.art_outline, factor)
+		scaled.head_polygon = _scaled_points(stats.head_polygon, factor)
+		scaled.projectile_radius = stats.projectile_radius * factor
+		_scale_special_art(scaled, stats, factor)
+		return scaled
+
 	func _scale_special_art(scaled: Resource, stats: Resource, factor: float) -> void:
 		scaled.loaded_art = _scaled_points(stats.loaded_art, factor)
 		scaled.ball_art = _scaled_points(stats.ball_art, factor)
@@ -367,24 +382,8 @@ class HeavyWeapons extends WeaponStatsModifier:
 
 class BigHeads extends WeaponStatsModifier:
 	func _modified(stats: Resource) -> Resource:
-		var big: Resource = stats.duplicate()
-		var offsets: PackedVector2Array = stats.head_circle_offsets.duplicate()
-		for i in offsets.size():
-			offsets[i] = offsets[i] * BIG_HEAD_SCALE
-		var radii: PackedFloat32Array = stats.head_circle_radii.duplicate()
-		for i in radii.size():
-			radii[i] = radii[i] * BIG_HEAD_SCALE
-		var outline: PackedVector2Array = stats.art_outline.duplicate()
-		for i in outline.size():
-			outline[i] = outline[i] * BIG_HEAD_SCALE
-		big.head_circle_offsets = offsets
-		big.head_circle_radii = radii
-		big.art_outline = outline
-		big.head_polygon = _scaled_points(stats.head_polygon, BIG_HEAD_SCALE)
 		# The boomstick's bullet grows with its head (owner, hackathon playtest).
-		big.projectile_radius = stats.projectile_radius * BIG_HEAD_SCALE
-		_scale_special_art(big, stats, BIG_HEAD_SCALE)
-		return big
+		return _scale_head(stats, BIG_HEAD_SCALE)
 
 class FastLava extends RoundModifier:
 	var _saved_grace: float = 0.0
@@ -423,23 +422,8 @@ class SlipperyFloor extends RoundModifier:
 
 class TinyWeapons extends WeaponStatsModifier:
 	func _modified(stats: Resource) -> Resource:
-		var tiny: Resource = stats.duplicate()
-		var offsets: PackedVector2Array = stats.head_circle_offsets.duplicate()
-		for i in offsets.size():
-			offsets[i] = offsets[i] * TINY_HEAD_SCALE
-		var radii: PackedFloat32Array = stats.head_circle_radii.duplicate()
-		for i in radii.size():
-			radii[i] = radii[i] * TINY_HEAD_SCALE
-		var outline: PackedVector2Array = stats.art_outline.duplicate()
-		for i in outline.size():
-			outline[i] = outline[i] * TINY_HEAD_SCALE
-		tiny.head_circle_offsets = offsets
-		tiny.head_circle_radii = radii
-		tiny.art_outline = outline
-		tiny.head_polygon = _scaled_points(stats.head_polygon, TINY_HEAD_SCALE)
-		tiny.projectile_radius = stats.projectile_radius * TINY_HEAD_SCALE
+		var tiny: Resource = _scale_head(stats, TINY_HEAD_SCALE)
 		tiny.max_reach = maxf(stats.min_reach, stats.max_reach * TINY_REACH_SCALE)
-		_scale_special_art(tiny, stats, TINY_HEAD_SCALE)
 		tiny.chain_length = stats.chain_length * TINY_REACH_SCALE
 		return tiny
 

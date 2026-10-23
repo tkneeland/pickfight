@@ -34,6 +34,9 @@ extends Node2D
 enum Leg { OUT, BACK }
 
 const LAYER_WORLD: int = 1
+## The shield, colour, art and swept-cast helpers every shot shares,
+## preloaded by path (CLAUDE.md: never by `class_name`).
+const ShotSweepScript := preload("res://scripts/ShotSweep.gd")
 ## Every live boomerang is in this group, which is how scenarios find them.
 const GROUP: StringName = &"boomerangs"
 ## Sideways acceleration on the way out, as a fraction of the slowing-down
@@ -94,9 +97,8 @@ func setup(from_shooter: RigidBody2D, origin: Vector2, flight: Vector2, stats: R
 	if side.y > 0.0:
 		side = -side
 	_arc = side * _slowing * ARC_FRACTION
-	var identity: Variant = from_shooter.get("identity_color") if from_shooter != null else null
-	_colour = identity if identity is Color else Color.WHITE
-	_art = _centred(stats.loaded_art)
+	_colour = ShotSweepScript.shooter_colour(from_shooter)
+	_art = ShotSweepScript.centred(stats.loaded_art)
 
 func _ready() -> void:
 	add_to_group(GROUP)
@@ -130,8 +132,8 @@ func _physics_process(delta: float) -> void:
 	if leg == Leg.BACK and (shooter.global_position - global_position).length() <= CATCH_RADIUS:
 		_catch()
 		return
-	queue_redraw()
 
+## Redrawn once a frame here, not again each physics tick.
 func _process(_delta: float) -> void:
 	queue_redraw()
 
@@ -153,7 +155,7 @@ func _move(motion: Vector2) -> void:
 		return
 	# Issue #631: a shield's face turns the boomerang back with no damage; on
 	# the way home it just flies on harmlessly, like terrain does.
-	var blocker: Node = _shield_holder_blocking(global_position, global_position + motion, _shape.radius)
+	var blocker: Node = ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, _shape.radius)
 	if blocker != null and blocker != _shield_turned:
 		_shield_turned = blocker
 		impacted.emit(blocker, global_position)
@@ -165,37 +167,25 @@ func _move(motion: Vector2) -> void:
 			global_position += motion
 		return
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var query := PhysicsShapeQueryParameters2D.new()
-	query.shape = _shape
-	query.collision_mask = LAYER_WORLD
-	query.collide_with_bodies = true
-	query.collide_with_areas = false
 	var exclude: Array[RID] = [shooter.get_rid()]
 	var left: Vector2 = motion
 	for i in MAX_PASSES:
 		if left.length_squared() == 0.0:
 			return
-		query.transform = Transform2D(0.0, global_position)
-		query.motion = left
-		query.exclude = exclude
-		var fractions: PackedFloat32Array = space.cast_motion(query)
-		var unsafe: float = fractions[1] if fractions.size() >= 2 else 1.0
+		# A graze can leave no rest info; `cast_first` then still finds what
+		# was touched with an overlap query, so a player is not mistaken for
+		# terrain.
+		var met: Dictionary = ShotSweepScript.cast_first(space, _shape, global_position, left, LAYER_WORLD, exclude)
+		var unsafe: float = met["unsafe"]
 		if unsafe >= 1.0:
 			global_position += left
 			return
 		global_position += left * unsafe
 		left *= (1.0 - unsafe)
-		query.transform = Transform2D(0.0, global_position)
-		query.motion = Vector2.ZERO
-		var rest: Dictionary = space.get_rest_info(query)
-		var collider: Object = instance_from_id(rest["collider_id"]) if rest.has("collider_id") else null
-		var point: Vector2 = rest["point"] if rest.has("point") else global_position
-		if rest.is_empty():
-			# A graze can leave no rest info; an overlap query still finds
-			# what was touched, so a player is not mistaken for terrain.
-			var overlaps: Array[Dictionary] = space.intersect_shape(query, 1)
-			if not overlaps.is_empty():
-				collider = overlaps[0]["collider"]
+		var collider: Object = met["collider"]
+		var point: Vector2 = met["point"]
+		if point == Vector2.INF:
+			point = global_position
 		var node: Node = collider as Node
 		if node != null and node.is_in_group("players"):
 			_hit_player(node, point)
@@ -230,18 +220,6 @@ func _hit_player(victim: Node, point: Vector2) -> void:
 ## The shield holder that turned this boomerang, so it is not turned twice.
 var _shield_turned: Node = null
 
-## Issue #631, ADR-0024: the player, other than the shooter, whose shield's
-## face turns a shot flying `from` -> `to`, or null.
-func _shield_holder_blocking(from: Vector2, to: Vector2, radius: float) -> Node:
-	for node: Node in get_tree().get_nodes_in_group("players"):
-		if node != shooter and node.has_method("shield_face_blocks") \
-				and node.shield_face_blocks(from, to, radius):
-			return node
-	return null
-
-func _shooter_in_play() -> bool:
-	return is_instance_valid(shooter) and bool(shooter.get("alive"))
-
 func _draw() -> void:
 	var alpha: float = GHOST_ALPHA if ghost else 1.0
 	var shape: PackedVector2Array = PackedVector2Array()
@@ -254,18 +232,3 @@ func _draw() -> void:
 		draw_polyline(edge, Color(OUTLINE_COLOR, OUTLINE_COLOR.a * alpha), 1.0)
 	else:
 		draw_circle(Vector2.ZERO, _shape.radius if _shape != null else 6.0, Color(_colour, alpha))
-
-## `art` moved so its bounding box is centred on the origin: the loaded art is
-## authored where it sits on the head, and in flight it is drawn round the
-## flying circle.
-func _centred(art: PackedVector2Array) -> PackedVector2Array:
-	if art.is_empty():
-		return art
-	var box := Rect2(art[0], Vector2.ZERO)
-	for p: Vector2 in art:
-		box = box.expand(p)
-	var centre: Vector2 = box.get_center()
-	var out := PackedVector2Array()
-	for p: Vector2 in art:
-		out.append(p - centre)
-	return out

@@ -21,14 +21,11 @@
 # Logs (#195): every Godot run passes `--log-file` into $GODOT_LOG_DIR, so no
 # run writes a log under the runner's user data folder. The output that
 # matters is captured from stdout below either way.
-# Runner image (#946): pinned to ubuntu-24.04, not ubuntu-latest. When
-# ubuntu-latest started rolling out ubuntu-26.04 (2026-10-23 ~00:43Z), the
-# physics in roster_heads_do_not_tunnel_head and bot_dodges_moving_saw came out
-# different on the new image (presumably a different libm or toolchain giving different float results,
-# and the sim diverges) and both failed, though nothing in the repo had
-# changed. The suite's expected values were tuned on 24.04. Moving to a newer
-# image is a deliberate change: bump the pin in its own PR and re-check those
-# two scenarios.
+# Runner image (#946, #950): ubuntu-latest again. It moved to ubuntu-26.04
+# on 2026-10-23, whose float results differ slightly from 24.04's, and two
+# scenarios fell over a margin the game had left to luck: a head crossing the
+# sweep could not see (WeaponHead._first_rotating_contact) and a bot not
+# leading a patrolling saw's danger zone (Bot.SAW_LOOKAHEAD_TICKS).
 name: scenarios
 
 on:
@@ -49,7 +46,7 @@ env:
 jobs:
   check:
     name: import + boot + parse check
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -127,7 +124,7 @@ jobs:
   suite:
     name: scenarios shard ${{ matrix.shard }}/4
     needs: check
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false

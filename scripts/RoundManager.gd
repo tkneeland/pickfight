@@ -423,7 +423,7 @@ func _swap_stage(changing: bool = false) -> void:
 	_stage_rotation.stage_index = next_index
 	if changing and next_index == previous and _current_stage != null and is_instance_valid(_current_stage):
 		# The only stage on (#646): play carries on in the same instance.
-		_match_stages.append(stage_scenes[next_index].resource_path.get_file().get_basename())
+		_match_stages.append(_stage_file_name(next_index))
 		return
 	if _current_stage != null:
 		# Out of the tree first: a queued free leaves it there until frame end and
@@ -433,7 +433,7 @@ func _swap_stage(changing: bool = false) -> void:
 		_current_stage.queue_free()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
-	_match_stages.append(stage_scenes[_stage_rotation.stage_index].resource_path.get_file().get_basename())
+	_match_stages.append(_stage_file_name(_stage_rotation.stage_index))
 	var night: bool = _roll_night()
 	_current_stage.set("night", night)
 	container.add_child(_current_stage)
@@ -503,15 +503,18 @@ func _roll_night() -> bool:
 const StageScript := preload("res://scripts/Stage.gd")
 const PaletteScript := preload("res://scripts/Palette.gd")
 
+## The current stage's view rectangle: its own `get_view_rect()`, else the
+## default view size centred on it.
+func _stage_view_rect() -> Rect2:
+	if _current_stage.has_method("get_view_rect"):
+		return _current_stage.get_view_rect()
+	return Rect2(_current_stage.global_position - StageScript.DEFAULT_VIEW_SIZE * 0.5, StageScript.DEFAULT_VIEW_SIZE)
+
 func _fit_camera_to_stage() -> void:
 	var camera: Camera2D = get_node_or_null(camera_path) as Camera2D if not camera_path.is_empty() else null
 	if camera == null or _current_stage == null:
 		return
-	var view: Rect2
-	if _current_stage.has_method("get_view_rect"):
-		view = _current_stage.get_view_rect()
-	else:
-		view = Rect2(_current_stage.global_position - StageScript.DEFAULT_VIEW_SIZE * 0.5, StageScript.DEFAULT_VIEW_SIZE)
+	var view: Rect2 = _stage_view_rect()
 	var zoom: float = StageScript.zoom_for_view(view.size)
 	camera.zoom = Vector2(zoom, zoom)
 	camera.global_position = view.get_center()
@@ -1299,7 +1302,7 @@ var _victory_until_msec: int = 0
 func _everyone_continued(roster: Array[int]) -> bool:
 	var humans: int = 0
 	for slot: int in roster:
-		if _controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+		if _is_bot_slot(slot):
 			continue
 		humans += 1
 		if not _is_ready(slot):
@@ -1313,13 +1316,11 @@ func _leave_victory() -> void:
 	if DemoBuildScript.is_active() and not _end_card_up and _lobby_screen != null:
 		_end_card_up = true
 		_end_card_until_msec = GameClockScript.now_msec() + int(end_card_sec * 1000.0)
-		if _controller_server != null and _controller_server.has_method("clear_ready"):
-			_controller_server.clear_ready()
+		_clear_ready()
 		_lobby_screen.show_panel("end_card")
 		return
 	_end_card_up = false
-	if _controller_server != null and _controller_server.has_method("clear_ready"):
-		_controller_server.clear_ready()
+	_clear_ready()
 	_enter_lobby()
 
 ## The host at the keyboard skips the wait (#337).
@@ -1370,8 +1371,7 @@ func _enter_victory() -> void:
 	_play_lobby_music()
 	_state = State.VICTORY
 	_clear_stage()
-	if _controller_server != null and _controller_server.has_method("clear_ready"):
-		_controller_server.clear_ready()
+	_clear_ready()
 	if _scoreboard != null:
 		_scoreboard.visible = false
 	_build_lobby_ui()
@@ -1420,8 +1420,7 @@ func _begin_match() -> void:
 	_stage_rotation.pinned = -1
 	_update_score_label()
 	_ko_match_started()
-	if _controller_server != null and _controller_server.has_method("clear_ready"):
-		_controller_server.clear_ready()
+	_clear_ready()
 	if _lobby_screen != null and _lobby_screen.panels_built():
 		_lobby_screen.show_panel("")
 	_set_join_corner_visible(false) # lobby only (#430)
@@ -1759,8 +1758,7 @@ func _end_match() -> void:
 	_end_spawn_protection()
 	_last_winner_slot = -1
 	_team_keep_weapon.clear()
-	if _controller_server != null and _controller_server.has_method("clear_ready"):
-		_controller_server.clear_ready()
+	_clear_ready()
 	_enter_lobby()
 
 func _set_tree_paused(on: bool) -> void:
@@ -1884,7 +1882,7 @@ func _lobby_teams(roster: Array[int]) -> Dictionary:
 			var pick: int = int(_controller_server.slot_team_pick(slot))
 			if pick != TeamsScript.NONE:
 				picks[slot] = pick
-		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+		if _is_bot_slot(slot):
 			bots.append(slot)
 	return TeamsScript.assign(roster, picks, bots)
 
@@ -1916,7 +1914,7 @@ func _apply_teams(entering: Array[int]) -> void:
 	if _team_mode:
 		var bots: Array[int] = []
 		for slot: int in entering:
-			if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+			if _is_bot_slot(slot):
 				bots.append(slot)
 		_teams = TeamsScript.assign(entering, {}, bots, _teams)
 	for slot in _players.size():
@@ -2236,14 +2234,12 @@ func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 	var weapon: String = ""
 	var real: bool = true
 	if amount > 0.0 and attacker_slot >= 0 and attacker_slot < _players.size() and _players[attacker_slot] != null:
-		var stats: Variant = _players[attacker_slot].get("weapon_stats")
-		if stats != null and stats.resource_path != "":
-			weapon = stats.resource_path.get_file().get_basename()
+		weapon = _weapon_id_of(attacker_slot)
 		# Issue #516: an in-flight shot is credited to the weapon that fired it.
 		var fired_with: Variant = _players[attacker_slot].get("hit_weapon_id")
 		if fired_with is String and fired_with != "":
 			weapon = fired_with
-		real = not (_controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(attacker_slot))
+		real = not _is_bot_slot(attacker_slot)
 	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec(), weapon, real)
 
 func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
@@ -2332,8 +2328,7 @@ func _start_play_of_round() -> void:
 		_play_of_round = PlayOfRoundScript.new()
 		add_child(_play_of_round)
 	# Only a fresh Ready tap skips it.
-	if _controller_server != null and _controller_server.has_method("clear_ready"):
-		_controller_server.clear_ready()
+	_clear_ready()
 	# Streamer mode (#369) hides only the room code and join links; names stay.
 	_play_of_round.play(_replay.frames_slice(int(pick["start"]), int(pick["count"])),
 		tr("PLAY_OF_ROUND_CAPTION") % _slot_name(int(best["killer"])), _shake_on())
@@ -2354,7 +2349,7 @@ func _tick_play_of_round() -> void:
 	if _play_of_round == null or not _play_of_round.is_playing() or _controller_server == null:
 		return
 	for slot: int in _controller_server.claimed_slots():
-		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+		if _is_bot_slot(slot):
 			continue
 		var tapped: bool = _controller_server.slot_pressed_ready(slot) if _controller_server.has_method("slot_pressed_ready") else false
 		if tapped:
@@ -2570,8 +2565,7 @@ func _stock_single_stage() -> String:
 func _stages_by_mode() -> Dictionary:
 	var settings: RefCounted = HostSettingsScript.shared()
 	var out: Dictionary = {}
-	for mode_id: String in ["classic", GameModesScript.KING_OF_THE_HILL, GameModesScript.SUDDEN_DEATH,
-			GameModesScript.STOCK, GameModesScript.SOCCER, GameModesScript.CAPTURE_THE_FLAG]:
+	for mode_id: String in HostSettingsScript.KNOWN_MODES:
 		out[mode_id] = {"all": settings.stages_for_mode(mode_id), "on": settings.on_stages_for(mode_id)}
 	return out
 
@@ -2588,8 +2582,7 @@ func _rules_state() -> Dictionary:
 	ids.append("night")
 	titles["night"] = "Night Stages"
 	var modes: Dictionary = {}
-	for mode_id: String in ["classic", GameModesScript.KING_OF_THE_HILL, GameModesScript.SUDDEN_DEATH,
-			GameModesScript.STOCK, GameModesScript.SOCCER, GameModesScript.CAPTURE_THE_FLAG]:
+	for mode_id: String in HostSettingsScript.KNOWN_MODES:
 		var on: Array = []
 		var locked: Array = []
 		for id: String in ids:
@@ -2741,9 +2734,12 @@ func _tick_ghosts() -> void:
 			_clear_ghosts()
 		return
 	var claimed: Array[int] = _controller_server.claimed_slots() if _controller_server != null else []
+	var stock: bool = _game_mode_node != null and _game_mode_node.has_method("is_pending")
+	# Read only once a ghost is due, and then once for the tick.
+	var view: Rect2 = Rect2()
+	var have_view: bool = false
 	for slot in _in_round:
 		var player: Variant = _players[slot]
-		var stock: bool = _game_mode_node != null and _game_mode_node.has_method("is_pending")
 		# Back in play (a Stock respawn, a tiebreaker #554): the ghost goes.
 		if (player == null or player.alive or (stock and _game_mode_node.is_pending(slot))) and _ghosts.has(slot):
 			if is_instance_valid(_ghosts[slot]):
@@ -2753,15 +2749,13 @@ func _tick_ghosts() -> void:
 			continue
 		if stock and _game_mode_node.is_pending(slot):
 			continue  # a life left: coming back, no ghost yet (#354)
-		if _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot):
+		if _is_bot_slot(slot):
 			continue
 		if _ghosts.has(slot) and is_instance_valid(_ghosts[slot]):
 			continue
-		var view: Rect2
-		if _current_stage.has_method("get_view_rect"):
-			view = _current_stage.get_view_rect()
-		else:
-			view = Rect2(_current_stage.global_position - StageScript.DEFAULT_VIEW_SIZE * 0.5, StageScript.DEFAULT_VIEW_SIZE)
+		if not have_view:
+			view = _stage_view_rect()
+			have_view = true
 		var ghost: Node2D = GhostScript.new()
 		ghost.name = "Ghost%d" % slot
 		_current_stage.add_child(ghost)
@@ -2899,6 +2893,11 @@ func _end_tiebreaker() -> void:
 var _career_kos: Dictionary = {}
 var _career_self_kos: Dictionary = {}
 
+## Every phone's ready flag down, when there is a server that keeps them.
+func _clear_ready() -> void:
+	if _controller_server != null and _controller_server.has_method("clear_ready"):
+		_controller_server.clear_ready()
+
 func _is_bot_slot(slot: int) -> bool:
 	return _controller_server != null and _controller_server.has_method("is_virtual") and _controller_server.is_virtual(slot)
 
@@ -2923,9 +2922,9 @@ func _send_career_round(winners: Array) -> void:
 			deltas["kos"] = int(_career_kos[slot])
 		if int(_career_self_kos.get(slot, 0)) > 0:
 			deltas["self_kos"] = int(_career_self_kos[slot])
-		var stats: Variant = _players[slot].get("weapon_stats") if slot < _players.size() and _players[slot] != null else null
-		if stats != null and stats.resource_path != "":
-			deltas["weapons"] = {stats.resource_path.get_file().get_basename().capitalize(): 1}
+		var weapon: String = _weapon_id_of(slot)
+		if weapon != "":
+			deltas["weapons"] = {weapon.capitalize(): 1}
 		_send_career(slot, deltas)
 
 func _send_career_match() -> void:
@@ -2964,6 +2963,10 @@ func _played_stage_name() -> String:
 	var index: int = _stage_rotation.stage_index
 	if index < 0 or index >= stage_scenes.size():
 		return ""
+	return _stage_file_name(index)
+
+## The file name (no extension) of stage scene `index`.
+func _stage_file_name(index: int) -> String:
 	return stage_scenes[index].resource_path.get_file().get_basename()
 
 ## A KO resolved: what killed `victim`, and whether a rod reel or a ghost's boo
