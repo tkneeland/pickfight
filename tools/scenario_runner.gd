@@ -1089,6 +1089,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"structure_changed_on_new_entity_and_hud_change_review_net",
 	"controller_page_review_fixes_review_net",
 	"stage_check_and_join_urls_cached_review_perf",
+	"relay_throttles_bad_room_guesses_review_relay",
+	"relay_rate_limits_client_frames_review_relay",
+	"relay_caps_rooms_and_pending_per_ip_review_relay",
+	"feedback_issue_fences_text_and_defuses_mentions_review_relay",
+	"relay_prunes_empty_rate_limit_keys_review_relay",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3640,6 +3645,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_review_fixes_review_net()
 		"stage_check_and_join_urls_cached_review_perf":
 			return await _scenario_stage_check_and_join_urls_cached_review_perf()
+		"relay_throttles_bad_room_guesses_review_relay":
+			return await _scenario_relay_throttles_bad_room_guesses_review_relay()
+		"relay_rate_limits_client_frames_review_relay":
+			return await _scenario_relay_rate_limits_client_frames_review_relay()
+		"relay_caps_rooms_and_pending_per_ip_review_relay":
+			return await _scenario_relay_caps_rooms_and_pending_per_ip_review_relay()
+		"feedback_issue_fences_text_and_defuses_mentions_review_relay":
+			return _scenario_feedback_issue_fences_text_and_defuses_mentions_review_relay()
+		"relay_prunes_empty_rate_limit_keys_review_relay":
+			return await _scenario_relay_prunes_empty_rate_limit_keys_review_relay()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -29668,13 +29683,14 @@ func _scenario_feedback_relay_builds_github_issue() -> Array[String]:
 				failures.append("labels were %s" % [sent["labels"]])
 			if sent["title"] != "Feedback: Hello world":
 				failures.append("title was '%s'" % sent["title"])
-			var expect_body: String = "Hello world\nsecond line\n\n---\nBuild: 0.3\nOS: macOS\nStage: Ice\n\n_Sent from the in-game feedback button._"
+			var expect_body: String = "```\nHello world\nsecond line\n```\n\n---\nBuild: 0.3\nOS: macOS\nStage: Ice\n\n_Sent from the in-game feedback button._"
 			if sent["body"] != expect_body:
 				failures.append("body was '%s'" % sent["body"])
 	seen.clear()
 	await relay.handle_feedback("2.2.2.2", {"text": long_text})
 	var capped: Variant = JSON.parse_string(seen[0]["body"]) if seen.size() == 1 else {}
-	var head: String = str(capped.get("body", "")).split("\n")[0] if capped is Dictionary else ""
+	var capped_lines: PackedStringArray = str(capped.get("body", "")).split("\n") if capped is Dictionary else PackedStringArray()
+	var head: String = capped_lines[1] if capped_lines.size() > 1 else "" # line 0 is the code fence
 	if head.length() != 2000:
 		failures.append("a 2500-char message was cut to %d, expected 2000" % head.length())
 	relay.queue_free()
@@ -51471,5 +51487,194 @@ func _scenario_stage_check_and_join_urls_cached_review_perf() -> Array[String]:
 				break
 	screen.set_popup("")
 	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+## Review (relay hardening): once an IP has earned BAD_ROOM_LIMIT "bad_room"
+## refusals in a minute, its joins are refused unread, even for a real code; with
+## no trusted IP (no PROXY protocol) the throttle is off.
+func _scenario_relay_throttles_bad_room_guesses_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(0, failures)
+	if room.is_empty():
+		return failures
+	var relay: Node = room["relay"]
+	var clients: Array = room["clients"]
+	relay.ip_cap_enabled = true
+	var wrong: String = "AAAA" if room["code"] != "AAAA" else "BBBB"
+	for i in RelayScript238.BAD_ROOM_LIMIT:
+		var guess: WebSocketPeer = await _relay_connect({"t": "join", "room": wrong}, clients)
+		var answer: Dictionary = await _relay_next(guess, clients) if guess != null else {}
+		if answer.get("reason") != "bad_room":
+			failures.append("guess %d got %s, wanted bad_room" % [i, answer])
+			break
+	var real: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var throttled: Dictionary = await _relay_next(real, clients) if real != null else {}
+	if throttled.get("t") != "error" or throttled.get("reason") != "bad_room":
+		failures.append("a guesser's join to a real room got %s, wanted bad_room" % throttled)
+	relay.ip_cap_enabled = false
+	var trusted_off: WebSocketPeer = await _relay_connect({"t": "join", "room": room["code"]}, clients)
+	var welcome: Dictionary = await _relay_next(trusted_off, clients) if trusted_off != null else {}
+	if welcome.get("t") != "welcome":
+		failures.append("with the IP cap off a real join got %s" % welcome)
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+## Review (relay hardening): a client flooding binary frames is cut to its token
+## bucket (CLIENT_FRAME_BURST, refilled at CLIENT_FRAMES_PER_SEC); the excess is
+## dropped silently and the client keeps its seat.
+func _scenario_relay_rate_limits_client_frames_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var room: Dictionary = await _relay_room(1, failures)
+	if room.is_empty():
+		return failures
+	var clients: Array = room["clients"]
+	var host: WebSocketPeer = room["host"]
+	var client: WebSocketPeer = room["peers"][0]
+	var sent: int = 300
+	var started: int = Time.get_ticks_msec()
+	for i in sent:
+		client.send(PackedByteArray([i % 256]))
+	var got: int = 0
+	var deadline: int = Time.get_ticks_msec() + 600
+	while Time.get_ticks_msec() < deadline:
+		for c: WebSocketPeer in clients:
+			c.poll()
+		while host.get_available_packet_count() > 0:
+			host.get_packet()
+			if not host.was_string_packet():
+				got += 1
+		await process_frame
+	var elapsed_sec: float = float(Time.get_ticks_msec() - started) / 1000.0
+	var ceiling: int = int(RelayScript238.CLIENT_FRAME_BURST + RelayScript238.CLIENT_FRAMES_PER_SEC * elapsed_sec) + 2
+	if got < int(RelayScript238.CLIENT_FRAME_BURST):
+		failures.append("the host got %d frames of a burst, wanted at least %d" % [got, int(RelayScript238.CLIENT_FRAME_BURST)])
+	if got >= sent or got > ceiling:
+		failures.append("the host got %d of %d flooded frames in %.2fs, wanted at most %d" % [got, sent, elapsed_sec, ceiling])
+	if client.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		failures.append("the flooding client lost its seat")
+	# The bucket refills: after a pause a frame passes again.
+	var wait_until: int = Time.get_ticks_msec() + 300
+	while Time.get_ticks_msec() < wait_until:
+		for c: WebSocketPeer in clients:
+			c.poll()
+		while host.get_available_packet_count() > 0:
+			host.get_packet()
+		await process_frame
+	client.send(PackedByteArray([77]))
+	var up: Dictionary = await _relay_next(host, clients, false)
+	if up.get("data") != PackedByteArray([1, 77]):
+		failures.append("after a pause the host got %s, wanted [1, 77]" % [up.get("data")])
+	_relay_stop(room["relay"], clients)
+	_scenario_completed = true
+	return failures
+## Review (relay hardening): with a trusted IP one address may host at most
+## `room_cap_per_ip` rooms and hold at most `pending_cap_per_ip` sockets awaiting
+## their hello; beyond either it is refused.
+func _scenario_relay_caps_rooms_and_pending_per_ip_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = _relay_start()
+	if relay == null:
+		return ["no free port for the relay"]
+	var clients: Array = []
+	relay.ip_cap_enabled = true
+	relay.room_cap_per_ip = 2
+	var codes: Array = []
+	for i in 2:
+		var host: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+		var made: Dictionary = await _relay_next(host, clients) if host != null else {}
+		if made.get("t") != "room":
+			failures.append("host %d under the cap got %s" % [i, made])
+		codes.append(made.get("code", ""))
+	var third: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+	var refused: Dictionary = await _relay_next(third, clients) if third != null else {}
+	if refused.get("t") != "error" or refused.get("reason") != "room_full":
+		failures.append("a third room from one IP got %s, wanted room_full" % refused)
+	if relay.room_count() != 2:
+		failures.append("room_count %d after the refusal, wanted 2" % relay.room_count())
+	# Pending cap 0: the socket is closed before the WebSocket handshake.
+	relay.pending_cap_per_ip = 0
+	var blocked := WebSocketPeer.new()
+	if blocked.connect_to_url("ws://127.0.0.1:%d" % _relay_port_next) != OK:
+		failures.append("could not start the blocked connection")
+	else:
+		clients.append(blocked)
+		var opened: Array = [false] # a lambda captures locals by value
+		var closed: bool = await _relay580_wait(clients, func() -> bool:
+			if blocked.get_ready_state() == WebSocketPeer.STATE_OPEN:
+				opened[0] = true
+			return blocked.get_ready_state() == WebSocketPeer.STATE_CLOSED)
+		if opened[0] or not closed:
+			failures.append("a socket over the pending cap was not closed (opened %s, closed %s)" % [opened[0], closed])
+	relay.pending_cap_per_ip = 8
+	relay.ip_cap_enabled = false
+	var free_host: WebSocketPeer = await _relay_connect({"t": "host"}, clients)
+	var free_room: Dictionary = await _relay_next(free_host, clients) if free_host != null else {}
+	if free_room.get("t") != "room":
+		failures.append("with the IP cap off a host got %s" % free_room)
+	_relay_stop(relay, clients)
+	_scenario_completed = true
+	return failures
+## Review (relay hardening): feedback lands in a public issue, so the player's
+## text sits in a code fence longer than any backtick run in it, and every "@"
+## (text, title and the metadata fields) is broken with a zero-width joiner.
+func _scenario_feedback_issue_fences_text_and_defuses_mentions_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = RelayScript238.new()
+	var issue: Dictionary = relay.build_feedback_issue({
+		"text": "hey @tkneeland look\n```\n# not a heading\n``` and ````` too",
+		"version": "1.0 @someone", "os": "Win`dows", "stage": "Ice"})
+	relay.free()
+	var body: String = str(issue.get("body", ""))
+	var title: String = str(issue.get("title", ""))
+	var zwj: String = "‍"
+	for where: String in ["body", "title"]:
+		var text: String = body if where == "body" else title
+		if text.contains("@tkneeland") or text.contains("@someone"):
+			failures.append("the %s still mentions someone: %s" % [where, text.c_escape()])
+	if not body.contains("@" + zwj + "tkneeland") or not body.contains("@" + zwj + "someone"):
+		failures.append("the body lost the defused mentions: %s" % body.c_escape())
+	if title != "Feedback: hey @" + zwj + "tkneeland look":
+		failures.append("title was '%s'" % title.c_escape())
+	var lines: PackedStringArray = body.split("\n")
+	var fence: String = "``````" # one longer than the five-backtick run
+	if lines.size() < 2 or lines[0] != fence:
+		failures.append("the body did not open with a %d-backtick fence: %s" % [fence.length(), body.c_escape()])
+	var closing: int = lines.find(fence, 1)
+	if closing != 5:
+		failures.append("the closing fence was at line %d, wanted 5: %s" % [closing, body.c_escape()])
+	if not body.contains("\nOS: Windows\n"):
+		failures.append("a backtick in a metadata field survived: %s" % body.c_escape())
+	_scenario_completed = true
+	return failures
+## Review (relay hardening): rate-limit maps erase a caller once all its times
+## have expired, so they do not grow with every IP ever seen.
+func _scenario_relay_prunes_empty_rate_limit_keys_review_relay() -> Array[String]:
+	var failures: Array[String] = []
+	var relay: Node = RelayScript238.new()
+	root.add_child(relay)
+	relay.feedback_token = "tok"
+	relay.feedback_post = func(_u: String, _h: PackedStringArray, _b: String) -> int:
+		return 201
+	relay.stats_path = "user://review_relay_stats_%d.jsonl" % Time.get_ticks_usec()
+	for ip: String in ["10.0.0.1", "10.0.0.2"]:
+		await relay.handle_feedback(ip, {"text": "hi"})
+	var record: Dictionary = {"mode": "Classic", "format": "ffa", "length_sec": 60, "stages": ["Ice"],
+		"weapons": {"pickaxe": {"damage": 10.0, "hits": 2, "kos": 1}}, "winner_weapon": "pickaxe"}
+	var stats: Dictionary = relay.handle_stats("10.0.0.3", {"t": "stats", "record": record})
+	if stats.get("status") != 200:
+		failures.append("the stats record gave %s, wanted 200" % [stats])
+	var held: Dictionary = relay.rate_limit_key_counts()
+	if held.get("feedback") != 2 or held.get("stats") != 1:
+		failures.append("before pruning the relay held %s, wanted 2 feedback and 1 stats key" % held)
+	var now: int = Time.get_ticks_msec()
+	relay.prune_rate_limits(now)
+	if relay.rate_limit_key_counts() != held:
+		failures.append("pruning live entries changed %s to %s" % [held, relay.rate_limit_key_counts()])
+	relay.prune_rate_limits(now + RelayScript238.FEEDBACK_WINDOW_MSEC + 1)
+	var after: Dictionary = relay.rate_limit_key_counts()
+	if after.get("feedback") != 0 or after.get("stats") != 0 or after.get("bad_room") != 0:
+		failures.append("after the window the relay still held %s" % after)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(relay.stats_path))
+	relay.queue_free()
 	_scenario_completed = true
 	return failures
