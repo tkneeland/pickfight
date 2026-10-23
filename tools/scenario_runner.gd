@@ -1031,6 +1031,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"kill_feed_switch_833",
 	"damage_numbers_switch_873",
 	"match_point_plate_switch_off_shows_none",
+	"stage_title_card_switch_off_shows_none",
 	"juice_hit_pause_switch_off_never_pauses",
 	"pickup_callout_switch_off_spawns_none",
 	"match_win_ko_autosaves_clip_795",
@@ -3602,6 +3603,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_damage_numbers_switch_873()
 		"match_point_plate_switch_off_shows_none":
 			return await _scenario_match_point_plate_switch_off_shows_none()
+		"stage_title_card_switch_off_shows_none":
+			return await _scenario_stage_title_card_switch_off_shows_none()
 		"juice_hit_pause_switch_off_never_pauses":
 			return await _scenario_juice_hit_pause_switch_off_never_pauses()
 		"pickup_callout_switch_off_spawns_none":
@@ -50100,6 +50103,54 @@ func _scenario_pickup_callout_switch_off_spawns_none() -> Array[String]:
 	_scenario_completed = true
 	return failures
 ## Issue #892: Settings > Match point plate off shows no plate (dots stay); saved; reset by Restore defaults.
+func _scenario_stage_title_card_switch_off_shows_none() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.stage_title_card, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	var layer := CanvasLayer.new()
+	get_root().add_child(layer)
+	var cards: RefCounted = preload("res://scripts/RoundCards.gd").new(layer)
+	sfx.set_stage_title_card(false)
+	cards.show_stage_title("Test", 1.0, "rule")
+	if cards.stage_title_label() != null and cards.stage_title_label().visible:
+		failures.append("with Stage title card off a card was shown")
+	sfx.set_stage_title_card(true)
+	cards.show_stage_title("Test", 1.0, "rule")
+	if cards.stage_title_label() == null or not cards.stage_title_label().visible:
+		failures.append("with Stage title card on no card was shown")
+	layer.free()
+	var path: String = OS.get_temp_dir().path_join("pickfight_stage_title_942_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_stage_title_card(false)
+	sfx.stage_title_card = true
+	sfx.load_settings()
+	if sfx.stage_title_card:
+		failures.append("Stage title card off was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.stage_title_card_box()
+	if box == null:
+		failures.append("Settings has no Stage title card box")
+	else:
+		box.button_pressed = false
+		if sfx.stage_title_card:
+			failures.append("unticking the Stage title card box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.stage_title_card:
+			failures.append("Restore defaults did not put Stage title card back on")
+	sfx.stage_title_card = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+
 func _scenario_match_point_plate_switch_off_shows_none() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
@@ -50449,7 +50500,7 @@ func _text_fit_synthetic_751(sfx: Node, fit_script: GDScript) -> Array[String]:
 	await _text_fit_settle_751(sfx)
 	if absf(sfx.fit_factor(tight) - 1.0) > 0.001 or tight.theme != null or first_word.get_theme_font_size("font_size") != 40:
 		failures.append("Normal did not restore the tight screen (factor %.2f, label %d px)" % [sfx.fit_factor(tight), first_word.get_theme_font_size("font_size")])
-	layer.queue_free()
+	layer.free()
 	await _await_ticks(2)
 	return failures
 ## The numbers the launch copy quotes, counted from the game (#797): the stage
@@ -52112,7 +52163,7 @@ func _scenario_victory_keeps_same_podium_and_resets_title_colour_review_ui() -> 
 	victory.refresh(slots, scores, -1, awards)
 	if victory.victory_title().get_theme_color("font_color") != preload("res://scripts/UiTheme.gd").YELLOW:
 		failures.append("a match with no winner kept the last winner's title colour %s" % victory.victory_title().get_theme_color("font_color"))
-	layer.queue_free()
+	layer.free()
 	await process_frame
 	_scenario_completed = true
 	return failures
@@ -52164,6 +52215,9 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	credits.close()
 	if toggle != null and not ui.toggle_hit(point):
 		failures.append("the Settings toggle stayed unclickable after the credits closed")
+	# close() only hides the screen; free it so the runner's leak check passes.
+	credits.queue_free()
+	await process_frame
 	PadMenuScript368.reset()
 	_scenario_completed = true
 	return failures
