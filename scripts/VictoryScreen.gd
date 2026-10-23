@@ -33,6 +33,9 @@ var _victory_logo: TextureRect
 var _end_card_panel: Control
 var _continue_prompt_label: Label
 var _clip_saved_label: Label
+## What the podium, awards and stats were last built from: the lobby state changes
+## about once a second with remote seats (their ping), and the same inputs need no rebuild.
+var _last_inputs: Array = []
 
 func _init(screen: CanvasLayer, slot_name: Callable, slot_color: Callable) -> void:
 	_screen = screen
@@ -169,7 +172,15 @@ func refresh(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awar
 		winner_team: int = -1, teams: Dictionary = {}, team_scores: PackedInt32Array = PackedInt32Array(),
 		stat_rows: Array[Dictionary] = []) -> void:
 	_refresh_clip_saved()
+	var names: Array = []
+	for slot: int in slots:
+		names.append([_slot_name.call(slot), _slot_color.call(slot)])
+	var inputs: Array = [slots, scores, winner_slot, awards, winner_team, teams, team_scores, stat_rows, names, TranslationServer.get_locale()]
+	if inputs == _last_inputs:
+		return
+	_last_inputs = inputs.duplicate(true)
 	for child: Node in _podium.get_children():
+		_podium.remove_child(child) # out at once: no frame with both sets of columns
 		child.queue_free()
 	# Five to eight on the podium (issue #138) take narrower columns and smaller
 	# names that wrap, so eight columns still fit across the 1600 px screen.
@@ -217,6 +228,7 @@ func refresh(slots: Array[int], scores: PackedInt32Array, winner_slot: int, awar
 		_victory_title.add_theme_color_override("font_color", _slot_color.call(winner_slot))
 	else:
 		_victory_title.text = _screen.tr("VICTORY_MATCH_OVER")
+		_victory_title.add_theme_color_override("font_color", UiThemeScript.YELLOW) # not the last winner's colour
 	_refresh_awards(awards)
 	_refresh_stat_table(stat_rows)
 
