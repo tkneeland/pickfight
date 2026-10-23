@@ -4189,6 +4189,55 @@ func _teardown(stage: Node2D, completes: bool = true) -> void:
 func _await_ticks(n: int) -> void:
 	for i in n:
 		await physics_frame
+## Shared input and fixture helpers (code review of the runner). Older
+## scenarios carry issue-suffixed copies of these; new ones use these.
+##
+## Feeds one key event, by keycode and physical keycode, through Input and
+## waits a frame for it to land.
+func _key_event(keycode: Key, pressed: bool = true) -> void:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = keycode
+	ev.keycode = keycode
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+	await process_frame
+## Presses and releases `keycode`.
+func _tap_key(keycode: Key) -> void:
+	await _key_event(keycode, true)
+	await _key_event(keycode, false)
+## Presses and releases a gamepad button on `device`.
+func _pad_tap(device: int, button: int) -> void:
+	await _pad_button_261(device, button, true)
+	await _pad_button_261(device, button, false)
+## Joins `count` phones named `<prefix>-<i>` to the current ControllerServer
+## (`_phone_ws_port`) and returns them. `keep` holds phones already joined:
+## they are polled meanwhile and hold the slots before these, so phone i
+## should get slot `keep.size() + i`; any other slot is a failure.
+func _join_phones(count: int, prefix: String, failures: Array[String], keep: Array[WebSocketPeer] = []) -> Array[WebSocketPeer]:
+	var joined: Array[WebSocketPeer] = []
+	for i in count:
+		var peer := WebSocketPeer.new()
+		var polled: Array[WebSocketPeer] = keep + joined
+		var result: Dictionary = await _join_phone(peer, "%s-%d" % [prefix, i], polled)
+		var want: int = keep.size() + i
+		if result["slot"] != want:
+			failures.append("phone %d was given slot %d, expected %d" % [want + 1, result["slot"], want])
+		joined.append(peer)
+	return joined
+## A per-process temp settings file for `tag`: never the owner's user:// file,
+## and never shared with another runner on the same machine.
+func _temp_cfg(tag: String) -> String:
+	return OS.get_temp_dir().path_join("pickfight_%s_%d.cfg" % [tag, OS.get_process_id()])
+## The Settings panel built on the Sfx autoload `sfx`, opened, with saving of
+## its host settings off.
+func _open_settings_ui(sfx: Node) -> CanvasLayer:
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	return ui
 ## The weapon rig is built beside the player, not under it, so freeing a
 ## player does not free its weapon. Left orphaned it keeps simulating with a
 ## live head on the head layer -- able to hit people on behalf of someone who
@@ -9307,13 +9356,7 @@ func _scenario_buzz_reaches_only_its_phone() -> Array[String]:
 	stage.add_child(server)
 	await _await_ticks(5)
 	_phone_ws_port = server.ws_port
-	var joined: Array[WebSocketPeer] = []
-	for i in 2:
-		var peer := WebSocketPeer.new()
-		var result: Dictionary = await _join_phone(peer, "buzz-phone-%d" % i, joined)
-		if result["slot"] != i:
-			failures.append("phone %d was given slot %d, expected %d" % [i + 1, result["slot"], i])
-		joined.append(peer)
+	var joined: Array[WebSocketPeer] = await _join_phones(2, "buzz-phone", failures)
 	if failures.is_empty():
 		server.send_buzz(1, "struck")
 		server.send_buzz(2, "win")  # no phone on slot 2: must be a no-op
@@ -15062,13 +15105,7 @@ func _scenario_phone_lobby_messages_over_websocket() -> Array[String]:
 	stage.add_child(server)
 	await _await_ticks(5)
 	_phone_ws_port = server.ws_port
-	var joined: Array[WebSocketPeer] = []
-	for i in 2:
-		var peer := WebSocketPeer.new()
-		var result: Dictionary = await _join_phone(peer, "lobby-phone-%d" % i, joined)
-		if result["slot"] != i:
-			failures.append("phone %d got slot %d" % [i + 1, result["slot"]])
-		joined.append(peer)
+	var joined: Array[WebSocketPeer] = await _join_phones(2, "lobby-phone", failures)
 	if failures.size() > 0:
 		await _teardown(stage)
 		return failures
@@ -35201,8 +35238,7 @@ const DECK_SCREEN_368: Vector2 = Vector2(1280, 800)
 const DECK_MIN_EM_PX_368: float = 12.7
 ## A full press and release: a focused Button fires on the release.
 func _pad_tap_368(device: int, button: int) -> void:
-	await _pad_button_261(device, button, true)
-	await _pad_button_261(device, button, false)
+	await _pad_tap(device, button)
 func _deck_rig_368() -> Dictionary:
 	RoundManagerScript.modifier_rolls_enabled = false
 	PadMenuScript368.reset()
@@ -35643,8 +35679,7 @@ func _scenario_round_never_shows_join_corner() -> Array[String]:
 	return failures
 ## A gamepad button pressed and released, as a real pad sends it.
 func _pad_tap_430(device: int, button: int) -> void:
-	await _pad_button_261(device, button)
-	await _pad_button_261(device, button, false)
+	await _pad_tap(device, button)
 ## Issue #430, in the real game: Start pauses only if the host uses it. The
 ## host's controller is pad 0 (`HOST_PAD_DEVICE`: the Deck's built-in
 ## controls). In the lobby, Start from pad 0 and from pad 5 keeps its #261
@@ -38037,13 +38072,7 @@ func _release_rig_463(bar_at: Vector2, stand_at: Vector2, tag: String) -> Dictio
 	await _await_ticks(6)
 	return rig
 func _key_463(keycode: Key) -> void:
-	var ev := InputEventKey.new()
-	ev.physical_keycode = keycode
-	ev.keycode = keycode
-	ev.pressed = true
-	Input.parse_input_event(ev)
-	Input.flush_buffered_events()
-	await process_frame
+	await _key_event(keycode)
 ## A PC seat's mouse never reports zero, so a Space tap is what lets go.
 func _scenario_pc_space_tap_retracts_grapple_while_mouse_vector_is_held() -> Array[String]:
 	var failures: Array[String] = []
@@ -38245,13 +38274,7 @@ func _scenario_remote_client_space_press_throws_boomerang_on_host() -> Array[Str
 # --- Tap for the weapon's job, hold to unstick (issue #485, ADR-0022 amendment 2) ---
 ## A keyboard key going down or up, as the host sees it.
 func _key_485(keycode: Key, pressed: bool) -> void:
-	var ev := InputEventKey.new()
-	ev.physical_keycode = keycode
-	ev.keycode = keycode
-	ev.pressed = pressed
-	Input.parse_input_event(ev)
-	Input.flush_buffered_events()
-	await process_frame
+	await _key_event(keycode, pressed)
 ## Down and up in the next frame: well inside TAP_MAX_SEC.
 func _tap_485(keycode: Key) -> void:
 	await _key_485(keycode, true)
@@ -39708,9 +39731,7 @@ func _scenario_solo_switching_to_online_and_back_leaves_no_stray_bots_or_relay()
 # --- Relay keepalive and retry (issue #519) --------------------------------
 ## Waits `sec` of wall-clock time (the relay and RelayLink read the wall clock).
 func _wait_wall_519(sec: float) -> void:
-	var until: int = Time.get_ticks_msec() + int(sec * 1000.0)
-	while Time.get_ticks_msec() < until:
-		await process_frame
+	await _wait_real_msec(int(sec * 1000.0))
 ## A host with no remote seat sends nothing of its own; the keepalive must keep
 ## the room alive past the relay's idle timeout.
 func _scenario_relay_host_keepalive_holds_idle_room_open() -> Array[String]:
@@ -44160,13 +44181,7 @@ func _click_647(button: Button) -> void:
 	button.set_pressed_no_signal(not button.button_pressed)
 	button.pressed.emit()
 func _key_tap_647(keycode: Key) -> void:
-	var ev := InputEventKey.new()
-	ev.keycode = keycode
-	ev.physical_keycode = keycode
-	ev.pressed = true
-	Input.parse_input_event(ev)
-	Input.flush_buffered_events()
-	await process_frame
+	await _key_event(keycode)
 func _scenario_settings_panel_no_longer_lists_stages_weapons_or_modifiers_647() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
@@ -49657,7 +49672,7 @@ func _scenario_damage_numbers_switch_873() -> Array[String]:
 	if log["numbers"].size() != 1:
 		failures.append("with Damage numbers on, %d were drawn, not 1" % log["numbers"].size())
 	await _teardown(stage, false)
-	var path: String = OS.get_temp_dir().path_join("pickfight_damage_numbers_873_%d.cfg" % OS.get_process_id())
+	var path: String = _temp_cfg("damage_numbers_873")
 	sfx.settings_path = path
 	sfx.persist_settings = true
 	sfx.set_damage_numbers(false)
@@ -49673,11 +49688,7 @@ func _scenario_damage_numbers_switch_873() -> Array[String]:
 	sfx.persist_settings = false
 	sfx.settings_path = was["path"]
 	DirAccess.remove_absolute(path)
-	var ui: CanvasLayer = sfx.build_settings_ui()
-	ui.host.persist = false
-	if not ui.is_open():
-		ui.toggle_panel()
-	await _await_ticks(2)
+	var ui: CanvasLayer = await _open_settings_ui(sfx)
 	var box: CheckBox = ui.damage_numbers_box()
 	if box == null:
 		failures.append("Settings has no Damage numbers box")
@@ -49709,7 +49720,7 @@ func _scenario_pickup_callout_switch_off_spawns_none() -> Array[String]:
 	if _callouts_818(loop).size() != 1:
 		failures.append("with Pickup callouts on, %d callouts, expected 1" % _callouts_818(loop).size())
 	await _teardown(loop["stage"], false)
-	var path: String = OS.get_temp_dir().path_join("pickfight_pickup_callouts_882_%d.cfg" % OS.get_process_id())
+	var path: String = _temp_cfg("pickup_callouts_882")
 	sfx.settings_path = path
 	sfx.persist_settings = true
 	sfx.set_pickup_callouts(false)
@@ -49720,11 +49731,7 @@ func _scenario_pickup_callout_switch_off_spawns_none() -> Array[String]:
 	sfx.persist_settings = false
 	sfx.settings_path = was["path"]
 	DirAccess.remove_absolute(path)
-	var ui: CanvasLayer = sfx.build_settings_ui()
-	ui.host.persist = false
-	if not ui.is_open():
-		ui.toggle_panel()
-	await _await_ticks(2)
+	var ui: CanvasLayer = await _open_settings_ui(sfx)
 	var box: CheckBox = ui.pickup_callouts_box()
 	if box == null:
 		failures.append("Settings has no Pickup callouts box")
@@ -49761,7 +49768,7 @@ func _scenario_match_point_plate_switch_off_shows_none() -> Array[String]:
 		if not _match_point_plates_825().is_empty():
 			failures.append("a plate showed with Match point plate off")
 	await _teardown(loop["stage"], false)
-	var path: String = OS.get_temp_dir().path_join("pickfight_match_point_plate_892_%d.cfg" % OS.get_process_id())
+	var path: String = _temp_cfg("match_point_plate_892")
 	sfx.settings_path = path
 	sfx.persist_settings = true
 	sfx.set_match_point_plate(false)
@@ -49777,11 +49784,7 @@ func _scenario_match_point_plate_switch_off_shows_none() -> Array[String]:
 	sfx.persist_settings = false
 	sfx.settings_path = was["path"]
 	DirAccess.remove_absolute(path)
-	var ui: CanvasLayer = sfx.build_settings_ui()
-	ui.host.persist = false
-	if not ui.is_open():
-		ui.toggle_panel()
-	await _await_ticks(2)
+	var ui: CanvasLayer = await _open_settings_ui(sfx)
 	var box: CheckBox = ui.match_point_plate_box()
 	if box == null:
 		failures.append("Settings has no Match point plate box")
@@ -49821,7 +49824,7 @@ func _scenario_juice_hit_pause_switch_off_never_pauses() -> Array[String]:
 	if get_root().get_tree().paused:
 		failures.append("the freeze did not lift")
 	await _teardown(stage, false)
-	var path: String = OS.get_temp_dir().path_join("pickfight_hit_pause_916_%d.cfg" % OS.get_process_id())
+	var path: String = _temp_cfg("hit_pause_916")
 	sfx.settings_path = path
 	sfx.persist_settings = true
 	sfx.set_hit_pause(false)
@@ -49832,11 +49835,7 @@ func _scenario_juice_hit_pause_switch_off_never_pauses() -> Array[String]:
 	sfx.persist_settings = false
 	sfx.settings_path = was["path"]
 	DirAccess.remove_absolute(path)
-	var ui: CanvasLayer = sfx.build_settings_ui()
-	ui.host.persist = false
-	if not ui.is_open():
-		ui.toggle_panel()
-	await _await_ticks(2)
+	var ui: CanvasLayer = await _open_settings_ui(sfx)
 	var box: CheckBox = ui.hit_pause_box()
 	if box == null:
 		failures.append("Settings has no Hit pause box")
