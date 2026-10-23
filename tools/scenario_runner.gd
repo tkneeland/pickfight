@@ -956,6 +956,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_rod_casts_and_reels_rival_632",
 	"bot_grapple_zips_to_rival_out_of_reach_632",
 	"bot_opens_umbrella_while_falling",
+	"bot_aims_boomstick_at_rival",
+	"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -3457,6 +3459,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_grapple_zips_to_rival_out_of_reach_632()
 		"bot_opens_umbrella_while_falling":
 			return await _scenario_bot_opens_umbrella_while_falling()
+		"bot_aims_boomstick_at_rival":
+			return await _scenario_bot_aims_boomstick_at_rival()
+		"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952":
+			return await _scenario_bot_boomstick_no_aim_952()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -43837,6 +43843,78 @@ func _scenario_bot_opens_umbrella_while_falling() -> Array[String]:
 		failures.append("a bot with the pickaxe reported an open canopy")
 	if umbrella["fastest"] > pickaxe["fastest"] * 0.6:
 		failures.append("the umbrella bot fell at %.0f px/s, not clearly slower than the pickaxe bot's %.0f" % [umbrella["fastest"], pickaxe["fastest"]])
+	_scenario_completed = true
+	return failures
+## Issue #952: a bot holding `weapon` with a rival `gap` px off on flat ground.
+## Returns the smallest angle (degrees) between the barrel (body to head) and
+## the rival over the last 0.2 s before the first shot, or -1 if none fired.
+func _bot_gun_run_952(weapon: String, level: String, gap: float, wall: bool) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(-gap * 0.5, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(gap * 0.5, 274.0))
+	await _await_ticks(2)
+	await _equip(player, weapon)
+	if wall:
+		var slab := StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(30.0, 800.0)
+		shape.shape = rect
+		slab.add_child(shape)
+		slab.collision_layer = 1
+		stage.add_child(slab)
+		slab.global_position = Vector2(0.0, 0.0)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var out: Dictionary = {"best": -1.0, "aimed_ticks": 0}
+	var best: float = 360.0
+	var recent: Array[float] = []
+	var prev_ready: float = INF
+	for t in 260:
+		await physics_frame
+		var ready_in: float = player.fire_ready_in()
+		var barrel: Vector2 = player.weapon_head_position() - player.global_position
+		var ang: float = rad_to_deg(absf(barrel.angle_to(rival.global_position - player.global_position)))
+		recent.append(ang)
+		if recent.size() > 12:
+			recent.pop_front()
+		if ready_in < 0.4:
+			out["aimed_ticks"] += 1
+		# The clock wrapped: the shot just fired.
+		if prev_ready < 0.1 and ready_in > 1.0:
+			for a in recent:
+				best = minf(best, a)
+			out["best"] = best
+			break
+		prev_ready = ready_in
+	await _teardown(stage, false)
+	return out
+## A Normal bot with the boomstick and a rival in the open points the barrel
+## within 15 degrees of them when the shot fires.
+func _scenario_bot_aims_boomstick_at_rival() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _bot_gun_run_952(BOOMSTICK_PATH, "normal", 500.0, false)
+	print("      bot_aims_boomstick_at_rival: best angle=%.1f" % run["best"])
+	if run["best"] < 0.0:
+		failures.append("no boomstick shot fired")
+	elif run["best"] > 15.0:
+		failures.append("the barrel came within %.1f degrees of the rival, not 15" % run["best"])
+	_scenario_completed = true
+	return failures
+## No aiming through a wall or on Easy, and a pickaxe bot never reads the clock.
+func _scenario_bot_boomstick_no_aim_952() -> Array[String]:
+	var failures: Array[String] = []
+	var walled: Dictionary = await _bot_gun_run_952(BOOMSTICK_PATH, "normal", 500.0, true)
+	var easy: Dictionary = await _bot_gun_run_952(BOOMSTICK_PATH, "easy", 500.0, false)
+	print("      bot_boomstick_no_aim_952: wall best=%.1f easy best=%.1f" % [walled["best"], easy["best"]])
+	if walled["best"] >= 0.0 and walled["best"] <= 15.0:
+		failures.append("the bot aimed the boomstick through a wall (%.1f degrees)" % walled["best"])
+	if easy["best"] >= 0.0 and easy["best"] <= 15.0:
+		failures.append("an Easy bot aimed the boomstick (%.1f degrees)" % easy["best"])
 	_scenario_completed = true
 	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
