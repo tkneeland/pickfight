@@ -27,5 +27,6 @@ else
   id=$(gh api "repos/$REPO/issues/432/comments" -f body="$body" -q .id 2>>"$PF_STATE/beacon.log") || { log "POST failed"; exit 1; }
   echo "$id" > "$idf"
 fi
-# best effort: also tell the private channel (doorbell for the other machine); never fails the beacon
-bash "$PF_DIR/pf-msg.sh" send USAGE "$(jq -r '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate)"' "$snap")" >/dev/null 2>&1 || true
+# Also send it on the private channel: the triagemaster's status line reads the newest USAGE message first and falls
+# back to this #432 comment. Format: "<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n>". Never fails the beacon.
+bash "$PF_DIR/pf-msg.sh" send USAGE "$(jq -r --arg ag "${agents:-0}" '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate) r5=\(.rate_limits.five_hour.resets_at // 0|floor|todate) agents=\($ag)"' "$snap")" >/dev/null 2>&1 || true
