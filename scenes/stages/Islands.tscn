@@ -1,19 +1,11 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Saw.tscn" id="saw315"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Teleporter.tscn" id="tele960"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_island"]
-size = Vector2(180, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_islet"]
-size = Vector2(120, 24)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Four small platforms, all at exactly the same height, with kill space between
 ; them and underneath. Nothing here is higher than anything else, so the height
@@ -46,25 +38,13 @@ background_sky_bottom = Color(0.26, 0.22, 0.28, 1)
 background_silhouette = Color(0.1, 0.12, 0.18, 1)
 background_layers = PackedStringArray("clouds", "hills")
 
-[node name="IslandA" type="StaticBody2D" parent="."]
+[node name="IslandA" parent="." instance=ExtResource("platform")]
 position = Vector2(-420, 300)
+size = Vector2(180, 24)
 
-[node name="IslandAShape" type="CollisionShape2D" parent="IslandA"]
-shape = SubResource("RectangleShape2D_island")
-
-[node name="IslandAVisual" type="Polygon2D" parent="IslandA"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
-
-[node name="IslandB" type="StaticBody2D" parent="."]
+[node name="IslandB" parent="." instance=ExtResource("platform")]
 position = Vector2(-140, 300)
-
-[node name="IslandBShape" type="CollisionShape2D" parent="IslandB"]
-shape = SubResource("RectangleShape2D_island")
-
-[node name="IslandBVisual" type="Polygon2D" parent="IslandB"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
+size = Vector2(180, 24)
 
 ; Was IslandC, a static platform at x=140. As a ferry it is authored at
 ; x=50 and travels 190 px right, so its 180 px body spans -40..140 at the
@@ -77,38 +57,20 @@ size = Vector2(180, 24)
 travel = Vector2(190, 0)
 one_way_sec = 2.5
 
-[node name="IslandD" type="StaticBody2D" parent="."]
+[node name="IslandD" parent="." instance=ExtResource("platform")]
 position = Vector2(420, 300)
-
-[node name="IslandDShape" type="CollisionShape2D" parent="IslandD"]
-shape = SubResource("RectangleShape2D_island")
-
-[node name="IslandDVisual" type="Polygon2D" parent="IslandD"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)
+size = Vector2(180, 24)
 
 ; Outer islets (issue #137): 120 px, one each side, 100 px off IslandA and
 ; IslandD -- the same gap as A to B -- so the chain runs x=+-730 and a player
 ; knocked off an end island has somewhere to land. Same height as the rest.
-[node name="IslandE" type="StaticBody2D" parent="."]
+[node name="IslandE" parent="." instance=ExtResource("platform")]
 position = Vector2(-670, 300)
+size = Vector2(120, 24)
 
-[node name="IslandEShape" type="CollisionShape2D" parent="IslandE"]
-shape = SubResource("RectangleShape2D_islet")
-
-[node name="IslandEVisual" type="Polygon2D" parent="IslandE"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-60, -12, 60, -12, 60, 12, -60, 12)
-
-[node name="IslandF" type="StaticBody2D" parent="."]
+[node name="IslandF" parent="." instance=ExtResource("platform")]
 position = Vector2(670, 300)
-
-[node name="IslandFShape" type="CollisionShape2D" parent="IslandF"]
-shape = SubResource("RectangleShape2D_islet")
-
-[node name="IslandFVisual" type="Polygon2D" parent="IslandF"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-60, -12, 60, -12, 60, 12, -60, 12)
+size = Vector2(120, 24)
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-420, 220)
@@ -136,12 +98,8 @@ position = Vector2(-480, 220)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(365, 220)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). On the middle island and over the ferry's route.
 [node name="PickupSpawn0" type="Marker2D" parent="."]

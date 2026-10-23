@@ -1,17 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="2"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="3"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_bastion"]
-size = Vector2(400, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_gantry"]
-size = Vector2(220, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; A foundry floor that will not hold still (issue #144, a large stage for five
 ; to eight players). Two still bastions at the ends, and between them seven
@@ -34,25 +26,13 @@ view_size = Vector2(2240, 1260)
 ; The two still ends. Everyone starts here, four a side, and the open ends
 ; past them (x = +-980) are the ring-out.
 
-[node name="BastionLeft" type="StaticBody2D" parent="."]
+[node name="BastionLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-780, 380)
+size = Vector2(400, 40)
 
-[node name="BastionLeftShape" type="CollisionShape2D" parent="BastionLeft"]
-shape = SubResource("RectangleShape2D_bastion")
-
-[node name="BastionLeftVisual" type="Polygon2D" parent="BastionLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-200, -20, 200, -20, 200, 20, -200, 20)
-
-[node name="BastionRight" type="StaticBody2D" parent="."]
+[node name="BastionRight" parent="." instance=ExtResource("platform")]
 position = Vector2(780, 380)
-
-[node name="BastionRightShape" type="CollisionShape2D" parent="BastionRight"]
-shape = SubResource("RectangleShape2D_bastion")
-
-[node name="BastionRightVisual" type="Polygon2D" parent="BastionRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-200, -20, 200, -20, 200, 20, -200, 20)
+size = Vector2(400, 40)
 
 ; The pistons: seven columns, 160 wide with 5 px seams (far narrower than a
 ; body), each rising and falling 100 px between a top at y=310 and one at
@@ -109,25 +89,13 @@ one_way_sec = 1.9
 ; stroke and 200 above one at the bottom: a climb that is easy or hard
 ; depending on when you make it. Each carries a pickup.
 
-[node name="GantryLeft" type="StaticBody2D" parent="."]
+[node name="GantryLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-410, 222)
+size = Vector2(220, 24)
 
-[node name="GantryLeftShape" type="CollisionShape2D" parent="GantryLeft"]
-shape = SubResource("RectangleShape2D_gantry")
-
-[node name="GantryLeftVisual" type="Polygon2D" parent="GantryLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-110, -12, 110, -12, 110, 12, -110, 12)
-
-[node name="GantryRight" type="StaticBody2D" parent="."]
+[node name="GantryRight" parent="." instance=ExtResource("platform")]
 position = Vector2(410, 222)
-
-[node name="GantryRightShape" type="CollisionShape2D" parent="GantryRight"]
-shape = SubResource("RectangleShape2D_gantry")
-
-[node name="GantryRightVisual" type="Polygon2D" parent="GantryRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-110, -12, 110, -12, 110, 12, -110, 12)
+size = Vector2(220, 24)
 
 ; Spawns, all eight on the bastions (never on a piston: it moves), 70 px
 ; apart, 90 px short of each outer edge. Spawn0-3 are the fair four.
@@ -156,12 +124,8 @@ position = Vector2(-890, 300)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(890, 300)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)
-script = ExtResource("3")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points: over the centre piston (a pickup any rider at the top
 ; of its stroke collects) and on the two gantries. All well clear of the
