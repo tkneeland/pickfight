@@ -28863,10 +28863,17 @@ func _scenario_remote_client_interpolates_100ms_behind() -> Array[String]:
 			failures.append("rendered x %.1f, expected %.1f from the 100 ms-late blend" % [got, want])
 	if between == 0:
 		failures.append("no render fell between the two samples, so interpolation was not exercised")
+	# A mid-round full snapshot blends in like a delta (no hitch every second) ...
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1, Vector2(900, 0))))
+	client._render()
+	if client.player_puppet(0).position.x > 890.0:
+		failures.append("a mid-round full snapshot snapped the puppet instead of blending it in (x %.1f)" % client.player_puppet(0).position.x)
+	# ... but a new round (the last world was not on screen) or a new stage snaps it.
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 0, Vector2(900, 0))))
 	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1, Vector2(900, 0))))
 	client._render()
 	if client.player_puppet(0).position != Vector2(900, 0):
-		failures.append("a full snapshot must snap the puppet, not glide it (x %.1f)" % client.player_puppet(0).position.x)
+		failures.append("the first full snapshot of a round must snap the puppet, not glide it (x %.1f)" % client.player_puppet(0).position.x)
 	await _rc_close_241(rig)
 	return failures
 func _scenario_remote_client_esc_menu_resume_and_leave() -> Array[String]:
@@ -40932,7 +40939,7 @@ func _scenario_controller_page_wears_theme_and_labels_target_per_mode_576() -> A
 	for family: String in ["Lilita One", "Nunito"]:
 		if not page.contains('font-family: "%s";\n    font-weight' % family):
 			failures.append("no @font-face for %s" % family)
-	if page.count("src: url(/fonts/") != 2:
+	if page.count("src: url(fonts/") != 2:
 		failures.append("the two theme fonts are not linked as served WOFF2 files (#589)")
 	for external: String in ["fonts.googleapis", "fonts.gstatic", "src: url(http", "@import"]:
 		if page.contains(external):
@@ -41784,7 +41791,7 @@ func _scenario_controller_fonts_served_589() -> Array[String]:
 	if page.contains("data:font"):
 		failures.append("the page still embeds base64 fonts")
 	for font: String in ["/fonts/LilitaOne-Latin.woff2", "/fonts/Nunito-Latin.woff2"]:
-		if not page.contains("url(%s)" % font):
+		if not page.contains("url(%s)" % font.trim_prefix("/")): # relative, so it also resolves on GitHub Pages
 			failures.append("page does not link %s" % font)
 		var res: Dictionary = await _http_get_589(server.http_port, font)
 		if res["status"] != 200:
