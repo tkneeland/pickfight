@@ -41,7 +41,7 @@ env:
 jobs:
   check:
     name: import + boot + parse check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # pinned: physics scenarios differ on ubuntu-26.04 (roster_heads_do_not_tunnel_head, bot_dodges_moving_saw)
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +119,7 @@ jobs:
   suite:
     name: scenarios shard ${{ matrix.shard }}/4
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # pinned: physics scenarios differ on ubuntu-26.04 (roster_heads_do_not_tunnel_head, bot_dodges_moving_saw)
     timeout-minutes: 20
     strategy:
       fail-fast: false
