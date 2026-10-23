@@ -584,6 +584,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stock_has_no_rise",
 	"stock_teams_steal_a_life_and_team_loss",
 	"stock_timeout_most_lives_wins_tie_overtime",
+	"stock_timeout_tie_goes_to_lowest_damage",
+	"stock_timeout_equal_damage_still_overtime",
+	"stock_timeout_team_tie_lowest_summed_damage",
 	"stock_lives_shown_as_pips_and_on_phone",
 	"stock_match_is_one_round_then_the_podium_644",
 	"soccer_goals_are_the_match_and_each_goal_changes_pitch_646",
@@ -2763,6 +2766,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_teams_steal_a_life_and_team_loss()
 		"stock_timeout_most_lives_wins_tie_overtime":
 			return await _scenario_stock_timeout_most_lives_wins_tie_overtime()
+		"stock_timeout_tie_goes_to_lowest_damage":
+			return await _scenario_stock_tiebreak_damage(30.0, 80.0, false, false)
+		"stock_timeout_equal_damage_still_overtime":
+			return await _scenario_stock_tiebreak_damage(30.0, 30.0, true, false)
+		"stock_timeout_team_tie_lowest_summed_damage":
+			return await _scenario_stock_tiebreak_damage(30.0, 80.0, false, true)
 		"stock_lives_shown_as_pips_and_on_phone":
 			return await _scenario_stock_lives_shown_as_pips_and_on_phone()
 		"stock_match_is_one_round_then_the_podium_644":
@@ -32746,6 +32755,51 @@ func _scenario_stock_timeout_most_lives_wins_tie_overtime() -> Array[String]:
 	mode.time_left = 0.1
 	if not await _await_condition(func() -> bool: return rm.team_score(0) == 1, 3000):
 		failures.append("the team with more lives in total did not win (Red %d, Blue %d)" % [rm.team_score(0), rm.team_score(1)])
+	await _stock_finish(rig)
+	return failures
+## #1011: tied on lives at the timeout, lowest damage wins with no overtime;
+## level damage (within 0.5) still plays the overtime. Teams sum damage.
+func _scenario_stock_tiebreak_damage(d0: float, d1: float, want_overtime: bool, teams: bool) -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _stock_rig(3, 3, 120, {0: 0, 1: 0, 2: 1}) if teams else _stock_rig(2, 3, 120)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock round never started")
+		await _stock_finish(rig)
+		return failures
+	if teams:
+		# Red 1 + 2 lives, Blue 3: level on lives; Red's summed damage is lower.
+		await _stock_lose_life(players[0])
+		await _stock_lose_life(players[0])
+		await _stock_lose_life(players[1])
+		players[0].damage = 20.0
+		players[1].damage = 20.0
+		players[2].damage = 80.0
+	else:
+		players[0].damage = d0
+		players[1].damage = d1
+	mode.time_left = 0.1
+	if want_overtime:
+		if not await _await_condition(func() -> bool: return mode.overtime, 3000):
+			failures.append("equal damage on a lives tie did not start an overtime")
+		else:
+			await _await_ticks(4)
+			players[0].strike_landed.emit(players[1], 5.0, Vector2.ZERO, false)
+			if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
+				failures.append("one hit in the overtime did not decide the round")
+	else:
+		var saw_ot: Array[bool] = [false]
+		if not await _await_condition(func() -> bool:
+			var m: Node = rm.game_mode_node()
+			if m != null and is_instance_valid(m) and m.overtime:
+				saw_ot[0] = true
+			return (rm.team_score(0) if teams else rm.score_of(0)) == 1, 3000):
+			failures.append("the lowest-damage fighter did not win the lives tie (scores %d %d, ot %s, dmg %s %s)" % [rm.score_of(0), rm.score_of(1), saw_ot[0], players[0].damage, players[1].damage])
+		if saw_ot[0]:
+			failures.append("an overtime started although damage settled the tie")
+	await _await_ticks(30)
 	await _stock_finish(rig)
 	return failures
 func _scenario_stock_lives_shown_as_pips_and_on_phone() -> Array[String]:

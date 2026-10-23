@@ -211,7 +211,7 @@ func tiebreak_drawn(slots: Array[int]) -> void:
 			_respawner.cancel(slot)
 
 ## The clock ran out: most lives wins (a team's lives added up in Teams). The
-## others are eliminated for good; if several are level the round goes on as a
+## others are eliminated for good; level lives go to the lowest damage; if several are still level the round goes on as a
 ## one-hit overtime between them.
 func _timeout() -> void:
 	var totals: Dictionary = {}
@@ -228,6 +228,21 @@ func _timeout() -> void:
 		var unit: int = _team(slot) if _team(slot) != -1 else slot
 		if int(lives[slot]) > 0 and int(totals[unit]) == best:
 			tied.append(slot)
+	# A tie on lives goes to the lowest damage (Smash rule, #1011); units within
+	# 0.5 of the lowest stay tied and play the overtime.
+	var dmg: Dictionary = {}
+	for slot: int in tied:
+		var unit: int = _team(slot) if _team(slot) != -1 else slot
+		dmg[unit] = float(dmg.get(unit, 0.0)) + float(_watched[slot].damage)
+	var lowest: float = INF
+	for unit: int in dmg.keys():
+		lowest = minf(lowest, float(dmg[unit]))
+	var level: Array[int] = []
+	for slot: int in tied:
+		var unit: int = _team(slot) if _team(slot) != -1 else slot
+		if float(dmg[unit]) <= lowest + 0.5:
+			level.append(slot)
+	tied = level
 	tied.sort()
 	var losers: Array[int] = []
 	for slot: int in lives.keys():
