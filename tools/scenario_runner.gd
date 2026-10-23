@@ -166,6 +166,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_two_more_stages_spawns_clear",
+	"ice_patch_plays_skid_once_on_entry",
 	"treadmill_belts_oppose_and_mud_sits_between",
 	"mud_patch_overpass_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
@@ -1913,6 +1914,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_summit_spawns_clear()
 		"ice_patch_two_more_stages_spawns_clear":
 			return await _scenario_ice_patch_two_more_stages_spawns_clear()
+		"ice_patch_plays_skid_once_on_entry":
+			return await _scenario_ice_patch_plays_skid_once_on_entry()
 		"treadmill_belts_oppose_and_mud_sits_between":
 			return await _scenario_treadmill_belts_oppose_and_mud_sits_between()
 		"mud_patch_overpass_spawns_clear":
@@ -11408,6 +11411,61 @@ func _scenario_ice_patch_slides_player_and_restores() -> Array[String]:
 		await physics_frame
 	if ice.is_icing(player) or player.physics_material_override != before:
 		failures.append("the player's material was not restored after leaving the ice")
+	await _teardown(stage)
+	return failures
+## Issue #993: stepping onto ice plays ice_skid once; staying is silent; a
+## re-entry within 1 s is silent, after 1 s plays again; a ghost plays none.
+func _ice_skid_drop(player: RigidBody2D, ice: StaticBody2D, sfx: Node) -> int:
+	player.global_position = ice.position + Vector2(0, -60)
+	player.linear_velocity = Vector2.ZERO
+	var before: int = _sfx_count(sfx, "ice_skid")
+	for _tick in 40:
+		await physics_frame
+	return _sfx_count(sfx, "ice_skid") - before
+func _scenario_ice_patch_plays_skid_once_on_entry() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"ice_skid"):
+		return ["ice_skid is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var ice: StaticBody2D = _ice_ground(stage, true)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -ICE_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	sfx.start_recording()
+	for _tick in 90:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "ice_skid")
+	var last: Dictionary = _sfx_last(sfx, "ice_skid")
+	for _tick in 90:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "ice_skid") - first
+	var again: int = await _ice_skid_drop(player, ice, sfx)
+	var quick: int = await _ice_skid_drop(player, ice, sfx)
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _ice_skid_drop(player, ice, sfx)
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _ice_skid_drop(player, ice, sfx)
+	sfx.stop_recording()
+	print("      skids: entry %d, staying %d, first drop %d, quick re-entry %d, later re-entry %d, dead %d" % [first, stayed, again, quick, later, dead])
+	if first != 1:
+		failures.append("stepping onto ice played ice_skid %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("ice_skid was not positional")
+	if stayed != 0:
+		failures.append("staying on the ice played %d more skids" % stayed)
+	if again != 1:
+		failures.append("re-entering after more than 1 s played %d skids, want 1" % again)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d skids" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s (later) played %d skids, want 1" % later)
+	if dead != 0:
+		failures.append("a ghost played %d skids" % dead)
 	await _teardown(stage)
 	return failures
 ## Summit (#860) carries an ice patch on its floor; no spawn or pickup spot
