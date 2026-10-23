@@ -319,6 +319,23 @@ const PCM_OPTIONS: Dictionary = {
 	"force/max_rate": false,
 }
 
+## Every on/off display option saved in the `display` section, by property
+## name, with its default. Load, save and `restore_defaults()` loop over it;
+## each has a `set_<name>()` wrapper over `set_flag()`. `fullscreen` is not
+## here: setting it also changes the window mode.
+const DISPLAY_FLAGS: Dictionary = {
+	&"screen_shake": true,
+	&"kill_feed": true,
+	&"damage_numbers": true,
+	&"edge_arrows": true,
+	&"match_point_plate": true,
+	&"stage_title_card": true,
+	&"hit_pause": true,
+	&"pickup_callouts": true,
+	&"reduce_flash": false,
+	&"hide_room_code": false,
+}
+
 ## The master volume, 0..1, and whether everything is muted. Set through
 ## `set_master_volume()` / `set_muted()` so they reach the bus.
 var master_volume: float = 1.0
@@ -697,65 +714,64 @@ func mix_gain_for(sound: StringName) -> float:
 		gain *= db_to_linear(AudioServer.get_bus_volume_db(AudioServer.get_bus_index(VOICE_BUS_NAME)))
 	return gain
 
+## Set the display flag `flag` (a key of `DISPLAY_FLAGS`) and remember the
+## choice. The `set_*` methods below are one-line wrappers over it.
+func set_flag(flag: StringName, value: bool) -> void:
+	if not DISPLAY_FLAGS.has(flag):
+		push_warning("Sfx: no display flag named '%s'" % flag)
+		return
+	set(flag, value)
+	_save_settings()
+
 ## Turn the camera shake (#256) on or off, and remember the choice.
 func set_screen_shake(value: bool) -> void:
-	screen_shake = value
-	_save_settings()
+	set_flag(&"screen_shake", value)
 
 ## Turn the floating damage numbers (#873) on or off, and remember the choice.
 func set_damage_numbers(value: bool) -> void:
-	damage_numbers = value
-	_save_settings()
+	set_flag(&"damage_numbers", value)
 
 ## Turn the edge arrows (#940) on or off, and remember the choice.
 func set_edge_arrows(value: bool) -> void:
-	edge_arrows = value
-	_save_settings()
+	set_flag(&"edge_arrows", value)
 
 ## Turn the MATCH POINT plate (#892) on or off, and remember the choice.
 func set_match_point_plate(value: bool) -> void:
-	match_point_plate = value
-	_save_settings()
+	set_flag(&"match_point_plate", value)
 
 ## Turn the stage title card (#942) on or off, and remember the choice.
 func set_stage_title_card(value: bool) -> void:
-	stage_title_card = value
-	_save_settings()
+	set_flag(&"stage_title_card", value)
 
 ## Turn the hit-stop freeze (#916) on or off, and remember the choice.
 func set_hit_pause(value: bool) -> void:
-	hit_pause = value
-	_save_settings()
+	set_flag(&"hit_pause", value)
 
 ## Turn the weapon-name pickup callouts (#882) on or off, and remember the choice.
 func set_pickup_callouts(value: bool) -> void:
-	pickup_callouts = value
-	_save_settings()
+	set_flag(&"pickup_callouts", value)
 
 ## Turn the KO ticker (#833) on or off, and remember the choice.
 func set_kill_feed(value: bool) -> void:
-	kill_feed = value
-	_save_settings()
+	set_flag(&"kill_feed", value)
 
 ## Turn the bright flashes (#317) off or on, and remember the choice.
 func set_reduce_flash(value: bool) -> void:
-	reduce_flash = value
-	_save_settings()
+	set_flag(&"reduce_flash", value)
 
 ## Hide the room code and join QR on the shared screen (#369), and remember it.
 func set_hide_room_code(value: bool) -> void:
-	hide_room_code = value
-	_save_settings()
+	set_flag(&"hide_room_code", value)
 
 ## Pick the name tag size (#317): snaps to the nearest of `UI_SCALES`.
 func set_ui_scale(value: float) -> void:
-	ui_scale = _nearest_ui_scale(value)
+	ui_scale = _nearest(UI_SCALES, value)
 	_save_settings()
 
 ## Pick the UI text size (#751): snaps to the nearest of TEXT_SCALES, applies it
 ## to the theme and every open screen, and remembers it.
 func set_text_scale(value: float) -> void:
-	text_scale = _nearest_text_scale(value)
+	text_scale = _nearest(TEXT_SCALES, value)
 	apply_text_scale()
 	_save_settings()
 
@@ -792,20 +808,12 @@ func _on_node_added(node: Node) -> void:
 			if is_instance_valid(node):
 				TextScaleScript.apply_to_node(node, text_scale)).call_deferred()
 
-static func _nearest_text_scale(value: float) -> float:
+## The entry of `options` nearest `value`; 1.0 for a non-finite value.
+static func _nearest(options: Array[float], value: float) -> float:
 	var best: float = 1.0
 	if not is_finite(value):
 		return best
-	for option: float in TEXT_SCALES:
-		if absf(option - value) < absf(best - value):
-			best = option
-	return best
-
-static func _nearest_ui_scale(value: float) -> float:
-	var best: float = 1.0
-	if not is_finite(value):
-		return best
-	for option: float in UI_SCALES:
+	for option: float in options:
 		if absf(option - value) < absf(best - value):
 			best = option
 	return best
@@ -822,19 +830,11 @@ func restore_defaults() -> void:
 	sfx_volume = 1.0
 	voice_volume = 1.0
 	fullscreen = false
-	screen_shake = true
-	kill_feed = true
-	damage_numbers = true
-	edge_arrows = true
-	match_point_plate = true
-	stage_title_card = true
-	hit_pause = true
-	pickup_callouts = true
-	reduce_flash = false
+	for flag: StringName in DISPLAY_FLAGS:
+		set(flag, DISPLAY_FLAGS[flag])
 	ui_scale = 1.0
 	text_scale = 1.0
 	apply_text_scale()
-	hide_room_code = false
 	_apply_master()
 	_apply_sfx_volume()
 	_apply_voice_volume()
@@ -935,18 +935,11 @@ func load_settings() -> void:
 		sfx_volume = clampf(_num(config.get_value("audio", "sfx_volume", 1.0), 1.0), 0.0, 1.0)
 		voice_volume = clampf(_num(config.get_value("audio", "voice_volume", 1.0), 1.0), 0.0, 1.0)
 		fullscreen = _flag(config.get_value("display", "fullscreen", false), false)
-		screen_shake = _flag(config.get_value("display", "screen_shake", true), true)
-		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
-		damage_numbers = _flag(config.get_value("display", "damage_numbers", true), true)
-		edge_arrows = _flag(config.get_value("display", "edge_arrows", true), true)
-		match_point_plate = _flag(config.get_value("display", "match_point_plate", true), true)
-		stage_title_card = _flag(config.get_value("display", "stage_title_card", true), true)
-		hit_pause = _flag(config.get_value("display", "hit_pause", true), true)
-		pickup_callouts = _flag(config.get_value("display", "pickup_callouts", true), true)
-		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
-		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
-		hide_room_code = _flag(config.get_value("display", "hide_room_code", false), false)
-		text_scale = _nearest_text_scale(_num(config.get_value("display", "text_scale", 1.0), 1.0))
+		for flag: StringName in DISPLAY_FLAGS:
+			var fallback: bool = DISPLAY_FLAGS[flag]
+			set(flag, _flag(config.get_value("display", flag, fallback), fallback))
+		ui_scale = _nearest(UI_SCALES, _num(config.get_value("display", "ui_scale", 1.0), 1.0))
+		text_scale = _nearest(TEXT_SCALES, _num(config.get_value("display", "text_scale", 1.0), 1.0))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()
@@ -967,17 +960,9 @@ func _save_settings() -> void:
 	config.set_value("audio", "sfx_volume", sfx_volume)
 	config.set_value("audio", "voice_volume", voice_volume)
 	config.set_value("display", "fullscreen", fullscreen)
-	config.set_value("display", "screen_shake", screen_shake)
-	config.set_value("display", "kill_feed", kill_feed)
-	config.set_value("display", "damage_numbers", damage_numbers)
-	config.set_value("display", "edge_arrows", edge_arrows)
-	config.set_value("display", "match_point_plate", match_point_plate)
-	config.set_value("display", "stage_title_card", stage_title_card)
-	config.set_value("display", "hit_pause", hit_pause)
-	config.set_value("display", "pickup_callouts", pickup_callouts)
-	config.set_value("display", "reduce_flash", reduce_flash)
+	for flag: StringName in DISPLAY_FLAGS:
+		config.set_value("display", flag, bool(get(flag)))
 	config.set_value("display", "ui_scale", ui_scale)
-	config.set_value("display", "hide_room_code", hide_room_code)
 	config.set_value("display", "text_scale", text_scale)
 	var err: Error = config.save(settings_path)
 	if err != OK:
