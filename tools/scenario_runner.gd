@@ -531,6 +531,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_streaker_award_needs_three_unbroken_kos",
 	"victory_combo_award_needs_two_kos_inside_three_seconds",
 	"award_sharpshooter_counts_ranged_kos",
+	"award_jack_counts_distinct_weapons",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -2632,6 +2633,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_victory_combo_award_needs_two_kos_inside_three_seconds()
 		"award_sharpshooter_counts_ranged_kos":
 			return await _scenario_award_sharpshooter_counts_ranged_kos()
+		"award_jack_counts_distinct_weapons":
+			return await _scenario_award_jack_counts_distinct_weapons()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -30724,6 +30727,42 @@ func _scenario_award_sharpshooter_counts_ranged_kos() -> Array[String]:
 	stats.begin_match()
 	if not stats.ranged_kos.is_empty():
 		failures.append("begin_match left ranged KOs behind")
+	_scenario_completed = true
+	return failures
+
+## Issue #970: Jack of All Trades goes to the most distinct weapons landed, at least 3, no ties.
+func _scenario_award_jack_counts_distinct_weapons() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Jack of All Trades")
+	var hit := func(stats: RefCounted, who: int, weapons: Array, real: bool = true) -> void:
+		var t: int = 1000
+		for w: String in weapons:
+			stats.record_hit(who, 3, 10.0, t, w, real)
+			t += 100
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	hit.call(stats, 0, ["pickaxe", "pickaxe", "boomstick", "hammer"])
+	hit.call(stats, 1, ["pickaxe", "boomstick"])
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "3 different weapons":
+		failures.append("expected Jack for slot 0 with 3 distinct weapons, got %s" % [found])
+	var few: RefCounted = MatchStatsScript.new()
+	few.begin_match()
+	hit.call(few, 0, ["pickaxe", "pickaxe", "pickaxe", "boomstick"])
+	if not find.call(few).is_empty():
+		failures.append("Jack given for only 2 distinct weapons")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	hit.call(tied, 0, ["pickaxe", "boomstick", "hammer"])
+	hit.call(tied, 1, ["pickaxe", "boomstick", "hammer"])
+	if not find.call(tied).is_empty():
+		failures.append("Jack given for a tie")
+	var bot: RefCounted = MatchStatsScript.new()
+	bot.begin_match()
+	hit.call(bot, 0, ["pickaxe", "boomstick", "hammer"], false)
+	if not find.call(bot).is_empty():
+		failures.append("a bot earned Jack")
 	_scenario_completed = true
 	return failures
 

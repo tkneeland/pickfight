@@ -205,7 +205,7 @@ static func award_cards(awards: Array, name_of: Callable, color_of: Callable) ->
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 48 if awards.size() <= 3 else (32 if awards.size() <= 4 else (12 if awards.size() <= 6 else (6 if awards.size() <= 7 else 4))))
 	var crowded: bool = awards.size() > 6 # seven cards (Streaker, #890) shrink once more
-	var packed: bool = awards.size() > 7 # eight (Combo, #921) and nine (Sharpshooter, #953) once again
+	var packed: bool = awards.size() > 7 # eight (Combo, #921) nine (Sharpshooter, #953) and ten (Jack, #970) once again
 	var who_size: int = 20 if awards.size() <= 4 else (11 if packed else (12 if crowded else 14)) # six cards must fit 1600 px (#613)
 	for award: Dictionary in awards:
 		var card := VBoxContainer.new()
