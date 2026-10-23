@@ -1,20 +1,9 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/WindZone.tscn" id="3"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
-size = Vector2(430, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_mid"]
-size = Vector2(380, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_overlook"]
-size = Vector2(200, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Two banks and a middle, same shapes and the same 100 px gaps as Gauntlet's
 ; ground -- proven reach numbers (pickaxe hooks either lip at ~110 px, the
@@ -71,49 +60,25 @@ background_layers = PackedStringArray("clouds", "mountains", "clouds")
 
 ; Banks widened outward for issue #137: x=+-290..+-660 -> +-290..+-720.
 ; The gaps and the gusts over them are untouched.
-[node name="BankLeft" type="StaticBody2D" parent="."]
+[node name="BankLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-505, 320)
+size = Vector2(430, 40)
 
-[node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
-shape = SubResource("RectangleShape2D_bank")
-
-[node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)
-
-[node name="Middle" type="StaticBody2D" parent="."]
+[node name="Middle" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 320)
+size = Vector2(380, 40)
 
-[node name="MiddleShape" type="CollisionShape2D" parent="Middle"]
-shape = SubResource("RectangleShape2D_mid")
-
-[node name="MiddleVisual" type="Polygon2D" parent="Middle"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-190, -20, 190, -20, 190, 20, -190, 20)
-
-[node name="BankRight" type="StaticBody2D" parent="."]
+[node name="BankRight" parent="." instance=ExtResource("platform")]
 position = Vector2(505, 320)
-
-[node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
-shape = SubResource("RectangleShape2D_bank")
-
-[node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)
+size = Vector2(430, 40)
 
 ; A calm perch above the middle, 142 px up -- one hook's reach for a pickaxe
 ; planted near either corner, more effort for the sword and dagger, and out
 ; of both wind zones' boxes. Drops back onto Middle on either side, so it is
 ; a lookout, not a trap.
-[node name="Overlook" type="StaticBody2D" parent="."]
+[node name="Overlook" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 160)
-
-[node name="OverlookShape" type="CollisionShape2D" parent="Overlook"]
-shape = SubResource("RectangleShape2D_overlook")
-
-[node name="OverlookVisual" type="Polygon2D" parent="Overlook"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+size = Vector2(200, 24)
 
 ; West gap's gale: spans x=-330..-150, 40 px onto BankLeft's inner edge and
 ; 40 px onto Middle's outer edge, never reaching either spawn on BankLeft.
@@ -162,12 +127,8 @@ position = Vector2(-445, 250)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(445, 250)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). One on the middle, one floating
 ; in each gale -- the wind never blocks a pickup (it collides with bodies,

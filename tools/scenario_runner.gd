@@ -1164,6 +1164,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"expanding_rings_share_base_and_free_refactor_audio",
 	"hit_feedback_and_music_quit_guard_refactor_audio",
 	"night_glow_rehung_after_other_night_exits_refactor_audio",
+	"stage_platform_geometry_unchanged_refactor_platforms",
+	"ice_patches_overlapping_keep_grip_off_refactor_modes",
+	"controller_page_review_fixes_refactor_phone",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3921,6 +3924,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hit_feedback_and_music_quit_guard_refactor_audio()
 		"night_glow_rehung_after_other_night_exits_refactor_audio":
 			return await _scenario_night_glow_rehung_after_other_night_exits_refactor_audio()
+		"stage_platform_geometry_unchanged_refactor_platforms":
+			return await _scenario_stage_platform_geometry_unchanged_refactor_platforms()
+		"ice_patches_overlapping_keep_grip_off_refactor_modes":
+			return await _scenario_ice_patches_overlapping_keep_grip_off_refactor_modes()
+		"controller_page_review_fixes_refactor_phone":
+			return _scenario_controller_page_review_fixes_refactor_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -16172,11 +16181,11 @@ func _scenario_controller_page_prompts_for_nickname_first() -> Array[String]:
 	if not open_body.contains("nameInput.value = myName"):
 		failures.append("the prompt is not prefilled with the default name: %s" % open_body)
 	var commit_body: String = _js_function_body(page, "commitName")
-	for needed: String in ["cleanName(nameInput.value)", "localStorage.setItem(NAME_KEY, name)",
-			"localStorage.setItem(NAME_CHOSEN_KEY, \"1\")", "classList.remove(\"show\")", "sendName()"]:
+	for needed: String in ["cleanName(nameInput.value)", "store(NAME_KEY, name)",
+			"store(NAME_CHOSEN_KEY, \"1\")", "classList.remove(\"show\")", "sendName()"]:
 		if not commit_body.contains(needed):
 			failures.append("picking a name does not do %s" % needed)
-	if not _js_function_body(page, "nameChosen").contains("localStorage.getItem(NAME_CHOSEN_KEY)"):
+	if not _js_function_body(page, "nameChosen").contains("stored(NAME_CHOSEN_KEY)"):
 		failures.append("whether a name was chosen is not read back from localStorage")
 	if not page.contains("nameEl.addEventListener(\"click\", openNamePrompt)"):
 		failures.append("tapping the name does not open the prompt to edit it")
@@ -17636,9 +17645,14 @@ func _scenario_controller_page_look_picker_after_name() -> Array[String]:
 		if not server_src.contains(arm):
 			failures.append("ControllerServer does not handle the page's %s frame" % arm.strip_edges())
 	var render: String = _js_function_body(page, "renderLookPrompt")
-	for needed: String in ["sw.disabled = holder >= 0", '"taken"', 't: "color", v: index', 't: "hat", v: id', "drawHat(preview"]:
+	for needed: String in ["sw.disabled = holder >= 0", '"taken"', 't: "color", v: index', 'drawHat, tint, HAT_KEY, "hat")']:
 		if not render.contains(needed):
 			failures.append("the picker does not do %s" % needed)
+	# The hat and eyes grids share buildPicker(): it draws each preview and sends the pick as a `kind` frame.
+	var picker: String = _js_function_body(page, "buildPicker")
+	for needed: String in ["t: kind, v: item.id", "draw(preview, item.id, tint)"]:
+		if not picker.contains(needed):
+			failures.append("the picker grid does not do %s" % needed)
 	if not _js_function_body(page, "colorOf").contains("looks.palette[look.color]"):
 		failures.append("the phone does not take its colour from the host")
 	for old: String in ["SLOT_COLORS[slot % SLOT_COLORS.length]", "SLOT_COLORS[p.slot % SLOT_COLORS.length]"]:
@@ -19577,7 +19591,7 @@ func _scenario_controller_page_stale_confirms_close() -> Array[String]:
 		failures.append("the kick does not name the target's claim")
 	if not kick_body.contains("return claimHolder(target, claim) !== null;"):
 		failures.append("the kick confirm does not check its target still holds that claim")
-	if not _js_function_body(page, "claimHolder").contains("lobby.players[i].claim === claim"):
+	if not _js_function_body(page, "claimHolder").contains("p.claim === claim"):
 		failures.append("claimHolder does not compare claims")
 	var end_at: int = page.find('menuEndBtn.addEventListener("click"')
 	var end_to: int = page.find("menuKickBtn.addEventListener", end_at)
@@ -23363,9 +23377,9 @@ func _scenario_controller_page_refused_phone_waits_for_slot() -> Array[String]:
 		failures.append("the close handler does not remember the reason before redrawing")
 	if not _js_function_body(page, "setSlot").contains('if (n >= 0) { closeReason = ""; }'):
 		failures.append("being given a slot does not forget the old refusal")
-	var hint_at: int = state.find('getElementById("hint").style.display = ')
+	var hint_at: int = state.find("var hintShown = ")
 	var hint_line: String = state.substr(hint_at, state.find(";", hint_at) - hint_at) if hint_at >= 0 else ""
-	if not hint_line.contains("= slot >= 0 && ("):
+	if not hint_line.contains("= slot >= 0 && (") or not state.contains("hintEl.style.display = hintDisplay"):
 		failures.append("the 'Drag to swing' hint shows on a phone with no slot: %s" % hint_line)
 	_scenario_completed = true
 	return failures
@@ -32085,9 +32099,11 @@ func _scenario_controller_page_has_once_per_device_tip() -> Array[String]:
 			failures.append("the controller page has no '%s'" % needle)
 	var stores := 0
 	for line: String in page.split("\n"):
-		if line.contains("TIP_SEEN_KEY") and (line.contains("getItem") or line.contains("setItem")):
+		if line.contains("TIP_SEEN_KEY") and (line.contains("getItem") or line.contains("setItem")
+				or line.contains("stored(TIP_SEEN_KEY)") or line.contains("store(TIP_SEEN_KEY")):
 			stores += 1
-			if not line.contains("try {"):
+			# Direct access needs its own try/catch; stored()/store() are the page's try/catch helpers.
+			if (line.contains("getItem") or line.contains("setItem")) and not line.contains("try {"):
 				failures.append("a tip localStorage access is not inside try/catch: %s" % line.strip_edges())
 	if stores < 2:
 		failures.append("the tip is not both read and written in localStorage (%d accesses)" % stores)
@@ -51148,7 +51164,9 @@ func _scenario_phone_swing_reach_slider_817() -> Array[String]:
 		failures.append("computeDragRadius does not multiply by the reach")
 	if not page.contains("var reachScale = 1;"):
 		failures.append("the reach does not default to 1.0")
-	if not page.contains("setReach(stored(REACH_KEY));") or not page.contains("store(REACH_KEY, String(reachScale));"):
+	var slider: String = _js_function_body(page, "bindSlider")
+	if not page.contains("bindSlider(reachEl, reachValueEl, REACH_KEY, REACH_MIN, REACH_MAX, applyReach);") \
+			or not slider.contains("set(stored(key));") or not slider.contains("store(key, String(set(inputEl.value)));"):
 		failures.append("the reach is not read from and saved to the try/catch storage helpers")
 	if not page.contains("if (!isFinite(v) || v <= 0) { v = 1; }"):
 		failures.append("a zero or garbage stored reach does not fall back to 1.0")
@@ -54392,6 +54410,225 @@ func _scenario_night_glow_rehung_after_other_night_exits_refactor_audio() -> Arr
 	if player.get_node_or_null("NightGlow") != null or late.get_node_or_null("NightGlow") != null:
 		failures.append("a player kept its night glow after the last night stage left")
 	await _teardown(holder)
+	return failures
+# --- Stage platform parts (refactor_platforms) -----------------------------------
+## The table every stage's static terrain must still match, one line per
+## fact: recorded from the stages before their plain platforms and floor kill
+## zones became `scenes/parts/Platform.tscn` and `scenes/parts/KillFloor.tscn`
+## instances, so that migration is provably lossless.
+const STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS: String = "res://tools/stage_platform_geometry.txt"
+## Where the scenario writes the table it measured, to diff against or to copy
+## over the committed one after a deliberate geometry change.
+const STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS: String = "user://stage_platform_geometry_actual.txt"
+## Every stage's static bodies and its KillZone, as authored (instanced, not in
+## the tree): global transform, layers, z, every collision shape (size, one-way)
+## and polygon (points, colour) under them; then, in the tree, the colour each
+## of those polygons takes from the stage mood. Compared line for line with
+## the committed table. A stage newer than the table is measured but not
+## compared; a stage in the table that no longer loads fails.
+func _scenario_stage_platform_geometry_unchanged_refactor_platforms() -> Array[String]:
+	var failures: Array[String] = []
+	var expected: Dictionary = {}
+	for raw: String in FileAccess.get_file_as_string(STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS).split("\n", false):
+		var line: String = raw.strip_edges(false, true)
+		if line.is_empty() or line.begins_with("#"):
+			continue
+		var stage_name: String = line.get_slice("|", 0)
+		# Packed arrays are values: append to a copy and store it back.
+		var stage_lines: PackedStringArray = expected.get(stage_name, PackedStringArray())
+		stage_lines.append(line)
+		expected[stage_name] = stage_lines
+	if expected.size() < 40:
+		failures.append("geometry table %s covers %d stages, wants 40+" % [STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS, expected.size()])
+	var stages: PackedStringArray = []
+	for file: String in DirAccess.get_files_at("res://scenes/stages"):
+		if file.ends_with(".tscn"):
+			stages.append(file.get_basename())
+	stages.sort()
+	var measured: PackedStringArray = []
+	for stage_name: String in stages:
+		var lines: PackedStringArray = await _stage_geometry_lines_refactor_platforms(stage_name)
+		measured.append_array(lines)
+		if not expected.has(stage_name):
+			continue
+		var want: PackedStringArray = expected[stage_name]
+		if lines == want:
+			continue
+		var shown: int = 0
+		for i in maxi(lines.size(), want.size()):
+			var got_line: String = lines[i] if i < lines.size() else "<nothing>"
+			var want_line: String = want[i] if i < want.size() else "<nothing>"
+			if got_line != want_line:
+				failures.append("%s line %d: got %s, wanted %s" % [stage_name, i, got_line, want_line])
+				shown += 1
+				if shown >= 3:
+					break
+	for stage_name: String in expected:
+		if not stages.has(stage_name):
+			failures.append("%s is in the geometry table but not in scenes/stages" % stage_name)
+	var out := FileAccess.open(STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS, FileAccess.WRITE)
+	if out != null:
+		out.store_string("\n".join(measured) + "\n")
+		out.close()
+	if not failures.is_empty():
+		failures.append("measured table written to %s" % ProjectSettings.globalize_path(STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS))
+	_scenario_completed = true
+	return failures
+
+func _stage_geometry_lines_refactor_platforms(stage_name: String) -> PackedStringArray:
+	var out: PackedStringArray = []
+	var instance: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate()
+	var nodes: Array[Node] = instance.find_children("*", "StaticBody2D", true, false)
+	var kill_zone: Node = instance.get_node_or_null("KillZone")
+	if kill_zone != null:
+		nodes.append(kill_zone)
+	for node: Node in nodes:
+		var path: String = _geometry_path_refactor_platforms(instance, node)
+		var body: CollisionObject2D = node as CollisionObject2D
+		var head: String = "%s|%s|%s|%s|%s|layer=%d|mask=%d|z=%d|zrel=%s|visible=%s" % [stage_name,
+				"body" if node is StaticBody2D else "kill", path, node.get_class(),
+				var_to_str(_geometry_xform_refactor_platforms(instance, body)),
+				body.collision_layer, body.collision_mask, body.z_index, body.z_as_relative, body.visible]
+		if node is StaticBody2D:
+			var static_body: StaticBody2D = node
+			head += "|material=%s|vel=%s|spin=%s" % [static_body.physics_material_override != null,
+					var_to_str(static_body.constant_linear_velocity), static_body.constant_angular_velocity]
+		else:
+			var script: Script = node.get_script()
+			head += "|script=%s" % (script.resource_path if script != null else "")
+			for prop: Dictionary in node.get_property_list():
+				if int(prop["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE and int(prop["usage"]) & PROPERTY_USAGE_STORAGE:
+					head += "|%s=%s" % [prop["name"], var_to_str(node.get(prop["name"]))]
+		out.append(head)
+		for child: Node in node.get_children():
+			if child is CollisionShape2D:
+				var shape_node: CollisionShape2D = child
+				var shape: Shape2D = shape_node.shape
+				out.append("%s|shape|%s/%s|%s|%s|%s|oneway=%s|disabled=%s" % [stage_name, path, _geometry_name_refactor_platforms(child),
+						var_to_str(shape_node.transform), shape.get_class() if shape != null else "null",
+						var_to_str(shape.get("size")) if shape != null else "", shape_node.one_way_collision,
+						shape_node.disabled])
+			elif child is Polygon2D:
+				var poly: Polygon2D = child
+				out.append("%s|poly|%s/%s|%s|%s|%s|z=%d|visible=%s|texture=%s|offset=%s" % [stage_name, path,
+						_geometry_name_refactor_platforms(child), var_to_str(poly.transform), var_to_str(poly.polygon), var_to_str(poly.color),
+						poly.z_index, poly.visible, poly.texture != null, var_to_str(poly.offset)])
+			else:
+				out.append("%s|child|%s/%s|%s" % [stage_name, path, _geometry_name_refactor_platforms(child), child.get_class()])
+	# In the tree under a fixed mood: what colour the stage paints each of them.
+	instance.set("stage_index", 0)
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	holder.add_child(instance)
+	for node: Node in instance.find_children("*", "StaticBody2D", true, false):
+		for child: Node in node.get_children():
+			if child is Polygon2D:
+				out.append("%s|tinted|%s/%s|%s" % [stage_name, _geometry_path_refactor_platforms(instance, node),
+						_geometry_name_refactor_platforms(child), var_to_str((child as Polygon2D).color)])
+	holder.queue_free()
+	await process_frame
+	return out
+
+func _geometry_path_refactor_platforms(root: Node, node: Node) -> String:
+	var parts: PackedStringArray = []
+	var at: Node = node
+	while at != null and at != root:
+		parts.insert(0, _geometry_name_refactor_platforms(at))
+		at = at.get_parent()
+	return "/".join(parts)
+
+func _geometry_xform_refactor_platforms(root: Node, node: Node2D) -> Transform2D:
+	var xform: Transform2D = Transform2D.IDENTITY
+	var at: Node = node
+	while at != null and at != root:
+		if at is Node2D:
+			xform = (at as Node2D).transform * xform
+		at = at.get_parent()
+	return xform
+
+## A node's name with the counter of an auto-generated one (`@Polygon2D@354`,
+## given to children a part builds without naming) dropped: that number
+## depends on how many nodes the process has made, not on the stage.
+func _geometry_name_refactor_platforms(node: Node) -> String:
+	var auto := RegEx.create_from_string("^@(\\w+)@\\d+$")
+	return auto.sub(String(node.name), "@$1@")
+## Two overlapping ice patches (refactor of IcePatch): a player standing where
+## both overlap is held on the ice by both, and taking either patch away
+## leaves the grip off while the other is still underfoot; only with both gone
+## is the player's own material back.
+func _scenario_ice_patches_overlapping_keep_grip_off_refactor_modes() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var left: StaticBody2D = IcePatchScene.instantiate() as StaticBody2D
+	left.size = Vector2(300, 8)
+	left.position = PART_POSITION + Vector2(-100, 0)
+	stage.add_child(left)
+	var right: StaticBody2D = IcePatchScene.instantiate() as StaticBody2D
+	right.size = Vector2(300, 8)
+	right.position = PART_POSITION + Vector2(100, 0)
+	stage.add_child(right)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -4.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	var before: PhysicsMaterial = player.physics_material_override
+	for _tick in ICE_SETTLE_TICKS:
+		await physics_frame
+	if not left.is_icing(player) or not right.is_icing(player):
+		failures.append("a player on both patches was held by left=%s right=%s, expected both" % [left.is_icing(player), right.is_icing(player)])
+	var ice: PhysicsMaterial = player.physics_material_override
+	if ice == before:
+		failures.append("a player on the ice did not get the ice material")
+	# The left patch goes first, then the right one.
+	for patch: StaticBody2D in [left, right]:
+		var still_on: bool = patch == left
+		stage.remove_child(patch)
+		patch.queue_free()
+		await physics_frame
+		if still_on and player.physics_material_override != ice:
+			failures.append("taking the left patch away gave the grip back while the right one is still underfoot")
+		if not still_on and player.physics_material_override != before:
+			failures.append("the player's own material was not back once both patches were gone")
+	await _teardown(stage)
+	return failures
+## Phone page review fixes, read off controller/index.html as shipped: the input
+## packet is reused but still sent every frame (ADR-0002), an idle pad skips its
+## clear, the state timer runs only for the round_end countdown, the weak-link
+## chip sits clear of the Stock lives, the hill chip is translated, and the
+## launch site closes its <head>.
+func _scenario_controller_page_review_fixes_refactor_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	var frame_body: String = _js_function_body(page, "frame")
+	if frame_body.contains("new ArrayBuffer") or frame_body.contains("new DataView") or frame_body.contains("new Uint8Array"):
+		failures.append("frame() allocates a new input packet every frame")
+	if not frame_body.contains("ws.send(inputBuf);") or not frame_body.contains("ws.send(relayInputBuf);"):
+		failures.append("frame() does not send the input on both transports every frame")
+	if not page.contains("relayInputView.setUint8(0, KIND_INPUT);"):
+		failures.append("the relay input packet does not carry the input kind byte")
+	var draw_body: String = _js_function_body(page, "draw")
+	if not draw_body.contains("if (drawing || drewLast) { ctx.clearRect("):
+		failures.append("draw() clears the canvas even when nothing was or will be drawn")
+	if _js_function_body(page, "showLobby").contains("setInterval"):
+		failures.append("a lobby frame still starts the state timer")
+	var state_body: String = _js_function_body(page, "showState")
+	if not state_body.contains('lobby.phase === "round_end"') or not state_body.contains("clearInterval(stateTimer)"):
+		failures.append("the state timer is not limited to the round_end countdown")
+	if state_body.contains("getElementById"):
+		failures.append("showState() looks elements up on every call")
+	var top_re := RegEx.create_from_string("(?:^|[;\\s])top:\\s*([^;]+);")
+	var lives_m: RegExMatch = top_re.search(_css_rule_231(page, "#lives"))
+	var weak_m: RegExMatch = top_re.search(_css_rule_231(page, "#weak-chip"))
+	if lives_m == null or weak_m == null or lives_m.get_string(1) == weak_m.get_string(1):
+		failures.append("the weak connection chip sits on top of the Stock lives count")
+	var hill_keys: int = page.count("\"HILL_LINE\":")
+	if hill_keys != 9:
+		failures.append("HILL_LINE is in %d language tables, wanted 9" % hill_keys)
+	if not _js_function_body(page, "showHill").contains("t(\"HILL_LINE\""):
+		failures.append("the King of the Hill chip is not translated")
+	var site: String = FileAccess.get_file_as_string("res://site/index.html")
+	var head_end: int = site.find("</head>")
+	if head_end < 0 or head_end > site.find("<body>"):
+		failures.append("site/index.html does not close its <head> before <body>")
+	_scenario_completed = true
 	return failures
 # --- Issue #976 part B: the host's effects, screens and HUD on the joiner -------
 const EffectStreamScript976 := preload("res://scripts/EffectStream.gd")

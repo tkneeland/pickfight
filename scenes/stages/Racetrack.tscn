@@ -1,25 +1,11 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="spin"]
 [ext_resource type="PackedScene" path="res://scenes/parts/SpeedStrip.tscn" id="speed"]
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_1400x40"]
-size = Vector2(1400, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_460x24"]
-size = Vector2(460, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_140x24"]
-size = Vector2(140, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_680x24"]
-size = Vector2(680, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Racetrack (issue #373, a large Hot Potato stage for five to eight players): a
 ; big oval to run laps of. Two decks at the outer ends (everyone starts here,
@@ -44,15 +30,9 @@ view_size = Vector2(2240, 1260)
 mode_weights = {"hot_potato": 4.0, "_other": 0.3}
 
 ; The long floor between the ramps.
-[node name="Floor" type="StaticBody2D" parent="."]
+[node name="Floor" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 420)
-
-[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
-shape = SubResource("RectangleShape2D_1400x40")
-
-[node name="FloorVisual" type="Polygon2D" parent="Floor"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-700, -20, 700, -20, 700, 20, -700, 20)
+size = Vector2(1400, 40)
 
 ; Speed strip (issue #891): a fast lane flush into the middle of the long floor, clear of every spawn drop line (spawns sit on the decks at the ends).
 [node name="FloorSpeedStrip" parent="." instance=ExtResource("speed")]
@@ -60,25 +40,13 @@ position = Vector2(0, 396)
 size = Vector2(420, 8)
 
 ; Decks at the ends: spawns and the ring-out edge.
-[node name="DeckLeft" type="StaticBody2D" parent="."]
+[node name="DeckLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-870, 212)
+size = Vector2(460, 24)
 
-[node name="DeckLeftShape" type="CollisionShape2D" parent="DeckLeft"]
-shape = SubResource("RectangleShape2D_460x24")
-
-[node name="DeckLeftVisual" type="Polygon2D" parent="DeckLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-230, -12, 230, -12, 230, 12, -230, 12)
-
-[node name="DeckRight" type="StaticBody2D" parent="."]
+[node name="DeckRight" parent="." instance=ExtResource("platform")]
 position = Vector2(870, 212)
-
-[node name="DeckRightShape" type="CollisionShape2D" parent="DeckRight"]
-shape = SubResource("RectangleShape2D_460x24")
-
-[node name="DeckRightVisual" type="Polygon2D" parent="DeckRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-230, -12, 230, -12, 230, 12, -230, 12)
+size = Vector2(460, 24)
 
 ; Ramps: 28 degrees, a climb every weapon makes. The space under each is open on its outer side, so it is a tunnel and never a pocket.
 [node name="RampLeft" type="StaticBody2D" parent="."]
@@ -100,36 +68,18 @@ color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(640, 200, 300, 400, 300, 424, 640, 224)
 
 ; Stepping ledges from the decks up to the bridge, 130 px above a deck and 110 below the bridge.
-[node name="StepLeft" type="StaticBody2D" parent="."]
+[node name="StepLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-520, 60)
+size = Vector2(140, 24)
 
-[node name="StepLeftShape" type="CollisionShape2D" parent="StepLeft"]
-shape = SubResource("RectangleShape2D_140x24")
-
-[node name="StepLeftVisual" type="Polygon2D" parent="StepLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-70, -12, 70, -12, 70, 12, -70, 12)
-
-[node name="StepRight" type="StaticBody2D" parent="."]
+[node name="StepRight" parent="." instance=ExtResource("platform")]
 position = Vector2(520, 60)
-
-[node name="StepRightShape" type="CollisionShape2D" parent="StepRight"]
-shape = SubResource("RectangleShape2D_140x24")
-
-[node name="StepRightVisual" type="Polygon2D" parent="StepRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-70, -12, 70, -12, 70, 12, -70, 12)
+size = Vector2(140, 24)
 
 ; The high bridge across the top.
-[node name="Bridge" type="StaticBody2D" parent="."]
+[node name="Bridge" parent="." instance=ExtResource("platform")]
 position = Vector2(0, -28)
-
-[node name="BridgeShape" type="CollisionShape2D" parent="Bridge"]
-shape = SubResource("RectangleShape2D_680x24")
-
-[node name="BridgeVisual" type="Polygon2D" parent="Bridge"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-340, -12, 340, -12, 340, 12, -340, 12)
+size = Vector2(680, 24)
 
 ; A bounce pad on each deck's inner end: straight up beside the bridge, then steer on.
 [node name="PadLeft" parent="." instance=ExtResource("pad")]
@@ -171,12 +121,8 @@ position = Vector2(-800, 140)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(800, 140)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)
-script = ExtResource("kz")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spots: over the bridge, the spinner, the stepping ledges and the floor. All far from the spawns.
 [node name="PickupSpawn0" type="Marker2D" parent="."]

@@ -13,6 +13,8 @@ extends Node
 ## An announcer line for the mode (#370); the Announcer listens for it.
 signal callout(sound: StringName)
 
+const ModeKitScript := preload("res://scripts/ModeKit.gd")
+
 ## Seconds "it" has before the fuse eliminates them.
 var fuse_sec: float = 12.0
 ## After a tag nobody can be tagged for this long, so the new "it" cannot be
@@ -49,30 +51,17 @@ func start_round(slots: Array[int]) -> void:
 	tag_count = 0
 	tags_passed.clear()
 	_cooldown_left = 0.0
-	for slot: int in slots:
-		if slot < 0 or slot >= round_manager._players.size():
-			continue
-		var player: Variant = round_manager._players[slot]
-		if player == null or not is_instance_valid(player) or not player.has_signal("strike_landed"):
-			continue
-		var handler: Callable = _on_strike.bind(slot)
-		_watched[slot] = player
-		_handlers[slot] = handler
+	ModeKitScript.watch(round_manager, slots, &"strike_landed", func(slot: int) -> Callable: return _on_strike.bind(slot),
+			_watched, _handlers)
+	for slot: int in _watched:
 		it_time[slot] = 0.0
-		player.strike_landed.connect(handler)
 	_active = true
 	callout.emit(&"announce_hot_potato")
 	_pick_it()
 
 func end_round() -> void:
 	_active = false
-	for slot: int in _handlers.keys():
-		var player: Variant = _watched.get(slot)
-		var handler: Callable = _handlers[slot]
-		if player != null and is_instance_valid(player) and player.strike_landed.is_connected(handler):
-			player.strike_landed.disconnect(handler)
-	_handlers.clear()
-	_watched.clear()
+	ModeKitScript.unwatch(_watched, _handlers, &"strike_landed", false)
 	it_slot = -1
 	fuse_left = 0.0
 

@@ -13,7 +13,8 @@ extends Node2D
 ## Reduce flashes (#317): lamps gently flicker, unless the saved setting is on,
 ## when they hold a steady light.
 
-const HookUtilScript := preload("res://scripts/HookUtil.gd")
+## Preloaded by path, never by `class_name` (CLAUDE.md).
+const PartKitScript := preload("res://scripts/PartKit.gd")
 const NIGHT_TINT: Color = Color(0.46, 0.5, 0.68)
 const LAMP_COLOR: Color = Color(1.0, 0.85, 0.55)
 const GLOW_COLOR: Color = Color(0.9, 0.93, 1.0)
@@ -140,7 +141,7 @@ func _hang_glow(holder: Node, is_player: bool) -> Node:
 
 func _process(delta: float) -> void:
 	_time += delta
-	var steady: bool = _reduce_flash()
+	var steady: bool = PartKitScript.reduce_flash(self)
 	for i in lamps.size():
 		var flicker: float = 0.0 if steady else 0.08 * sin(_time * 5.0 + i * 1.7)
 		lamps[i].energy = LAMP_ENERGY + flicker
@@ -206,6 +207,3 @@ func _light_texture() -> GradientTexture2D:
 		gradient.set_color(1, Color(1, 1, 1, 0))
 		_texture.gradient = gradient
 	return _texture
-
-func _reduce_flash() -> bool:
-	return HookUtilScript.sfx_flag(self, &"reduce_flash", false)

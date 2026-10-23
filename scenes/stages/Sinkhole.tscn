@@ -1,14 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/CollapsingFloor.tscn" id="3"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_core"]
-size = Vector2(260, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Built around #53's collapsing floor. One long flat strip, all at y=300
 ; (nobody starts with a height advantage), made of five slabs with 20 px
@@ -92,15 +87,9 @@ position = Vector2(-195, 300)
 size = Vector2(90, 24)
 stand_sec = 1.5
 
-[node name="Core" type="StaticBody2D" parent="."]
+[node name="Core" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 300)
-
-[node name="CoreShape" type="CollisionShape2D" parent="Core"]
-shape = SubResource("RectangleShape2D_core")
-
-[node name="CoreVisual" type="Polygon2D" parent="Core"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
+size = Vector2(260, 24)
 
 [node name="NearRight" parent="." instance=ExtResource("3")]
 position = Vector2(195, 300)
@@ -150,12 +139,8 @@ position = Vector2(-520, 220)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(520, 220)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). Floating over the two stood_on
 ; rings: going for one means standing on ground that starts wearing out the

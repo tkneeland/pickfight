@@ -1,25 +1,11 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
 [ext_resource type="PackedScene" path="res://scenes/parts/IcePatch.tscn" id="ice"]
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
-
-[sub_resource type="RectangleShape2D" id="R_220x24"]
-size = Vector2(220, 24)
-
-[sub_resource type="RectangleShape2D" id="R_240x24"]
-size = Vector2(240, 24)
-
-[sub_resource type="RectangleShape2D" id="R_260x24"]
-size = Vector2(260, 24)
-
-[sub_resource type="RectangleShape2D" id="R_1500x40"]
-size = Vector2(1500, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Roundabout (issue #377, a King of the Hill stage with a moving hill): four
 ; platforms in a ring (top, left, right, bottom) and the hill walks round them
@@ -37,55 +23,25 @@ background_layers = PackedStringArray("clouds", "mountains", "city")
 mode_weights = {"king_of_the_hill": 4.0, "_other": 0.3}
 hill_moves = true
 
-[node name="Floor" type="StaticBody2D" parent="."]
+[node name="Floor" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 400)
+size = Vector2(1500, 40)
 
-[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
-shape = SubResource("R_1500x40")
-
-[node name="FloorVisual" type="Polygon2D" parent="Floor"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-750, -20, 750, -20, 750, 20, -750, 20)
-
-[node name="Top" type="StaticBody2D" parent="."]
+[node name="Top" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 50)
+size = Vector2(220, 24)
 
-[node name="TopShape" type="CollisionShape2D" parent="Top"]
-shape = SubResource("R_220x24")
-
-[node name="TopVisual" type="Polygon2D" parent="Top"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-110, -12, 110, -12, 110, 12, -110, 12)
-
-[node name="Left" type="StaticBody2D" parent="."]
+[node name="Left" parent="." instance=ExtResource("platform")]
 position = Vector2(-420, 220)
+size = Vector2(240, 24)
 
-[node name="LeftShape" type="CollisionShape2D" parent="Left"]
-shape = SubResource("R_240x24")
-
-[node name="LeftVisual" type="Polygon2D" parent="Left"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
-
-[node name="Right" type="StaticBody2D" parent="."]
+[node name="Right" parent="." instance=ExtResource("platform")]
 position = Vector2(420, 220)
+size = Vector2(240, 24)
 
-[node name="RightShape" type="CollisionShape2D" parent="Right"]
-shape = SubResource("R_240x24")
-
-[node name="RightVisual" type="Polygon2D" parent="Right"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
-
-[node name="Bottom" type="StaticBody2D" parent="."]
+[node name="Bottom" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 240)
-
-[node name="BottomShape" type="CollisionShape2D" parent="Bottom"]
-shape = SubResource("R_260x24")
-
-[node name="BottomVisual" type="Polygon2D" parent="Bottom"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
+size = Vector2(260, 24)
 
 [node name="LiftLeft" parent="." instance=ExtResource("mp")]
 position = Vector2(-215, 380)
@@ -128,12 +84,8 @@ position = Vector2(-460, 320)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(460, 320)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)
-script = ExtResource("kz")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 [node name="HillSpot0" type="Marker2D" parent="."]
 position = Vector2(0, -50)

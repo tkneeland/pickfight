@@ -1,14 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/StageGust.tscn" id="9"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_pillar"]
-size = Vector2(140, 300)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Three tall columns with open air between them and no floor at all across the
 ; middle. Every crossing is a committed swing over a fall, so the stage turns
@@ -36,59 +31,29 @@ background_sky_bottom = Color(0.3, 0.22, 0.2, 1)
 background_silhouette = Color(0.18, 0.12, 0.11, 1)
 background_layers = PackedStringArray("clouds", "rocks")
 
-[node name="PillarLeft" type="StaticBody2D" parent="."]
+[node name="PillarLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-320, 270)
+size = Vector2(140, 300)
 
-[node name="PillarLeftShape" type="CollisionShape2D" parent="PillarLeft"]
-shape = SubResource("RectangleShape2D_pillar")
-
-[node name="PillarLeftVisual" type="Polygon2D" parent="PillarLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)
-
-[node name="PillarMid" type="StaticBody2D" parent="."]
+[node name="PillarMid" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 270)
+size = Vector2(140, 300)
 
-[node name="PillarMidShape" type="CollisionShape2D" parent="PillarMid"]
-shape = SubResource("RectangleShape2D_pillar")
-
-[node name="PillarMidVisual" type="Polygon2D" parent="PillarMid"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)
-
-[node name="PillarRight" type="StaticBody2D" parent="."]
+[node name="PillarRight" parent="." instance=ExtResource("platform")]
 position = Vector2(320, 270)
-
-[node name="PillarRightShape" type="CollisionShape2D" parent="PillarRight"]
-shape = SubResource("RectangleShape2D_pillar")
-
-[node name="PillarRightVisual" type="Polygon2D" parent="PillarRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)
+size = Vector2(140, 300)
 
 ; Outer columns (issue #137): the same 140 px column and the same 180 px gap
 ; again outboard of each side, so the row of tops runs x=+-710 across the view.
 ; Still no floor anywhere: every gap is still a committed swing over a fall,
 ; but a player knocked off the end column lands on another top more often.
-[node name="PillarFarLeft" type="StaticBody2D" parent="."]
+[node name="PillarFarLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-640, 270)
+size = Vector2(140, 300)
 
-[node name="PillarFarLeftShape" type="CollisionShape2D" parent="PillarFarLeft"]
-shape = SubResource("RectangleShape2D_pillar")
-
-[node name="PillarFarLeftVisual" type="Polygon2D" parent="PillarFarLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)
-
-[node name="PillarFarRight" type="StaticBody2D" parent="."]
+[node name="PillarFarRight" parent="." instance=ExtResource("platform")]
 position = Vector2(640, 270)
-
-[node name="PillarFarRightShape" type="CollisionShape2D" parent="PillarFarRight"]
-shape = SubResource("RectangleShape2D_pillar")
-
-[node name="PillarFarRightVisual" type="Polygon2D" parent="PillarFarRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)
+size = Vector2(140, 300)
 
 ; Issue #281: a stage-wide gust every ~9 s, always blowing right, with a 1.5 s
 ; warning (tint and streaks across the whole stage, the wind_tell sound).
@@ -124,12 +89,8 @@ position = Vector2(-605, 60)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(605, 60)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). On top of the middle pillar and floating above it: both players have to cross the same gap to reach either.
 [node name="PickupSpawn0" type="Marker2D" parent="."]

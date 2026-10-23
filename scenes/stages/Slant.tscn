@@ -1,10 +1,7 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; One long ramp from a low pad on the left to a high landing on the right, with
 ; open air off both outer edges. It is the only stage in the rotation that is
@@ -66,12 +63,8 @@ position = Vector2(-650, 300)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(620, 100)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 560)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). Halfway up the slope, and in the air above it.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
