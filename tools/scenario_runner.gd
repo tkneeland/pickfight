@@ -172,6 +172,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"speed_strip_boosts_run_distance",
 	"stage_speed_strips_placed",
 	"mud_patch_slows_player",
+	"mud_patch_plays_squelch_once_on_entry",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -1924,6 +1925,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_speed_strips_placed()
 		"mud_patch_slows_player":
 			return await _scenario_mud_patch_slows_player()
+		"mud_patch_plays_squelch_once_on_entry":
+			return await _scenario_mud_patch_plays_squelch_once_on_entry()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -11754,6 +11757,68 @@ func _scenario_mud_patch_slows_player() -> Array[String]:
 		# leaving, the runner need only be clearly above the mud pace.
 		if runner.linear_velocity.x <= on_mud * 1.3:
 			failures.append("speed %.1f px/s 0.3 s after leaving the mud, still near the mud pace %.1f" % [runner.linear_velocity.x, on_mud])
+	await _teardown(stage)
+	return failures
+## Issue #987: wading onto mud plays mud_squelch once; staying is silent; a
+## second entry within 1 s is silent, after 1 s plays again; a dead fighter
+## (ghost) plays none.
+func _mud_squelch_drop(stage: Node2D, player: RigidBody2D, mud: StaticBody2D, sfx: Node) -> int:
+	# Lift the player clear of the strip, then drop it back on.
+	player.global_position = mud.position + Vector2(0, -60)
+	player.linear_velocity = Vector2.ZERO
+	var before: int = _sfx_count(sfx, "mud_squelch")
+	for _tick in 40:
+		await physics_frame
+	return _sfx_count(sfx, "mud_squelch") - before
+func _scenario_mud_patch_plays_squelch_once_on_entry() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"mud_squelch"):
+		return ["mud_squelch is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var mud: StaticBody2D = _mud_ground(stage, Vector2(1600, 10), PART_POSITION, true)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	sfx.start_recording()
+	for _tick in 90:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "mud_squelch")
+	var last: Dictionary = _sfx_last(sfx, "mud_squelch")
+	# Stay on the mud 1.5 s more: nothing further.
+	for _tick in 90:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "mud_squelch") - first
+	# Step off (lift) and back: the first drop is long after the entry, so it
+	# plays; the next one lands within 1 s of it and is rate-limited.
+	var again: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	var quick: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	# Wait past 1 s, then step off and on again.
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	# A dead fighter is silent.
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	sfx.stop_recording()
+	print("      squelches: entry %d, staying %d, quick re-entry %d, later re-entry %d, dead %d" % [first, stayed, quick, later, dead])
+	if first != 1:
+		failures.append("walking onto mud played mud_squelch %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("mud_squelch was not positional")
+	if stayed != 0:
+		failures.append("staying on the mud played %d more squelches" % stayed)
+	if again != 1:
+		failures.append("re-entering after more than 1 s (first drop) played %d squelches, want 1" % again)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d squelches" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s played %d squelches, want 1" % later)
+	if dead != 0:
+		failures.append("a dead fighter played %d squelches" % dead)
 	await _teardown(stage)
 	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
