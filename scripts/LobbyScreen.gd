@@ -421,7 +421,9 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	var humans_waiting: int = 0
 	for entry: Dictionary in state["players"]:
 		var is_bot: bool = _server != null and _server.has_method("is_virtual") and _server.is_virtual(int(entry["slot"]))
-		if not is_bot and not bool(entry["ready"]):
+		# #936: Online, the host's own seat readies by START itself, so it never holds START back.
+		var host_seat: bool = online and not solo and _server != null and _server.has_method("host_pc_slot") and int(entry["slot"]) == _server.host_pc_slot()
+		if not is_bot and not host_seat and not bool(entry["ready"]):
 			humans_waiting += 1
 	var joined: int = state["players"].size()
 	var can_start: bool = state["phase"] != "countdown" and joined >= min_players and humans_waiting == 0 and (not teams or both_teams_manned(state))

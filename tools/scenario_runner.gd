@@ -528,6 +528,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"haymaker_award_861",
 	"victory_streaker_award_needs_three_unbroken_kos",
 	"victory_combo_award_needs_two_kos_inside_three_seconds",
+	"award_sharpshooter_counts_ranged_kos",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -956,6 +957,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_rod_casts_and_reels_rival_632",
 	"bot_grapple_zips_to_rival_out_of_reach_632",
 	"bot_opens_umbrella_while_falling",
+	"bot_aims_boomstick_at_rival",
+	"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -1099,6 +1102,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"relay_caps_rooms_and_pending_per_ip_review_relay",
 	"feedback_issue_fences_text_and_defuses_mentions_review_relay",
 	"relay_prunes_empty_rate_limit_keys_review_relay",
+	"online_remote_seats_cannot_start_or_run_the_match_936",
 	"pad_reaches_invite_and_your_look_picks_review_ui",
 	"esc_closes_any_lobby_popup_review_ui",
 	"restore_defaults_resizes_the_window_review_ui",
@@ -2614,6 +2618,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_victory_streaker_award_needs_three_unbroken_kos()
 		"victory_combo_award_needs_two_kos_inside_three_seconds":
 			return await _scenario_victory_combo_award_needs_two_kos_inside_three_seconds()
+		"award_sharpshooter_counts_ranged_kos":
+			return await _scenario_award_sharpshooter_counts_ranged_kos()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -3462,6 +3468,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_grapple_zips_to_rival_out_of_reach_632()
 		"bot_opens_umbrella_while_falling":
 			return await _scenario_bot_opens_umbrella_while_falling()
+		"bot_aims_boomstick_at_rival":
+			return await _scenario_bot_aims_boomstick_at_rival()
+		"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952":
+			return await _scenario_bot_boomstick_no_aim_952()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -3732,6 +3742,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_feedback_issue_fences_text_and_defuses_mentions_review_relay()
 		"relay_prunes_empty_rate_limit_keys_review_relay":
 			return await _scenario_relay_prunes_empty_rate_limit_keys_review_relay()
+		"online_remote_seats_cannot_start_or_run_the_match_936":
+			return await _scenario_online_remote_seats_cannot_start_or_run_the_match_936()
 		"pad_reaches_invite_and_your_look_picks_review_ui":
 			return await _scenario_pad_reaches_invite_and_your_look_picks_review_ui()
 		"esc_closes_any_lobby_popup_review_ui":
@@ -30550,6 +30562,53 @@ func _scenario_victory_combo_award_needs_two_kos_inside_three_seconds() -> Array
 	_scenario_completed = true
 	return failures
 
+## Issue #953: Sharpshooter goes to the most boomstick/boomerang KOs, at least 2, no ties.
+func _scenario_award_sharpshooter_counts_ranged_kos() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Sharpshooter")
+	var ko := func(stats: RefCounted, killer: int, victim: int, weapon: String, t: int) -> void:
+		stats.record_hit(killer, victim, 10.0, t, weapon)
+		stats.record_elimination(victim, t + 1)
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	ko.call(stats, 0, 1, "boomstick", 1000)
+	ko.call(stats, 0, 2, "boomerang", 9000)
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "2 ranged KOs":
+		failures.append("expected Sharpshooter for slot 0 with 2 ranged KOs, got %s" % [found])
+	var one: RefCounted = MatchStatsScript.new()
+	one.begin_match()
+	ko.call(one, 0, 1, "boomstick", 1000)
+	if not find.call(one).is_empty():
+		failures.append("Sharpshooter given for a single ranged KO")
+	var melee: RefCounted = MatchStatsScript.new()
+	melee.begin_match()
+	for i: int in 3:
+		ko.call(melee, 0, 1 + i, "pickaxe", 1000 + i * 5000)
+	if not find.call(melee).is_empty():
+		failures.append("melee KOs counted toward Sharpshooter")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	for who: int in [0, 1]:
+		ko.call(tied, who, 2, "boomstick", 1000 + who * 5000)
+		ko.call(tied, who, 3, "boomerang", 2000 + who * 5000)
+	if not find.call(tied).is_empty():
+		failures.append("Sharpshooter given for a tie")
+	var bot: RefCounted = MatchStatsScript.new()
+	bot.begin_match()
+	bot.record_hit(0, 1, 10.0, 1000, "boomstick", false)
+	bot.record_elimination(1, 1001)
+	bot.record_hit(0, 2, 10.0, 9000, "boomstick", false)
+	bot.record_elimination(2, 9001)
+	if find.call(bot).size() != 1:
+		failures.append("a bot's ranged KOs did not earn Sharpshooter")
+	stats.begin_match()
+	if not stats.ranged_kos.is_empty():
+		failures.append("begin_match left ranged KOs behind")
+	_scenario_completed = true
+	return failures
+
 ## Issue #861: Haymaker goes to the single hardest hit, at least 40, no ties.
 func _scenario_haymaker_award_861() -> Array[String]:
 	var failures: Array[String] = []
@@ -37099,7 +37158,8 @@ func _scenario_match_kind_couch_refuses_remote_seat() -> Array[String]:
 		failures.append("the host phone's Go online button does not hide in a Couch match")
 	await _online_close_239(rig)
 	return failures
-## Online claims the host PC seat itself, ready, and the old toggle is refused.
+## Online claims the host PC seat itself, and the old toggle is refused. Since
+## #936 the seat is not ready in the lobby until the host presses Start.
 func _scenario_match_kind_online_claims_host_pc_seat() -> Array[String]:
 	var failures: Array[String] = []
 	var relay: Node = _relay_start()
@@ -37112,7 +37172,7 @@ func _scenario_match_kind_online_claims_host_pc_seat() -> Array[String]:
 	server.apply_host_command("kind", "online")
 	if server.host_pc_slot() != 0 or server.claimed_slots() != [0]:
 		failures.append("Online gave pc slot %d, claims %s; expected the seat in 0" % [server.host_pc_slot(), server.claimed_slots()])
-	elif not server.slot_ready(0) or server.slot_name(0) != "Host":
+	elif server.slot_ready(0) or server.slot_name(0) != "Host":
 		failures.append("the host PC seat is ready %s, named '%s'" % [server.slot_ready(0), server.slot_name(0)])
 	if not await _wait_for_239(func() -> bool: return server.is_online()):
 		failures.append("Online never went online (%s)" % server.online_status())
@@ -43853,6 +43913,78 @@ func _scenario_bot_opens_umbrella_while_falling() -> Array[String]:
 		failures.append("a bot with the pickaxe reported an open canopy")
 	if umbrella["fastest"] > pickaxe["fastest"] * 0.6:
 		failures.append("the umbrella bot fell at %.0f px/s, not clearly slower than the pickaxe bot's %.0f" % [umbrella["fastest"], pickaxe["fastest"]])
+	_scenario_completed = true
+	return failures
+## Issue #952: a bot holding `weapon` with a rival `gap` px off on flat ground.
+## Returns the smallest angle (degrees) between the barrel (body to head) and
+## the rival over the last 0.2 s before the first shot, or -1 if none fired.
+func _bot_gun_run_952(weapon: String, level: String, gap: float, wall: bool) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(-gap * 0.5, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(gap * 0.5, 274.0))
+	await _await_ticks(2)
+	await _equip(player, weapon)
+	if wall:
+		var slab := StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(30.0, 800.0)
+		shape.shape = rect
+		slab.add_child(shape)
+		slab.collision_layer = 1
+		stage.add_child(slab)
+		slab.global_position = Vector2(0.0, 0.0)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var out: Dictionary = {"best": -1.0, "aimed_ticks": 0}
+	var best: float = 360.0
+	var recent: Array[float] = []
+	var prev_ready: float = INF
+	for t in 260:
+		await physics_frame
+		var ready_in: float = player.fire_ready_in()
+		var barrel: Vector2 = player.weapon_head_position() - player.global_position
+		var ang: float = rad_to_deg(absf(barrel.angle_to(rival.global_position - player.global_position)))
+		recent.append(ang)
+		if recent.size() > 12:
+			recent.pop_front()
+		if ready_in < 0.4:
+			out["aimed_ticks"] += 1
+		# The clock wrapped: the shot just fired.
+		if prev_ready < 0.1 and ready_in > 1.0:
+			for a in recent:
+				best = minf(best, a)
+			out["best"] = best
+			break
+		prev_ready = ready_in
+	await _teardown(stage, false)
+	return out
+## A Normal bot with the boomstick and a rival in the open points the barrel
+## within 15 degrees of them when the shot fires.
+func _scenario_bot_aims_boomstick_at_rival() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _bot_gun_run_952(BOOMSTICK_PATH, "normal", 500.0, false)
+	print("      bot_aims_boomstick_at_rival: best angle=%.1f" % run["best"])
+	if run["best"] < 0.0:
+		failures.append("no boomstick shot fired")
+	elif run["best"] > 15.0:
+		failures.append("the barrel came within %.1f degrees of the rival, not 15" % run["best"])
+	_scenario_completed = true
+	return failures
+## No aiming through a wall or on Easy, and a pickaxe bot never reads the clock.
+func _scenario_bot_boomstick_no_aim_952() -> Array[String]:
+	var failures: Array[String] = []
+	var walled: Dictionary = await _bot_gun_run_952(BOOMSTICK_PATH, "normal", 500.0, true)
+	var easy: Dictionary = await _bot_gun_run_952(BOOMSTICK_PATH, "easy", 500.0, false)
+	print("      bot_boomstick_no_aim_952: wall best=%.1f easy best=%.1f" % [walled["best"], easy["best"]])
+	if walled["best"] >= 0.0 and walled["best"] <= 15.0:
+		failures.append("the bot aimed the boomstick through a wall (%.1f degrees)" % walled["best"])
+	if easy["best"] >= 0.0 and easy["best"] <= 15.0:
+		failures.append("an Easy bot aimed the boomstick (%.1f degrees)" % easy["best"])
 	_scenario_completed = true
 	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
@@ -52131,6 +52263,106 @@ func _scenario_relay_prunes_empty_rate_limit_keys_review_relay() -> Array[String
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(relay.stats_path))
 	relay.queue_free()
 	_scenario_completed = true
+	return failures
+# --- Online: only the host starts the match (issue #936) ------------------------
+## Pumps `frames` frames, polling every fake remote client, and returns each lobby
+## phase seen on the way.
+func _pump_936(rig: Dictionary, frames: int) -> Dictionary:
+	var seen: Dictionary = {}
+	for i in frames:
+		for c: WebSocketPeer in rig["clients"]:
+			c.poll()
+		await process_frame
+		seen[rig["rm"].lobby_phase()] = true
+	return seen
+## #936: in an Online lobby a remote client's Ready only readies its own seat.
+## Every remote ready for longer than a countdown takes starts nothing; the host's
+## Start does. A remote seat's host commands (start, pause, end, kick, online,
+## pc_seat, mode, gamemode, target, stock) are refused, in the lobby and mid-match.
+func _scenario_online_remote_seats_cannot_start_or_run_the_match_936() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bots_rig_445("online", true, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var screen: CanvasLayer = rig["screen"]
+	var remotes: Array[WebSocketPeer] = []
+	var slots: Array[int] = []
+	for id: String in ["ready936-a", "ready936-b"]:
+		var peer: WebSocketPeer = await _online_remote_239(rig, id)
+		var seat: Dictionary = await _online_wait_239(rig, peer, "slot") if peer != null else {}
+		if seat.is_empty() or int(seat.get("slot", -1)) < 0:
+			failures.append("remote '%s' got no seat: %s" % [id, seat])
+		else:
+			remotes.append(peer)
+			slots.append(int(seat["slot"]))
+	if remotes.size() != 2:
+		await _bots_close_445(rig)
+		return failures
+	var emitted: Array = []
+	server.host_command.connect(func(cmd: String, slot: int) -> void: emitted.append([cmd, slot]))
+	var target: int = server.mode_target()
+	var game_mode: String = server.game_mode()
+	var host_seat: int = server.host_pc_slot()
+	# Host commands from a remote seat, in the lobby.
+	var sender: WebSocketPeer = remotes[0]
+	for frame: Dictionary in [{"t": "host", "cmd": "start"}, {"t": "start"}, {"t": "host", "cmd": "pause"},
+			{"t": "host", "cmd": "resume"}, {"t": "host", "cmd": "end"}, {"t": "host", "cmd": "kick", "slot": slots[1]},
+			{"t": "host", "cmd": "kick", "slot": host_seat}, {"t": "host", "cmd": "online", "v": false},
+			{"t": "host", "cmd": "pc_seat", "v": false}, {"t": "pc_seat", "v": false}, {"t": "mode", "v": "teams"},
+			{"t": "gamemode", "v": GameModesScript361.SUDDEN_DEATH}, {"t": "target", "n": target + 2}, {"t": "stock", "lives": 1}]:
+		_online_send_239(sender, 1, JSON.stringify(frame).to_utf8_buffer())
+	await _pump_936(rig, 30)
+	if not emitted.is_empty():
+		failures.append("a remote seat's host commands were taken in the lobby: %s" % [emitted])
+	if not server.claimed_slots().has(slots[1]) or not server.claimed_slots().has(host_seat):
+		failures.append("a remote seat's kick removed someone (seats %s)" % [server.claimed_slots()])
+	if not server.online_requested() or not server.is_online():
+		failures.append("a remote seat took the room offline")
+	if server.team_mode() or server.game_mode() != game_mode or server.mode_target() != target:
+		failures.append("a remote seat changed the match settings (teams %s, mode '%s', target %d)" % [server.team_mode(), server.game_mode(), server.mode_target()])
+	# Every remote readies: nothing starts, however long they wait.
+	for peer: WebSocketPeer in remotes:
+		_online_send_239(peer, 1, JSON.stringify({"t": "ready", "v": true}).to_utf8_buffer())
+	var seen: Dictionary = await _pump_936(rig, 360)
+	for slot: int in slots:
+		if not server.slot_pressed_ready(slot):
+			failures.append("remote slot %d's Ready never arrived" % slot)
+	if seen.size() != 1 or not seen.has("lobby"):
+		failures.append("remote clients' Ready alone moved the room through %s; only the host's Start may" % [seen.keys()])
+	if not emitted.is_empty():
+		failures.append("host commands emitted without the host: %s" % [emitted])
+	if rm.lobby_phase() != "lobby":
+		await _bots_close_445(rig)
+		return failures
+	# The host's Start runs the countdown; a remote un-ready cancels it, and its
+	# Ready back does not restart it: that takes the host's Start again.
+	screen.press_control("start")
+	if not await _wait_for_239(func() -> bool: return rm.lobby_phase() == "countdown", 5000):
+		failures.append("the host's Start never ran the countdown (phase %s)" % rm.lobby_phase())
+	_online_send_239(sender, 1, JSON.stringify({"t": "ready", "v": false}).to_utf8_buffer())
+	await _pump_936(rig, 20)
+	if rm.lobby_phase() != "lobby":
+		failures.append("a remote un-ready did not cancel the countdown (phase %s)" % rm.lobby_phase())
+	_online_send_239(sender, 1, JSON.stringify({"t": "ready", "v": true}).to_utf8_buffer())
+	seen = await _pump_936(rig, 360)
+	if seen.size() != 1 or not seen.has("lobby"):
+		failures.append("a remote's Ready after a cancelled countdown moved the room through %s" % [seen.keys()])
+	screen.press_control("start")
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1, 30000):
+		failures.append("the host's Start never started the match (state %d)" % int(rm.get("_state")))
+		await _bots_close_445(rig)
+		return failures
+	emitted.clear()
+	for frame: Dictionary in [{"t": "host", "cmd": "pause"}, {"t": "host", "cmd": "end"}, {"t": "host", "cmd": "kick", "slot": slots[1]}]:
+		_online_send_239(sender, 1, JSON.stringify(frame).to_utf8_buffer())
+	await _pump_936(rig, 30)
+	if not emitted.is_empty() or rm.is_paused():
+		failures.append("a remote seat's pause/end/kick was taken mid-match: %s (paused %s)" % [emitted, rm.is_paused()])
+	if not server.claimed_slots().has(slots[1]):
+		failures.append("a remote seat kicked slot %d mid-match" % slots[1])
+	await _bots_close_445(rig)
 	return failures
 ## Review: a gamepad host reaches Invite Steam friends from the lobby's pad menu, and in Your look
 ## every pick (colour swatches with a visible yellow focus outline, hats, eyes), focus landing on

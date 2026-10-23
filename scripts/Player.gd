@@ -1743,6 +1743,13 @@ func _tick_fire(delta: float) -> void:
 	_fire_clock -= _stats.fire_interval
 	_fire()
 
+## Issue #952: seconds until the held weapon fires its next shot, or INF for a
+## weapon that never fires on its own. Read-only; bots use it to line up.
+func fire_ready_in() -> float:
+	if _stats == null or _stats.fire_interval <= 0.0:
+		return INF
+	return maxf(_stats.fire_interval - _fire_clock, 0.0)
+
 ## One shot. The bullet leaves from the head's anchor along the haft's actual
 ## direction -- the barrel as drawn, which is where the player sees it point
 ## -- and the body takes `recoil_impulse` straight back along it.
