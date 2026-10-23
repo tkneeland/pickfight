@@ -969,6 +969,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_walks_against_belt_to_open_end",
 	"bot_aims_boomstick_at_rival",
 	"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952",
+	"bot_faces_shield_at_incoming_shot",
+	"bot_shield_ignores_shot_on_easy_or_other_weapon_977",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -3507,6 +3509,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_aims_boomstick_at_rival()
 		"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952":
 			return await _scenario_bot_boomstick_no_aim_952()
+		"bot_faces_shield_at_incoming_shot":
+			return await _scenario_bot_faces_shield_at_incoming_shot()
+		"bot_shield_ignores_shot_on_easy_or_other_weapon_977":
+			return await _scenario_bot_shield_ignores_shot_977()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -44414,6 +44420,65 @@ func _scenario_bot_boomstick_no_aim_952() -> Array[String]:
 		failures.append("the bot aimed the boomstick through a wall (%.1f degrees)" % walled["best"])
 	if easy["best"] >= 0.0 and easy["best"] <= 15.0:
 		failures.append("an Easy bot aimed the boomstick (%.1f degrees)" % easy["best"])
+	_scenario_completed = true
+	return failures
+## Issue #977: a bot holding `weapon` with a rival 600 px to its left (its
+## target) and a boomstick bullet flying left at it from the right. Returns the
+## smallest angle (degrees) between the head's line from the body and the line
+## to the bullet before it arrives, and the damage the bot took.
+func _bot_shield_shot_run_977(weapon: String, level: String) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(-600.0, 274.0))
+	await _await_ticks(2)
+	await _equip(player, weapon)
+	var gun: Resource = load(BOOMSTICK_PATH)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	await _await_ticks(30)
+	var bullet: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+	var origin: Vector2 = player.global_position + Vector2(900.0, 0.0)
+	bullet.setup(rival, origin, Vector2.LEFT, gun)
+	stage.add_child(bullet)
+	var before: float = player.damage
+	var best: float = 360.0
+	for t in 80:
+		await physics_frame
+		if not is_instance_valid(bullet) or bullet.is_queued_for_deletion():
+			break
+		var face: Vector2 = player.weapon_head_position() - player.global_position
+		var line: Vector2 = bullet.global_position - player.global_position
+		if line.x > 100.0:
+			best = rad_to_deg(absf(face.angle_to(line)))
+	await _await_ticks(20)
+	var out: Dictionary = {"best": best, "taken": player.damage - before, "damage": float(gun.projectile_damage)}
+	await _teardown(stage, false)
+	return out
+## A Normal bot holding the shield, a bullet coming from the right: the face
+## points within 30 degrees of the bullet's line and the bullet is blocked.
+func _scenario_bot_faces_shield_at_incoming_shot() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _bot_shield_shot_run_977(SHIELD_PATH, "normal")
+	print("      bot_faces_shield_at_incoming_shot: best angle=%.1f taken=%.1f of %.1f" % [run["best"], run["taken"], run["damage"]])
+	if run["best"] > 30.0:
+		failures.append("the shield face came within %.1f degrees of the bullet's line, not 30" % run["best"])
+	if run["taken"] > run["damage"] * 0.3:
+		failures.append("the bullet was not blocked (took %.1f of %.1f)" % [run["taken"], run["damage"]])
+	_scenario_completed = true
+	return failures
+## Controls: an Easy bot keeps today's behaviour (faces its target, the bullet
+## lands), and so does a bot holding another weapon.
+func _scenario_bot_shield_ignores_shot_977() -> Array[String]:
+	var failures: Array[String] = []
+	var easy: Dictionary = await _bot_shield_shot_run_977(SHIELD_PATH, "easy")
+	var pick: Dictionary = await _bot_shield_shot_run_977("res://resources/pickaxe.tres", "normal")
+	print("      bot_shield_ignores_shot_977: easy best=%.1f taken=%.1f pickaxe best=%.1f" % [easy["best"], easy["taken"], pick["best"]])
+	if easy["best"] <= 30.0:
+		failures.append("the Easy control faced the bullet (%.1f degrees), so the fixture does not show the old behaviour" % easy["best"])
 	_scenario_completed = true
 	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
