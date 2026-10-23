@@ -50,6 +50,9 @@ enum State { FLYING, STUCK, HOME, REELING }
 
 ## Player.LAYER_WORLD, repeated so this script need not preload the player.
 const LAYER_WORLD: int = 1
+## The shield, colour, art and swept-cast helpers every shot shares,
+## preloaded by path (CLAUDE.md: never by `class_name`).
+const ShotSweepScript := preload("res://scripts/ShotSweep.gd")
 ## Every live hook is in this group, which is how scenarios find them.
 const GROUP: StringName = &"grapple_hooks"
 ## How fast a released hook reels home, and how close it has to get.
@@ -91,9 +94,8 @@ func setup(from_shooter: RigidBody2D, origin: Vector2, flight: Vector2, stats: R
 	_origin = origin
 	_stats = stats
 	direction = flight.normalized() if flight != Vector2.ZERO else Vector2.RIGHT
-	var identity: Variant = from_shooter.get("identity_color") if from_shooter != null else null
-	_colour = identity if identity is Color else Color.WHITE
-	_art = _centred(stats.loaded_art)
+	_colour = ShotSweepScript.shooter_colour(from_shooter)
+	_art = ShotSweepScript.centred(stats.loaded_art)
 	_velocity = direction * float(stats.projectile_speed)
 
 func _ready() -> void:
@@ -157,39 +159,23 @@ func _fly(delta: float) -> void:
 			direction = _velocity.normalized()
 			rotation = direction.angle()
 	var motion: Vector2 = (_velocity * delta).limit_length(left)
-	if _shield_holder_blocking(global_position, global_position + motion, _shape.radius) != null:
+	if ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, _shape.radius) != null:
 		state = State.HOME
 		return
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var query := PhysicsShapeQueryParameters2D.new()
-	query.shape = _shape
-	query.transform = Transform2D(0.0, global_position)
-	query.motion = motion
-	query.collision_mask = LAYER_WORLD
-	query.exclude = [shooter.get_rid()]
-	query.collide_with_bodies = true
-	query.collide_with_areas = false
-	var fractions: PackedFloat32Array = space.cast_motion(query)
-	var unsafe: float = fractions[1] if fractions.size() >= 2 else 1.0
+	var exclude: Array[RID] = [shooter.get_rid()]
+	var met: Dictionary = ShotSweepScript.cast_first(space, _shape, global_position, motion, LAYER_WORLD, exclude)
+	var unsafe: float = met["unsafe"]
 	if unsafe >= 1.0:
 		global_position += motion
 		travelled += motion.length()
 		return
 	global_position += motion * unsafe
 	travelled += motion.length() * unsafe
-	query.transform = Transform2D(0.0, global_position)
-	query.motion = Vector2.ZERO
-	var collider: Object = null
-	var point: Vector2 = global_position + direction * _shape.radius
-	var rest: Dictionary = space.get_rest_info(query)
-	if not rest.is_empty():
-		collider = instance_from_id(rest["collider_id"])
-		point = rest["point"]
-	else:
-		var overlaps: Array[Dictionary] = space.intersect_shape(query, 1)
-		if not overlaps.is_empty():
-			collider = overlaps[0]["collider"]
-	_meet(collider, point)
+	var point: Vector2 = met["point"]
+	if point == Vector2.INF:
+		point = global_position + direction * _shape.radius
+	_meet(met["collider"], point)
 
 func _meet(collider: Object, point: Vector2) -> void:
 	impacted.emit(collider, point)
@@ -298,15 +284,6 @@ func _solid(node: Node) -> bool:
 		return bool(node.call("is_solid"))
 	return true
 
-## Issue #631, ADR-0024: the player, other than the shooter, whose shield's
-## face turns a shot flying `from` -> `to`, or null.
-func _shield_holder_blocking(from: Vector2, to: Vector2, radius: float) -> Node:
-	for node: Node in get_tree().get_nodes_in_group("players"):
-		if node != shooter and node.has_method("shield_face_blocks") \
-				and node.shield_face_blocks(from, to, radius):
-			return node
-	return null
-
 func _shooter_in_play() -> bool:
 	return is_instance_valid(shooter) and bool(shooter.get("alive"))
 
@@ -323,18 +300,3 @@ func _draw() -> void:
 		draw_polyline(edge, OUTLINE_COLOR, 1.0)
 	else:
 		draw_circle(Vector2.ZERO, _shape.radius if _shape != null else 4.0, _colour)
-
-## `art` moved so its bounding box is centred on the origin: the loaded art is
-## authored where it sits on the head, and in flight it is drawn round the
-## flying circle.
-func _centred(art: PackedVector2Array) -> PackedVector2Array:
-	if art.is_empty():
-		return art
-	var box := Rect2(art[0], Vector2.ZERO)
-	for p: Vector2 in art:
-		box = box.expand(p)
-	var centre: Vector2 = box.get_center()
-	var out := PackedVector2Array()
-	for p: Vector2 in art:
-		out.append(p - centre)
-	return out

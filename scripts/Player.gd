@@ -61,6 +61,7 @@ const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 ## The three special weapons (issue #150). See "Special weapons" at the end.
 const FlailChainScript := preload("res://scripts/FlailChain.gd")
 const GrappleHookScript := preload("res://scripts/GrappleHook.gd")
+const ShotSweepScript := preload("res://scripts/ShotSweep.gd")
 const BoomerangScript := preload("res://scripts/Boomerang.gd")
 const MagnetScript := preload("res://scripts/Magnet.gd")
 ## Slack on the fire countdown: the interval is summed from fixed physics
@@ -2026,21 +2027,8 @@ func _head_is_home() -> bool:
 ## Whether terrain lies on the straight line from this body to its head's
 ## anchor. Other players' bodies are on the same layer but are not terrain.
 func _head_cut_off() -> bool:
-	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var query := PhysicsRayQueryParameters2D.create(
-		global_position, _head.global_position, LAYER_WORLD, [get_rid(), _head.get_rid()])
-	query.collide_with_areas = false
-	for i in GRIDLOCK_MAX_SKIPS:
-		var hit: Dictionary = space.intersect_ray(query)
-		if hit.is_empty():
-			return false
-		var collider: Object = hit["collider"]
-		if not (collider is Node and (collider as Node).is_in_group("players")):
-			return true
-		var exclude: Array[RID] = query.exclude
-		exclude.append(hit["rid"])
-		query.exclude = exclude
-	return false
+	return ShotSweepScript.terrain_between(get_world_2d().direct_space_state, global_position,
+		_head.global_position, LAYER_WORLD, [get_rid(), _head.get_rid()], GRIDLOCK_MAX_SKIPS)
 
 # --- Special weapons (issue #150) ---------------------------------------------
 #
