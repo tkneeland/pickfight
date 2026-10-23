@@ -63,6 +63,15 @@ static func team_of(manager: Node, slot: int) -> int:
 static func stage(manager: Node) -> Node:
 	return manager._current_stage if manager != null else null
 
+## A fingerprint of `stage` for a mode that caches its geometry (goal and base
+## rectangles) instead of reading it every tick: another stage (a mid-round
+## change, #646), the stage entering the tree, or it being moved or resized
+## changes the key, and the cache is read afresh. Empty for no stage.
+static func stage_key(stage_node: Node) -> Array:
+	if stage_node == null:
+		return []
+	return [stage_node.get_instance_id(), stage_node.is_inside_tree(), stage_node.get("position"), stage_node.get("view_size")]
+
 ## Everyone in `watched` to their own side of `centre_x`: team 0 on the left,
 ## team 1 on the right, nearest the stage's own spawn points on that side. A
 ## spawn point for which `skip.call(point)` is true is left out. A player who is

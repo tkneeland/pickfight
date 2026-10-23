@@ -85,6 +85,9 @@ var _root: Node2D
 var _flag_nodes: Dictionary = {}
 var _hud: CanvasLayer
 var _score_label: Label
+## The base rectangles `base_rect()` read last, and from which stage.
+var _bases_key: Array = [-1]
+var _base_rects: Array[Rect2] = [Rect2(), Rect2()]
 
 func setup(manager: Node) -> void:
 	round_manager = manager
@@ -104,6 +107,7 @@ func start_round(slots: Array[int]) -> void:
 	_finished = false
 	_pause_left = 0.0
 	_pausing = false
+	_bases_key = [-1]
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
 	_respawner.team_of = team_of
 	_respawner.centre_x = func() -> float: return (home_position(0).x + home_position(1).x) * 0.5
@@ -174,11 +178,16 @@ func home_position(team: int) -> Vector2:
 	return Vector2.ZERO
 
 ## The rectangle of `team`'s base, where a carrier of the enemy flag scores.
+## Read off the stage once per stage, not every tick (the bots and the capture
+## check ask each tick): a new hall after a capture is read afresh.
 func base_rect(team: int) -> Rect2:
 	var stage: Node = _stage()
-	if stage != null and stage.has_method("get_base_rect"):
-		return stage.get_base_rect(team)
-	return Rect2()
+	var key: Array = ModeKitScript.stage_key(stage)
+	if key != _bases_key:
+		_bases_key = key
+		for each: int in [0, 1]:
+			_base_rects[each] = stage.get_base_rect(each) if stage != null and stage.has_method("get_base_rect") else Rect2()
+	return _base_rects[team]
 
 func _stage() -> Node:
 	return ModeKitScript.stage(round_manager)
@@ -345,6 +354,7 @@ func capture(team: int, slot: int) -> void:
 ## flags home, everyone back on their own side.
 func _next_hall() -> void:
 	round_manager.change_stage_mid_round()
+	_bases_key = [-1]
 	_damage_seen.clear()
 	_lockout.clear()
 	state = {0: HOME, 1: HOME}

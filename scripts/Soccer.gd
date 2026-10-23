@@ -79,6 +79,12 @@ var _thump_cool: float = 0.0
 var _hud: CanvasLayer
 var _score_label: Label
 var _goal_label: Label
+## The stage geometry `_refresh_geometry()` read last, and from which stage.
+var _geometry_key: Array = [-1]
+var _goal_rects: Array[Rect2] = [Rect2(), Rect2()]
+var _has_play_rect: bool = false
+## The stage's view grown by `OUT_OF_PLAY_MARGIN`.
+var _play_rect: Rect2 = Rect2()
 
 func setup(manager: Node) -> void:
 	round_manager = manager
@@ -93,6 +99,7 @@ func start_round(slots: Array[int]) -> void:
 	_finished = false
 	_pause_left = 0.0
 	_last_touch = -1
+	_geometry_key = [-1]
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
 	_respawner.team_of = team_of
 	_respawner.centre_x = func() -> float: return _ball_spawn().x
@@ -159,10 +166,22 @@ func _stage() -> Node:
 	return ModeKitScript.stage(round_manager)
 
 func _goal_rect(team: int) -> Rect2:
+	_refresh_geometry()
+	return _goal_rects[team]
+
+## Reads the stage's goals and its out-of-play bounds again when the stage is
+## not the one they were read from (a new round, or the next pitch after a
+## goal), rather than every tick.
+func _refresh_geometry() -> void:
 	var stage: Node = _stage()
-	if stage != null and stage.has_method("get_goal_rect"):
-		return stage.get_goal_rect(team)
-	return Rect2()
+	var key: Array = ModeKitScript.stage_key(stage)
+	if key == _geometry_key:
+		return
+	_geometry_key = key
+	for team: int in [0, 1]:
+		_goal_rects[team] = stage.get_goal_rect(team) if stage != null and stage.has_method("get_goal_rect") else Rect2()
+	_has_play_rect = stage != null and stage.has_method("get_view_rect")
+	_play_rect = stage.get_view_rect().grow(OUT_OF_PLAY_MARGIN) if _has_play_rect else Rect2()
 
 func _ball_spawn() -> Vector2:
 	var stage: Node = _stage()
@@ -293,10 +312,10 @@ func _check_goals() -> void:
 ## The ball strayed out of the pitch (a stage without a closed roof): back to
 ## the centre rather than lost.
 func _check_out_of_play() -> void:
-	var stage: Node = _stage()
-	if stage == null or not stage.has_method("get_view_rect"):
+	_refresh_geometry()
+	if not _has_play_rect:
 		return
-	if not stage.get_view_rect().grow(OUT_OF_PLAY_MARGIN).has_point(ball.global_position):
+	if not _play_rect.has_point(ball.global_position):
 		_place_ball()
 
 ## `team` scores. The player credited is the last of that team to have touched
@@ -326,6 +345,7 @@ func _kick_off() -> void:
 	_show_goal(false)
 	# A different pitch for the next kick-off (#646), then its title card.
 	round_manager.change_stage_mid_round()
+	_geometry_key = [-1]
 	_place_ball()
 	_place_players()
 
