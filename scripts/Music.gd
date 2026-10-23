@@ -36,6 +36,7 @@ extends Node
 
 ## Its bus, headless-run and settings-file helpers are `Sfx`'s statics.
 const SfxScript := preload("res://scripts/Sfx.gd")
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
 
 const BUS_NAME: StringName = &"Music"
 const SETTINGS_PATH: String = "user://audio.cfg"
@@ -148,8 +149,7 @@ func _ready() -> void:
 		voice.bus = BUS_NAME
 		add_child(voice)
 		_voices.append(voice)
-	get_tree().node_added.connect(_on_node_added)
-	_watch_subtree(get_tree().root)
+	HookUtilScript.watch_tree(get_tree(), _on_node_added)
 	# The game's own scene is only current once all the autoloads are ready.
 	# The scenario runner never has one, so it starts in silence.
 	_start_if_in_game.call_deferred()
@@ -343,11 +343,6 @@ func _start_if_in_game() -> void:
 		await get_tree().process_frame
 	if _current == "":
 		play_lobby()
-
-func _watch_subtree(node: Node) -> void:
-	_on_node_added(node)
-	for child in node.get_children():
-		_watch_subtree(child)
 
 func _on_node_added(node: Node) -> void:
 	if node.has_meta(META_WATCHED):

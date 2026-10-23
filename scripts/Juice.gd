@@ -31,6 +31,7 @@ extends Node2D
 
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
 
 enum Kind { DUST, SPARK, CATCH }
 
@@ -200,8 +201,7 @@ func _ready() -> void:
 	_t_next.resize(MAX_TRAILS)
 	_t_pts.resize(MAX_TRAILS * TRAIL_POINTS)
 	_t_born.resize(MAX_TRAILS * TRAIL_POINTS)
-	get_tree().node_added.connect(_on_node_added)
-	_watch_subtree(get_tree().root)
+	HookUtilScript.watch_tree(get_tree(), _on_node_added)
 
 ## Restore everything this node changes outside itself, so a scene change or
 ## a removed Juice never leaves the game paused or the camera off-centre.
@@ -236,11 +236,6 @@ func holds_trail(head: Node) -> bool:
 	return slot >= 0 and _slot_held(slot)
 
 # --- Watching -----------------------------------------------------------------
-
-func _watch_subtree(node: Node) -> void:
-	_on_node_added(node)
-	for child in node.get_children():
-		_watch_subtree(child)
 
 func _on_node_added(node: Node) -> void:
 	# A lobby how-to-play demo's puppets (#219) make no sparks or shakes.
@@ -478,8 +473,7 @@ func _on_head_clashed(speed: float, point: Vector2, head: Node) -> void:
 ## A boomerang caught in the thrower's hand (#862): a small white burst. With
 ## "Reduce flashes" on the burst is skipped (the sound still plays).
 func _on_boomerang_caught(point: Vector2) -> void:
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	if sfx != null and bool(sfx.get("reduce_flash")):
+	if HookUtilScript.sfx_flag(self, &"reduce_flash", false):
 		return
 	for i in CATCH_SPARKS:
 		var angle: float = TAU * float(i) / float(CATCH_SPARKS) + _rng.randf_range(-0.3, 0.3)
@@ -503,14 +497,12 @@ func _on_player_eliminated(_player: Node) -> void:
 ## `user://audio.cfg` like the other display settings, #256). On when there is
 ## no `Sfx` autoload to ask.
 func _shake_enabled() -> bool:
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	return sfx == null or bool(sfx.get("screen_shake"))
+	return HookUtilScript.sfx_flag(self, &"screen_shake", true)
 
 ## The saved "Hit pause" setting (`Sfx.hit_pause`, #916). On when there is no
 ## `Sfx` autoload to ask. Off, no strike or KO freezes the tree.
 func _hit_pause_enabled() -> bool:
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	return sfx == null or bool(sfx.get("hit_pause"))
+	return HookUtilScript.sfx_flag(self, &"hit_pause", true)
 
 ## Apply screen shake effect. A new shake never shortens or weakens one still
 ## running; it keeps the longer of the two, with that one's own duration.

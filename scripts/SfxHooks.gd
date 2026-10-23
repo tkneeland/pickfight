@@ -18,6 +18,7 @@ extends Node
 
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
 
 ## Damage that plays a weapon's hit at full strength. A committed swing does
 ## 34-60 depending on the weapon (Player._strike_damage), so a full-speed
@@ -64,8 +65,7 @@ func _ready() -> void:
 	# Before every game node in the tree order, so `_physics_process` reads
 	# each body's velocity before the step that may land it.
 	process_physics_priority = -100
-	get_tree().node_added.connect(_on_node_added)
-	_watch_subtree(get_tree().root)
+	HookUtilScript.watch_tree(get_tree(), _on_node_added)
 
 func _physics_process(_delta: float) -> void:
 	if _velocity_before.size() > _players.size() * 4 + 16:
@@ -76,11 +76,6 @@ func _physics_process(_delta: float) -> void:
 			_velocity_before[player.get_instance_id()] = player.linear_velocity
 			still.append(player)
 	_players = still
-
-func _watch_subtree(node: Node) -> void:
-	_on_node_added(node)
-	for child in node.get_children():
-		_watch_subtree(child)
 
 func _on_node_added(node: Node) -> void:
 	# A lobby how-to-play demo's puppets (#219) make no sound.

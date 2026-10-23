@@ -24,6 +24,7 @@ extends Node2D
 
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
 ## The debug switch. Damage numbers are a testing aid, not part of the game;
@@ -123,8 +124,7 @@ func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool
 
 ## Settings > "Damage numbers" (#873); on when there is no Sfx autoload.
 func _settings_allow_numbers() -> bool:
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	return sfx == null or bool(sfx.get("damage_numbers"))
+	return HookUtilScript.sfx_flag(self, &"damage_numbers", true)
 
 ## A marker or number has finished: out of the tree and back in the pool.
 ## Called deferred, never from inside the node's own `_process`.

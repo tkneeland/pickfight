@@ -5,6 +5,7 @@ extends Node2D
 ## identity colour. Spawned beside the player, not under it, because the
 ## player hides the moment it is eliminated. Frees itself when done.
 
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
 const DURATION: float = 0.7
 const RING_START: float = 18.0
 const RING_END: float = 110.0
@@ -32,8 +33,7 @@ func _ready() -> void:
 ## Alpha of the white flash at the start of the burst right now (0 once it is
 ## over, or always with "Reduce flashes" on, #317). Observable for scenarios.
 func flash_alpha() -> float:
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	if sfx != null and bool(sfx.get("reduce_flash")):
+	if HookUtilScript.sfx_flag(self, &"reduce_flash", false):
 		return 0.0
 	var t: float = clampf(_age / DURATION, 0.0, 1.0)
 	return 0.8 * (1.0 - t * 4.0) if t < 0.25 else 0.0
