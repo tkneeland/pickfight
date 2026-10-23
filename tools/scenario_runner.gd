@@ -163,6 +163,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_two_more_stages_spawns_clear",
+	"treadmill_belts_oppose_and_mud_sits_between",
 	"mud_patch_overpass_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
@@ -689,6 +690,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_ctf_attackers_defenders_and_carrier_chase",
 	"announcer_calls_capture_the_flag",
 	"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel",
+	"bot_four_bots_finish_a_classic_round_on_treadmill",
 	"character_polish_hit_flash_respects_reduce_flash",
 	"character_polish_takeoff_stretches_within_cap",
 	"character_polish_weapon_head_has_ink_outline",
@@ -1817,6 +1819,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_summit_spawns_clear()
 		"ice_patch_two_more_stages_spawns_clear":
 			return await _scenario_ice_patch_two_more_stages_spawns_clear()
+		"treadmill_belts_oppose_and_mud_sits_between":
+			return await _scenario_treadmill_belts_oppose_and_mud_sits_between()
 		"mud_patch_overpass_spawns_clear":
 			return await _scenario_mud_patch_overpass_spawns_clear()
 		"ice_patch_restores_when_stage_freed":
@@ -2865,6 +2869,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_announcer_calls_capture_the_flag()
 		"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel":
 			return await _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel()
+		"bot_four_bots_finish_a_classic_round_on_treadmill":
+			return await _scenario_bot_four_bots_finish_a_classic_round_on_treadmill()
 		"character_polish_hit_flash_respects_reduce_flash":
 			return await _scenario_character_polish_hit_flash_respects_reduce_flash()
 		"character_polish_takeoff_stretches_within_cap":
@@ -5410,6 +5416,7 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Dunes.tscn",
 	"res://scenes/stages/Bastion.tscn",
 	"res://scenes/stages/Stronghold.tscn",
+	"res://scenes/stages/Treadmill.tscn",
 ]
 func _scenario_every_stage_has_a_preview_647() -> Array[String]:
 	var previews: GDScript = load("res://scripts/StagePreviews.gd")
@@ -11106,6 +11113,48 @@ func _scenario_ice_patch_two_more_stages_spawns_clear() -> Array[String]:
 				if absf(marker.position.x - ice.position.x) <= half_x + PLAYER_RADIUS:
 					failures.append("%s %s at x=%.0f is over the ice" % [stage_name, child.name, marker.position.x])
 		await _teardown(stage)
+	return failures
+## Treadmill (#934): its two belts oppose each other (a standing player on the
+## left strip drifts right, on the right strip left), and the mud patch lies
+## exactly where the strips meet. The belts are mirrored, and the stage is
+## not a competitive one.
+func _scenario_treadmill_belts_oppose_and_mud_sits_between() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = (load("res://scenes/stages/Treadmill.tscn") as PackedScene).instantiate() as Node2D
+	get_root().add_child(stage)
+	var left: StaticBody2D = stage.get_node_or_null("BeltLeft") as StaticBody2D
+	var right: StaticBody2D = stage.get_node_or_null("BeltRight") as StaticBody2D
+	var mud: StaticBody2D = stage.get_node_or_null("CentreMud") as StaticBody2D
+	if left == null or right == null or mud == null:
+		failures.append("Treadmill is missing BeltLeft, BeltRight or CentreMud")
+		await _teardown(stage, false)
+		return failures
+	if left.belt_speed <= 0.0 or right.belt_speed >= 0.0 or not is_equal_approx(left.belt_speed, -right.belt_speed):
+		failures.append("belts do not oppose: left %.0f, right %.0f" % [left.belt_speed, right.belt_speed])
+	var left_edge: float = left.position.x + left.size.x / 2.0
+	var right_edge: float = right.position.x - right.size.x / 2.0
+	if absf(left_edge - (mud.position.x - mud.size.x / 2.0)) > 1.0 or absf(right_edge - (mud.position.x + mud.size.x / 2.0)) > 1.0:
+		failures.append("mud (x %.0f..%.0f) does not sit where the belts meet (%.0f, %.0f)" % [mud.position.x - mud.size.x / 2.0, mud.position.x + mud.size.x / 2.0, left_edge, right_edge])
+	if stage.get("competitive") != false:
+		failures.append("Treadmill must not be competitive")
+	var on_left: RigidBody2D = _spawn_player(stage, left.position + Vector2(0, -left.size.y / 2.0 - PLAYER_RADIUS - 4.0))
+	var on_right: RigidBody2D = _spawn_player(stage, right.position + Vector2(0, -right.size.y / 2.0 - PLAYER_RADIUS - 4.0))
+	on_left.set_input_vector(Vector2.UP)
+	on_right.set_input_vector(Vector2.UP)
+	for _tick in CONVEYOR_SETTLE_TICKS:
+		await physics_frame
+	var left_start: float = on_left.global_position.x
+	var right_start: float = on_right.global_position.x
+	for _tick in CONVEYOR_WATCH_TICKS:
+		await physics_frame
+	var left_drift: float = on_left.global_position.x - left_start
+	var right_drift: float = on_right.global_position.x - right_start
+	print("      Treadmill drift left strip %.1f px, right strip %.1f px" % [left_drift, right_drift])
+	if left_drift < CONVEYOR_MIN_DRIFT:
+		failures.append("left strip drifted %.1f px, expected at least %.1f" % [left_drift, CONVEYOR_MIN_DRIFT])
+	if right_drift > -CONVEYOR_MIN_DRIFT:
+		failures.append("right strip drifted %.1f px, expected at most %.1f" % [right_drift, -CONVEYOR_MIN_DRIFT])
+	await _teardown(stage)
 	return failures
 ## Overpass (#910) carries exactly one mud patch on its street; no spawn,
 ## pickup spot, hill spot, bounce pad or drain edge sits on or within 40 px of it.
@@ -35008,7 +35057,9 @@ func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failure
 	rm.match_seed = 7
 	stage.add_child(rm)
 	var rig: Dictionary = {"stage": stage, "rm": rm, "players": players, "roster": roster}
-	if not await _mode_started(rig):
+	# Classic has no mode node, so its round has started once the manager is active.
+	var started: bool = await _mode_started(rig) if mode != GameModesType.CLASSIC else await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 3000)
+	if not started:
 		failures.append("the %s round never started on %s" % [mode, stage_name])
 		await _teardown(stage)
 		return -1.0
@@ -35026,6 +35077,15 @@ func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failure
 ## Carousel: every route between the shoulders and the hub tips or turns. A bot
 ## that would only step on still ground waited on its shoulder for the whole
 ## round; waiting at an edge it now steps onto the see-saws.
+## Treadmill (#934): four bots in a Classic round on the belts-and-mud floor
+## finish it, no stall, before the cap.
+func _scenario_bot_four_bots_finish_a_classic_round_on_treadmill() -> Array[String]:
+	var failures: Array[String] = []
+	var took: float = await _bot_round_409_on("Treadmill", GameModesType.CLASSIC, 200.0, failures)
+	print("      Classic round with four bots on Treadmill took %.1f s" % took)
+	if took < 0.0 and failures.is_empty():
+		failures.append("four bots did not finish a Classic round on Treadmill in 200 s")
+	return failures
 func _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel() -> Array[String]:
 	var failures: Array[String] = []
 	var took: float = await _bot_round_409_on("Carousel", GameModesType.KING_OF_THE_HILL, 200.0, failures)
