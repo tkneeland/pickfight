@@ -1089,6 +1089,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"structure_changed_on_new_entity_and_hud_change_review_net",
 	"controller_page_review_fixes_review_net",
 	"stage_check_and_join_urls_cached_review_perf",
+	"bot_chops_wall_at_every_difficulty_review_bp",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3640,6 +3641,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_review_fixes_review_net()
 		"stage_check_and_join_urls_cached_review_perf":
 			return await _scenario_stage_check_and_join_urls_cached_review_perf()
+		"bot_chops_wall_at_every_difficulty_review_bp":
+			return await _scenario_bot_chops_wall_at_every_difficulty_review_bp()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -51471,5 +51474,52 @@ func _scenario_stage_check_and_join_urls_cached_review_perf() -> Array[String]:
 				break
 	screen.set_popup("")
 	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+## Review (bots): the wall chop's sweep and wind-up and the hook cooldown scale
+## with the difficulty's reaction time like every other bot timer, and a bot on
+## Easy (the slowest chop), cut off from its rival by Reactor's shield wall,
+## still chops the shield down in good time (about 67-88 s over three seeds;
+## Normal takes 62 s).
+func _scenario_bot_chops_wall_at_every_difficulty_review_bp() -> Array[String]:
+	var failures: Array[String] = []
+	var sweeps: Dictionary = {}
+	var cooldowns: Dictionary = {}
+	for level: String in ["easy", "normal", "hard"]:
+		var probe: Node = BotScript.new()
+		probe.difficulty = level
+		sweeps[level] = probe.wall_chop_sec(true) + probe.wall_chop_sec(false)
+		cooldowns[level] = probe.hook_cooldown_sec(true) + probe.hook_cooldown_sec(false)
+		if level == "normal" and (probe.wall_chop_sec(true) != BotScript.WALL_SWEEP_SEC \
+				or probe.wall_chop_sec(false) != BotScript.WALL_WIND_UP_SEC \
+				or probe.hook_cooldown_sec(true) != BotScript.ROD_COOLDOWN_SEC \
+				or probe.hook_cooldown_sec(false) != BotScript.GRAPPLE_COOLDOWN_SEC):
+			failures.append("Normal changed the tuned wall chop or hook cooldown")
+		probe.free()
+	if not (sweeps["hard"] < sweeps["normal"] and sweeps["normal"] < sweeps["easy"]):
+		failures.append("wall chop times not hard < normal < easy: %s" % str(sweeps))
+	if not (cooldowns["hard"] < cooldowns["normal"] and cooldowns["normal"] < cooldowns["easy"]):
+		failures.append("hook cooldowns not hard < normal < easy: %s" % str(cooldowns))
+	for level: String in ["easy"]:
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var reactor: Node2D = load("res://scenes/stages/Reactor.tscn").instantiate()
+		stage.add_child(reactor)
+		var shield: Node = reactor.get_node("ShieldLeft")
+		var me: RigidBody2D = _spawn_player(stage, Vector2(-400, 270))
+		_spawn_player(stage, Vector2(400, 270))
+		var bot: Node = BotScript.new()
+		bot.difficulty = level
+		bot.rng.seed = BOT_SEED
+		bot.player = me
+		bot.output = me.set_input_vector
+		stage.add_child(bot)
+		var began: int = _game_msec()
+		var broke: bool = await _await_condition(func() -> bool: return shield.is_broken(), 120000)
+		var took: float = float(_game_msec() - began) / 1000.0
+		print("      %s bot broke Reactor's shield: %s after %.1f s (hp left %.0f)" % [level, broke, took, shield.hp_left()])
+		if not broke:
+			failures.append("a bot on %s never broke Reactor's shield in 120 s" % level)
+		await _teardown(stage, false)
 	_scenario_completed = true
 	return failures
