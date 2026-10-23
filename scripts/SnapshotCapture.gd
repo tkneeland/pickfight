@@ -248,7 +248,10 @@ static func _announcer_text(rm: Node) -> String:
 #               u8 has_position (0/1), if 1: i16 x, i16 y (world px, truncated),
 #               u8 strength (0..255 = 0.0..1.0)
 #     track:  u8 length, UTF-8 key of the playing music track ("" = silence)
-#     size:   u16, the byte count of events + track
+#     effects (optional, issue #976): u16 length, then `EffectStream.encode()`
+#             bytes -- the host's one-shot effects since the previous frame.
+#             Absent (the track ends the body) when there were none.
+#     size:   u16, the byte count of events + track + effects
 #     magic:  2 bytes, 0x53 0x58 ("SX")
 #
 # Events are the sounds played since the previous frame. A client reads the
@@ -259,8 +262,11 @@ static func _announcer_text(rm: Node) -> String:
 const MAX_SOUND_EVENTS: int = 32
 const TRAILER_MAGIC: PackedByteArray = [0x53, 0x58]
 
-## `events` as [{"name": String, "position": Vector2 or null, "strength": float}].
-static func encode_sound_trailer(events: Array, track: String) -> PackedByteArray:
+const EffectStreamScript: GDScript = preload("res://scripts/EffectStream.gd")
+
+## `events` as [{"name": String, "position": Vector2 or null, "strength": float}];
+## `effects` as `EffectStream` events (#976), none by default.
+static func encode_sound_trailer(events: Array, track: String, effects: Array = []) -> PackedByteArray:
 	var body := PackedByteArray()
 	var count: int = mini(events.size(), MAX_SOUND_EVENTS)
 	body.append(count)
@@ -280,6 +286,11 @@ static func encode_sound_trailer(events: Array, track: String) -> PackedByteArra
 	var track_bytes: PackedByteArray = track.to_utf8_buffer().slice(0, 255)
 	body.append(track_bytes.size())
 	body.append_array(track_bytes)
+	var fx: PackedByteArray = EffectStreamScript.encode(effects)
+	if not fx.is_empty():
+		body.append(fx.size() >> 8)
+		body.append(fx.size() & 0xFF)
+		body.append_array(fx)
 	var out := body.duplicate()
 	out.append(body.size() >> 8)
 	out.append(body.size() & 0xFF)
@@ -288,10 +299,11 @@ static func encode_sound_trailer(events: Array, track: String) -> PackedByteArra
 
 ## Splits a streamed payload into {"snapshot": PackedByteArray for
 ## `Snapshot.decode()`, "events": Array (as `encode_sound_trailer()` takes),
-## "track": String}. No trailer: the whole packet is the snapshot, no events.
+## "track": String, "effects": Array of `EffectStream` events}. No trailer:
+## the whole packet is the snapshot, no events.
 static func split_sound_trailer(packet: PackedByteArray) -> Dictionary:
 	var n: int = packet.size()
-	var none: Dictionary = {"snapshot": packet, "events": [], "track": ""}
+	var none: Dictionary = {"snapshot": packet, "events": [], "track": "", "effects": []}
 	if n < 5 or packet[n - 2] != TRAILER_MAGIC[0] or packet[n - 1] != TRAILER_MAGIC[1]:
 		return none
 	var size: int = (packet[n - 4] << 8) | packet[n - 3]
@@ -330,10 +342,19 @@ static func split_sound_trailer(packet: PackedByteArray) -> Dictionary:
 	if at >= end:
 		return none
 	var track_len: int = packet[at]
-	if at + 1 + track_len != end:
+	if at + 1 + track_len > end:
 		return none
 	var track: String = packet.slice(at + 1, at + 1 + track_len).get_string_from_utf8()
-	return {"snapshot": packet.slice(0, start), "events": events, "track": track}
+	at += 1 + track_len
+	var effects: Array = []
+	if at != end:
+		if at + 2 > end:
+			return none
+		var fx_len: int = (packet[at] << 8) | packet[at + 1]
+		if at + 2 + fx_len != end:
+			return none
+		effects = EffectStreamScript.decode(packet.slice(at + 2, end))
+	return {"snapshot": packet.slice(0, start), "events": events, "track": track, "effects": effects}
 
 static func _i16(bytes: PackedByteArray, at: int) -> int:
 	var v: int = (bytes[at] << 8) | bytes[at + 1]

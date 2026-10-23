@@ -277,6 +277,8 @@ const SOUNDS: Dictionary = {
 	"announce_gale": {"files": ["kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},
 	# No recorded voice clip for Pickup Rush yet (#841): a UI chime stands in.
 	"announce_pickup_rush": {"files": ["kenney_interface/confirmation_002.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false},
+	# No recorded voice clip for Heavy gravity yet: a low thud stands in (#840).
+	"announce_heavy_gravity": {"files": ["kenney_scifi/lowFrequency_explosion_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},
 	# --- Player voice grunts (#290): one voice per slot, placeholder synthesis ---
 	# Kept well under the weapon sounds (their `db` is about 0, these -15/-13),
 	# and placed on the fighter. `voice` keeps each slot's pitch fixed, so a slot

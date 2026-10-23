@@ -858,6 +858,8 @@ func _nearest_pickup() -> Node2D:
 			continue
 		if float(_ignored_pickups.get(pickup.get_instance_id(), -1.0)) > _clock:
 			continue
+		if _same_weapon_as_held(pickup):
+			continue # a weapon it already holds gains nothing (#1007)
 		var at: Vector2 = (pickup as Node2D).global_position
 		var d: float = player.global_position.distance_to(at)
 		if d < best_distance and _footing(at) == FOOT_SOLID and _footing(at + Vector2(EDGE_KEEP, 0.0)) == FOOT_SOLID \
@@ -865,6 +867,15 @@ func _nearest_pickup() -> Node2D:
 			best_distance = d
 			best = pickup
 	return best
+
+## Issue #1007: true when the pickup carries the weapon the bot already holds.
+func _same_weapon_as_held(pickup: Node) -> bool:
+	var held: Variant = player.get("weapon_stats")
+	var offered: Variant = pickup.get("weapon_stats")
+	if not (held is Resource) or not (offered is Resource):
+		return false
+	var path: String = (held as Resource).resource_path
+	return path != "" and path == (offered as Resource).resource_path
 
 func _alive(node: Variant) -> bool:
 	if node == null or not is_instance_valid(node):
@@ -1132,22 +1143,56 @@ func _hold_in_air() -> Vector2:
 const CANOPY_FALL_FROM: float = 60.0
 var _canopy_up: bool = false
 func _umbrella_drive() -> Vector2:
-	var stats: Variant = player.get("weapon_stats")
-	if not (stats is Resource) or (stats as Resource).get("special") != &"umbrella":
+	if not _holds_umbrella():
 		return Vector2.INF
 	# Latched: once the canopy is up it stays up until the fall ends, so the
 	# bot's own swing does not close it as the speed drops under the cap.
 	var vy: float = player.linear_velocity.y
 	if vy <= (0.0 if _canopy_up else CANOPY_FALL_FROM):
 		_canopy_up = false
-		return Vector2.INF
+		return _canopy_block_drive()
 	var me: Vector2 = player.global_position
 	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
 		_canopy_up = false
-		return Vector2.INF
+		return _canopy_block_drive()
 	_canopy_up = true
 	var lean: float = clampf((goal.x - me.x) / 400.0, -0.6, 0.6)
 	return Vector2(lean, -1.0).normalized()
+
+## Issue #1014: a Normal or Hard bot holding the umbrella, not falling, with a
+## hostile bullet, hook or boomerang heading at it within CANOPY_SHOT_RANGE px,
+## aims the head so the open canopy faces that shot: straight at it when it
+## comes from overhead, else tilted CANOPY_TILT_DEG off vertical towards it
+## (the canopy only counts as open within about 45 degrees of straight up).
+## It faces the threat and does not dodge it (the bullet sidestep, #997, stands
+## down for the umbrella). Vector2.INF when it has no say: another weapon,
+## Easy, no threat, or a threat from below the canopy's reach. Host-side input
+## only, so online joiners see it through normal player and projectile state.
+const CANOPY_SHOT_RANGE: float = 500.0
+const CANOPY_TILT_DEG: float = 40.0
+const CANOPY_AIM_COS: float = 0.35
+func _canopy_block_drive() -> Vector2:
+	if difficulty_level() == "easy" or not player.is_inside_tree():
+		return Vector2.INF
+	var shots: Array[Dictionary] = _incoming_shots([&"projectiles", &"grapple_hooks", &"boomerangs"], CANOPY_SHOT_RANGE)
+	if shots.is_empty():
+		return Vector2.INF
+	var nearest: Dictionary = shots[0]
+	for shot: Dictionary in shots:
+		if float(shot["ahead"]) < float(nearest["ahead"]):
+			nearest = shot
+	var to_shot: Vector2 = ((nearest["node"] as Node2D).global_position - player.global_position).normalized()
+	var aim: Vector2 = to_shot
+	if aim.y > -cos(deg_to_rad(CANOPY_TILT_DEG)):
+		var side: float = signf(to_shot.x) if absf(to_shot.x) > 0.01 else 1.0
+		aim = Vector2(side * sin(deg_to_rad(CANOPY_TILT_DEG)), -cos(deg_to_rad(CANOPY_TILT_DEG)))
+	if aim.dot(to_shot) < CANOPY_AIM_COS:
+		return Vector2.INF
+	return aim
+
+func _holds_umbrella() -> bool:
+	var stats: Variant = player.get("weapon_stats")
+	return stats is Resource and (stats as Resource).get("special") == &"umbrella"
 
 ## Issue #963: a bot standing on an ice patch or a conveyor with a drop within
 ## STRIP_DROP_ROOM px in the way it slips or is carried treats the strip as a
@@ -1293,7 +1338,7 @@ const BULLET_DODGE_HOLD_SEC: float = 0.35
 var _bullet_dodge_left: float = 0.0
 func _bullet_drive(delta: float) -> Vector2:
 	var level: String = difficulty_level()
-	if level == "easy" or not player.is_inside_tree() or _holds_shield():
+	if level == "easy" or not player.is_inside_tree() or _holds_shield() or _holds_umbrella():
 		return Vector2.INF
 	_bullet_dodge_left = maxf(_bullet_dodge_left - delta, 0.0)
 	var range_px: float = BULLET_DODGE_RANGE_HARD if level == "hard" else BULLET_DODGE_RANGE_NORMAL
