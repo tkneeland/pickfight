@@ -37,6 +37,12 @@ const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
 var _cooldowns: Dictionary = {}
 var _hits: int = 0
 
+## Group every hazard joins, so `Respawn.gd` can keep a respawn clear of them (#982).
+const GROUP: String = "damage_hazard"
+
+func _enter_tree() -> void:
+	add_to_group(GROUP)
+
 func _init() -> void:
 	collision_layer = 0
 	collision_mask = 1

@@ -23,6 +23,8 @@ var avoid_rects: Callable
 var far_from: Callable
 ## How far below a spawn point a floor still counts as under it.
 const GROUND_PROBE: float = 400.0
+## A spawn this close to a spike strip or saw is passed over (#982).
+const HAZARD_CLEARANCE: float = 120.0
 var round_manager: Node
 ## slot -> player node; the mode's own dictionary, shared.
 var watched: Dictionary = {}
@@ -125,6 +127,12 @@ func farthest_spawn(slot: int) -> Vector2:
 			grounded.append(point)
 	if not grounded.is_empty():
 		pool = grounded
+	var clear: Array[Vector2] = []
+	for point: Vector2 in pool:
+		if not _near_hazard(point):
+			clear.append(point)
+	if not clear.is_empty():
+		pool = clear
 	var best: Vector2 = pool[0]
 	var best_gap: float = -1.0
 	for point: Vector2 in pool:
@@ -144,6 +152,25 @@ func farthest_spawn(slot: int) -> Vector2:
 			best_gap = gap
 			best = point
 	return best
+
+## Whether `point` is within HAZARD_CLEARANCE of a spike strip (its footprint)
+## or a saw (its blade centre, wherever it is now). Host-side only (#982).
+func _near_hazard(point: Vector2) -> bool:
+	if round_manager == null or not is_instance_valid(round_manager) or not round_manager.is_inside_tree():
+		return false
+	for hazard: Node in round_manager.get_tree().get_nodes_in_group("damage_hazard"):
+		var node: Node2D = hazard as Node2D
+		if node == null or not node.is_inside_tree():
+			continue
+		var gap: float
+		if "size" in node:
+			var box := Rect2(node.global_position - (node.size as Vector2) / 2.0, node.size as Vector2)
+			gap = 0.0 if box.grow(HAZARD_CLEARANCE).has_point(point) else INF
+		else:
+			gap = point.distance_to(node.global_position)
+		if gap <= HAZARD_CLEARANCE:
+			return true
+	return false
 
 ## Whether solid ground lies within GROUND_PROBE below `point`. True when the
 ## space cannot be asked.
