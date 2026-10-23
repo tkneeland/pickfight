@@ -32,7 +32,7 @@ signal hazard_hit(point: Vector2)
 
 ## Fallback hazard colour; `Stage.gd` recolours with the mood's kill colour.
 const DEFAULT_COLOR: Color = Color(0.85, 0.15, 0.05, 1)
-const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
+const PartKitScript := preload("res://scripts/PartKit.gd")
 
 var _cooldowns: Dictionary = {}
 var _hits: int = 0
@@ -73,7 +73,9 @@ func _hurt(body: RigidBody2D) -> void:
 	var dir: Vector2 = knockback_direction(body)
 	var change: Vector2 = dir * knockback_speed - body.linear_velocity
 	body.linear_velocity += change
-	for part: RigidBody2D in _weapon_bodies_of(body):
+	# The shove carries the whole player, so the joint drive has no reach error
+	# to haul back (see `BouncePad.gd`).
+	for part: RigidBody2D in PartKitScript.weapon_bodies_of(get_tree(), body):
 		part.linear_velocity += change
 	if body.has_method("mark_hazard"):
 		body.mark_hazard("damage")  # achievements (#689)
@@ -81,16 +83,3 @@ func _hurt(body: RigidBody2D) -> void:
 	hazard_hit.emit(body.global_position)
 	if body.has_signal("strike_landed"):
 		body.strike_landed.emit(body, damage, body.global_position, not body.alive)
-
-## The body's weapon rigid bodies, so the shove carries the whole player and
-## the joint drive has no reach error to haul back (see `BouncePad.gd`).
-func _weapon_bodies_of(body: RigidBody2D) -> Array[RigidBody2D]:
-	var parts: Array[RigidBody2D] = []
-	var rid: RID = body.get_rid()
-	for head: Node in get_tree().get_nodes_in_group(WeaponHeadType.HEAD_GROUP):
-		if head.is_queued_for_deletion() or not (head is RigidBody2D) or not rid in head.sweep_exclude:
-			continue
-		for child: Node in head.get_parent().get_children():
-			if child is RigidBody2D and child != body and not parts.has(child):
-				parts.append(child as RigidBody2D)
-	return parts

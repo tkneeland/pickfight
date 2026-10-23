@@ -28,6 +28,7 @@ extends StaticBody2D
 
 ## Preloaded by path, never by `class_name` (CLAUDE.md), for the shared friction.
 const RoundModifiersType := preload("res://scripts/RoundModifiers.gd")
+const PartKitScript := preload("res://scripts/PartKit.gd")
 
 ## The strip's collision and visual box, centred on the node.
 @export var size: Vector2 = Vector2(160, 8)
@@ -52,20 +53,12 @@ func _ready() -> void:
 	_ice_material.friction = ICE_FRICTION
 
 	var half: Vector2 = size / 2.0
-	var rect := RectangleShape2D.new()
-	rect.size = size
-	var collision_shape := CollisionShape2D.new()
-	collision_shape.name = "CollisionShape2D"
-	collision_shape.shape = rect
-	add_child(collision_shape)
+	PartKitScript.add_rect_shape(self, size)
 
 	var ice := Polygon2D.new()
 	ice.name = "Ice"
 	ice.color = ICE_COLOR
-	ice.polygon = PackedVector2Array([
-		Vector2(-half.x, -half.y), Vector2(half.x, -half.y),
-		Vector2(half.x, half.y), Vector2(-half.x, half.y),
-	])
+	ice.polygon = PartKitScript.rect_polygon(size)
 	add_child(ice)
 
 	var streaks := Node2D.new()
@@ -80,23 +73,13 @@ func _ready() -> void:
 		streak.points = PackedVector2Array([Vector2(x - 6.0, half.y * 0.5), Vector2(x + 6.0, -half.y * 0.5)])
 		streaks.add_child(streak)
 
-	_detector = Area2D.new()
-	_detector.name = "Detector"
-	_detector.collision_layer = 0
-	_detector.collision_mask = 1  # world layer only: player bodies, not heads
-	_detector.position = Vector2(0, -half.y - _DETECTOR_ABOVE / 2.0 + _DETECTOR_BELOW / 2.0)
-	var detector_rect := RectangleShape2D.new()
-	detector_rect.size = Vector2(size.x, _DETECTOR_ABOVE + _DETECTOR_BELOW)
-	var detector_shape := CollisionShape2D.new()
-	detector_shape.name = "DetectorShape"
-	detector_shape.shape = detector_rect
-	_detector.add_child(detector_shape)
-	add_child(_detector)
+	# World layer only: player bodies, not heads.
+	_detector = PartKitScript.add_top_detector(self, size, _DETECTOR_ABOVE, _DETECTOR_BELOW)
 
 func _physics_process(_delta: float) -> void:
 	var on_ice: Array[RigidBody2D] = []
 	for body: Node2D in _detector.get_overlapping_bodies():
-		if body is RigidBody2D and body.is_in_group("players") and _touching(body):
+		if body is RigidBody2D and body.is_in_group("players") and PartKitScript.touching(self, body):
 			on_ice.append(body as RigidBody2D)
 			_grip_off(body as RigidBody2D)
 	for body: Variant in _saved.keys():
@@ -106,9 +89,6 @@ func _physics_process(_delta: float) -> void:
 func _exit_tree() -> void:
 	for body: Variant in _saved.keys():
 		_restore(body)
-
-func _touching(body: RigidBody2D) -> bool:
-	return body.contact_monitor and body.get_colliding_bodies().has(self)
 
 ## True while `body` has the ice's material on it.
 func is_icing(body: RigidBody2D) -> bool:

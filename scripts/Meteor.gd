@@ -19,6 +19,8 @@ extends Node2D
 ##
 ## Preloaded by path, never named by `class_name` (CLAUDE.md).
 
+const PartKitScript := preload("res://scripts/PartKit.gd")
+
 ## Mirrors `Player.LAYER_WORLD`, as `FallingRock` does.
 const _WORLD_LAYER: int = 1
 const _PLAYERS_GROUP: StringName = &"players"
@@ -135,7 +137,5 @@ func _strike(victim: Node) -> void:
 
 func _impact() -> void:
 	_done = true
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
-	if sfx != null:
-		sfx.play(&"rock_impact", global_position, 0.6)
+	PartKitScript.sfx(self, &"rock_impact", global_position, 0.6)
 	queue_free()
