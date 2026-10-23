@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/SpeedStrip.tscn" id="speed"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_2080x40"]
 size = Vector2(2080, 40)
@@ -106,3 +107,12 @@ position = Vector2(560, 258)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
 position = Vector2(0, 198)
+
+; Speed strips (issue #961): a mirrored pair of fast lanes on the floor under the two platforms, between the inner and outer spawn drops, so the stage stays symmetric.
+[node name="FloorSpeedStripLeft" parent="." instance=ExtResource("speed")]
+position = Vector2(-565, 454)
+size = Vector2(300, 8)
+
+[node name="FloorSpeedStripRight" parent="." instance=ExtResource("speed")]
+position = Vector2(565, 454)
+size = Vector2(300, 8)
