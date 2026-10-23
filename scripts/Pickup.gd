@@ -115,10 +115,13 @@ func _physics_process(delta: float) -> void:
 	_fall_speed += DROP_GRAVITY * delta
 	var from: Vector2 = global_position
 	var to: Vector2 = from + Vector2(0.0, _fall_speed * delta)
-	var query := PhysicsRayQueryParameters2D.create(from, to + Vector2(0.0, DROP_REST_CLEARANCE), LAYER_WORLD)
-	for body: Node in get_tree().get_nodes_in_group("players"): # bodies share the world layer; land on terrain only
+	# Bodies share the world layer; land on terrain only. Built up front:
+	# `query.exclude` hands back a copy, so appending to it would be lost.
+	var bodies: Array[RID] = []
+	for body: Node in get_tree().get_nodes_in_group("players"):
 		if body is CollisionObject2D:
-			query.exclude.append((body as CollisionObject2D).get_rid())
+			bodies.append((body as CollisionObject2D).get_rid())
+	var query := PhysicsRayQueryParameters2D.create(from, to + Vector2(0.0, DROP_REST_CLEARANCE), LAYER_WORLD, bodies)
 	var hit: Dictionary = get_world_2d().direct_space_state.intersect_ray(query)
 	if not hit.is_empty():
 		global_position = (hit["position"] as Vector2) - Vector2(0.0, DROP_REST_CLEARANCE)
@@ -154,67 +157,29 @@ func trigger_radius() -> float:
 ## a blade, and a crescent on a mid-length one are each recognisable from
 ## across the room (user story 10).
 func _build() -> void:
-	var outline: PackedVector2Array = PackedVector2Array()
-	if weapon_stats != null and "art_outline" in weapon_stats:
-		outline = weapon_stats.art_outline
-	# A weapon whose head alone does not show what it is -- the grapple's
-	# launcher without its hook, the flail's knob without its ball (issue
-	# #150) -- carries a fuller drawing for its pickup.
-	if weapon_stats != null and "pickup_art" in weapon_stats and weapon_stats.pickup_art.size() >= 3:
-		outline = weapon_stats.pickup_art
-	_art_is_fallback = outline.size() < 3
-	if _art_is_fallback:
-		outline = FALLBACK_ART
-	_art.polygon = outline
+	var layout: Dictionary = art_layout(weapon_stats)
+	_art_is_fallback = layout["fallback"]
+	_art.polygon = layout["outline"]
 	_art.color = ART_COLOR
-	_art.scale = Vector2.ONE * ART_SCALE
-
-	var reach: float = weapon_stats.max_reach if weapon_stats != null and "max_reach" in weapon_stats else 0.0
-	var haft_len: float = clampf(reach * HAFT_DRAW_SCALE, HAFT_MIN_LENGTH, HAFT_MAX_LENGTH)
-	# The outline is head-local: +x points out along the haft from where the
-	# haft holds the head. How far forward it reaches sets where the weapon's
-	# midpoint falls.
-	var head_len: float = 0.0
-	for point: Vector2 in outline:
-		head_len = maxf(head_len, point.x * ART_SCALE)
-	var total: float = haft_len + head_len
-	var butt: Vector2 = -DRAW_AXIS * total * 0.5
-	var anchor: Vector2 = butt + DRAW_AXIS * haft_len
-	_art.position = anchor
+	_art.scale = Vector2.ONE * float(layout["art_scale"])
+	_art.position = layout["anchor"]
 	_art.rotation = DRAW_AXIS.angle()
-
-	# The drawn weapon's furthest point from the centre, butt or head.
-	var art_radius: float = butt.length() + HAFT_WIDTH * 0.5
-	for point: Vector2 in outline:
-		art_radius = maxf(art_radius, (anchor + (point * ART_SCALE).rotated(_art.rotation)).length())
-
-	if art_radius > MAX_ART_RADIUS:
-		var fit: float = MAX_ART_RADIUS / art_radius
-		butt *= fit
-		anchor *= fit
-		_art.position = anchor
-		_art.scale = Vector2.ONE * ART_SCALE * fit
-		art_radius = MAX_ART_RADIUS
 
 	var haft := Line2D.new()
 	haft.name = "Haft"
-	haft.points = PackedVector2Array([butt, anchor])
+	haft.points = PackedVector2Array([layout["butt"], layout["anchor"]])
 	haft.width = HAFT_WIDTH
 	haft.default_color = HAFT_COLOR
 	haft.begin_cap_mode = Line2D.LINE_CAP_ROUND
 	add_child(haft)
 	move_child(haft, _art.get_index())
 
-	_trigger_radius = maxf(MIN_TRIGGER_RADIUS, art_radius)
+	_trigger_radius = layout["trigger_radius"]
 	var circle := CircleShape2D.new()
 	circle.radius = _trigger_radius
 	_shape.shape = circle
 
-	var disc := PackedVector2Array()
-	var disc_radius: float = maxf(_trigger_radius, art_radius + BACKING_MARGIN)
-	for i in BACKING_SEGMENTS:
-		var a: float = TAU * float(i) / float(BACKING_SEGMENTS)
-		disc.append(Vector2(cos(a), sin(a)) * disc_radius)
+	var disc: PackedVector2Array = layout["disc"]
 	_backing.polygon = disc
 	_backing.color = BACKING_COLOR
 
@@ -233,6 +198,58 @@ func _build() -> void:
 	_halo.color = HALO_COLOR
 	add_child(_halo)
 	move_child(_halo, 0)
+
+## The geometry of a pickup for `stats`, shared with the Online client's puppet
+## (issue #930) so both draw the same thing: "outline" (head-local art),
+## "fallback", "art_scale", "butt" and "anchor" (haft ends), "trigger_radius",
+## and "disc" (the backing circle). Pure: touches no node.
+static func art_layout(stats: Resource) -> Dictionary:
+	var outline: PackedVector2Array = PackedVector2Array()
+	if stats != null and "art_outline" in stats:
+		outline = stats.art_outline
+	# A weapon whose head alone does not show what it is -- the grapple's
+	# launcher without its hook, the flail's knob without its ball (issue
+	# #150) -- carries a fuller drawing for its pickup.
+	if stats != null and "pickup_art" in stats and stats.pickup_art.size() >= 3:
+		outline = stats.pickup_art
+	var is_fallback: bool = outline.size() < 3
+	if is_fallback:
+		outline = FALLBACK_ART
+	var art_scale: float = ART_SCALE
+
+	var reach: float = stats.max_reach if stats != null and "max_reach" in stats else 0.0
+	var haft_len: float = clampf(reach * HAFT_DRAW_SCALE, HAFT_MIN_LENGTH, HAFT_MAX_LENGTH)
+	# The outline is head-local: +x points out along the haft from where the
+	# haft holds the head. How far forward it reaches sets where the weapon's
+	# midpoint falls.
+	var head_len: float = 0.0
+	for point: Vector2 in outline:
+		head_len = maxf(head_len, point.x * ART_SCALE)
+	var total: float = haft_len + head_len
+	var butt: Vector2 = -DRAW_AXIS * total * 0.5
+	var anchor: Vector2 = butt + DRAW_AXIS * haft_len
+	var rot: float = DRAW_AXIS.angle()
+
+	# The drawn weapon's furthest point from the centre, butt or head.
+	var art_radius: float = butt.length() + HAFT_WIDTH * 0.5
+	for point: Vector2 in outline:
+		art_radius = maxf(art_radius, (anchor + (point * ART_SCALE).rotated(rot)).length())
+
+	if art_radius > MAX_ART_RADIUS:
+		var fit: float = MAX_ART_RADIUS / art_radius
+		butt *= fit
+		anchor *= fit
+		art_scale = ART_SCALE * fit
+		art_radius = MAX_ART_RADIUS
+
+	var trigger: float = maxf(MIN_TRIGGER_RADIUS, art_radius)
+	var disc := PackedVector2Array()
+	var disc_radius: float = maxf(trigger, art_radius + BACKING_MARGIN)
+	for i in BACKING_SEGMENTS:
+		var a: float = TAU * float(i) / float(BACKING_SEGMENTS)
+		disc.append(Vector2(cos(a), sin(a)) * disc_radius)
+	return {"outline": outline, "fallback": is_fallback, "art_scale": art_scale,
+		"butt": butt, "anchor": anchor, "trigger_radius": trigger, "disc": disc}
 
 var _halo: Polygon2D
 var _halo_t: float = 0.0

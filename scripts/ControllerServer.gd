@@ -559,9 +559,19 @@ func set_join_corner_visible(on: bool) -> void:
 ## What the shared screen shows in place of the room code, URL and QR in
 ## streamer mode (#369).
 
+## The Sfx autoload, or null without one. Asked every frame (the reduce-flash
+## and room-code syncs, the sound listener), so it is looked up once and kept
+## while it stays in the tree.
+var _sfx_node: Node = null
+
+func _sfx_autoload() -> Node:
+	if _sfx_node == null or not is_instance_valid(_sfx_node) or not _sfx_node.is_inside_tree():
+		_sfx_node = get_node_or_null(^"/root/Sfx")
+	return _sfx_node
+
 ## Streamer mode (#369): the host's saved "Hide room code" setting.
 func room_code_hidden() -> bool:
-	var sfx: Node = get_node_or_null("/root/Sfx")
+	var sfx: Node = _sfx_autoload()
 	return sfx != null and bool(sfx.get("hide_room_code"))
 
 ## The in-round join label and QR, or null (issue #230).
@@ -728,13 +738,18 @@ func _is_tap(down_msec: int) -> bool:
 	return float(GameClockScript459.now_msec() - down_msec) <= TAP_MAX_SEC * 1000.0
 
 func _action_down(slot: int, mouse: bool = false) -> void:
-	var timers: PackedInt64Array = _slot_click_down if mouse else _slot_action_down
-	if slot >= 0 and slot < timers.size():
-		timers[slot] = GameClockScript459.now_msec()
-		if mouse:
-			_slot_click_down = timers
-		else:
-			_slot_action_down = timers
+	_set_action_timer(slot, mouse, GameClockScript459.now_msec())
+
+## Stamps `slot`'s button (`mouse`: the click, else the action key) with
+## `msec`, -1 for up. Out-of-range slots are ignored.
+func _set_action_timer(slot: int, mouse: bool, msec: int) -> void:
+	if slot < 0:
+		return
+	if mouse:
+		if slot < _slot_click_down.size():
+			_slot_click_down[slot] = msec
+	elif slot < _slot_action_down.size():
+		_slot_action_down[slot] = msec
 
 ## The button came up: a tap does the weapon's job, a hold already did its work.
 func _action_up(slot: int, mouse: bool = false) -> void:
@@ -742,11 +757,7 @@ func _action_up(slot: int, mouse: bool = false) -> void:
 	if slot < 0 or slot >= timers.size() or timers[slot] == -1:
 		return
 	var tap: bool = _is_tap(timers[slot])
-	timers[slot] = -1
-	if mouse:
-		_slot_click_down = timers
-	else:
-		_slot_action_down = timers
+	_set_action_timer(slot, mouse, -1)
 	if tap:
 		_action_press(slot)
 
@@ -811,10 +822,12 @@ func _apply_smoothed_input(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	_push_pad_sticks()
 	_step_pad_pickers(delta)
-	for slot in _slot_peers.size():
-		if _slot_peers[slot] == null and not _weapon_away_from_rest(slot):
-			continue
-		_log_weapon(slot)
+	# Diagnostics only: `_log_weapon` does nothing with logging off.
+	if _log_input:
+		for slot in _slot_peers.size():
+			if _slot_peers[slot] == null and not _weapon_away_from_rest(slot):
+				continue
+			_log_weapon(slot)
 
 ## True while an unbound slot still owes the log an easing line. The last
 ## reported length counts too, so the frame the weapon actually reaches rest is
@@ -907,17 +920,21 @@ func _process_http() -> void:
 			continue
 
 		var available: int = conn.tcp.get_available_bytes()
+		var grew: bool = false
 		if available > 0:
 			var chunk: Array = conn.tcp.get_data(available)
 			if chunk[0] == OK:
 				conn.buf.append_array(chunk[1])
+				grew = true
 
 		if conn.buf.size() > MAX_HEADER_BYTES:
 			conn.tcp.disconnect_from_host()
 			_http_clients.erase(conn)
 			continue
 
-		var text: String = conn.buf.get_string_from_ascii()
+		# No new bytes: the buffer is the one found incomplete last tick (a
+		# complete one was answered and dropped), so it is not decoded again.
+		var text: String = conn.buf.get_string_from_ascii() if grew else ""
 		if not text.contains("\r\n\r\n"):
 			# A socket that connects and never finishes a request would
 			# otherwise be polled for the rest of the session.
@@ -1045,6 +1062,8 @@ func _process_websocket() -> void:
 		var state: int = peer.get_ready_state()
 		if state == WebSocketPeer.STATE_OPEN:
 			_drain(slot, peer)
+			if _slot_peers[slot] != peer:
+				continue # a text frame in the drain unbound the slot
 			var silent_for: int = now - _slot_last_packet_msec[slot]
 			if silent_for > (int(remote_timeout_sec * 1000.0) if peer is RemoteSeat else timeout_msec):
 				# The decisive case: the phone screen-locked or left Wi-Fi
@@ -1081,6 +1100,9 @@ static func _parse_json(text: String) -> Variant:
 		return null
 	return json.data
 
+## The prefix of an id the host makes up for a client that sent none.
+const GENERATED_ID_PREFIX: String = "host-assigned-"
+
 ## Bind a newly-identified controller (ADR-0007). An id that matches a claimed
 ## slot takes that exact slot back -- this is the whole reconnect path. If the
 ## slot's old socket is still open (the phone dropped and came back before the
@@ -1091,9 +1113,11 @@ static func _parse_json(text: String) -> Variant:
 ## up if the client sent none (issue #164), so it can still be told apart and
 ## banned. Refuses the connection once every slot is claimed.
 func _bind_with_id(peer: Variant, id: String) -> void:
+	if not peer is LocalSeat and (id == HOST_PC_ID or id.begins_with(PAD_ID_PREFIX)):
+		id = "" # a network client may not claim a reserved id: the host PC's or a pad's (a made-up host-assigned id stays valid, a kick sticks to it)
 	if id.is_empty():
 		_last_generated_id += 1
-		id = "host-assigned-%d-%d" % [_last_generated_id, randi()]
+		id = GENERATED_ID_PREFIX + "%d-%d" % [_last_generated_id, randi()]
 	if _refused_by_match_kind(peer):
 		return # #435: a phone in an Online match, a remote seat in a Couch one
 	if _kicked_ids.has(id):
@@ -1170,7 +1194,7 @@ func _recent_leaver(id: String) -> Dictionary:
 func _yielding_bot_slot() -> int:
 	if bot_director == null:
 		return -1
-	var phase: String = str(_lobby_state.get("phase", "lobby"))
+	var phase: String = _phase()
 	if not SOLO_PHASES.has(phase) and not (_match_kind == KIND_ONLINE and BETWEEN_ROUNDS_PHASES.has(phase)):
 		return -1
 	var bots: Array[int] = virtual_slots()
@@ -1301,6 +1325,8 @@ func _unbind(slot: int) -> void:
 	_slot_was_alive[slot] = 0
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
+	_weak_link.erase(slot) # a socket that takes the slot over starts its own (#777)
+	_weak_link_in.erase(slot)
 	if _players[slot] != null:
 		_players[slot].set_input_vector(Vector2.ZERO)
 		_players[slot].unbind_controller()
@@ -1331,7 +1357,10 @@ func send_buzz(slot: int, kind: String) -> void:
 	if peer is PadSeat and peer.open:
 		_rumble_pad(peer.device, kind)
 		return
-	if peer == null or not peer is WebSocketPeer or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	# A LAN phone or a phone over the Couch relay fallback (#683); never the
+	# host PC's own seat, a closed pad or a PC remote client.
+	if peer == null or peer is LocalSeat or _is_pc_remote(peer) \
+			or not (peer is WebSocketPeer or peer is RemoteSeat) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 	peer.send_text(JSON.stringify({"t": "buzz", "kind": kind}))
 	if _log_input:
@@ -1340,6 +1369,19 @@ func send_buzz(slot: int, kind: String) -> void:
 ## Minimum gap between two `dmg` frames to one seat, and the steps (percent)
 ## the bar is sent in. Cheap by construction (issue #331): only on change.
 const DAMAGE_SEND_GAP_MSEC: int = 100
+## The connection on `slot` if a text frame can go to it now -- `slot` in
+## range, a connection there that can send text, and that connection open --
+## else null. Each caller adds its own exclusions (gamepad seats, the host's
+## own seat, bots) before asking.
+func _open_peer(slot: int) -> Variant:
+	if slot < 0 or slot >= _slot_peers.size():
+		return null
+	var peer: Variant = _slot_peers[slot]
+	if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return null
+	return peer
+
+## (The send throttle above is for `dmg` frames.)
 var _damage_sent: Array[int] = []  # last percent sent per slot, -1 = nothing yet
 var _damage_sent_msec: Array[int] = []
 
@@ -1357,8 +1399,8 @@ func send_damage(slot: int, fraction: float) -> void:
 	var now: int = Time.get_ticks_msec()
 	if _damage_sent[slot] != -1 and now - _damage_sent_msec[slot] < DAMAGE_SEND_GAP_MSEC:
 		return
-	var peer: Variant = _slot_peers[slot]
-	if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	var peer: Variant = _open_peer(slot)
+	if peer == null:
 		return
 	_damage_sent[slot] = percent
 	_damage_sent_msec[slot] = now
@@ -1376,8 +1418,8 @@ func send_hill(slot: int, seconds: int, target: int) -> void:
 	var key: int = seconds * 1000 + target
 	if _hill_sent[slot] == key:
 		return
-	var peer: Variant = _slot_peers[slot]
-	if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	var peer: Variant = _open_peer(slot)
+	if peer == null:
 		return
 	_hill_sent[slot] = key
 	peer.send_text(JSON.stringify({"t": "hill", "v": seconds, "win": target}))
@@ -1391,8 +1433,8 @@ func send_lives(slot: int, count: int, can_steal: bool) -> void:
 	var key: String = "%d:%s" % [count, can_steal]
 	if _lives_sent[slot] == key:
 		return
-	var peer: Variant = _slot_peers[slot]
-	if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	var peer: Variant = _open_peer(slot)
+	if peer == null:
 		return
 	_lives_sent[slot] = key
 	peer.send_text(JSON.stringify({"t": "lives", "v": count, "steal": can_steal}))
@@ -1409,8 +1451,8 @@ func send_modifier(title: String) -> void:
 	for slot: int in _slot_peers.size():
 		if slot >= _modifier_sent.size() or _modifier_sent[slot] == title or not slot_has_controller(slot):
 			continue
-		var peer: Variant = _slot_peers[slot]
-		if peer == null or not (peer is WebSocketPeer or peer.has_method("send_text")) or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		var peer: Variant = _open_peer(slot)
+		if peer == null:
 			continue
 		_modifier_sent[slot] = title
 		peer.send_text(JSON.stringify({"t": "mod", "v": title}))
@@ -1421,10 +1463,10 @@ func send_modifier(title: String) -> void:
 func _send_name_echo(slot: int) -> void:
 	if slot < 0 or slot >= _slot_peers.size() or _slot_virtual[slot] == 1:
 		return
-	var peer: Variant = _slot_peers[slot]
-	if peer == null or peer is PadSeat or not (peer is WebSocketPeer or peer.has_method("send_text")):
+	if _slot_peers[slot] is PadSeat:
 		return
-	if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	var peer: Variant = _open_peer(slot)
+	if peer == null:
 		return
 	peer.send_text(JSON.stringify({"t": "name", "v": _slot_name[slot]}))
 
@@ -1434,16 +1476,16 @@ func _send_name_echo(slot: int) -> void:
 var _reduce_flash_sent: int = -1
 
 func _reduce_flash_on() -> bool:
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	var sfx: Node = _sfx_autoload()
 	return sfx != null and bool(sfx.get("reduce_flash"))
 
 func _send_reduce_flash(slot: int) -> void:
 	if slot < 0 or slot >= _slot_peers.size() or _slot_virtual[slot] == 1:
 		return
-	var peer: Variant = _slot_peers[slot]
-	if peer == null or peer is PadSeat or not (peer is WebSocketPeer or peer.has_method("send_text")):
+	if _slot_peers[slot] is PadSeat:
 		return
-	if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	var peer: Variant = _open_peer(slot)
+	if peer == null:
 		return
 	peer.send_text(JSON.stringify({"t": "flash", "v": _reduce_flash_on()}))
 
@@ -1466,8 +1508,10 @@ func _sync_reduce_flash() -> void:
 func send_career(slot: int, deltas: Dictionary) -> bool:
 	if deltas.is_empty() or not slot_has_controller(slot) or _slot_virtual[slot] == 1:
 		return false
-	var peer: Variant = _slot_peers[slot]
-	if peer == null or peer is LocalSeat or not peer.has_method("send_text") or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	if _slot_peers[slot] is LocalSeat:
+		return false
+	var peer: Variant = _open_peer(slot)
+	if peer == null:
 		return false
 	peer.send_text(JSON.stringify({"t": "career", "d": deltas}))
 	return true
@@ -1545,6 +1589,8 @@ func _drain(slot: int, peer: Variant) -> void:
 			# counts against the slot's budget.
 			if _take_text_budget(slot) and pkt.size() <= MAX_TEXT_FRAME_BYTES:
 				_handle_text(slot, pkt.get_string_from_utf8())
+				if _slot_peers[slot] != peer:
+					return # that frame let the slot go ("leave", a kick): the rest is not its
 			continue
 		if pkt.size() != PACKET_SIZE and pkt.size() != RELEASE_PACKET_SIZE and pkt.size() != ACTION_PACKET_SIZE \
 				and pkt.size() != MOUSE_PACKET_SIZE:
@@ -1708,7 +1754,7 @@ func _handle_text(slot: int, text: String) -> void:
 			_weak_link_in[slot] = true # this phone answers pings (#777)
 		"team":
 			var team: Variant = msg.get("v")
-			var phase: String = str(_lobby_state.get("phase", "lobby"))
+			var phase: String = _phase()
 			if _is_number(team) and float(team) in [-1.0, 0.0, 1.0] and TEAM_PICK_PHASES.has(phase):
 				_slot_team_pick[slot] = int(team)
 				if _log_input:
@@ -1815,7 +1861,7 @@ func leave(slot: int) -> bool:
 
 ## Whether `slot`'s phone has pressed Ready (and not un-readied since).
 func slot_ready(slot: int) -> bool:
-	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1 or (slot == _host_pc_slot and not _solo_host_must_ready()))
+	return slot >= 0 and slot < _slot_ready.size() and (_slot_ready[slot] == 1 or _slot_virtual[slot] == 1 or (slot == _host_pc_slot and not _solo_host_must_ready() and not _online_host_must_start()))
 
 ## Whether `slot`'s own Ready tap is in, ignoring bots and the host-PC seat's
 ## automatic ready (#704: a tap during the play of the round skips it).
@@ -1827,8 +1873,15 @@ func slot_pressed_ready(slot: int) -> bool:
 ## else, and in a Solo match once it is running, the seat counts as ready. On the
 ## victory screen the Solo host must Continue (key, or the timeout) like any human.
 func _solo_host_must_ready() -> bool:
-	var phase: String = str(_lobby_state.get("phase", "lobby"))
+	var phase: String = _phase()
 	return room_closed() and (SOLO_PHASES.has(phase) or phase == "victory") # the lone human must Continue too, or the podium never shows (#522)
+
+## Issue #936: in an Online lobby the host PC seat is not ready by itself, or the
+## last remote client to press Ready would start the match. The host's Start
+## (button, Enter, gamepad menu) readies it, so only the host starts. Elsewhere
+## (Couch has no host seat; between rounds, the victory screen) nothing changes.
+func _online_host_must_start() -> bool:
+	return _match_kind == KIND_ONLINE and SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby")))
 
 ## Mark `slot` ready or not, as its phone's Ready button would: Solo
 ## practice readies the host (issue #152).
@@ -1897,14 +1950,21 @@ func set_lobby_state(state: Dictionary) -> void:
 	_lobby_state["t"] = "lobby"
 	if MATCH_PHASES.has(str(_lobby_state.get("phase", ""))) and not MATCH_PHASES.has(was):
 		_match_serial += 1
+	# Issue #936: a cancelled Online countdown (someone un-readied) needs the host's
+	# Start again, so a remote client readying back up cannot restart it alone.
+	if was == "countdown" and str(_lobby_state.get("phase", "")) == "lobby" and _online_host_must_start() and _host_pc_slot != -1:
+		_slot_ready[_host_pc_slot] = 0
 	_sync_steam_presence()
 	_send_lobby_to_all()
 	_update_mouse_capture()
 
 func _send_lobby_to_all() -> void:
-	var text: String = _lobby_text()
+	_send_text_to_all(_lobby_text())
+
+## Sends `text` to every seat's open connection, leaving out `except`.
+func _send_text_to_all(text: String, except: Variant = null) -> void:
 	for peer: Variant in _slot_peers:
-		if peer != null and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		if peer != null and peer != except and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
 			peer.send_text(text)
 
 ## The stored lobby state as sent to a phone, marked up as it stands right
@@ -2132,10 +2192,7 @@ func looks_update_message() -> Dictionary:
 ## Tell every connected phone but `except` (one that has just been sent the
 ## full looks frame on binding) who wears what.
 func _broadcast_looks(except: Variant = null) -> void:
-	var text: String = JSON.stringify(looks_update_message())
-	for peer: Variant in _slot_peers:
-		if peer != null and peer != except and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
-			peer.send_text(text)
+	_send_text_to_all(JSON.stringify(looks_update_message()), except)
 
 # --- Virtual controllers (issue #152) ----------------------------------------
 
@@ -2256,6 +2313,16 @@ func _on_relay_frame(peer: int, kind: int, payload: PackedByteArray) -> void:
 ## The remote twin of the hello stage in `_process_websocket()`: the first text
 ## frame must be `{"id": ..., "proto": PROTOCOL_VERSION}`, then the seat goes
 ## through `_bind_with_id()` exactly as a phone does.
+## Turns a remote seat's hello away: tells it `reason` in an error frame, drops
+## it from the relay and forgets it; `said` is the reason as logged.
+func _refuse_remote(seat: RemoteSeat, reason: String, said: String) -> void:
+	seat.send_text(JSON.stringify({"t": "error", "reason": reason}))
+	relay_link.drop_peer(seat.peer)
+	seat.open = false
+	_remote_seats.erase(seat.peer)
+	if _log_input:
+		print("remote %d refused: %s" % [seat.peer, said])
+
 func _process_remote() -> void:
 	for peer: int in _remote_seats.keys():
 		if not _remote_seats[peer].open:
@@ -2278,21 +2345,11 @@ func _process_remote() -> void:
 				_bind_with_id(seat, (hello["id"] as String).left(MAX_CLIENT_ID_LENGTH))
 				continue
 			if not _is_number(hello.get("proto")) or int(hello["proto"]) != PROTOCOL_VERSION:
-				seat.send_text(JSON.stringify({"t": "error", "reason": "version"}))
-				relay_link.drop_peer(seat.peer)
-				seat.open = false
-				_remote_seats.erase(seat.peer)
-				if _log_input:
-					print("remote %d refused: protocol version" % seat.peer)
+				_refuse_remote(seat, "version", "protocol version")
 				continue
 			var build_reason: String = build_mismatch_reason(hello)
 			if not build_reason.is_empty():
-				seat.send_text(JSON.stringify({"t": "error", "reason": build_reason}))
-				relay_link.drop_peer(seat.peer)
-				seat.open = false
-				_remote_seats.erase(seat.peer)
-				if _log_input:
-					print("remote %d refused: %s" % [seat.peer, build_reason])
+				_refuse_remote(seat, build_reason, build_reason)
 				continue
 			_bind_with_id(seat, (hello["id"] as String).left(MAX_CLIENT_ID_LENGTH))
 		elif now > seat.deadline_msec:
@@ -2388,7 +2445,12 @@ func internet_join_on() -> bool:
 
 ## "off", "connecting", "online" or "unreachable" for the fallback room.
 func internet_join_status() -> String:
-	if not _relay_fallback or relay_link == null:
+	return _link_status(_relay_fallback)
+
+## The relay link as "off" (not `wanted`, or no link), "online", "connecting"
+## or "unreachable".
+func _link_status(wanted: bool) -> String:
+	if not wanted or relay_link == null:
 		return "off"
 	match relay_link.link_state():
 		"online":
@@ -2454,7 +2516,7 @@ static func resolve_relay_url(args: PackedStringArray) -> String:
 ## heeded only in the lobby (SOLO_PHASES / "lobby"); "mode" and "target" also
 ## on the victory screen (MODE_PHASES), as the phone's were.
 func apply_host_command(cmd: String, arg: Variant = null) -> bool:
-	var phase: String = str(_lobby_state.get("phase", "lobby"))
+	var phase: String = _phase()
 	match cmd:
 		"online":
 			if not arg is bool or not SOLO_PHASES.has(phase) or _match_kind == KIND_LOCAL or _match_kind == KIND_SOLO:
@@ -2589,15 +2651,12 @@ func online_requested() -> bool:
 	return _online_requested
 
 ## "off", "connecting", "online" or "unreachable" (asked for and not reached).
+## The lobby's phase as last relayed ("lobby" before RoundManager sent one).
+func _phase() -> String:
+	return str(_lobby_state.get("phase", "lobby"))
+
 func online_status() -> String:
-	if not _online_requested or relay_link == null:
-		return "off"
-	match relay_link.link_state():
-		"online":
-			return "online"
-		"connecting", "reconnecting":
-			return "connecting"
-	return "unreachable"
+	return _link_status(_online_requested)
 
 func _on_room_code_changed(_code: String) -> void:
 	_sync_steam_presence()
@@ -2660,11 +2719,32 @@ func _set_host_pc_seat(on: bool) -> bool:
 	_host_mouse.reset()
 	_claim_for_phone(_rejoin_slot(HOST_PC_ID, slot), HOST_PC_ID, _host_pc_seat)
 	_host_pc_slot = _slot_peers.find(_host_pc_seat)
-	_slot_name[_host_pc_slot] = HOST_PC_NAME
+	_slot_name[_host_pc_slot] = host_pc_display_name()
 	_apply_saved_host_pick()
 	_update_mouse_capture()
 	_send_lobby_to_all()
 	return true
+
+## Issue #937: the host PC seat's name as everyone sees it: the saved nickname,
+## cleaned like a phone's and masked with Filter player names on, or "Host" when
+## none is saved (or nothing of it survives cleaning).
+func host_pc_display_name() -> String:
+	var nickname: String = clean_name(HostSettingsScript.shared().host_name)
+	if nickname.is_empty():
+		return HOST_PC_NAME
+	return NameFilterScript.mask(nickname) if HostSettingsScript.shared().filter_names else nickname
+
+## Issue #937: the nickname the host typed for its own seat (the Your look popup's
+## Name box), "" for the default.
+func host_pc_nickname() -> String:
+	return HostSettingsScript.shared().host_name
+
+## Issue #937: the host typed `text` as its seat's nickname. It is cleaned, saved
+## for next time and shown on the seat at once; empty goes back to "Host".
+func set_host_pc_name(text: String) -> void:
+	HostSettingsScript.shared().set_host_name(clean_name(text))
+	if _host_pc_slot != -1:
+		_slot_name[_host_pc_slot] = host_pc_display_name()
 
 ## Issue #441: the host PC's saved look goes on its seat as it is claimed, by the
 ## phone's own rules (a colour another seat holds is refused, the automatic one stays).
@@ -2678,7 +2758,7 @@ func _apply_saved_host_pick() -> void:
 ## Whether the host PC's own cosmetics panel shows: an Online match with its
 ## seat on, in the lobby or countdown.
 func host_picker_shown() -> bool:
-	return (_match_kind == KIND_ONLINE or _match_kind == KIND_SOLO) and _host_pc_slot != -1 and CosmeticsPickerScript.PICK_PHASES.has(str(_lobby_state.get("phase", "lobby")))
+	return (_match_kind == KIND_ONLINE or _match_kind == KIND_SOLO) and _host_pc_slot != -1 and CosmeticsPickerScript.PICK_PHASES.has(_phase())
 
 func _release_host_pc_seat() -> void:
 	var slot: int = _host_pc_slot
@@ -2736,7 +2816,7 @@ func _input(event: InputEvent) -> void:
 	# Issue #463, ADR-0022: a Space tap is the host PC's finger lifting (and
 	# touching again), since a mouse never sends a zero vector.
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE \
-			and _host_pc_slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) \
+			and _host_pc_slot != -1 and MATCH_PHASES.has(_phase()) \
 			and not _input_gated() and not _host_menu_open():
 		_action_down(_host_pc_slot, false)
 		return
@@ -2752,7 +2832,7 @@ func _input(event: InputEvent) -> void:
 		if not action_click.pressed:
 			_action_up(_host_pc_slot, true)
 			return
-		if _mouse_captured and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) \
+		if _mouse_captured and MATCH_PHASES.has(_phase()) \
 				and not _input_gated() and not _host_menu_open() and get_viewport().gui_get_hovered_control() == null:
 			_action_down(_host_pc_slot, true)
 			return
@@ -2771,7 +2851,7 @@ func _input(event: InputEvent) -> void:
 ## The mouse is captured while the host PC plays a live match, and free in the
 ## lobby, while paused, after Esc, and once the seat is off.
 func _update_mouse_capture() -> void:
-	var phase: String = str(_lobby_state.get("phase", "lobby"))
+	var phase: String = _phase()
 	if not MATCH_PHASES.has(phase):
 		_mouse_escaped = false
 	var want: bool = _host_pc_slot != -1 and MATCH_PHASES.has(phase) and not _mouse_escaped \
@@ -2867,10 +2947,11 @@ func _push_pad_sticks() -> void:
 		if gated:
 			_smoothers[slot].push(Vector2.ZERO)
 			continue
-		if _pad_axis(device) != Vector2.ZERO:
+		var axis: Vector2 = _pad_axis(device)
+		if axis != Vector2.ZERO:
 			_pad_tip_done[str(_slot_client_id[slot])] = true # it found the stick (#442)
 		_slot_last_packet_msec[slot] = Time.get_ticks_msec()
-		_smoothers[slot].push(_pad_axis(device))
+		_smoothers[slot].push(axis)
 
 ## Issue #430: the host's controller, whose Start pauses and resumes a match.
 ## Joypad 0: the Steam Deck's own built-in controls (docs/steam-deck-readiness.md
@@ -2913,7 +2994,7 @@ func _pad_button_pressed(device: int, button: int) -> void:
 		return # a host menu owns A and B right now (#368)
 	var slot: int = pad_slot(device)
 	var paused: bool = bool(_lobby_state.get("paused", false))
-	if button == JOY_BUTTON_START and (paused or MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby")))):
+	if button == JOY_BUTTON_START and (paused or MATCH_PHASES.has(_phase())):
 		if device == HOST_PAD_DEVICE:
 			host_command.emit("resume" if paused else "pause", -1)
 		return
@@ -2921,12 +3002,12 @@ func _pad_button_pressed(device: int, button: int) -> void:
 	if slot != -1 and pad_picker_shown(slot) and cosmetics_picker.pad_button(self, slot, button):
 		return
 	# Issue #660: A is a KO'd pad seat's ghost action.
-	if button == JOY_BUTTON_A and slot != -1 and MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) \
+	if button == JOY_BUTTON_A and slot != -1 and MATCH_PHASES.has(_phase()) \
 			and not _input_gated() and _ghost_action(slot):
 		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
 		if slot == -1:
-			if SOLO_PHASES.has(str(_lobby_state.get("phase", "lobby"))):
+			if SOLO_PHASES.has(_phase()):
 				_bind_pad(device)
 		else:
 			_slot_ready[slot] = 1
@@ -2971,8 +3052,10 @@ var _pad_guids: Dictionary = {} # claim id -> GUID of the pad that holds it
 var _test_pad_guids: Dictionary = {}
 ## Claim ids whose pad has already been told "right stick swings".
 var _pad_tip_done: Dictionary = {}
-## Rumbles started, newest last: {"device", "kind"} (diagnostic, for scenarios).
+## Rumbles started, newest last: {"device", "kind"} (diagnostic, for scenarios),
+## the newest MAX_PAD_RUMBLES only, so a long session does not grow it forever.
 var pad_rumbles: Array = []
+const MAX_PAD_RUMBLES: int = 64
 
 func _pad_guid(device: int) -> String:
 	if _test_pad_guids.has(device):
@@ -3042,6 +3125,8 @@ func _rumble_pad(device: int, kind: String) -> void:
 			seconds = 0.1
 	Input.start_joy_vibration(device, weak, strong, seconds)
 	pad_rumbles.append({"device": device, "kind": kind})
+	while pad_rumbles.size() > MAX_PAD_RUMBLES:
+		pad_rumbles.pop_front()
 
 # --- Snapshot stream to remote seats (issue #251) ----------------------------
 
@@ -3125,7 +3210,7 @@ var _sound_source: Node = null
 
 ## Records the Sfx autoload's plays while a remote seat is bound, and only then.
 func _listen_for_sounds(on: bool) -> void:
-	var sfx: Node = get_node_or_null("/root/Sfx")
+	var sfx: Node = _sfx_autoload()
 	if sfx == null or on == (_sound_source != null):
 		return
 	if on:
@@ -3196,7 +3281,7 @@ func _weak_link_target(slot: int) -> bool:
 	var peer: Variant = _slot_peers[slot]
 	if peer == null or peer is PadSeat or _is_pc_remote(peer):
 		return false
-	return (peer is WebSocketPeer or peer.has_method("send_text")) and peer.get_ready_state() == WebSocketPeer.STATE_OPEN
+	return _open_peer(slot) != null
 
 func _weak_link_tick() -> void:
 	var now: int = Time.get_ticks_msec()
@@ -3277,7 +3362,7 @@ func pad_claim(slot: int) -> bool:
 ## Whether `slot`'s gamepad picker shows: a gamepad holds the seat right now
 ## and it is the lobby (cosmetics change in the lobby only).
 func pad_picker_shown(slot: int) -> bool:
-	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] is PadSeat and _slot_peers[slot].open 		and CosmeticsPickerScript.PICK_PHASES.has(str(_lobby_state.get("phase", "lobby")))
+	return slot >= 0 and slot < _slot_peers.size() and _slot_peers[slot] is PadSeat and _slot_peers[slot].open 		and CosmeticsPickerScript.PICK_PHASES.has(_phase())
 # --- Couch or Online, never mixed (issue #435, ADR-0021) -------------------------
 #
 # The host picks the match kind on the title screen (LobbyScreen.gd): Couch (the
@@ -3330,11 +3415,12 @@ func set_match_kind(kind: String) -> bool:
 	if room_closed() and kind != KIND_SOLO:
 		bot_director.remove_bots() # Solo's bots go with it: none is left to play a room alone (#505)
 	var target: String = KIND_LOCAL if kind == KIND_LOCAL else KIND_ONLINE
-	var dropped: int = _drop_seats_for(target) if target != _match_kind and not (_match_kind == KIND_SOLO and target == KIND_ONLINE) else 0
+	var dropped: int = _drop_seats_for(target, SOLO_MATCH_REASON if kind == KIND_SOLO else "") if target != _match_kind and not (_match_kind == KIND_SOLO and target == KIND_ONLINE) else 0
 	if kind == KIND_SOLO and _match_kind == KIND_ONLINE:
 		# Solo refuses phones and remote seats alike (#552): drop the live ones and
 		# the held claims (#459), which would otherwise eat bot capacity.
-		dropped += _drop_seats_for(KIND_LOCAL) + _drop_seats_for(KIND_ONLINE)
+		# Told as `_refused_by_match_kind()` would tell them in Solo.
+		dropped += _drop_seats_for(KIND_ONLINE, SOLO_MATCH_REASON) + _drop_seats_for(KIND_LOCAL, ROOM_CLOSED_REASON)
 	_match_kind = kind
 	if kind != KIND_LOCAL:
 		_close_internet_join() # #683: the fallback is a Couch thing; its seats went above
@@ -3399,9 +3485,12 @@ func _refused_by_match_kind(peer: Variant) -> bool:
 
 ## Drops every seat the `target` kind refuses, and every held claim that is not a
 ## gamepad's: phones going Online, remote seats going Couch. Returns how many.
-func _drop_seats_for(target: String) -> int:
+## `why` overrides the reason the dropped seats are told.
+func _drop_seats_for(target: String, why: String = "") -> int:
 	var dropped: int = 0
 	var reason: String = ONLINE_MATCH_REASON if target == KIND_ONLINE else COUCH_MATCH_REASON
+	if not why.is_empty():
+		reason = why
 	for slot in _slot_peers.size():
 		if _slot_claimed[slot] != 1 or _slot_virtual[slot] == 1:
 			continue
@@ -3521,7 +3610,7 @@ func host_pc_has_match_controls() -> bool:
 
 ## Whether a match is in play or paused: what Pause and End match act on.
 func host_pc_match_live() -> bool:
-	return MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) or host_pc_paused()
+	return MATCH_PHASES.has(_phase()) or host_pc_paused()
 
 ## Whether the match is paused, as the lobby state last said.
 func host_pc_paused() -> bool:
@@ -3569,7 +3658,7 @@ func _sync_steam_presence() -> void:
 			_presence_key = ""
 			steam.call("clear_rich_presence")
 		return
-	var status: String = tr("STEAM_STATUS_IN_MATCH") if MATCH_PHASES.has(str(_lobby_state.get("phase", "lobby"))) else tr("STEAM_STATUS_IN_LOBBY")
+	var status: String = tr("STEAM_STATUS_IN_MATCH") if MATCH_PHASES.has(_phase()) else tr("STEAM_STATUS_IN_LOBBY")
 	var key: String = "%s|%s" % [code, status]
 	if key != _presence_key:
 		_presence_key = key

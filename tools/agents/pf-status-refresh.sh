@@ -4,7 +4,7 @@
 . "$(dirname "$0")/pf-env.sh" || exit 1
 R=$ROOT; out=$PF_STATE/pf-status-cache.txt
 bash "$PF_DIR/pf-succession.sh" --post >/dev/null 2>&1   # keeps $PF_STATE/pf-triagemaster current
-iss=$(gh api "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null) || exit 0
+iss=$(set -o pipefail; gh api --paginate "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null | jq -s 'add // []') || exit 0   # every page, one array
 ready_for() { echo "$iss" | jq --arg h "$1" '[.[]|select(.pull_request==null)|select(any(.labels[];.name=="ready-for-agent"))|select(any(.assignees[];.login==$h))]|length'; }
 rd="ready me $(ready_for "$PF_ACCOUNT")"
 for h in $(pf_handles); do [ "$h" = "$PF_ACCOUNT" ] || rd+=" / $h $(ready_for "$h")"; done
@@ -17,7 +17,7 @@ if [ "$(pf_daynight)" = day ]; then min=$DAY_MIN_AGENTS; else min=$NIGHT_PREFERR
 agents=""; n=0
 for b in $(git -C $R worktree list --porcelain | awk '/^branch /{sub("refs/heads/","",$2);print $2}' | grep -E "issue-[0-9]+"); do
   i=$(echo "$b" | sed -E 's/.*issue-([0-9]+).*/\1/')
-  t=$(echo "$iss" | jq -r ".[]|select(.number==$i and .pull_request==null)|.title" | cut -c1-60)
+  t=$(echo "$iss" | jq -r ".[]|select(.number==$i and .pull_request==null)|.title")
   [ -z "$t" ] && continue   # issue closed: stale worktree, not a running agent
   n=$((n+1)); agents+=$'\n'"  #$i $t"
 done

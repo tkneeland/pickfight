@@ -182,14 +182,12 @@ func build() -> void:
 	bottom_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	bottom_row.add_theme_constant_override("separation", 24)
 	box.add_child(bottom_row)
-	var quit_button := ScreenKitScript.themed_button(_screen.tr("TITLE_QUIT"), UiThemeScript.ACTION_BUTTON, "Title_quit")
-	quit_button.focus_mode = Control.FOCUS_ALL
+	var quit_button := ScreenKitScript.themed_button(_screen.tr("TITLE_QUIT"), UiThemeScript.ACTION_BUTTON, "Title_quit", true)
 	quit_button.pressed.connect(press_title.bind("quit"))
 	bottom_row.add_child(quit_button)
 	_title_buttons["quit"] = quit_button
 	# Credits (#721): beside Quit, one D-pad step right of it.
-	var credits_button := ScreenKitScript.themed_button(_screen.tr("CREDITS_BUTTON"), UiThemeScript.ACTION_BUTTON, "Title_credits")
-	credits_button.focus_mode = Control.FOCUS_ALL
+	var credits_button := ScreenKitScript.themed_button(_screen.tr("CREDITS_BUTTON"), UiThemeScript.ACTION_BUTTON, "Title_credits", true)
 	credits_button.pressed.connect(press_title.bind("credits"))
 	bottom_row.add_child(credits_button)
 	_title_buttons["credits"] = credits_button
@@ -201,8 +199,7 @@ func build() -> void:
 	credits_button.focus_neighbor_top = credits_button.get_path_to(last_card)
 	# Wishlist on Steam (#793): demo build only, and only once the store page exists; beside Credits.
 	if DemoBuildScript.wishlist_available():
-		var wishlist_button := ScreenKitScript.themed_button(_screen.tr("WISHLIST_BUTTON"), UiThemeScript.ACTION_BUTTON, "Title_wishlist")
-		wishlist_button.focus_mode = Control.FOCUS_ALL
+		var wishlist_button := ScreenKitScript.themed_button(_screen.tr("WISHLIST_BUTTON"), UiThemeScript.ACTION_BUTTON, "Title_wishlist", true)
 		wishlist_button.pressed.connect(press_title.bind("wishlist"))
 		bottom_row.add_child(wishlist_button)
 		_title_buttons["wishlist"] = wishlist_button

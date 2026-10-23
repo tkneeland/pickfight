@@ -90,11 +90,17 @@ func _process(delta: float) -> void:
 		return
 	update_targets()
 	var step: float = delta / FADE_SEC
+	var redraw: bool = false
 	for slot in _alpha.size():
+		var was: float = _alpha[slot]
 		_alpha[slot] = move_toward(_alpha[slot], 1.0 if _wanted[slot] else 0.0, step)
 		_badges[slot].modulate.a = _alpha[slot]
 		_numbers[slot].modulate.a = _alpha[slot]
-	_canvas.queue_redraw()
+		if _alpha[slot] > 0.0 or _alpha[slot] != was:
+			redraw = true
+	# With every arrow faded out (and none fading this frame) there is nothing to draw.
+	if redraw:
+		_canvas.queue_redraw()
 
 ## Works out who is off screen right now and where their arrow goes. Public so a scenario can
 ## read the result without waiting out a frame.
@@ -105,11 +111,12 @@ func update_targets() -> void:
 	var screen := Rect2(Vector2.ZERO, size)
 	var inner := Rect2(Vector2.ONE * EDGE_MARGIN, size - Vector2.ONE * EDGE_MARGIN * 2.0)
 	var numbers_on: bool = HostSettingsScript.shared().player_numbers
+	var arrows_on: bool = _settings_allow_arrows()
 	for slot in _players.size():
 		var player: Variant = _players[slot]
 		_wanted[slot] = false
 		var team: int = TeamsScript.NONE
-		if player != null and is_instance_valid(player) and player.alive and player.visible:
+		if arrows_on and player != null and is_instance_valid(player) and player.alive and player.visible:
 			var at: Vector2 = to_screen * player.global_position
 			if not screen.has_point(at):
 				_wanted[slot] = true
@@ -130,6 +137,11 @@ func update_targets() -> void:
 			num.set_number(slot + 1, _slot_color.call(slot))
 		else:
 			num.set_number(0)
+
+## Settings > "Edge arrows" (#940); on when there is no Sfx autoload.
+func _settings_allow_arrows() -> bool:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	return sfx == null or bool(sfx.get("edge_arrows"))
 
 ## The point where the ray from `centre` toward `at` leaves `box`.
 static func _clamp_to(box: Rect2, centre: Vector2, at: Vector2) -> Vector2:

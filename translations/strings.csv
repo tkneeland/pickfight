@@ -3,6 +3,8 @@ AWARD_BUTTERFINGERS,Butterfingers,Butterfinger,Doigts de beurre,Manos de mantequ
 AWARD_CATEGORY_AIRBORNE,AIRBORNE,LUFTIG,EN L'AIR,AÉREO,NO AR,腾空,空中,공중,ВОЗДУХ
 AWARD_CATEGORY_CLUMSY,CLUMSY,TOLPATSCH,MALADROIT,TORPE,DESAJEITADO,笨手笨脚,ドジ,덤벙,НЕУКЛЮЖИЙ
 AWARD_CATEGORY_COLLECTOR,COLLECTOR,SAMMLER,COLLECTIONNEUR,COLECCIONISTA,COLECIONADOR,收集,コレクター,수집,КОЛЛЕКЦИОНЕР
+AWARD_CATEGORY_COMBO,COMBO,KOMBO,COMBO,COMBO,COMBO,连击,コンボ,콤보,КОМБО
+AWARD_CATEGORY_SHARPSHOOTER,SHARPSHOOTER,SCHARFSCHÜTZE,TIREUR D'ÉLITE,TIRADOR,ATIRADOR,神枪手,スナイパー,명사수,СНАЙПЕР
 AWARD_CATEGORY_COMBAT,COMBAT,KAMPF,COMBAT,COMBATE,COMBATE,战斗,バトル,전투,БОЙ
 AWARD_CATEGORY_HAYMAKER,HAYMAKER,HAMMERSCHLAG,UPPERCUT,PUÑETAZO,PANCADA,重拳,強打,강타,ХУК
 AWARD_CATEGORY_STREAKER,STREAK,SERIE,SÉRIE,RACHA,SEQUÊNCIA,连杀,連勝,연속,СЕРИЯ
@@ -12,6 +14,8 @@ AWARD_HEAVY_HITTER,Heavy Hitter,Schwergewicht,Poids lourd,Peso pesado,Peso pesad
 AWARD_LONGEST_AIRTIME,Longest Airtime,Längste Flugzeit,Plus long vol,Más tiempo en el aire,Maior tempo no ar,滞空最久,最長滞空,최장 체공,Дольше всех в полёте
 AWARD_MAGPIE,Magpie,Elster,Pie voleuse,Urraca,Pega,喜鹊,カササギ,까치,Сорока
 AWARD_HAYMAKER,Haymaker,Hammerschlag,Uppercut,Puñetazo,Pancada,重拳出击,強烈な一撃,강타,Хук
+AWARD_COMBO,Combo,Kombo,Combo,Combo,Combo,连击,コンボ,콤보,Комбо
+AWARD_SHARPSHOOTER,Sharpshooter,Scharfschütze,Tireur d'élite,Tirador certero,Atirador de elite,神枪手,スナイパー,명사수,Снайпер
 AWARD_STREAKER,Streaker,Serienkiller,En série,Racha,Sequência,连杀王,連勝王,연속 킬,Серийник
 AWARD_UNTOUCHABLE,Untouchable,Unantastbar,Intouchable,Intocable,Intocável,滑不留手,無傷の男,무적의 몸,Неуловимый
 AWARD_PUNCHING_BAG,Punching Bag,Sandsack,Punching-ball,Costal de boxeo,Saco de pancada,人肉沙包,サンドバッグ,샌드백,Груша для битья
@@ -54,6 +58,8 @@ TITLE_SOLO_HINT,You against 3 bots,Du gegen 3 Bots,Toi contre 3 bots,Tú contra 
 DETAIL_AIRBORNE,%.1fs airborne,%.1fs in der Luft,%.1f s en l'air,%.1f s en el aire,%.1f s no ar,腾空 %.1f 秒,滞空 %.1f秒,체공 %.1f초,%.1f с в воздухе
 DETAIL_ALIVE,%s alive,%s am Leben,%s en vie,%s con vida,%s vivos,存活 %s,生存 %s,생존 %s,Жив: %s
 DETAIL_HAYMAKER,%d damage in one hit,%d Schaden in einem Treffer,%d de dégâts en un coup,%d de daño de un golpe,%d de dano em um golpe,一击造成 %d 伤害,一撃で %d ダメージ,한 방에 피해 %d,%d урона одним ударом
+DETAIL_COMBO,%d KOs in 3s,%d KOs in 3 s,%d KO en 3 s,%d KO en 3 s,%d KOs em 3 s,3 秒内 %d 次击倒,3秒で%d KO,3초 내 %d KO,%d KO за 3 с
+DETAIL_SHARPSHOOTER,%d ranged KOs,%d Fernkampf-KOs,%d KO à distance,%d KO a distancia,%d KOs à distância,%d 次远程击倒,遠距離で%d KO,원거리 %d KO,%d KO издалека
 DETAIL_STREAK,%d in a row,%d am Stück,%d d'affilée,%d seguidos,%d seguidos,连续 %d 次,%d連続,%d연속,%d подряд
 DETAIL_DAMAGE,%d damage,%d Schaden,%d de dégâts,%d de daño,%d de dano,伤害 %d,ダメージ %d,피해 %d,Урон: %d
 DETAIL_DAMAGE_TAKEN,%d damage taken,%d Schaden kassiert,%d de dégâts subis,%d de daño recibido,%d de dano sofrido,承受伤害 %d,被ダメージ %d,받은 피해 %d,Получено урона: %d
@@ -192,7 +198,9 @@ SETTINGS,Settings,Einstellungen,Réglages,Ajustes,Ajustes,设置,設定,설정,�
 SETTINGS_FEEDBACK,Feedback,Feedback,Avis,Comentarios,Feedback,反馈,フィードバック,피드백,Отзыв
 SETTINGS_FULLSCREEN,Full (F11),Voll (F11),Plein (F11),Completa (F11),Cheia (F11),全屏 (F11),フルスクリーン (F11),전체 화면 (F11),Во весь экран (F11)
 SETTINGS_KILL_FEED,Kill feed,Kill-Feed,Fil des KO,Registro de KO,Registro de KOs,击杀信息,キルフィード,킬 피드,Лента убийств
+SETTINGS_EDGE_ARROWS,Edge arrows,Randpfeile,Flèches de bord,Flechas de borde,Setas de borda,边缘箭头,画面端の矢印,가장자리 화살표,Стрелки у края
 SETTINGS_DAMAGE_NUMBERS,Damage numbers,Schadenszahlen,Nombres de dégâts,Números de daño,Números de dano,伤害数字,ダメージ数字,피해 숫자,Числа урона
+SETTINGS_STAGE_TITLE_CARD,Stage title card,Stage-Titelkarte,Carton de titre du niveau,Cartel del título del escenario,Cartaz do título do cenário,关卡名称提示,ステージタイトル表示,스테이지 제목 표시,Заставка названия арены
 SETTINGS_MATCH_POINT_PLATE,Match point plate,Matchpunkt-Anzeige,Bandeau balle de match,Cartel de punto de partido,Aviso de ponto de partida,赛点提示,マッチポイント表示,매치 포인트 표시,Табличка матчбола
 SETTINGS_PICKUP_CALLOUTS,Pickup callouts,Aufnahme-Hinweise,Annonces de ramassage,Avisos de recogida,Avisos de coleta,拾取提示,取得表示,획득 알림,Подсказки подбора
 SETTINGS_HIDE_ROOM_CODE,Hide room code,Raumcode verstecken,Masquer le code du salon,Ocultar código de sala,Ocultar código da sala,隐藏房间码,ルームコードを隠す,방 코드 숨기기,Скрыть код комнаты
@@ -277,6 +285,7 @@ MODE_CAPTURE_THE_FLAG_RULE,Reach the capture target to win.,"Erreich das Capture
 AWARD_CATEGORY_CAPTURER,CAPTURER,FLAGGENRÄUBER,CAPTUREUR,CAPTURADOR,CAPTURADOR,夺旗手,奪取王,탈취,ЗАХВАТЧИК
 STAGE_BASTION,Bastion,Bastion,Bastion,Bastión,Bastião,堡垒,バスティオン,요새,Бастион
 STAGE_STRONGHOLD,Stronghold,Festung,Forteresse,Fortaleza,Fortaleza,据点,ストロングホールド,거점,Цитадель
+STAGE_TREADMILL,Treadmill,Laufband,Tapis roulant,Cinta de correr,Esteira,跑步机,トレッドミル,러닝머신,Беговая дорожка
 AWARD_CATEGORY_HILL,HILL,HÜGEL,COLLINE,COLINA,COLINA,山丘,ヒル,언덕,ГОРА
 AWARD_CATEGORY_TAGGER,TAGGER,FÄNGER,PORTEUR,MARCADO,MARCADO,标记者,タッガー,술래,ВОДЯЩИЙ
 AWARD_CATEGORY_LIVES,LIVES,LEBEN,VIES,VIDAS,VIDAS,命数,ライフ,목숨,ЖИЗНИ
@@ -373,6 +382,7 @@ MODE_CAPTURE_THE_FLAG_BLURB,Teams: steal their flag,Teams: ihre Flagge klauen,É
 PICKER_LIVE_NOTE,"In the game this is the real character, live","Im Spiel ist das der echte Charakter, live","Dans le jeu, c'est le vrai personnage, en direct","En el juego es el personaje real, en vivo","No jogo, este é o personagem de verdade, ao vivo",游戏里就是这个角色的实时模样,ゲーム中はこのキャラがそのまま動くよ,게임에서도 이 캐릭터가 그대로 나와요,"В игре это настоящий персонаж, вживую"
 PICKER_TAKEN_NOTE,Greyed colours are taken by other players,Ausgegraute Farben haben andere Spieler,Les couleurs grisées sont prises par d'autres joueurs,Los colores en gris ya los tienen otros jugadores,Cores em cinza já estão com outros jogadores,灰色的颜色已被其他玩家选走,グレーの色は他のプレイヤーが使用中,회색 색상은 다른 플레이어가 골랐어요,Серые цвета заняты другими игроками
 PICKER_DONE,Done,Fertig,Terminé,Listo,Pronto,完成,完了,완료,Готово
+PICKER_NAME,Name,Name,Nom,Nombre,Nome,名字,名前,이름,Имя
 TITLE_FOOTER,"Click, press a key, or D-pad + A","Klick, Taste oder Steuerkreuz + A","Clique, appuie sur une touche, ou croix + A","Haz clic, pulsa una tecla, o cruceta + A","Clique, aperte uma tecla, ou direcional + A","点击、按任意键,或方向键 + A",クリック、キー、または十字キー + A,"클릭하거나, 아무 키나 누르거나, 방향키 + A","Клик, любая клавиша или крестовина + A"
 CAREER_LINE,Matches %d · Wins %d · KOs %d,Matches %d · Siege %d · KOs %d,Matchs %d · Victoires %d · KO %d,Partidas %d · Victorias %d · KO %d,Partidas %d · Vitórias %d · KOs %d,对局 %d · 胜场 %d · 击倒 %d,マッチ %d · 勝利 %d · KO %d,대전 %d · 승리 %d · KO %d,Матчей %d · Побед %d · Нокаутов %d
 CAREER_MATCHES,Matches played: %d,Gespielte Matches: %d,Matchs joués : %d,Partidas jugadas: %d,Partidas jogadas: %d,对局场数:%d,プレイしたマッチ: %d,플레이한 대전: %d,Сыграно матчей: %d

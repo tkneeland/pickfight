@@ -61,6 +61,7 @@ const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
 ## The three special weapons (issue #150). See "Special weapons" at the end.
 const FlailChainScript := preload("res://scripts/FlailChain.gd")
 const GrappleHookScript := preload("res://scripts/GrappleHook.gd")
+const ShotSweepScript := preload("res://scripts/ShotSweep.gd")
 const BoomerangScript := preload("res://scripts/Boomerang.gd")
 const MagnetScript := preload("res://scripts/Magnet.gd")
 ## Slack on the fire countdown: the interval is summed from fixed physics
@@ -894,8 +895,14 @@ func _build_rig() -> void:
 	_rig.reset_physics_interpolation()
 	_haft_tip_before = Vector2(NAN, NAN)
 	_haft_tip_at_tick_end = Vector2(NAN, NAN)
-	# A fresh head is built solid.
+	# A fresh head is built solid, at rest, out of the terrain, and with no
+	# swing carried over from the rig it replaces.
 	_release_time = 0.0
+	_embedded_time = 0.0
+	_head_velocity = Vector2.ZERO
+	_head_terrain_ticks = 0
+	_swing_rate = 0.0
+	_swing_tracking = false
 
 func _clear_rig() -> void:
 	if _rig == null:
@@ -1075,10 +1082,33 @@ var _head_terrain_ticks: int = 0
 
 func _track_head_terrain_contact() -> void:
 	_head_terrain_ticks = maxi(_head_terrain_ticks - 1, 0)
+	_scan_head_contacts()
+	if _head_on_terrain:
+		_head_terrain_ticks = SWING_PLANTED_TICKS
+
+## What the head is touching this tick, read once: `_head_on_terrain` (anything
+## but a player or a weapon head) and `_head_on_rival` (a player or a weapon
+## head). The grip, the swing's planting and the pogo all ask; the head's
+## contacts do not change within a tick, so one scan of them answers all three.
+var _head_on_terrain: bool = false
+var _head_on_rival: bool = false
+var _contacts_frame: int = -1
+var _contacts_head_id: int = 0
+
+func _scan_head_contacts() -> void:
+	var frame: int = Engine.get_physics_frames()
+	var head_id: int = _head.get_instance_id()
+	if frame == _contacts_frame and head_id == _contacts_head_id:
+		return
+	_contacts_frame = frame
+	_contacts_head_id = head_id
+	_head_on_terrain = false
+	_head_on_rival = false
 	for body: Node2D in _head.get_colliding_bodies():
-		if not body.is_in_group("players") and not body is WeaponHeadType:
-			_head_terrain_ticks = SWING_PLANTED_TICKS
-			return
+		if body.is_in_group("players") or body is WeaponHeadType:
+			_head_on_rival = true
+		else:
+			_head_on_terrain = true
 
 ## How much of `force` along `axis` to keep, so that the reaction on the body
 ## never runs against the circling. 1.0 when it does not.
@@ -1269,7 +1299,10 @@ func _style_haft() -> void:
 ## directly, which is how this suite's own scenarios read and drive it.
 func _update_damage_visual() -> void:
 	var t: float = clampf(damage / DEATH_DAMAGE, 0.0, 1.0)
-	body_visual.color = identity_color.lerp(DAMAGE_FILL_COLOR, t)
+	var fill: Color = identity_color.lerp(DAMAGE_FILL_COLOR, t)
+	# Written only when it moved: setting it redraws the polygon every tick.
+	if body_visual.color != fill:
+		body_visual.color = fill
 
 ## Draws the weapon head as the art it was fitted to (ADR-0010): the weapon's
 ## own `art_outline`, in `identity_color`.
@@ -1652,24 +1685,38 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 	var amount: float = _strike_damage(speed)
 	if stomp:
 		# One stomp is one hit: the head, the body and the sweep all see the
-		# same landing within a few ticks.
+		# same landing within a few ticks. The lock is only taken once the stomp
+		# really lands below, so a too-slow touch or a teammate underfoot does
+		# not swallow the next real stomp.
 		if _stomp_lock > 0.0:
 			return
-		_stomp_lock = POGO_STOMP_LOCK
 		amount = _stomp_damage(speed)
 	if _stats.stab_multiplier != 1.0 and _is_stab():
 		amount = minf(amount * _stats.stab_multiplier, MAX_STRIKE_DAMAGE)
 	if amount <= 0.0 and speed <= knockback_threshold:
 		return
-	var point: Vector2 = _strike_point(victim)
 	if is_teammate(victim):
 		return
+	if stomp:
+		_stomp_lock = POGO_STOMP_LOCK
+	var bash: Callable = _shield_bash if _stats.special == &"shield" else Callable()
+	_deliver_hit(victim, amount, _strike_point(victim), true, bash)
+
+## Every hit ends here -- a strike, a bullet, a flail ball: nothing for a
+## teammate, nothing taken through spawn protection, the damage through the
+## victim's `take_damage()` (`recoil` false for a shot), then `before_report`
+## (the shield's bash) and the hit reported as `strike_landed`. Returns the
+## damage the victim took.
+func _deliver_hit(victim: Node, amount: float, point: Vector2, recoil: bool = true, before_report: Callable = Callable()) -> float:
+	if is_teammate(victim):
+		return 0.0
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	amount = victim.take_damage(amount, point, self)
-	if _stats.special == &"shield":
-		_shield_bash(victim)
+	amount = victim.take_damage(amount, point, self, recoil)
+	if before_report.is_valid():
+		before_report.call(victim)
 	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
+	return amount
 
 ## Whether the head's motion relative to the body is a stab: pointed mostly
 ## straight out along the haft rather than across it. Read here, not off
@@ -1714,12 +1761,16 @@ func _strike_point(victim: Node2D) -> Vector2:
 ## sweep: three clean strikes to kill, and two if the head is carried in by a
 ## body already moving. Stick Fight's punch weight would be ten or more and
 ## rounds would drag, which ADR-0005 warns about by name.
-func _strike_damage(speed: float) -> float:
+## `base` is the full-speed damage, the weapon's `damage` unless given (the
+## flail's ball passes its `ball_damage`).
+func _strike_damage(speed: float, base: float = -1.0) -> float:
 	var over: float = speed - MIN_STRIKE_SPEED
 	if over <= 0.0:
 		return 0.0
+	if base < 0.0:
+		base = _stats.damage
 	var strike_scale: float = minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
-	return minf(_stats.damage * strike_scale, MAX_STRIKE_DAMAGE)
+	return minf(base * strike_scale, MAX_STRIKE_DAMAGE)
 
 # --- Firing (issue #55, ADR-0014) --------------------------------------------
 #
@@ -1742,6 +1793,13 @@ func _tick_fire(delta: float) -> void:
 		return
 	_fire_clock -= _stats.fire_interval
 	_fire()
+
+## Issue #952: seconds until the held weapon fires its next shot, or INF for a
+## weapon that never fires on its own. Read-only; bots use it to line up.
+func fire_ready_in() -> float:
+	if _stats == null or _stats.fire_interval <= 0.0:
+		return INF
+	return maxf(_stats.fire_interval - _fire_clock, 0.0)
 
 ## One shot. The bullet leaves from the head's anchor along the haft's actual
 ## direction -- the barrel as drawn, which is where the player sees it point
@@ -1774,14 +1832,10 @@ func _fire() -> void:
 func land_projectile_hit(victim: Node, amount: float, point: Vector2, weapon_id: String = "") -> void:
 	if victim == self or not victim.alive:
 		return
-	if is_teammate(victim):
-		return
-	if victim.get("spawn_protected") == true:
-		amount = 0.0
-	amount = victim.take_damage(amount, point, self, false)
 	# Issue #516: the weapon that fired the bullet, not the one held on arrival.
+	# Only `strike_landed`'s handlers read it.
 	hit_weapon_id = weapon_id
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
+	_deliver_hit(victim, amount, point, false)
 	hit_weapon_id = ""
 
 ## Issue #516: weapon id (file basename) credited with the hit being reported
@@ -1874,13 +1928,8 @@ func _update_head_grip() -> void:
 	if _head_material == null:
 		return
 	_track_head_terrain_contact()
-	var grip: float = 0.0
-	var bodies: Array[Node2D] = _head.get_colliding_bodies()
-	for body: Node2D in bodies:
-		if body.is_in_group("players") or body is WeaponHeadType:
-			grip = 0.0
-			break
-		grip = 1.0
+	# Terrain only: any player or weapon head in the contacts lets go.
+	var grip: float = 1.0 if _head_on_terrain and not _head_on_rival else 0.0
 	var floor_friction: float = HEAD_BASE_FRICTION
 	if grip > 0.0:
 		floor_friction = HEAD_YIELD_FRICTION
@@ -1985,21 +2034,8 @@ func _head_is_home() -> bool:
 ## Whether terrain lies on the straight line from this body to its head's
 ## anchor. Other players' bodies are on the same layer but are not terrain.
 func _head_cut_off() -> bool:
-	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var query := PhysicsRayQueryParameters2D.create(
-		global_position, _head.global_position, LAYER_WORLD, [get_rid(), _head.get_rid()])
-	query.collide_with_areas = false
-	for i in GRIDLOCK_MAX_SKIPS:
-		var hit: Dictionary = space.intersect_ray(query)
-		if hit.is_empty():
-			return false
-		var collider: Object = hit["collider"]
-		if not (collider is Node and (collider as Node).is_in_group("players")):
-			return true
-		var exclude: Array[RID] = query.exclude
-		exclude.append(hit["rid"])
-		query.exclude = exclude
-	return false
+	return ShotSweepScript.terrain_between(get_world_2d().direct_space_state, global_position,
+		_head.global_position, LAYER_WORLD, [get_rid(), _head.get_rid()], GRIDLOCK_MAX_SKIPS)
 
 # --- Special weapons (issue #150) ---------------------------------------------
 #
@@ -2299,11 +2335,7 @@ func _on_ball_hit(body: Node) -> void:
 func _land_ball_strike(victim: Node, speed: float) -> void:
 	if not victim.alive:
 		return
-	var amount: float = 0.0
-	var over: float = speed - MIN_STRIKE_SPEED
-	if over > 0.0:
-		var strike_scale: float = minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
-		amount = minf(_stats.ball_damage * strike_scale, MAX_STRIKE_DAMAGE)
+	var amount: float = _strike_damage(speed, _stats.ball_damage)
 	if amount <= 0.0 and speed <= knockback_threshold:
 		return
 	var ball: RigidBody2D = _flail.ball
@@ -2312,12 +2344,7 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 	if amount > 0.0 and victim is RigidBody2D:
 		var shove: float = minf(speed * ball.mass * float(_stats.ball_knockback), BALL_KNOCKBACK_MAX)
 		(victim as RigidBody2D).apply_central_impulse(toward * shove)
-	if is_teammate(victim):
-		return
-	if victim.get("spawn_protected") == true:
-		amount = 0.0
-	amount = victim.take_damage(amount, point, self)
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
+	_deliver_hit(victim, amount, point)
 
 # --- Umbrella (issue #269) ---------------------------------------------------
 #
@@ -2394,10 +2421,8 @@ func pogo_charge() -> float:
 	return clampf(_pogo_charge / _stats.pogo_charge_time, 0.0, 1.0)
 
 func _pogo_grounded() -> bool:
-	for body: Node2D in _head.get_colliding_bodies():
-		if not body.is_in_group("players") and not (body is WeaponHeadType):
-			return true
-	return false
+	_scan_head_contacts()
+	return _head_on_terrain
 
 func _tick_pogo(delta: float) -> void:
 	_pogo_cooldown = maxf(0.0, _pogo_cooldown - delta)

@@ -129,6 +129,14 @@ var _invite_button: Button # under the room code, Online with Steam running (#29
 var _join_help_button: Button # under the join QR, Couch only (#680)
 var _relay_nudge := RelayNudgeScript.new() # when to show the button below (#727)
 var _relay_nudge_button: Button # Not connecting? Join over the internet (#727)
+## The join addresses, re-read at most once a second: listing the host's network
+## interfaces every frame is wasted work (they rarely change mid-lobby).
+const JOIN_URLS_REFRESH_MSEC: int = 1000
+var _join_urls_cache: PackedStringArray = PackedStringArray()
+var _join_urls_key: String = ""
+var _join_urls_read_msec: int = 0
+## The solo state the join note's font size was last set for (null: never set).
+var _join_note_solo: Variant = null
 var _stages_box: VBoxContainer
 var _stages_summary: Label
 var _picked_mode: String = GameModesScript.CLASSIC
@@ -247,13 +255,10 @@ func _add_mode_card(id: String, card_name: String, rule: String) -> Label:
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_theme_constant_override("separation", 0)
 	card.add_child(box)
-	var title: Label = ScreenKitScript.themed_label(card_name, 22, UiThemeScript.INK_HEADING_LABEL)
-	title.name = "Name"
+	var title: Label = ScreenKitScript.themed_label(card_name, 22, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "Name")
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # wraps instead of cutting a long name off at a large Text size (#751)
 	box.add_child(title)
-	var rule_label: Label = ScreenKitScript.themed_label(rule, DECK_MIN_FONT_SIZE, UiThemeScript.INK_BOLD_LABEL)
-	rule_label.name = "Rule"
-	rule_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var rule_label: Label = ScreenKitScript.themed_label(rule, DECK_MIN_FONT_SIZE, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "Rule", TextServer.AUTOWRAP_WORD_SMART)
 	rule_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(rule_label)
 	var click := Button.new()
@@ -416,7 +421,9 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	var humans_waiting: int = 0
 	for entry: Dictionary in state["players"]:
 		var is_bot: bool = _server != null and _server.has_method("is_virtual") and _server.is_virtual(int(entry["slot"]))
-		if not is_bot and not bool(entry["ready"]):
+		# #936: Online, the host's own seat readies by START itself, so it never holds START back.
+		var host_seat: bool = online and not solo and _server != null and _server.has_method("host_pc_slot") and int(entry["slot"]) == _server.host_pc_slot()
+		if not is_bot and not host_seat and not bool(entry["ready"]):
 			humans_waiting += 1
 	var joined: int = state["players"].size()
 	var can_start: bool = state["phase"] != "countdown" and joined >= min_players and humans_waiting == 0 and (not teams or both_teams_manned(state))
@@ -475,7 +482,7 @@ func _apply_streamer_mode(join_source: Object) -> void:
 	_invite_button.visible = join_source.has_method("can_invite_steam_friends") and join_source.can_invite_steam_friends()
 	if online and _popups.current() == "join_help":
 		_popups.open("") # the match went Online under the popup: no LAN join to help with
-	var urls: PackedStringArray = join_source.join_urls() if join_source.has_method("join_urls") else PackedStringArray()
+	var urls: PackedStringArray = _cached_join_urls(join_source)
 	_popups.set_join_urls(urls, hidden)
 	_popups.refresh_internet(join_source)
 	if online:
@@ -485,15 +492,34 @@ func _apply_streamer_mode(join_source: Object) -> void:
 	_join_title.text = tr("LOBBY_SOLO_TITLE") if solo else (tr("LOBBY_ROOM_CODE_TITLE") if online else tr("LOBBY_SCAN_TITLE"))
 	_join_note.text = tr("LOBBY_SOLO_NOTE") if solo else tr("LOBBY_ROOM_CODE_NOTE")
 	_join_note.visible = online and not (hidden and not solo)
-	if solo:
-		_join_note.add_theme_font_size_override("font_size", 22)
-	else:
-		_join_note.add_theme_font_size_override("font_size", 20)
+	if _join_note_solo == null or bool(_join_note_solo) != solo:
+		# Only when it changes: re-setting it every frame restyled the label each
+		# frame and undid the Text size scaling (#751).
+		_join_note_solo = solo
+		_join_note.add_theme_font_size_override("font_size", 22 if solo else 20)
+
+## `join_source.join_urls()`, re-read once a second or when the source or its
+## port changes (the read lists every network interface).
+func _cached_join_urls(join_source: Object) -> PackedStringArray:
+	if not join_source.has_method("join_urls"):
+		return PackedStringArray()
+	var key: String = "%d:%s" % [join_source.get_instance_id(), str(join_source.get("http_port"))]
+	var now: int = Time.get_ticks_msec()
+	if key != _join_urls_key or now - _join_urls_read_msec >= JOIN_URLS_REFRESH_MSEC:
+		_join_urls_key = key
+		_join_urls_read_msec = now
+		_join_urls_cache = join_source.join_urls()
+	return _join_urls_cache
 
 ## Shows the "Not connecting? Join over the internet" button under the Couch QR
 ## once the QR has been up 30 s with no phone seated (#727).
 func _update_relay_nudge(join_source: Object) -> void:
 	if _relay_nudge_button == null:
+		return
+	if _lobby_panel == null or not _lobby_panel.visible:
+		# No QR showing. Whatever the nudge would latch now, show_panel("lobby")
+		# resets it before the lobby is seen again, so skip the server calls.
+		_relay_nudge_button.visible = false
 		return
 	var couch: bool = join_source != null and not _online_kind(join_source)
 	var qr_showing: bool = couch and _lobby_qr.visible and _lobby_panel.visible
@@ -642,9 +668,7 @@ func build_panels() -> void:
 	_lobby_right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_lobby_right.add_theme_constant_override("separation", 14)
 	columns.add_child(_lobby_right)
-	_lobby_status = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_lobby_status.name = "StartHint"
-	_lobby_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_lobby_status = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "StartHint", TextServer.AUTOWRAP_WORD_SMART)
 	_lobby_right.add_child(_lobby_status)
 	# Stages & Rules (#647): the summary for every seat and the host's button. The
 	# left column has no room for them under the mode cards at eight modes (#425).
@@ -653,15 +677,12 @@ func build_panels() -> void:
 	_stages_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stages_box.add_theme_constant_override("separation", 6)
 	_lobby_right.add_child(_stages_box)
-	_stages_summary = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_stages_summary.name = "StagesSummary"
-	_stages_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stages_summary = ScreenKitScript.themed_label("", DECK_MIN_FONT_SIZE + 2, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "StagesSummary", TextServer.AUTOWRAP_WORD_SMART)
 	_stages_box.add_child(_stages_summary)
 	_stages_button = ScreenKitScript.themed_button(tr("SR_BUTTON"), UiThemeScript.ACTION_BUTTON, "stages_rules")
 	_stages_button.visible = false # the host's: HostControls shows it once attached
 	_stages_box.add_child(_stages_button)
-	_countdown_label = ScreenKitScript.themed_label("", 220, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_countdown_label.name = "Countdown"
+	_countdown_label = ScreenKitScript.themed_label("", 220, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "Countdown")
 	_countdown_label.set_anchors_preset(Control.PRESET_CENTER)
 	_countdown_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_countdown_label.grow_vertical = Control.GROW_DIRECTION_BOTH
@@ -696,8 +717,7 @@ func _build_top_bar() -> Control:
 	_lobby_logo.position = LOGO_DRAW_OFFSET
 	_lobby_logo.size = LOGO_DRAW_SIZE
 	logo_holder.add_child(_lobby_logo)
-	_lobby_target_label = ScreenKitScript.themed_label("", 28, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_RIGHT)
-	_lobby_target_label.name = "StatusLine"
+	_lobby_target_label = ScreenKitScript.themed_label("", 28, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_RIGHT, "StatusLine")
 	_lobby_target_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lobby_target_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_lobby_target_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -723,8 +743,7 @@ func _build_left_column() -> Control:
 	_join_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_join_box.add_theme_constant_override("separation", 8)
 	card.add_child(_join_box)
-	_join_title = ScreenKitScript.themed_label(tr("LOBBY_SCAN_TITLE"), 30, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_join_title.name = "JoinTitle"
+	_join_title = ScreenKitScript.themed_label(tr("LOBBY_SCAN_TITLE"), 30, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "JoinTitle")
 	_join_box.add_child(_join_title)
 	_lobby_qr = TextureRect.new()
 	_lobby_qr.name = "JoinQr"
@@ -734,13 +753,9 @@ func _build_left_column() -> Control:
 	_lobby_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_lobby_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_join_box.add_child(_lobby_qr)
-	_lobby_url = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_lobby_url.name = "JoinUrl"
-	_lobby_url.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	_lobby_url = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "JoinUrl", TextServer.AUTOWRAP_ARBITRARY)
 	_join_box.add_child(_lobby_url)
-	_join_note = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_join_note.name = "JoinNote"
-	_join_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_join_note = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "JoinNote", TextServer.AUTOWRAP_WORD_SMART)
 	_join_note.visible = false
 	_join_box.add_child(_join_note)
 	_join_help_button = ScreenKitScript.themed_button(tr("JOIN_HELP_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinHelpButton")
@@ -757,8 +772,7 @@ func _build_left_column() -> Control:
 	_invite_button.visible = false
 	_invite_button.pressed.connect(_on_invite_pressed)
 	_join_box.add_child(_invite_button)
-	var mode_title: Label = ScreenKitScript.themed_label(tr("LOBBY_MODE_TITLE"), 26, UiThemeScript.HEADING_LABEL)
-	mode_title.name = "ModeTitle"
+	var mode_title: Label = ScreenKitScript.themed_label(tr("LOBBY_MODE_TITLE"), 26, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "ModeTitle")
 	left.add_child(mode_title)
 	# One card per game mode (#352), from `GameModes.picker_rows()`.
 	_mode_grid = GridContainer.new()

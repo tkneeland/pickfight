@@ -52,18 +52,7 @@ func build(card: Control, on_close: Callable) -> void:
 	box.name = "JoinHelp"
 	box.add_theme_constant_override("separation", 14)
 	card.add_child(box)
-	var head := HBoxContainer.new()
-	head.name = "Head"
-	box.add_child(head)
-	var title: Label = ScreenKitScript.themed_label(_screen.tr("JOIN_HELP_TITLE"), 46, UiThemeScript.INK_HEADING_LABEL)
-	title.name = "Title"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(title)
-	_close_button = ScreenKitScript.themed_button("X", UiThemeScript.YELLOW_BUTTON, "Close")
-	_close_button.custom_minimum_size = Vector2(56, 56)
-	_close_button.focus_mode = Control.FOCUS_ALL
-	_close_button.pressed.connect(on_close)
-	head.add_child(_close_button)
+	_close_button = ScreenKitScript.popup_head(box, _screen.tr("JOIN_HELP_TITLE"), 46, on_close).get_node("Close") as Button
 	for i in CHECK_KEYS.size():
 		var line: Label = ScreenKitScript.themed_label(_screen.tr(CHECK_KEYS[i]), 22, UiThemeScript.INK_BOLD_LABEL)
 		line.name = "Check%d" % i
@@ -77,9 +66,7 @@ func build(card: Control, on_close: Callable) -> void:
 	_url_box.name = "Urls"
 	_url_box.add_theme_constant_override("separation", 4)
 	rule_box.add_child(_url_box)
-	_url_head = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL)
-	_url_head.name = "UrlHead"
-	_url_head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_url_head = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "UrlHead", TextServer.AUTOWRAP_WORD_SMART)
 	_url_box.add_child(_url_head)
 	_rebuild_urls()
 	_build_internet(box)
@@ -91,12 +78,9 @@ func _build_internet(box: VBoxContainer) -> void:
 	net.name = "Internet"
 	net.add_theme_constant_override("separation", 10)
 	box.add_child(net)
-	var note: Label = ScreenKitScript.themed_label(_screen.tr("JOIN_NET_NOTE"), 22, UiThemeScript.INK_BOLD_LABEL)
-	note.name = "NetNote"
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var note: Label = ScreenKitScript.themed_label(_screen.tr("JOIN_NET_NOTE"), 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "NetNote", TextServer.AUTOWRAP_WORD_SMART)
 	net.add_child(note)
-	_net_button = ScreenKitScript.themed_button(_screen.tr("JOIN_NET_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinInternetButton")
-	_net_button.focus_mode = Control.FOCUS_ALL
+	_net_button = ScreenKitScript.themed_button(_screen.tr("JOIN_NET_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinInternetButton", true)
 	_net_button.pressed.connect(_set_internet.bind(true))
 	net.add_child(_net_button)
 	_net_live = HBoxContainer.new()
@@ -116,18 +100,13 @@ func _build_internet(box: VBoxContainer) -> void:
 	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	side.add_theme_constant_override("separation", 6)
 	_net_live.add_child(side)
-	_net_status = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL)
-	_net_status.name = "NetStatus"
+	_net_status = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "NetStatus")
 	side.add_child(_net_status)
-	_net_url = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_HEADING_LABEL)
-	_net_url.name = "NetUrl"
-	_net_url.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	_net_url = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "NetUrl", TextServer.AUTOWRAP_ARBITRARY)
 	side.add_child(_net_url)
-	_net_room = ScreenKitScript.themed_label("", 40, UiThemeScript.INK_HEADING_LABEL)
-	_net_room.name = "NetRoom"
+	_net_room = ScreenKitScript.themed_label("", 40, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "NetRoom")
 	side.add_child(_net_room)
-	_net_stop = ScreenKitScript.themed_button(_screen.tr("JOIN_NET_STOP"), UiThemeScript.ACTION_BUTTON, "StopInternetButton")
-	_net_stop.focus_mode = Control.FOCUS_ALL
+	_net_stop = ScreenKitScript.themed_button(_screen.tr("JOIN_NET_STOP"), UiThemeScript.ACTION_BUTTON, "StopInternetButton", true)
 	_net_stop.pressed.connect(_set_internet.bind(false))
 	side.add_child(_net_stop)
 
@@ -189,6 +168,12 @@ func url_heading() -> String:
 ## Sets the addresses to list (`ControllerServer.join_urls()`) and whether
 ## streamer mode hides them.
 func set_urls(urls: PackedStringArray, hidden: bool) -> void:
+	if urls == _urls and hidden == _hidden:
+		# The lobby calls this every frame: keep the labels, only refresh the
+		# heading (a language change retranslates it).
+		if _built:
+			_url_head.text = _heading_text()
+		return
 	_urls = urls
 	_hidden = hidden
 	if _built:
@@ -199,15 +184,19 @@ func _rebuild_urls() -> void:
 		_url_box.remove_child(label)
 		label.queue_free()
 	_url_labels.clear()
-	if _hidden:
-		_url_head.text = _screen.tr("ROOM_CODE_HIDDEN")
+	_url_head.text = _heading_text()
+	if _hidden or _urls.is_empty():
 		return
-	if _urls.is_empty():
-		_url_head.text = _screen.tr("JOIN_HELP_NO_ADDRESS")
-		return
-	_url_head.text = _screen.tr("JOIN_HELP_ADDRESSES")
 	for i in _urls.size():
 		var label: Label = ScreenKitScript.themed_label(_urls[i], 24, UiThemeScript.INK_HEADING_LABEL)
 		label.name = "Url%d" % i
 		_url_box.add_child(label)
 		_url_labels.append(label)
+
+## The heading over the address list for the current state.
+func _heading_text() -> String:
+	if _hidden:
+		return _screen.tr("ROOM_CODE_HIDDEN")
+	if _urls.is_empty():
+		return _screen.tr("JOIN_HELP_NO_ADDRESS")
+	return _screen.tr("JOIN_HELP_ADDRESSES")

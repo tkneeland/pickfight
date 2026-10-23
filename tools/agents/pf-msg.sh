@@ -21,12 +21,15 @@ load_conf() {
   PF_MSG_SERVER=${PF_MSG_SERVER:-https://ntfy.sh}
   [ -n "$PF_MSG_TOPIC" ]
 }
+# The topic URL as a curl config line, fed on stdin (`curl -K -`): in argv the secret topic shows in `ps`.
+# Optional $1 is appended to the URL (a path and query). load_conf has stripped quotes and spaces from both parts.
+topic_url_conf() { printf 'url = "%s/%s%s"\n' "$PF_MSG_SERVER" "$PF_MSG_TOPIC" "${1:-}"; }
 send() {  # send <TYPE> <text...>
   local type=$1; shift
   case $type in CLAIM|RELEASE|USAGE|ASK|ANSWER|FIRE|HELLO) ;; *) echo "pf-msg: bad type '$type'" >&2; return 2;; esac
   load_conf || { echo "pf-msg: no topic configured (run pf-msg.sh init); not sent" >&2; return 0; }
   case "$*" in *"$PF_MSG_TOPIC"*) echo "pf-msg: refusing to send text containing the topic" >&2; return 1;; esac
-  curl -sf -m 5 -d "$PF_ACCOUNT $type $*" "$PF_MSG_SERVER/$PF_MSG_TOPIC" >/dev/null 2>&1 || return 1
+  topic_url_conf | curl -sf -m 5 -K - -d "$PF_ACCOUNT $type $*" >/dev/null 2>&1 || return 1
   touch "$PF_STATE/.msg-sent-ok"
 }
 cmd=${1:-}; [ $# -gt 0 ] && shift
@@ -50,7 +53,7 @@ case $cmd in
     while true; do
       since=$(cat "$PF_STATE/.msg-last-id" 2>/dev/null); since=${since:-24h}
       began=$(date -u +%s)
-      curl -sN -m 0 "$PF_MSG_SERVER/$PF_MSG_TOPIC/json?since=$since" 2>/dev/null | {
+      topic_url_conf "/json?since=$since" | curl -sN -m 0 -K - 2>/dev/null | {
         n=0
         while IFS= read -r line; do
           rec=$(printf '%s' "$line" | jq -r 'select(.event=="message") | "\(.id)\t\(.time)\t\(.message|gsub("[[:cntrl:]]";" ")|.[0:300])"' 2>/dev/null) || continue

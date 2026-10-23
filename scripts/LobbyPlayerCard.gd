@@ -95,14 +95,11 @@ func _init(seat_slot: int = -1) -> void:
 	_avatar = PreviewScript.new()
 	_avatar.custom_minimum_size = AVATAR_SIZE
 	avatar_row.add_child(_avatar)
-	_name = ScreenKitScript.themed_label("", NAME_FONT_SIZE, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_name.name = "Name"
+	_name = ScreenKitScript.themed_label("", NAME_FONT_SIZE, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "Name")
 	_name.clip_text = true
 	_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(_name)
-	_meta = ScreenKitScript.themed_label("", SMALL_FONT_SIZE, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_meta.name = "Meta"
-	_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_meta = ScreenKitScript.themed_label("", SMALL_FONT_SIZE, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "Meta", TextServer.AUTOWRAP_WORD_SMART)
 	_meta.visible = false
 	box.add_child(_meta)
 	var spacer := Control.new()

@@ -56,23 +56,36 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	_accum += delta
-	if _accum < 1.0 / CAPTURE_FPS:
+	if not capture_due(delta):
 		return
-	_accum = 0.0
 	var tex := get_viewport().get_texture()
 	var img: Image = tex.get_image() if tex != null else null
-	if img != null:
-		push_frame(img)
+	if img != null and not img.is_empty():
+		_keep_frame(img) # fresh from get_image(): ours to shrink in place
+
+## Whether a frame is due after `delta` more seconds. The time past the
+## interval carries over (at most one interval of it, so a long hitch does not
+## bunch captures), or a 50 fps host would capture only 10 a second.
+func capture_due(delta: float) -> bool:
+	var interval: float = 1.0 / CAPTURE_FPS
+	_accum += delta
+	if _accum < interval:
+		return false
+	_accum = minf(_accum - interval, interval)
+	return true
 
 ## Add a frame, shrinking it to FRAME_SIZE, dropping the oldest past the cap.
 func push_frame(img: Image) -> void:
 	if img == null or img.is_empty():
 		return
-	var small: Image = img.duplicate()
-	small.convert(Image.FORMAT_RGB8)
+	_keep_frame(img.duplicate() as Image)
+
+## `push_frame` on an image nobody else holds: shrunk first, so the format
+## conversion only touches FRAME_SIZE pixels.
+func _keep_frame(small: Image) -> void:
 	if small.get_size() != FRAME_SIZE:
 		small.resize(FRAME_SIZE.x, FRAME_SIZE.y, Image.INTERPOLATE_BILINEAR)
+	small.convert(Image.FORMAT_RGB8)
 	_frames.append(small)
 	while _frames.size() > MAX_FRAMES:
 		_frames.pop_front()

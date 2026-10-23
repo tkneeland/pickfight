@@ -290,6 +290,8 @@ func _update_clock() -> void:
 	var text: String = clock_text()
 	_clock_label.text = text
 	_clock_label.visible = text != ""
+	if not _clock_label.visible:
+		return # nothing shows: the tint and pulse are set again when it does
 	var tint: Color = Color("14181D") # ink on the cream pill (#548)
 	var pulse: float = 1.0
 	if overtime:
@@ -298,7 +300,9 @@ func _update_clock() -> void:
 		var beat: float = 0.5 + 0.5 * sin(time_left * TAU)
 		pulse = 1.0 + 0.2 * beat
 		tint = Color("D55E00").lerp(Color("14181D"), 1.0 - beat)
-	_clock_label.add_theme_color_override("font_color", tint)
+	# Only on a change: setting it every tick restyles the label every tick.
+	if not _clock_label.has_theme_color_override("font_color") or _clock_label.get_theme_color("font_color") != tint:
+		_clock_label.add_theme_color_override("font_color", tint)
 	_clock_label.pivot_offset = _clock_label.size * 0.5
 	_clock_label.scale = Vector2(pulse, pulse)
 

@@ -165,51 +165,37 @@ static func is_large_view(view: Vector2) -> bool:
 ## it, so the rotation can skip a large stage it is not going to play. A
 ## scene that never sets it (every normal stage) has the default.
 static func view_size_of(scene: PackedScene) -> Vector2:
+	return _root_prop(scene, &"view_size", DEFAULT_VIEW_SIZE)
+
+## Property `prop` as a stage scene's packed root sets it, read without
+## instancing the scene, or `fallback` where it is not set (or no scene).
+static func _root_prop(scene: PackedScene, prop: StringName, fallback: Variant) -> Variant:
 	if scene == null:
-		return DEFAULT_VIEW_SIZE
+		return fallback
 	var state: SceneState = scene.get_state()
 	if state.get_node_count() == 0:
-		return DEFAULT_VIEW_SIZE
+		return fallback
 	for p in state.get_node_property_count(0):
-		if state.get_node_property_name(0, p) == &"view_size":
+		if state.get_node_property_name(0, p) == prop:
 			return state.get_node_property_value(0, p)
-	return DEFAULT_VIEW_SIZE
+	return fallback
 
 ## A stage scene's rotation weight for `mode_id` (#373), read off its packed
 ## root like `view_size_of()`; 1.0 when the scene lists none for that mode.
 static func mode_weight_of(scene: PackedScene, mode_id: String) -> float:
-	if scene == null:
+	var weights: Variant = _root_prop(scene, &"mode_weights", null)
+	if weights == null:
 		return 1.0
-	var state: SceneState = scene.get_state()
-	if state.get_node_count() == 0:
-		return 1.0
-	for p in state.get_node_property_count(0):
-		if state.get_node_property_name(0, p) == &"mode_weights":
-			var weights: Dictionary = state.get_node_property_value(0, p)
-			return float(weights.get(mode_id, weights.get("_other", 1.0)))
-	return 1.0
+	return float((weights as Dictionary).get(mode_id, (weights as Dictionary).get("_other", 1.0)))
 ## Whether a stage scene's `mode_weights` name `mode_id` itself (not only
 ## through "_other"): a stage built for that mode.
 static func names_mode(scene: PackedScene, mode_id: String) -> bool:
-	if scene == null or scene.get_state().get_node_count() == 0:
-		return false
-	var state: SceneState = scene.get_state()
-	for p in state.get_node_property_count(0):
-		if state.get_node_property_name(0, p) == &"mode_weights":
-			return (state.get_node_property_value(0, p) as Dictionary).has(mode_id)
-	return false
+	var weights: Variant = _root_prop(scene, &"mode_weights", null)
+	return weights != null and (weights as Dictionary).has(mode_id)
 ## Whether a stage scene is flagged `competitive` (issue #375), read off its
 ## packed root like `view_size_of`. Defaults to false: no stage sets it yet.
 static func competitive_of(scene: PackedScene) -> bool:
-	if scene == null:
-		return false
-	var state: SceneState = scene.get_state()
-	if state.get_node_count() == 0:
-		return false
-	for p in state.get_node_property_count(0):
-		if state.get_node_property_name(0, p) == &"competitive":
-			return bool(state.get_node_property_value(0, p))
-	return false
+	return bool(_root_prop(scene, &"competitive", false))
 
 ## The backdrop built in `_ready()`, or null outside the tree.
 func get_background() -> Node2D:
@@ -246,13 +232,18 @@ func get_pickup_spawn_points() -> Array[Vector2]:
 ## `Goal0`, team 1 `Goal1`): an `Area2D` with a rectangle `CollisionShape2D`.
 ## An empty Rect2 for a stage with no such goal.
 func get_goal_rect(team: int) -> Rect2:
-	var goal: Node2D = get_node_or_null("Goal%d" % team) as Node2D
-	if goal == null:
+	return _zone_rect("Goal%d" % team)
+
+## The world-space rectangle of the child zone `zone_name` (an `Area2D` with a
+## rectangle `CollisionShape2D`), or an empty Rect2 without one.
+func _zone_rect(zone_name: String) -> Rect2:
+	var zone: Node2D = get_node_or_null(zone_name) as Node2D
+	if zone == null:
 		return Rect2()
-	for child in goal.get_children():
+	for child in zone.get_children():
 		if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
 			var size: Vector2 = ((child as CollisionShape2D).shape as RectangleShape2D).size
-			var centre: Vector2 = (child as CollisionShape2D).global_position if child.is_inside_tree() else goal.position + (child as CollisionShape2D).position
+			var centre: Vector2 = (child as CollisionShape2D).global_position if child.is_inside_tree() else zone.position + (child as CollisionShape2D).position
 			return Rect2(centre - size * 0.5, size)
 	return Rect2()
 
@@ -263,7 +254,12 @@ func has_goals() -> bool:
 ## Where Soccer's ball kicks off (#402): a `BallSpawn` marker, else the
 ## stage's origin.
 func get_ball_spawn() -> Vector2:
-	var marker: Node2D = get_node_or_null("BallSpawn") as Node2D
+	return _marker_or_origin("BallSpawn")
+
+## Where the child marker `marker_name` sits (world space once in the tree),
+## else the stage's own origin.
+func _marker_or_origin(marker_name: String) -> Vector2:
+	var marker: Node2D = get_node_or_null(marker_name) as Node2D
 	if marker == null:
 		return global_position if is_inside_tree() else position
 	return marker.global_position if marker.is_inside_tree() else marker.position
@@ -271,24 +267,13 @@ func get_ball_spawn() -> Vector2:
 ## Capture the Flag (#403): where `team`'s flag sits at home, a `Flag0` /
 ## `Flag1` marker; the stage's origin without one.
 func get_flag_home(team: int) -> Vector2:
-	var marker: Node2D = get_node_or_null("Flag%d" % team) as Node2D
-	if marker == null:
-		return global_position if is_inside_tree() else position
-	return marker.global_position if marker.is_inside_tree() else marker.position
+	return _marker_or_origin("Flag%d" % team)
 
 ## The world-space rectangle of `team`'s base (`Base0` / `Base1`, an `Area2D`
 ## with a rectangle `CollisionShape2D`), where a carrier of the enemy flag
 ## captures. An empty Rect2 for a stage with no such base.
 func get_base_rect(team: int) -> Rect2:
-	var base: Node2D = get_node_or_null("Base%d" % team) as Node2D
-	if base == null:
-		return Rect2()
-	for child in base.get_children():
-		if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
-			var size: Vector2 = ((child as CollisionShape2D).shape as RectangleShape2D).size
-			var centre: Vector2 = (child as CollisionShape2D).global_position if child.is_inside_tree() else base.position + (child as CollisionShape2D).position
-			return Rect2(centre - size * 0.5, size)
-	return Rect2()
+	return _zone_rect("Base%d" % team)
 
 ## Whether this stage has a flag and a base for each team (#403).
 func has_bases() -> bool:

@@ -36,6 +36,7 @@ extends RefCounted
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
 const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
+const ShotSweepScript := preload("res://scripts/ShotSweep.gd")
 
 ## Player.LAYER_WORLD and Player.LAYER_HEAD, repeated so this script need not
 ## preload the player.
@@ -327,7 +328,9 @@ func _place(body: RigidBody2D, at: Vector2, rotation: float) -> void:
 	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, xform)
 
 func _update_phase(release_time: float) -> void:
-	var cut_off: bool = _terrain_between(head.global_position, ball.global_position)
+	# The ray is only needed where its answer is read: phased, or past the delay.
+	var cut_off: bool = (ball.phased or release_time >= PHASE_DELAY) \
+		and _terrain_between(head.global_position, ball.global_position)
 	if ball.phased:
 		if not cut_off and not ball.overlaps_world():
 			ball.set_phased(false)
@@ -340,21 +343,8 @@ func _update_phase(release_time: float) -> void:
 ## Whether terrain lies on the straight line between two points. Players'
 ## bodies share the terrain layer and are stepped past.
 func _terrain_between(from: Vector2, to: Vector2) -> bool:
-	var space: PhysicsDirectSpaceState2D = ball.get_world_2d().direct_space_state
-	var query := PhysicsRayQueryParameters2D.create(from, to, LAYER_WORLD,
-		[player.get_rid(), ball.get_rid(), head.get_rid()])
-	query.collide_with_areas = false
-	for i in RAY_MAX_SKIPS:
-		var hit: Dictionary = space.intersect_ray(query)
-		if hit.is_empty():
-			return false
-		var collider: Object = hit["collider"]
-		if not (collider is Node and (collider as Node).is_in_group("players")):
-			return true
-		var exclude: Array[RID] = query.exclude
-		exclude.append(hit["rid"])
-		query.exclude = exclude
-	return false
+	return ShotSweepScript.terrain_between(ball.get_world_2d().direct_space_state, from, to, LAYER_WORLD,
+		[player.get_rid(), ball.get_rid(), head.get_rid()], RAY_MAX_SKIPS)
 
 func _pin(rig: Node2D, a: RigidBody2D, b: RigidBody2D, at: Vector2) -> void:
 	var joint := PinJoint2D.new()

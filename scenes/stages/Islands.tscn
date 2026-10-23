@@ -1,9 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Saw.tscn" id="saw315"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Teleporter.tscn" id="tele960"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_island"]
 size = Vector2(180, 24)
@@ -124,10 +125,10 @@ position = Vector2(480, 220)
 
 ; Spawns 4-7 (issue #137): eight players. One on each outer islet, a second on IslandA, and (#199) a third on IslandD, so eight split 4/4 rather than 5/3. Spawn7 sits 125 px clear of the ferry pickup at (240, 220), 55 px off Spawn1.
 [node name="Spawn4" type="Marker2D" parent="."]
-position = Vector2(-670, 220)
+position = Vector2(-635, 220)
 
 [node name="Spawn5" type="Marker2D" parent="."]
-position = Vector2(670, 220)
+position = Vector2(635, 220)
 
 [node name="Spawn6" type="Marker2D" parent="."]
 position = Vector2(-480, 220)
@@ -154,3 +155,14 @@ position = Vector2(240, 220)
 position = Vector2(-100, 120)
 travel = Vector2(200, 0)
 one_way_sec = 2.5
+
+; Teleporter pair (issue #960): one portal on each outer islet, so a fighter knocked to one end can cross the whole chain. The islet spawns sit 60 px inboard (x=+-635).
+[node name="TeleporterW" parent="." instance=ExtResource("tele960")]
+position = Vector2(-695, 262)
+twin = NodePath("../TeleporterE")
+radius = 24.0
+
+[node name="TeleporterE" parent="." instance=ExtResource("tele960")]
+position = Vector2(695, 262)
+twin = NodePath("../TeleporterW")
+radius = 24.0

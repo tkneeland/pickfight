@@ -330,6 +330,25 @@ var _solid_mask: int = 0
 ## Reused by `overlaps_world`.
 var _overlap_query: PhysicsShapeQueryParameters2D = null
 
+## `sweep_exclude` plus this head's own body, for the overlap and embed
+## queries: rebuilt only when `sweep_exclude` is replaced or grows, not on
+## every call. Each query re-reads it only when `_own_exclude_version` moved.
+var _own_exclude: Array[RID] = []
+var _own_exclude_from: Array[RID] = []
+var _own_exclude_version: int = 0
+var _overlap_exclude_version: int = -1
+var _embed_exclude_version: int = -1
+
+## Brings `_own_exclude` up to date and returns its version.
+func _refresh_own_exclude() -> int:
+	if _own_exclude_version == 0 or not is_same(_own_exclude_from, sweep_exclude) \
+			or _own_exclude.size() != sweep_exclude.size() + 1:
+		_own_exclude_from = sweep_exclude
+		_own_exclude = sweep_exclude.duplicate()
+		_own_exclude.append(get_rid())
+		_own_exclude_version += 1
+	return _own_exclude_version
+
 func set_phased(on: bool) -> void:
 	if on == phased:
 		return
@@ -361,7 +380,9 @@ func overlaps_world() -> bool:
 		_overlap_query = PhysicsShapeQueryParameters2D.new()
 		_overlap_query.collide_with_areas = false
 	_overlap_query.collision_mask = sweep_mask
-	_overlap_query.exclude = sweep_exclude + [get_rid()]
+	if _overlap_exclude_version != _refresh_own_exclude():
+		_overlap_query.exclude = _own_exclude
+		_overlap_exclude_version = _own_exclude_version
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	for node: CollisionShape2D in sweep_shapes:
 		if node == null or node.shape == null:
@@ -394,7 +415,9 @@ func is_embedded() -> bool:
 		_embed_query = PhysicsPointQueryParameters2D.new()
 		_embed_query.collide_with_areas = false
 	_embed_query.collision_mask = sweep_mask
-	_embed_query.exclude = sweep_exclude + [get_rid()]
+	if _embed_exclude_version != _refresh_own_exclude():
+		_embed_query.exclude = _own_exclude
+		_embed_exclude_version = _own_exclude_version
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	for node: CollisionShape2D in sweep_shapes:
 		if node == null or node.shape == null:
@@ -603,6 +626,15 @@ func _first_turn_contact(from_offsets: PackedVector2Array, to_offsets: PackedVec
 		return {}
 	if not is_inside_tree():
 		return {}
+	# No circle moved: the loop below would skip every one and find nothing,
+	# so skip the head and physics lookups too.
+	var any_moved: bool = false
+	for i in sweep_shapes.size():
+		if not from_offsets[i].is_equal_approx(to_offsets[i]):
+			any_moved = true
+			break
+	if not any_moved:
+		return {}
 	var anchor: Vector2 = PhysicsServer2D.body_get_state(
 		get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM).origin
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
@@ -768,19 +800,33 @@ func _step_near_anything(space: PhysicsDirectSpaceState2D, motion: Vector2) -> b
 
 ## A ray query for `_trace_terrain` along the sweep's own mask.
 func _terrain_query() -> PhysicsRayQueryParameters2D:
-	var query := PhysicsRayQueryParameters2D.create(Vector2.ZERO, Vector2.ZERO, sweep_mask, sweep_exclude)
-	query.collide_with_areas = false
-	query.hit_from_inside = false
-	return query
+	if _terrain_ray == null:
+		_terrain_ray = PhysicsRayQueryParameters2D.new()
+		_terrain_ray.collide_with_areas = false
+		_terrain_ray.hit_from_inside = false
+	# `_trace_terrain` sets from, to and the exclusions on every use.
+	_terrain_ray.collision_mask = sweep_mask
+	return _terrain_ray
+
+## The world sweep's queries, made once and reused every tick rather than
+## allocated per step (each use sets every field it relies on).
+var _terrain_ray: PhysicsRayQueryParameters2D = null
+var _centre_ray: PhysicsRayQueryParameters2D = null
+var _world_cast: PhysicsShapeQueryParameters2D = null
 
 ## The first thing on `sweep_mask` the straight line `from` -> `to` enters, or
 ## empty: what the world sweep asks of a circle's centre. Unlike
 ## `_trace_terrain` it counts players' bodies, as the world sweep always has.
 func _trace_centre(space: PhysicsDirectSpaceState2D, from: Vector2, to: Vector2) -> Dictionary:
-	var query := PhysicsRayQueryParameters2D.create(from, to, sweep_mask, sweep_exclude)
-	query.collide_with_areas = false
-	query.hit_from_inside = false
-	return space.intersect_ray(query)
+	if _centre_ray == null:
+		_centre_ray = PhysicsRayQueryParameters2D.new()
+		_centre_ray.collide_with_areas = false
+		_centre_ray.hit_from_inside = false
+	_centre_ray.from = from
+	_centre_ray.to = to
+	_centre_ray.collision_mask = sweep_mask
+	_centre_ray.exclude = sweep_exclude
+	return space.intersect_ray(_centre_ray)
 
 ## The first terrain the straight line `from` -> `to` enters, or empty. Steps
 ## past other players' bodies, which share the layer (see the block comment).
@@ -1093,11 +1139,13 @@ func _find_world_contact(state: PhysicsDirectBodyState2D) -> Dictionary:
 	# question is where two heads first *met*, so the start is what has to be
 	# right. See `_previous_shape_xforms`.
 	var start := Transform2D(_previous_rotation, _previous_position)
-	var params := PhysicsShapeQueryParameters2D.new()
+	if _world_cast == null:
+		_world_cast = PhysicsShapeQueryParameters2D.new()
+		_world_cast.margin = 0.0
+	var params: PhysicsShapeQueryParameters2D = _world_cast
 	params.motion = motion
 	params.collision_mask = sweep_mask
 	params.exclude = sweep_exclude
-	params.margin = 0.0
 
 	var safe: float = 1.0
 	var terrain_query: PhysicsRayQueryParameters2D = null if cast_whole else _terrain_query()
