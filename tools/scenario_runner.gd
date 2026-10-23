@@ -959,6 +959,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_opens_umbrella_while_falling",
 	"bot_throws_boomerang_at_rival_in_range",
 	"bot_does_not_throw_boomerang_at_teammate_or_through_wall",
+	"bot_eases_off_ice_near_drop",
+	"bot_walks_against_belt_to_open_end",
 	"bot_aims_boomstick_at_rival",
 	"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952",
 	"join_help_opens_lists_urls_and_closes_680",
@@ -3469,6 +3471,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_throws_boomerang_at_rival_in_range()
 		"bot_does_not_throw_boomerang_at_teammate_or_through_wall":
 			return await _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall()
+		"bot_eases_off_ice_near_drop":
+			return await _scenario_bot_eases_off_ice_near_drop()
+		"bot_walks_against_belt_to_open_end":
+			return await _scenario_bot_walks_against_belt_to_open_end()
 		"bot_aims_boomstick_at_rival":
 			return await _scenario_bot_aims_boomstick_at_rival()
 		"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952":
@@ -43968,6 +43974,68 @@ func _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall() -> Arr
 		failures.append("the bot threw at a rival 900 px away")
 	if walled["throws"] > 0:
 		failures.append("the bot threw through a wall")
+	_scenario_completed = true
+	return failures
+## Issue #963: a bot on a floor strip with a drop `end_gap` px ahead (to the
+## right), a rival on a far island beyond it. `belt` lays a conveyor carrying
+## right, otherwise an ice patch. An Easy bot is the control: it keeps the old
+## behaviour. Returns whether the bot stayed on the floor and its farthest x.
+func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -> Dictionary:
+	var stage: Node2D = _new_empty_stage()
+	var strip: StaticBody2D = (ConveyorScene if belt else IcePatchScene).instantiate() as StaticBody2D
+	strip.size = Vector2(800.0, 12.0 if belt else 8.0)
+	strip.position = Vector2(0.0, 600.0)
+	stage.add_child(strip)
+	var island := StaticBody2D.new()
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(600.0, 12.0)
+	shape.shape = rect
+	island.add_child(shape)
+	island.position = Vector2(1050.0, 600.0)
+	stage.add_child(island)
+	var start_x: float = 400.0 - end_gap
+	var player: RigidBody2D = _spawn_player(stage, Vector2(start_x, 560.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(1100.0, 560.0))
+	await _await_ticks(30)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var out: Dictionary = {"stayed": true, "max_x": start_x}
+	for t in ticks:
+		await physics_frame
+		out["max_x"] = maxf(out["max_x"], player.global_position.x)
+		if player.global_position.y > 640.0:
+			out["stayed"] = false
+	await _teardown(stage, false)
+	return out
+## A Normal bot on ice with an open edge 150 px ahead, a rival beyond it, does
+## not leave the floor in 5 s; the Easy control (old behaviour) is printed.
+func _scenario_bot_eases_off_ice_near_drop() -> Array[String]:
+	var failures: Array[String] = []
+	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300)
+	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300)
+	print("      bot_eases_off_ice_near_drop: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
+	if not normal["stayed"]:
+		failures.append("the Normal bot left the ice patch")
+	if normal["max_x"] > 350.0:
+		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	_scenario_completed = true
+	return failures
+## A Normal bot on a belt carrying it towards an open end walks against it and
+## stays on the floor for 5 s.
+func _scenario_bot_walks_against_belt_to_open_end() -> Array[String]:
+	var failures: Array[String] = []
+	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300)
+	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300)
+	print("      bot_walks_against_belt_to_open_end: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
+	if not normal["stayed"]:
+		failures.append("the Normal bot was carried off the belt's open end")
+	if normal["max_x"] > 350.0:
+		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## Issue #952: a bot holding `weapon` with a rival `gap` px off on flat ground.
