@@ -1089,6 +1089,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"structure_changed_on_new_entity_and_hud_change_review_net",
 	"controller_page_review_fixes_review_net",
 	"stage_check_and_join_urls_cached_review_perf",
+	"pad_reaches_invite_and_your_look_picks_review_ui",
+	"esc_closes_any_lobby_popup_review_ui",
+	"restore_defaults_resizes_the_window_review_ui",
+	"victory_keeps_same_podium_and_resets_title_colour_review_ui",
+	"settings_language_change_rewords_every_label_review_ui",
+	"credits_cover_the_settings_toggle_review_ui",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3640,6 +3646,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_review_fixes_review_net()
 		"stage_check_and_join_urls_cached_review_perf":
 			return await _scenario_stage_check_and_join_urls_cached_review_perf()
+		"pad_reaches_invite_and_your_look_picks_review_ui":
+			return await _scenario_pad_reaches_invite_and_your_look_picks_review_ui()
+		"esc_closes_any_lobby_popup_review_ui":
+			return await _scenario_esc_closes_any_lobby_popup_review_ui()
+		"restore_defaults_resizes_the_window_review_ui":
+			return _scenario_restore_defaults_resizes_the_window_review_ui()
+		"victory_keeps_same_podium_and_resets_title_colour_review_ui":
+			return await _scenario_victory_keeps_same_podium_and_resets_title_colour_review_ui()
+		"settings_language_change_rewords_every_label_review_ui":
+			return _scenario_settings_language_change_rewords_every_label_review_ui()
+		"credits_cover_the_settings_toggle_review_ui":
+			return await _scenario_credits_cover_the_settings_toggle_review_ui()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -51471,5 +51489,218 @@ func _scenario_stage_check_and_join_urls_cached_review_perf() -> Array[String]:
 				break
 	screen.set_popup("")
 	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+## Review: a gamepad host reaches Invite Steam friends from the lobby's pad menu, and in Your look
+## every pick (colour swatches with a visible yellow focus outline, hats, eyes), focus landing on
+## the picked hat when the popup opens.
+func _scenario_pad_reaches_invite_and_your_look_picks_review_ui() -> Array[String]:
+	var failures: Array[String] = []
+	var steam: Node = get_root().get_node("SteamPlatform")
+	steam.fake_running_for_test = true
+	steam.calls_for_test.clear()
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		steam.fake_running_for_test = false
+		_scenario_completed = true
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.press_control("online")
+	await _wait_for_239(func() -> bool: return server.is_online())
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	screen.refresh_controls()
+	var invite: Button = screen.invite_button()
+	if invite == null or not invite.is_visible_in_tree():
+		failures.append("the invite button is hidden in an Online lobby with Steam running; the check is void")
+	else:
+		screen.set_pad_menu(true)
+		screen.refresh_controls()
+		if invite.focus_mode != Control.FOCUS_ALL:
+			failures.append("the pad menu left Invite Steam friends unfocusable")
+		var reached: bool = false
+		for id: String in ["copy_code", "leave", "join_help", "join", "start"]:
+			var button: Button = screen.control_button(id)
+			if button == null or not button.is_visible_in_tree():
+				continue
+			for side: String in ["focus_neighbor_bottom", "focus_neighbor_top"]:
+				var path: NodePath = button.get(side)
+				if not path.is_empty() and button.get_node_or_null(path) == invite:
+					reached = true
+		if not reached:
+			failures.append("no D-pad step from the controls around it leads to Invite Steam friends")
+		screen.set_pad_menu(false)
+	screen.set_pad_menu(true)
+	screen.press_control("look")
+	await _await_ticks(2)
+	var panel: Control = screen.host_picker()
+	if screen.popup_open() != "look" or panel == null:
+		failures.append("Your look did not open from the pad menu (popup '%s'); the check is void" % screen.popup_open())
+	else:
+		var focused: Control = screen.get_viewport().gui_get_focus_owner()
+		if not (focused is Button and str(focused.name).begins_with("Hat_") and (focused as Button).button_pressed):
+			failures.append("opening Your look focused %s, not the picked hat" % (str(focused.name) if focused != null else "nothing"))
+		var picks: Array[Node] = []
+		for pattern: String in ["Color_*", "Hat_*", "Eyes_*"]:
+			var found: Array[Node] = panel.find_children(pattern, "Button", true, false)
+			if found.is_empty():
+				failures.append("Your look has no %s buttons" % pattern)
+			else:
+				picks.append(found[0])
+		for pick: Node in picks:
+			if (pick as Button).focus_mode != Control.FOCUS_ALL:
+				failures.append("%s cannot take the gamepad's focus" % pick.name)
+		var swatch: Button = panel.color_button(0)
+		var outline := swatch.get_theme_stylebox("focus") as StyleBoxFlat if swatch != null else null
+		if outline == null or outline.draw_center or outline.border_color != preload("res://scripts/UiTheme.gd").YELLOW or outline.border_width_top < 2:
+			failures.append("a focused colour swatch shows no yellow outline")
+	screen.set_popup("")
+	screen.set_pad_menu(false)
+	await _kind_close_435(rig)
+	steam.fake_running_for_test = false
+	steam.calls_for_test.clear()
+	return failures
+## Review (owner decision): Esc over any lobby popup closes that popup and never opens Settings.
+func _scenario_esc_closes_any_lobby_popup_review_ui() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		_scenario_completed = true
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var settings: Node = get_root().get_node_or_null(^"Sfx/SfxSettings")
+	screen.press_control("online")
+	await _wait_for_239(func() -> bool: return server.is_online())
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	screen.refresh_controls()
+	for which: String in ["help", "look"]:
+		screen.set_popup(which)
+		await process_frame
+		if screen.popup_open() != which:
+			failures.append("popup '%s' never opened; the check is void" % which)
+			continue
+		await _key_tap_647(KEY_ESCAPE)
+		if screen.popup_open() != "":
+			failures.append("Esc left popup '%s' open" % which)
+			screen.set_popup("")
+		if settings != null and settings.is_open():
+			failures.append("Esc over popup '%s' opened the Settings panel" % which)
+			settings.toggle_panel()
+	await _kind_close_435(rig)
+	return failures
+## Review (owner decision): Restore defaults puts a windowed host's window back to the project's own
+## size; the Default window size is ZERO, which apply_resolution() never resized to.
+func _scenario_restore_defaults_resizes_the_window_review_ui() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		_scenario_completed = true
+		return ["the Sfx autoload is missing"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var host: RefCounted = ui.host
+	var was_persist: bool = host.persist
+	var was_language: String = host.language
+	var was_crash: bool = host.send_crash_reports
+	host.persist = false
+	host.resolution = Vector2i(1280, 720)
+	var sizes: Array = []
+	ui.set("window_resizer", func(size: Vector2i) -> void: sizes.append(size))
+	if sfx.fullscreen:
+		failures.append("the run is fullscreen; the check is void")
+	ui.confirm_restore()
+	var want := Vector2i(int(ProjectSettings.get_setting("display/window/size/viewport_width")), int(ProjectSettings.get_setting("display/window/size/viewport_height")))
+	if host.resolution != Vector2i.ZERO:
+		failures.append("Restore defaults left the window size at %s" % host.resolution)
+	if sizes != [want]:
+		failures.append("Restore defaults resized the window to %s, wanted [%s]" % [sizes, want])
+	ui.set("window_resizer", Callable())
+	host.language = was_language
+	host.send_crash_reports = was_crash
+	host.persist = was_persist
+	_scenario_completed = true
+	return failures
+## Review: the victory screen keeps its podium when the same result arrives again (the lobby state
+## changes about once a second with remote seats), takes the old columns out of the tree at once
+## when it does change, and a match with no winner gets the yellow title back.
+func _scenario_victory_keeps_same_podium_and_resets_title_colour_review_ui() -> Array[String]:
+	var failures: Array[String] = []
+	var layer := CanvasLayer.new()
+	get_root().add_child(layer)
+	var names: Callable = func(slot: int) -> String: return "P%d" % (slot + 1)
+	var colours: Callable = func(slot: int) -> Color: return [Color.RED, Color.BLUE, Color.GREEN][slot % 3]
+	var victory: RefCounted = preload("res://scripts/VictoryScreen.gd").new(layer, names, colours)
+	victory.build()
+	var podium: HBoxContainer = victory._podium
+	var slots: Array[int] = [1, 0, 2]
+	var scores := PackedInt32Array([3, 5, 1])
+	var awards: Array[Dictionary] = []
+	victory.refresh(slots, scores, 1, awards)
+	var first: Array[Node] = podium.get_children()
+	victory.refresh(slots, scores, 1, awards)
+	if podium.get_children() != first:
+		failures.append("the same result rebuilt the podium (%d columns, %d before)" % [podium.get_child_count(), first.size()])
+	scores[0] = 4
+	victory.refresh(slots, scores, 1, awards)
+	if podium.get_child_count() != slots.size():
+		failures.append("a changed result left %d columns in the podium, wanted %d" % [podium.get_child_count(), slots.size()])
+	if victory.victory_title().get_theme_color("font_color") != Color.BLUE:
+		failures.append("the winner's title is not in the winner's colour; the check is void")
+	victory.refresh(slots, scores, -1, awards)
+	if victory.victory_title().get_theme_color("font_color") != preload("res://scripts/UiTheme.gd").YELLOW:
+		failures.append("a match with no winner kept the last winner's title colour %s" % victory.victory_title().get_theme_color("font_color"))
+	layer.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+## Review: a language change re-words Pause on focus loss, VSync and the Quit confirm's No too.
+func _scenario_settings_language_change_rewords_every_label_review_ui() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		_scenario_completed = true
+		return ["the Sfx autoload is missing"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	var catalogue: Dictionary = _i18n_catalogue_367()
+	var pseudo := Translation.new()
+	pseudo.locale = "xx"
+	for key: String in catalogue:
+		pseudo.add_message(key, "[xx] " + str(catalogue[key]))
+	var was_locale: String = TranslationServer.get_locale()
+	TranslationServer.add_translation(pseudo)
+	TranslationServer.set_locale("xx")
+	ui._retranslate()
+	for node_name: String in ["PauseOnFocusLoss", "VSync", "QuitNo", "QuitYes"]:
+		var control: Button = ui.find_child(node_name, true, false) as Button
+		if control == null:
+			failures.append("Settings has no %s" % node_name)
+		elif not control.text.begins_with("[xx] "):
+			failures.append("%s still reads '%s' after the language change" % [node_name, control.text])
+	TranslationServer.set_locale(was_locale)
+	TranslationServer.remove_translation(pseudo)
+	ui._retranslate()
+	_scenario_completed = true
+	return failures
+## Review: the open credits screen covers the Settings corner toggle, so a click there is not the toggle's.
+func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		_scenario_completed = true
+		return ["the Sfx autoload is missing"]
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await _await_ticks(2)
+	var toggle: Button = ui.find_child("Toggle", true, false) as Button
+	var point: Vector2 = toggle.get_global_rect().get_center() if toggle != null else Vector2.ZERO
+	if toggle == null or not ui.toggle_hit(point):
+		failures.append("a click on the Settings toggle does not hit it with nothing over it; the check is void")
+	var credits: Node = preload("res://scripts/CreditsScreen.gd").open(self)
+	await process_frame
+	if ui.toggle_hit(point):
+		failures.append("a click on the corner under the open credits screen still hits the Settings toggle")
+	credits.close()
+	if toggle != null and not ui.toggle_hit(point):
+		failures.append("the Settings toggle stayed unclickable after the credits closed")
+	PadMenuScript368.reset()
 	_scenario_completed = true
 	return failures
