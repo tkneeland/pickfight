@@ -48,6 +48,9 @@ const LEAVE_BUTTON_FONT_SIZE: int = 18
 ## #545: Start pressed with the lobby's conditions unmet used to do nothing and
 ## say nothing. The reason shows in the status line for a few seconds.
 const START_NOTICE_MSEC: int = 4000
+## How often the open lobby re-reads the server for the controls' captions, in msec (like
+## HostMatchMenu). A press still refreshes at once.
+const REFRESH_MSEC: int = 250
 const PAD_ORDER: Array[String] = ["online", "local", "solo", "mode", "bots", "bot_skill", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
 
 var _screen # the LobbyScreen
@@ -79,6 +82,7 @@ var _leave_armed_until_msec: int = 0
 
 var _pad_active: bool = false
 var _pad_menu_open: bool = false
+var _refreshed_msec: int = -REFRESH_MSEC
 
 func _init(screen) -> void:
 	_screen = screen
@@ -110,6 +114,7 @@ func attach(server: Object) -> void:
 	_screen.join_help_button().pressed.connect(press_control.bind("join_help"))
 	_controls["join_help"] = _screen.join_help_button()
 	_controls["relay_nudge"] = _screen.relay_nudge_button() # #727, beside it in the pad chain
+	_controls["invite"] = _screen.invite_button() # Invite Steam friends (#298): pressed already calls the server; in the pad chain so a Steam Deck host reaches it
 	# The way into someone else's room code (Online only), with why it is off when it is.
 	lobby_right.add_child(_action_button("join", _screen.tr("HOST_JOIN_ONLINE"), UiThemeScript.ACTION_BUTTON))
 	_join_blocked = ScreenKitScript.themed_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
@@ -445,6 +450,7 @@ func refresh() -> void:
 	var server: Object = _screen._server
 	if server == null:
 		return
+	_refreshed_msec = Time.get_ticks_msec()
 	var status: String = server.online_status()
 	var code: String = server.online_room_code()
 	var kind: String = _kind_of(server)
@@ -488,7 +494,8 @@ func refresh() -> void:
 func process() -> void:
 	var lobby_panel: Control = _screen._lobby_panel
 	if _screen._server != null and lobby_panel != null and lobby_panel.visible:
-		refresh()
+		if Time.get_ticks_msec() - _refreshed_msec >= REFRESH_MSEC:
+			refresh()
 	elif _pad_menu_open:
 		set_pad_menu(false) # the lobby went away under the open menu
 
@@ -543,8 +550,9 @@ func input(event: InputEvent) -> void:
 		return
 	var popup: String = _screen.popup_open()
 	var key := event as InputEventKey
-	if (popup == "stages" or popup == "join_help") and key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
-		# Esc closes just this screen, never the Settings panel behind it; it stays up with a mode on no stage (#647)
+	if popup != "" and key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
+		# Esc closes just the open popup, never opens the Settings panel behind it (owner decision);
+		# Stages & Rules stays up with a mode on no stage (#647)
 		if _screen.request_close_popup():
 			_restore_focus_after_popup()
 		_screen.get_viewport().set_input_as_handled()
@@ -568,7 +576,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["join_help", "relay_nudge"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["invite"], ["join_help", "relay_nudge"], ["join"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]

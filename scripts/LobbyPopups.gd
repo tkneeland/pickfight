@@ -231,7 +231,7 @@ func open(which: String) -> void:
 func _focus_for_pad(which: String) -> void:
 	if not _screen.pad_menu_open() or which == "":
 		return
-	var target: Control = _close_button if which == "help" else _look_panel.done_button()
+	var target: Control = _close_button if which == "help" else _look_panel.focus_target()
 	if which == "stages":
 		target = _stages_screen.focus_target()
 	elif which == "join_help":
