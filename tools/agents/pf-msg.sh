@@ -1,7 +1,7 @@
 #!/bin/bash
 # Private account-to-account doorbell over an ntfy topic. The channel only nudges; verify everything on GitHub.
 #   pf-msg.sh init                  create $PF_STATE/pf-msg.conf with a random secret topic (never commit it)
-#   pf-msg.sh send <TYPE> <text>    TYPE: CLAIM RELEASE USAGE ASK ANSWER FIRE HELLO
+#   pf-msg.sh send <TYPE> <text>    TYPE: CLAIM RELEASE USAGE ASK ANSWER INFO FIRE HELLO
 #   pf-msg.sh claim|release <n>     send CLAIM / RELEASE <n>
 #   pf-msg.sh listen                long-lived: appends to msg-inbox.log, writes CLAIM/ASK/FIRE lines to msg-wake.txt
 #   pf-msg.sh claimed <n>           exit 0 when another account CLAIMed <n> in the last 24h and has not RELEASEd it
@@ -26,7 +26,7 @@ load_conf() {
 topic_url_conf() { printf 'url = "%s/%s%s"\n' "$PF_MSG_SERVER" "$PF_MSG_TOPIC" "${1:-}"; }
 send() {  # send <TYPE> <text...>
   local type=$1; shift
-  case $type in CLAIM|RELEASE|USAGE|ASK|ANSWER|FIRE|HELLO) ;; *) echo "pf-msg: bad type '$type'" >&2; return 2;; esac
+  case $type in CLAIM|RELEASE|USAGE|ASK|ANSWER|INFO|FIRE|HELLO) ;; *) echo "pf-msg: bad type '$type'" >&2; return 2;; esac
   load_conf || { echo "pf-msg: no topic configured (run pf-msg.sh init); not sent" >&2; return 0; }
   case "$*" in *"$PF_MSG_TOPIC"*) echo "pf-msg: refusing to send text containing the topic" >&2; return 1;; esac
   topic_url_conf | curl -sf -m 5 -K - -d "$PF_ACCOUNT $type $*" >/dev/null 2>&1 || return 1
