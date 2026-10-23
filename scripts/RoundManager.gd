@@ -173,6 +173,10 @@ const UiThemeScript := preload("res://scripts/UiTheme.gd")
 ## (#182), read from here: it stops while the tree is paused and runs at
 ## `Engine.time_scale`, so none of them needs pushing back after a pause.
 const GameClockScript := preload("res://scripts/GameClock.gd")
+## Issue #976: what the Online joiner is sent and shares with this screen.
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
+const FinalKoViewScript := preload("res://scripts/FinalKoView.gd")
+const ModifierBannerScript := preload("res://scripts/ModifierBanner.gd")
 
 var _state: int = State.WAITING
 var _pause_until_msec: int = 0
@@ -1077,26 +1081,10 @@ func _announce_modifier(title: String) -> void:
 
 ## Big, outlined, centred across the upper part of the screen, on its own
 ## canvas layer above the HUD.
+## The label is `ModifierBanner.gd`'s, shared with the Online joiner (#976).
 func _build_modifier_label() -> void:
-	_modifier_layer = CanvasLayer.new()
-	_modifier_layer.name = "ModifierLayer"
-	_modifier_layer.layer = 10
-	add_child(_modifier_layer)
-	_modifier_label = Label.new()
-	_modifier_label.name = "ModifierLabel"
-	_modifier_label.anchor_left = 0.0
-	_modifier_label.anchor_right = 1.0
-	_modifier_label.anchor_top = 0.12
-	_modifier_label.anchor_bottom = 0.32
-	_modifier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_modifier_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_modifier_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_modifier_label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL # Lilita One, ink outline (#548)
-	_modifier_label.add_theme_font_size_override("font_size", 96)
-	_modifier_label.add_theme_color_override("font_color", UiThemeScript.YELLOW)
-	_modifier_label.add_theme_constant_override("outline_size", 18)
-	_modifier_label.visible = false
-	_modifier_layer.add_child(_modifier_label)
+	_modifier_label = ModifierBannerScript.build(self)
+	_modifier_layer = _modifier_label.get_parent() as CanvasLayer
 	_modifier_timer = Timer.new()
 	_modifier_timer.name = "ModifierAnnounceTimer"
 	_modifier_timer.one_shot = true
@@ -1543,18 +1531,34 @@ func _lobby_looks(roster: Array[int]) -> Array:
 ## The podium: the match winner on the tallest block, then everyone else in
 ## the roster by final score, drawn by the lobby screen with the awards.
 func _refresh_victory() -> void:
-	if _controller_server != null and _controller_server.has_method("continue_inputs"):
-		_lobby_screen.set_victory_continue_inputs(_controller_server.continue_inputs())
+	var data: Dictionary = victory_data()
+	_lobby_screen.set_victory_continue_inputs(data["inputs"])
+	_lobby_screen.refresh_victory(data["slots"], data["scores"], data["winner"], data["awards"],
+		data["winner_team"], data["teams"], data["team_scores"], data["stats"])
+
+## Everything the victory screen is drawn from: `VictoryScreen.refresh()`'s
+## arguments, the Continue inputs, each slot's [name, colour] and whether the
+## demo's end card is up. The host draws its own screen from it, and the Online
+## joiner (#976) gets it whole in the `hud` frame and draws the same
+## `VictoryScreen` -- so an award only needs adding to `_all_awards()` here
+## (MatchStats' `awards()`, `extra_awards()` or `mode_awards()`) to reach both.
+func victory_data() -> Dictionary:
 	var roster: Array[int] = _roster()
 	var slots: Array[int] = []
 	for slot in _players.size():
 		if _players[slot] != null and (roster.has(slot) or slot == _match_winner_slot or (_team_mode and _teams.has(slot))):
 			slots.append(slot)
 	slots.sort_custom(podium_before)
-	if _team_mode:
-		_lobby_screen.refresh_victory(slots, _scores, -1, _all_awards(slots), _match_winner_team, _teams, _team_scores, _stats.stat_rows(slots))
-		return
-	_lobby_screen.refresh_victory(slots, _scores, _match_winner_slot, _all_awards(slots), -1, {}, PackedInt32Array(), _stats.stat_rows(slots))
+	var names: Dictionary = {}
+	for slot in _players.size():
+		names[slot] = [_slot_name(slot), _slot_color(slot)]
+	var inputs: PackedStringArray = PackedStringArray()
+	if _controller_server != null and _controller_server.has_method("continue_inputs"):
+		inputs = _controller_server.continue_inputs()
+	return {"slots": slots, "scores": _scores, "winner": -1 if _team_mode else _match_winner_slot,
+		"awards": _all_awards(slots), "winner_team": _match_winner_team if _team_mode else -1,
+		"teams": _teams.duplicate() if _team_mode else {}, "team_scores": _team_scores if _team_mode else PackedInt32Array(),
+		"stats": _stats.stat_rows(slots), "inputs": inputs, "names": names, "end_card": _end_card_up}
 
 ## The core awards plus the extra superlatives (issue #325).
 func _all_awards(slots: Array[int]) -> Array[Dictionary]:
@@ -1620,8 +1624,10 @@ func _stage_display_name(stage_name: String) -> String:
 func _show_stage_title() -> void:
 	if _current_stage == null or stage_title_sec <= 0.0:
 		return
-	_screen().show_stage_title(_stage_display_name(str(_current_stage.name)), stage_title_sec,
-		"%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.status_line(game_mode)])
+	var title: String = _stage_display_name(str(_current_stage.name))
+	var rule: String = "%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.status_line(game_mode)]
+	EffectStreamScript.record("title", {"t": title, "d": stage_title_sec, "r": rule}) # the joiner's card (#976)
+	_screen().show_stage_title(title, stage_title_sec, rule)
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
 #
@@ -1766,6 +1772,7 @@ func _set_tree_paused(on: bool) -> void:
 		get_tree().paused = on
 
 func _show_pause_banner(on: bool) -> void:
+	EffectStreamScript.record("pause", {"on": on}) # #976
 	if _lobby_screen == null and not on:
 		return
 	_screen().show_pause_banner(on)
@@ -2330,8 +2337,10 @@ func _start_play_of_round() -> void:
 	# Only a fresh Ready tap skips it.
 	_clear_ready()
 	# Streamer mode (#369) hides only the room code and join links; names stay.
-	_play_of_round.play(_replay.frames_slice(int(pick["start"]), int(pick["count"])),
-		tr("PLAY_OF_ROUND_CAPTION") % _slot_name(int(best["killer"])), _shake_on())
+	var caption: String = tr("PLAY_OF_ROUND_CAPTION") % _slot_name(int(best["killer"]))
+	# The Online joiner plays the same moment from its own screen's frames (#976).
+	EffectStreamScript.record("por", {"age": now - int(best["t"]), "rem": _pause_until_msec - now, "cap": caption})
+	_play_of_round.play(_replay.frames_slice(int(pick["start"]), int(pick["count"])), caption, _shake_on())
 
 func _shake_on() -> bool:
 	var sfx: Node = get_node_or_null("/root/Sfx") if is_inside_tree() else null
@@ -2339,6 +2348,8 @@ func _shake_on() -> bool:
 
 func _end_play_of_round() -> void:
 	if _play_of_round != null:
+		if _play_of_round.is_playing():
+			EffectStreamScript.record("por_end") # #976
 		_play_of_round.dismiss()
 
 func play_of_round_panel() -> CanvasLayer:
@@ -2647,18 +2658,16 @@ func _end_game_mode() -> void:
 # real time (about 1 s) and ends before the victory panel (#325) is entered.
 const FINAL_KO_TIME_SCALE: float = 0.3
 const FINAL_KO_GAME_MSEC: int = 300
-const FINAL_KO_ZOOM_FACTOR: float = 1.5
-const FINAL_KO_FLASH_ALPHA: float = 0.45
+const FINAL_KO_ZOOM_FACTOR: float = FinalKoViewScript.ZOOM_FACTOR
+const FINAL_KO_FLASH_ALPHA: float = FinalKoViewScript.FLASH_ALPHA
 
 var _last_lethal_point: Vector2 = Vector2.ZERO
 var _has_lethal_point: bool = false
 var _final_ko_active: bool = false
 var _final_ko_end_msec: int = 0
 var _final_ko_scale_was: float = 1.0
-var _final_ko_camera: Camera2D = null
-var _final_ko_zoom_was: Vector2 = Vector2.ONE
-var _final_ko_pos_was: Vector2 = Vector2.ZERO
-var _final_ko_flash: CanvasLayer = null
+## The zoom and flash, shared with the Online joiner (#976).
+var _final_ko_view: RefCounted = FinalKoViewScript.new()
 
 func _start_final_ko(fallback_point: Vector2) -> void:
 	if _final_ko_active:
@@ -2669,28 +2678,14 @@ func _start_final_ko(fallback_point: Vector2) -> void:
 	_final_ko_end_msec = GameClockScript.now_msec() + FINAL_KO_GAME_MSEC
 	_final_ko_scale_was = Engine.time_scale
 	Engine.time_scale = FINAL_KO_TIME_SCALE
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	if sfx == null or bool(sfx.get("screen_shake")):
-		var camera: Camera2D = get_node_or_null(camera_path) as Camera2D if not camera_path.is_empty() else null
-		if camera != null:
-			_final_ko_camera = camera
-			_final_ko_zoom_was = camera.zoom
-			_final_ko_pos_was = camera.global_position
-			camera.zoom = camera.zoom * FINAL_KO_ZOOM_FACTOR
-			camera.global_position = point
-	if sfx == null or not bool(sfx.get("reduce_flash")):
-		_final_ko_flash = CanvasLayer.new()
-		_final_ko_flash.layer = 50
-		var rect := ColorRect.new()
-		rect.color = Color(1, 1, 1, FINAL_KO_FLASH_ALPHA)
-		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-		_final_ko_flash.add_child(rect)
-		add_child(_final_ko_flash)
+	EffectStreamScript.record("final_ko", {"p": point}) # the joiner's zoom and flash (#976)
+	var camera: Camera2D = get_node_or_null(camera_path) as Camera2D if not camera_path.is_empty() else null
+	_final_ko_view.start(camera, self, point)
 
 func _tick_final_ko() -> void:
 	if _final_ko_active and GameClockScript.now_msec() >= _final_ko_end_msec:
 		_end_final_ko()
+		EffectStreamScript.record("clip_save") # the joiner saves its own clip too (#976)
 		if _replay != null:
 			_replay.autosave_match_clip() # #795
 
@@ -2700,14 +2695,8 @@ func _end_final_ko() -> void:
 		return
 	_final_ko_active = false
 	Engine.time_scale = _final_ko_scale_was
-	if is_instance_valid(_final_ko_camera):
-		_final_ko_camera.zoom = _final_ko_zoom_was
-		_final_ko_camera.global_position = _final_ko_pos_was
-		_final_ko_camera.reset_smoothing()
-	_final_ko_camera = null
-	if is_instance_valid(_final_ko_flash):
-		_final_ko_flash.queue_free()
-	_final_ko_flash = null
+	EffectStreamScript.record("final_ko_end") # #976
+	_final_ko_view.end()
 
 ## Whether the final-KO slow motion is playing (for the scenario suite).
 func final_ko_active() -> bool:
@@ -2715,7 +2704,7 @@ func final_ko_active() -> bool:
 
 ## The final-KO flash layer, or null (none, or reduce flashes is on).
 func final_ko_flash() -> CanvasLayer:
-	return _final_ko_flash
+	return _final_ko_view.flash
 # --- Ghosts of KO'd players (issue #324) ---------------------------------------
 
 const GhostScript := preload("res://scripts/Ghost.gd")

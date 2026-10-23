@@ -31,6 +31,7 @@ extends Node2D
 
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 
 enum Kind { DUST, SPARK, CATCH }
 
@@ -168,6 +169,10 @@ var _shake_intensity: float = 0.0
 var _shaken_camera: Camera2D = null
 ## Ticks of freeze still to serve; > 0 only while this node holds the pause.
 var _hitstop_frames: int = 0
+## Issue #976: the Online joiner's copy watches nothing in its tree; the host's
+## dust, sparks and shakes reach it as recorded events, played through the
+## public methods below, and its trails follow `track_trail()` anchors.
+var mirror: bool = false
 ## Whether this node, not anyone else, set `SceneTree.paused` for a hit-stop.
 ## It only ever lifts a pause it set itself.
 var _froze: bool = false
@@ -200,6 +205,8 @@ func _ready() -> void:
 	_t_next.resize(MAX_TRAILS)
 	_t_pts.resize(MAX_TRAILS * TRAIL_POINTS)
 	_t_born.resize(MAX_TRAILS * TRAIL_POINTS)
+	if mirror:
+		return
 	get_tree().node_added.connect(_on_node_added)
 	_watch_subtree(get_tree().root)
 
@@ -281,6 +288,15 @@ func _on_node_added(node: Node) -> void:
 func _slot_held(s: int) -> bool:
 	var head: Variant = _t_head[s]
 	return is_instance_valid(head) and not (head as Node).is_queued_for_deletion()
+
+## Issue #976: gives `head` (any Node2D that moves like a weapon head, such as
+## the Online joiner's anchor on a puppet's head) a trail, as a watched head
+## gets one. Queued when every slot is held.
+func track_trail(head: Node2D) -> void:
+	if head == null or _t_head.has(head) or _t_waiting.has(head):
+		return
+	if not _claim_trail(head):
+		_t_waiting.append(head)
 
 ## Gives `head` the first free slot. False when every slot is held: the
 ## caller queues it in `_t_waiting` for the next slot to come free.
@@ -454,6 +470,11 @@ func _on_player_touched(other: Node, player: Node) -> void:
 		return
 	var strength: float = clampf((before.y - DUST_MIN_SPEED) / (DUST_FULL_SPEED - DUST_MIN_SPEED), 0.0, 1.0)
 	var feet: Vector2 = (player as Node2D).global_position + Vector2(0.0, BODY_RADIUS)
+	EffectStreamScript.record("dust", {"p": feet, "s": strength}, player) # #976
+	land_puff(feet, strength)
+
+## A landing's dust puff at `feet`, `strength` 0..1 (#976: the joiner's too).
+func land_puff(feet: Vector2, strength: float) -> void:
 	for i in DUST_PER_PUFF:
 		# Half left, half right, low along the floor with a little lift.
 		var side: float = -1.0 if i % 2 == 0 else 1.0
@@ -469,6 +490,11 @@ func _on_head_clashed(speed: float, point: Vector2, head: Node) -> void:
 	if speed < SPARK_MIN_SPEED or not _off_cooldown(head, HEAD_COOLDOWN_FRAMES):
 		return
 	var strength: float = clampf((speed - SPARK_MIN_SPEED) / (SPARK_FULL_SPEED - SPARK_MIN_SPEED), 0.0, 1.0)
+	EffectStreamScript.record("clash", {"p": point, "s": strength}, head) # #976
+	clash_sparks(point, strength)
+
+## A clash's sparks at `point`, `strength` 0..1 (#976: the joiner's too).
+func clash_sparks(point: Vector2, strength: float) -> void:
 	var count: int = roundi(lerpf(SPARKS_MIN, SPARKS_MAX, strength))
 	for i in count:
 		var angle: float = TAU * float(i) / float(count) + _rng.randf_range(-0.35, 0.35)
@@ -478,6 +504,12 @@ func _on_head_clashed(speed: float, point: Vector2, head: Node) -> void:
 ## A boomerang caught in the thrower's hand (#862): a small white burst. With
 ## "Reduce flashes" on the burst is skipped (the sound still plays).
 func _on_boomerang_caught(point: Vector2) -> void:
+	EffectStreamScript.record("catch", {"p": point}) # #976
+	catch_burst(point)
+
+## The catch burst at `point`, unless this machine has Reduce flashes on (#976:
+## the joiner's own setting decides for its screen).
+func catch_burst(point: Vector2) -> void:
 	var sfx: Node = get_node_or_null("/root/Sfx")
 	if sfx != null and bool(sfx.get("reduce_flash")):
 		return
@@ -487,15 +519,29 @@ func _on_boomerang_caught(point: Vector2) -> void:
 		_emit(Kind.CATCH, point, vel, CATCH_LIFETIME * _rng.randf_range(0.8, 1.1))
 
 ## Strike landed: apply screen shake and hit-stop based on damage.
-func _on_strike_landed(_victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
+func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
+	if amount >= SHAKE_DAMAGE_MIN:
+		EffectStreamScript.record("jolt", {"a": amount}, victim) # #976
+	strike_jolt(amount)
+
+## A strike's shake (and, with `freeze`, its hit-stop) for `amount` damage,
+## under this machine's Screen shake and Hit pause settings. The Online joiner
+## (#976) plays it without the freeze: its world is the host's stream, which
+## already holds still through the host's hit-stop.
+func strike_jolt(amount: float, freeze: bool = true) -> void:
 	if _shake_enabled() and amount >= SHAKE_DAMAGE_MIN:
 		var strength: float = clampf((amount - SHAKE_DAMAGE_MIN) / (SHAKE_DAMAGE_MAX - SHAKE_DAMAGE_MIN), 0.0, 1.0)
 		_apply_shake(SHAKE_INTENSITY_MAX * strength, SHAKE_DURATION)
-	if amount >= HITSTOP_DAMAGE_MIN and _hit_pause_enabled():
+	if freeze and amount >= HITSTOP_DAMAGE_MIN and _hit_pause_enabled():
 		_apply_hitstop(HITSTOP_FRAMES)
 
 ## Player eliminated: apply strong screen shake.
-func _on_player_eliminated(_player: Node) -> void:
+func _on_player_eliminated(player: Node) -> void:
+	EffectStreamScript.record("ko_jolt", {}, player) # #976
+	elimination_jolt()
+
+## An elimination's strong shake, under this machine's Screen shake setting.
+func elimination_jolt() -> void:
 	if _shake_enabled():
 		_apply_shake(SHAKE_INTENSITY_ELIMINATION, SHAKE_DURATION_ELIMINATION)
 

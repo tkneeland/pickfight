@@ -9,6 +9,7 @@ extends RefCounted
 ## Static functions only. Preloaded by path, never named by `class_name`
 ## (CLAUDE.md).
 
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 const ShieldSparkScript := preload("res://scripts/ShieldSpark.gd")
 
 ## Issue #631, ADR-0024: the player, other than `shooter`, whose shield's
@@ -43,16 +44,9 @@ static func shield_blocked(shot: Node, holder: Node, point: Vector2) -> void:
 	var sfx: Node = shot.get_node_or_null(^"/root/Sfx")
 	if sfx != null:
 		sfx.play(&"shield_block", point, 1.0)
-		if bool(sfx.get("reduce_flash")):
-			return
-	var spark: Node2D = ShieldSparkScript.new()
-	spark.colour = shooter_colour(holder)
-	var parent: Node = shot.get_parent()
-	if parent == null:
-		spark.free()
-		return
-	parent.add_child(spark)
-	spark.global_position = point
+	var tint: Color = shooter_colour(holder)
+	EffectStreamScript.record("shield", {"p": point, "c": tint}, shot) # the joiner's spark (#976)
+	ShieldSparkScript.spawn_at(shot.get_parent(), point, tint)
 
 ## The shooter's identity colour, or white for a shooter without one.
 static func shooter_colour(shooter: Node) -> Color:
