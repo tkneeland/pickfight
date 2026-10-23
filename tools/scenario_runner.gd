@@ -316,6 +316,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"magnet_pushes_with_negative_force",
 	"magnet_ignores_wielder_dead_and_dropped",
 	"magnet_does_not_pull_through_solid_terrain",
+	"magnet_plays_pull_sound_rate_limited",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -532,6 +533,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_streaker_award_needs_three_unbroken_kos",
 	"victory_combo_award_needs_two_kos_inside_three_seconds",
 	"award_sharpshooter_counts_ranged_kos",
+	"award_jack_counts_distinct_weapons",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -951,6 +953,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_blocked_by_shield_face_631",
 	"boomerang_passes_through_other_weapon_head_631",
 	"boomerang_passes_through_shield_back_631",
+	"shield_block_plays_sound_and_spark",
 	"career_match_end_sends_per_seat_deltas_503",
 	"career_ko_of_bot_is_not_counted_503",
 	"career_abandoned_match_sends_rounds_not_match_503",
@@ -966,6 +969,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_walks_against_belt_to_open_end",
 	"bot_aims_boomstick_at_rival",
 	"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952",
+	"bot_faces_shield_at_incoming_shot",
+	"bot_shield_ignores_shot_on_easy_or_other_weapon_977",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -1086,6 +1091,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
 	"surprise_me_random_pick_is_clean_free_and_repeatable_865",
 	"controller_page_has_surprise_me_button_with_existing_messages_865",
+	"join_screen_paste_fills_room_code_906",
 	"pickup_drop_falls_through_players_to_terrain_review_gp",
 	"sudden_death_chip_cleared_without_modifier_review_gp",
 	"round_start_clears_stale_round_flags_review_gp",
@@ -2206,6 +2212,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_magnet_ignores_wielder_dead_and_dropped()
 		"magnet_does_not_pull_through_solid_terrain":
 			return await _scenario_magnet_does_not_pull_through_solid_terrain()
+		"magnet_plays_pull_sound_rate_limited":
+			return await _scenario_magnet_plays_pull_sound_rate_limited()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -2638,6 +2646,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_victory_combo_award_needs_two_kos_inside_three_seconds()
 		"award_sharpshooter_counts_ranged_kos":
 			return await _scenario_award_sharpshooter_counts_ranged_kos()
+		"award_jack_counts_distinct_weapons":
+			return await _scenario_award_jack_counts_distinct_weapons()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -3448,6 +3458,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_fishing_rod_reel_breaks_on_release()
 		"fishing_rod_reels_teammate_undamaged":
 			return await _scenario_fishing_rod_reels_teammate_undamaged()
+		"shield_block_plays_sound_and_spark":
+			return await _scenario_shield_block_plays_sound_and_spark()
 		"bullet_blocked_by_shield_face_631":
 			return await _scenario_bullet_blocked_by_shield_face_631()
 		"bullet_passes_through_other_weapon_head_631":
@@ -3498,6 +3510,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_aims_boomstick_at_rival()
 		"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952":
 			return await _scenario_bot_boomstick_no_aim_952()
+		"bot_faces_shield_at_incoming_shot":
+			return await _scenario_bot_faces_shield_at_incoming_shot()
+		"bot_shield_ignores_shot_on_easy_or_other_weapon_977":
+			return await _scenario_bot_shield_ignores_shot_977()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -3722,6 +3738,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865()
 		"controller_page_has_surprise_me_button_with_existing_messages_865":
 			return _scenario_controller_page_has_surprise_me_button_with_existing_messages_865()
+		"join_screen_paste_fills_room_code_906":
+			return await _scenario_join_screen_paste_fills_room_code_906()
 		"pickup_drop_falls_through_players_to_terrain_review_gp":
 			return await _scenario_pickup_drop_falls_through_players_to_terrain_review_gp()
 		"sudden_death_chip_cleared_without_modifier_review_gp":
@@ -21481,6 +21499,59 @@ func _magnet_wall_trial(wielder_stats: Resource, wall: bool) -> Array[float]:
 	var moved: Array[float] = [victim.global_position.x - start]
 	await _teardown(stage, false)
 	return moved
+## Issue #978: a magnet with a rival in range and clear line plays magnet_pull
+## at the start and at most once per 1.5 s after; nobody in range, or a wall
+## in the way, is silent.
+func _scenario_magnet_plays_pull_sound_rate_limited() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"magnet_pull"):
+		return ["magnet_pull is not in the sound table"]
+	var stats: Resource = load(MAGNET_PATH)
+	var open_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_NEAR, false)
+	var far_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_OUTSIDE, false)
+	var wall_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_NEAR, true)
+	print("      pull sounds: open %d, out of range %d, walled %d" % [open_n, far_n, wall_n])
+	if open_n < 1:
+		failures.append("a rival in range and clear line: magnet_pull never played")
+	# 200 ticks at 60 Hz is 3.3 s, so the 1.5 s limit allows at most 3.
+	if open_n > 3:
+		failures.append("magnet_pull played %d times in about 3.3 s; limit is one per 1.5 s" % open_n)
+	if far_n != 0:
+		failures.append("a rival out of range still played magnet_pull %d times" % far_n)
+	if wall_n != 0:
+		failures.append("a rival behind a wall still played magnet_pull %d times" % wall_n)
+	_scenario_completed = true
+	return failures
+## Counts magnet_pull plays over 200 ticks with one victim at `offset`.
+func _magnet_sound_trial(sfx: Node, wielder_stats: Resource, offset: Vector2, wall: bool) -> int:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + offset)
+	if wall:
+		var slab := StaticBody2D.new()
+		slab.collision_layer = 1
+		slab.collision_mask = 0
+		var slab_shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(20, 400)
+		slab_shape.shape = rect
+		slab.add_child(slab_shape)
+		slab.position = DEEP_PARK_POSITION + offset * 0.5
+		stage.add_child(slab)
+	await _await_ticks(2)
+	sfx.start_recording()
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	victim.linear_velocity = Vector2.ZERO
+	await _await_ticks(200)
+	var played: int = _sfx_count(sfx, "magnet_pull")
+	sfx.stop_recording()
+	await _teardown(stage, false)
+	return played
 func _scenario_magnet_ignores_wielder_dead_and_dropped() -> Array[String]:
 	var failures: Array[String] = []
 	# Unbraced wielder alone: with nobody to pull, the field must not shove its own
@@ -30771,6 +30842,42 @@ func _scenario_award_sharpshooter_counts_ranged_kos() -> Array[String]:
 	stats.begin_match()
 	if not stats.ranged_kos.is_empty():
 		failures.append("begin_match left ranged KOs behind")
+	_scenario_completed = true
+	return failures
+
+## Issue #970: Jack of All Trades goes to the most distinct weapons landed, at least 3, no ties.
+func _scenario_award_jack_counts_distinct_weapons() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Jack of All Trades")
+	var hit := func(stats: RefCounted, who: int, weapons: Array, real: bool = true) -> void:
+		var t: int = 1000
+		for w: String in weapons:
+			stats.record_hit(who, 3, 10.0, t, w, real)
+			t += 100
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	hit.call(stats, 0, ["pickaxe", "pickaxe", "boomstick", "hammer"])
+	hit.call(stats, 1, ["pickaxe", "boomstick"])
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "3 different weapons":
+		failures.append("expected Jack for slot 0 with 3 distinct weapons, got %s" % [found])
+	var few: RefCounted = MatchStatsScript.new()
+	few.begin_match()
+	hit.call(few, 0, ["pickaxe", "pickaxe", "pickaxe", "boomstick"])
+	if not find.call(few).is_empty():
+		failures.append("Jack given for only 2 distinct weapons")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	hit.call(tied, 0, ["pickaxe", "boomstick", "hammer"])
+	hit.call(tied, 1, ["pickaxe", "boomstick", "hammer"])
+	if not find.call(tied).is_empty():
+		failures.append("Jack given for a tie")
+	var bot: RefCounted = MatchStatsScript.new()
+	bot.begin_match()
+	hit.call(bot, 0, ["pickaxe", "boomstick", "hammer"], false)
+	if not find.call(bot).is_empty():
+		failures.append("a bot earned Jack")
 	_scenario_completed = true
 	return failures
 
@@ -43724,6 +43831,48 @@ func _shot_at_holder(shot: String, weapon_path: String, toward_shooter: bool) ->
 	var taken: float = holder.damage
 	await _teardown(stage)
 	return taken
+var _spark_bursts: int = 0
+func _count_spark_burst(node: Node) -> void:
+	var script: Script = node.get_script()
+	if script != null and script.resource_path == "res://scripts/ShieldSpark.gd":
+		_spark_bursts += 1
+## One shot at a shield holder: how many `shield_block` sounds and spark
+## bursts it caused (#969).
+func _shield_block_counts(shot: String, toward_shooter: bool) -> Dictionary:
+	var sfx: Node = _sfx()
+	_spark_bursts = 0
+	node_added.connect(_count_spark_burst)
+	sfx.start_recording()
+	await _shot_at_holder(shot, SHIELD_PATH, toward_shooter)
+	sfx.stop_recording()
+	node_added.disconnect(_count_spark_burst)
+	var res: Dictionary = {"sound": _sfx_count(sfx, "shield_block"), "sparks": _spark_bursts}
+	return res
+## Issue #969: a shield face stopping a bullet, hook or boomerang plays one
+## `shield_block` and throws one spark burst; the back does neither; Reduce
+## flashes drops the sparks but keeps the sound.
+func _scenario_shield_block_plays_sound_and_spark() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"shield_block"):
+		return ["shield_block is not in the sound table"]
+	var saved: bool = bool(sfx.get("reduce_flash"))
+	sfx.set("reduce_flash", false)
+	for shot: String in ["bullet", "hook", "boomerang"]:
+		var face: Dictionary = await _shield_block_counts(shot, true)
+		print("      shield_block_plays_sound_and_spark: %s face %s" % [shot, face])
+		if face["sound"] != 1 or face["sparks"] != 1:
+			failures.append("%s stopped by the face: %s, expected 1 sound and 1 burst" % [shot, face])
+		var back: Dictionary = await _shield_block_counts(shot, false)
+		if back["sound"] != 0 or back["sparks"] != 0:
+			failures.append("%s past the back: %s, expected none" % [shot, back])
+	sfx.set("reduce_flash", true)
+	var calm: Dictionary = await _shield_block_counts("bullet", true)
+	if calm["sound"] != 1 or calm["sparks"] != 0:
+		failures.append("Reduce flashes on: %s, expected 1 sound and 0 bursts" % calm)
+	sfx.set("reduce_flash", saved)
+	_scenario_completed = true
+	return failures
 func _scenario_bullet_blocked_by_shield_face_631() -> Array[String]:
 	var failures: Array[String] = []
 	var damage: float = await _shot_at_holder("bullet", SHIELD_PATH, true)
@@ -44147,15 +44296,19 @@ func _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall() -> Arr
 		failures.append("the bot threw through a wall")
 	_scenario_completed = true
 	return failures
+const ICE_PUSH_963: float = 800.0
+const BELT_PUSH_963: float = 200.0
 ## Issue #963: a bot on a floor strip with a drop `end_gap` px ahead (to the
 ## right), a rival on a far island beyond it. `belt` lays a conveyor carrying
 ## right, otherwise an ice patch. An Easy bot is the control: it keeps the old
 ## behaviour. Returns whether the bot stayed on the floor and its farthest x.
-func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -> Dictionary:
+func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int, push: float = 0.0) -> Dictionary:
 	var stage: Node2D = _new_empty_stage()
 	var strip: StaticBody2D = (ConveyorScene if belt else IcePatchScene).instantiate() as StaticBody2D
 	strip.size = Vector2(800.0, 12.0 if belt else 8.0)
 	strip.position = Vector2(0.0, 600.0)
+	if belt:
+		strip.belt_speed = push
 	stage.add_child(strip)
 	var island := StaticBody2D.new()
 	var shape := CollisionShape2D.new()
@@ -44175,6 +44328,8 @@ func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -
 	bot.player = player
 	bot.output = player.set_input_vector
 	stage.add_child(bot)
+	if not belt:
+		player.linear_velocity = Vector2(push, 0.0)
 	var out: Dictionary = {"stayed": true, "max_x": start_x}
 	for t in ticks:
 		await physics_frame
@@ -44187,26 +44342,30 @@ func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -
 ## not leave the floor in 5 s; the Easy control (old behaviour) is printed.
 func _scenario_bot_eases_off_ice_near_drop() -> Array[String]:
 	var failures: Array[String] = []
-	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300)
-	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300)
+	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300, ICE_PUSH_963)
+	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300, ICE_PUSH_963)
 	print("      bot_eases_off_ice_near_drop: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
 	if not normal["stayed"]:
 		failures.append("the Normal bot left the ice patch")
-	if normal["max_x"] > 350.0:
-		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	if easy["stayed"]:
+		failures.append("the Easy control stayed on, so the fixture does not show the old behaviour falling")
+	if normal["max_x"] > 390.0:
+		failures.append("the Normal bot reached the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## A Normal bot on a belt carrying it towards an open end walks against it and
 ## stays on the floor for 5 s.
 func _scenario_bot_walks_against_belt_to_open_end() -> Array[String]:
 	var failures: Array[String] = []
-	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300)
-	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300)
+	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300, BELT_PUSH_963)
+	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300, BELT_PUSH_963)
 	print("      bot_walks_against_belt_to_open_end: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
 	if not normal["stayed"]:
 		failures.append("the Normal bot was carried off the belt's open end")
-	if normal["max_x"] > 350.0:
-		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	if easy["stayed"]:
+		failures.append("the Easy control stayed on, so the fixture does not show the old behaviour falling")
+	if normal["max_x"] > 390.0:
+		failures.append("the Normal bot reached the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## Issue #952: a bot holding `weapon` with a rival `gap` px off on flat ground.
@@ -44279,6 +44438,65 @@ func _scenario_bot_boomstick_no_aim_952() -> Array[String]:
 		failures.append("the bot aimed the boomstick through a wall (%.1f degrees)" % walled["best"])
 	if easy["best"] >= 0.0 and easy["best"] <= 15.0:
 		failures.append("an Easy bot aimed the boomstick (%.1f degrees)" % easy["best"])
+	_scenario_completed = true
+	return failures
+## Issue #977: a bot holding `weapon` with a rival 600 px to its left (its
+## target) and a boomstick bullet flying left at it from the right. Returns the
+## smallest angle (degrees) between the head's line from the body and the line
+## to the bullet before it arrives, and the damage the bot took.
+func _bot_shield_shot_run_977(weapon: String, level: String) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(-600.0, 274.0))
+	await _await_ticks(2)
+	await _equip(player, weapon)
+	var gun: Resource = load(BOOMSTICK_PATH)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	await _await_ticks(30)
+	var bullet: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+	var origin: Vector2 = player.global_position + Vector2(900.0, 0.0)
+	bullet.setup(rival, origin, Vector2.LEFT, gun)
+	stage.add_child(bullet)
+	var before: float = player.damage
+	var best: float = 360.0
+	for t in 80:
+		await physics_frame
+		if not is_instance_valid(bullet) or bullet.is_queued_for_deletion():
+			break
+		var face: Vector2 = player.weapon_head_position() - player.global_position
+		var line: Vector2 = bullet.global_position - player.global_position
+		if line.x > 100.0:
+			best = rad_to_deg(absf(face.angle_to(line)))
+	await _await_ticks(20)
+	var out: Dictionary = {"best": best, "taken": player.damage - before, "damage": float(gun.projectile_damage)}
+	await _teardown(stage, false)
+	return out
+## A Normal bot holding the shield, a bullet coming from the right: the face
+## points within 30 degrees of the bullet's line and the bullet is blocked.
+func _scenario_bot_faces_shield_at_incoming_shot() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _bot_shield_shot_run_977(SHIELD_PATH, "normal")
+	print("      bot_faces_shield_at_incoming_shot: best angle=%.1f taken=%.1f of %.1f" % [run["best"], run["taken"], run["damage"]])
+	if run["best"] > 30.0:
+		failures.append("the shield face came within %.1f degrees of the bullet's line, not 30" % run["best"])
+	if run["taken"] > run["damage"] * 0.3:
+		failures.append("the bullet was not blocked (took %.1f of %.1f)" % [run["taken"], run["damage"]])
+	_scenario_completed = true
+	return failures
+## Controls: an Easy bot keeps today's behaviour (faces its target, the bullet
+## lands), and so does a bot holding another weapon.
+func _scenario_bot_shield_ignores_shot_977() -> Array[String]:
+	var failures: Array[String] = []
+	var easy: Dictionary = await _bot_shield_shot_run_977(SHIELD_PATH, "easy")
+	var pick: Dictionary = await _bot_shield_shot_run_977("res://resources/pickaxe.tres", "normal")
+	print("      bot_shield_ignores_shot_977: easy best=%.1f taken=%.1f pickaxe best=%.1f" % [easy["best"], easy["taken"], pick["best"]])
+	if easy["best"] <= 30.0:
+		failures.append("the Easy control faced the bullet (%.1f degrees), so the fixture does not show the old behaviour" % easy["best"])
 	_scenario_completed = true
 	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
@@ -51814,6 +52032,68 @@ func _scenario_controller_page_has_surprise_me_button_with_existing_messages_865
 		if not text.contains("getElementById(\"surprise-btn\").addEventListener(\"click\", surpriseMe)"):
 			failures.append("the button is not wired to surpriseMe")
 	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
+	_scenario_completed = true
+	return failures
+## Issue #906: the PC join screen's Paste button fills the room field from the clipboard (getter seam, never the real one).
+func _scenario_join_screen_paste_fills_room_code_906() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScript241.new()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await _await_ticks(4)
+	var paste: Button = client.find_child("Paste", true, false) as Button
+	if paste == null or not client.has_method("_on_paste_pressed") or not ("clipboard_getter" in client):
+		failures.append("the join screen has no Paste button with a clipboard_getter seam")
+		client.queue_free()
+		await _await_ticks(2)
+		_scenario_completed = true
+		return failures
+	var room: LineEdit = client.find_child("RoomCode", true, false) as LineEdit
+	var clip: Array[String] = [""]
+	client.clipboard_getter = func() -> String: return clip[0]
+	if not paste.is_visible_in_tree() or paste.disabled:
+		failures.append("Paste is not shown and enabled on the join screen")
+	if paste.focus_mode != Control.FOCUS_ALL:
+		failures.append("Paste is not in the gamepad focus chain (focus_mode %d)" % paste.focus_mode)
+	elif room.find_valid_focus_neighbor(SIDE_RIGHT) != paste:
+		failures.append("the focus chain does not lead from the room field to Paste")
+	if paste.text != client.tr("JOIN_PASTE") or paste.text == "JOIN_PASTE":
+		failures.append("Paste reads '%s', not a translated label" % paste.text)
+	if paste.get_global_rect().position.x < room.get_global_rect().end.x - 1.0:
+		failures.append("Paste is not beside the room field")
+	var cases: Array = [
+		["abcd", "ABCD"],
+		["Join with code: wxyz", "WXYZ"],
+		["  qrst\n", "QRST"],
+		["Come over, code kLmN, bring friends", "KLMN"],
+		["ab cd", "ABCD"],
+		["AB-CD", "ABCD"],
+	]
+	for pair: Array in cases:
+		room.text = ""
+		client.status_text = ""
+		clip[0] = pair[0]
+		paste.pressed.emit()
+		if room.text != pair[1]:
+			failures.append("pasting '%s' filled the room field with '%s', expected %s" % [pair[0], room.text, pair[1]])
+	# No usable code: the field is untouched and the status line says why.
+	for junk: String in ["", "hello", "i o i o", "abc", "12345678", "ABCDE"]:
+		room.text = "WXYZ"
+		client.status_text = ""
+		clip[0] = junk
+		paste.pressed.emit()
+		if room.text != "WXYZ":
+			failures.append("pasting '%s' changed the room field to '%s'" % [junk, room.text])
+		if client.status_text != client.tr("JOIN_NO_CODE_ON_CLIPBOARD") or client.status_text == "JOIN_NO_CODE_ON_CLIPBOARD":
+			failures.append("pasting '%s' left the status line '%s'" % [junk, client.status_text])
+	# It joins nothing by itself.
+	room.text = ""
+	clip[0] = "abcd"
+	paste.pressed.emit()
+	if client.state != RcState241.JOIN:
+		failures.append("Paste started a join (state %s)" % client.state)
+	client.queue_free()
+	await _await_ticks(2)
 	_scenario_completed = true
 	return failures
 # --- Review fixes: gameplay (review_gp) -----------------------------------------

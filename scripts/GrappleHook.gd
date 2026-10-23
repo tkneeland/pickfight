@@ -159,7 +159,9 @@ func _fly(delta: float) -> void:
 			direction = _velocity.normalized()
 			rotation = direction.angle()
 	var motion: Vector2 = (_velocity * delta).limit_length(left)
-	if ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, _shape.radius) != null:
+	var blocker: Node = ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, _shape.radius)
+	if blocker != null:
+		ShotSweepScript.shield_blocked(self, blocker, global_position)
 		state = State.HOME
 		return
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state

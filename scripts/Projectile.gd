@@ -109,6 +109,7 @@ func _physics_process(delta: float) -> void:
 	var motion: Vector2 = direction * speed * delta
 	var blocker: Node = ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, radius)
 	if blocker != null:
+		ShotSweepScript.shield_blocked(self, blocker, global_position)
 		impacted.emit(blocker, global_position)
 		queue_free()
 		return
