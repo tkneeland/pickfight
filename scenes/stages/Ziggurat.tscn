@@ -1,21 +1,10 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/parts/CollapsingFloor.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/FallingRock.tscn" id="3"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="4"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_base"]
-size = Vector2(2080, 60)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_middle"]
-size = Vector2(1520, 80)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_top"]
-size = Vector2(840, 80)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; A stepped pyramid (issue #144, a large stage for five to eight players):
 ; king of the hill. Three broad tiers climb to a throne that gives way under
@@ -38,35 +27,17 @@ view_size = Vector2(2240, 1260)
 ; only ring-out on the stage, so every fight ends with someone being walked
 ; down the steps and off an edge.
 
-[node name="TierBase" type="StaticBody2D" parent="."]
+[node name="TierBase" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 470)
+size = Vector2(2080, 60)
 
-[node name="TierBaseShape" type="CollisionShape2D" parent="TierBase"]
-shape = SubResource("RectangleShape2D_base")
-
-[node name="TierBaseVisual" type="Polygon2D" parent="TierBase"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-1040, -30, 1040, -30, 1040, 30, -1040, 30)
-
-[node name="TierMiddle" type="StaticBody2D" parent="."]
+[node name="TierMiddle" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 400)
+size = Vector2(1520, 80)
 
-[node name="TierMiddleShape" type="CollisionShape2D" parent="TierMiddle"]
-shape = SubResource("RectangleShape2D_middle")
-
-[node name="TierMiddleVisual" type="Polygon2D" parent="TierMiddle"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-760, -40, 760, -40, 760, 40, -760, 40)
-
-[node name="TierTop" type="StaticBody2D" parent="."]
+[node name="TierTop" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 320)
-
-[node name="TierTopShape" type="CollisionShape2D" parent="TierTop"]
-shape = SubResource("RectangleShape2D_top")
-
-[node name="TierTopVisual" type="Polygon2D" parent="TierTop"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-420, -40, 420, -40, 420, 40, -420, 40)
+size = Vector2(840, 80)
 
 ; The throne: a slab 108 px over the top tier (#53's collapsing floor, stood
 ; on). Three seconds of anyone standing on it, in total, and it goes for the
@@ -118,12 +89,8 @@ position = Vector2(-820, 380)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(820, 380)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)
-script = ExtResource("4")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points: over the throne, and on the outer end of the middle
 ; tier on each side, under a rock column's reach.

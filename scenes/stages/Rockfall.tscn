@@ -1,20 +1,9 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/FallingRock.tscn" id="3"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_bank"]
-size = Vector2(390, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_bridge"]
-size = Vector2(400, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_ledge"]
-size = Vector2(160, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; A quarry causeway (issue #54, #53's FallingRock). Two banks flank a canyon;
 ; the only way across is a flat bridge straight down its middle, and the only
@@ -71,55 +60,25 @@ background_layers = PackedStringArray("mountains", "rocks")
 ; x=+-560..+-720, same height) and RockLedgeRight with its ledge, which
 ; leaves room for four spawns per bank under open sky. The canyon and
 ; bridge are untouched.
-[node name="BankLeft" type="StaticBody2D" parent="."]
+[node name="BankLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-525, 380)
+size = Vector2(390, 40)
 
-[node name="BankLeftShape" type="CollisionShape2D" parent="BankLeft"]
-shape = SubResource("RectangleShape2D_bank")
-
-[node name="BankLeftVisual" type="Polygon2D" parent="BankLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-195, -20, 195, -20, 195, 20, -195, 20)
-
-[node name="BankRight" type="StaticBody2D" parent="."]
+[node name="BankRight" parent="." instance=ExtResource("platform")]
 position = Vector2(525, 380)
+size = Vector2(390, 40)
 
-[node name="BankRightShape" type="CollisionShape2D" parent="BankRight"]
-shape = SubResource("RectangleShape2D_bank")
-
-[node name="BankRightVisual" type="Polygon2D" parent="BankRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-195, -20, 195, -20, 195, 20, -195, 20)
-
-[node name="Bridge" type="StaticBody2D" parent="."]
+[node name="Bridge" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 372)
+size = Vector2(400, 24)
 
-[node name="BridgeShape" type="CollisionShape2D" parent="Bridge"]
-shape = SubResource("RectangleShape2D_bridge")
-
-[node name="BridgeVisual" type="Polygon2D" parent="Bridge"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-200, -12, 200, -12, 200, 12, -200, 12)
-
-[node name="HighLedgeLeft" type="StaticBody2D" parent="."]
+[node name="HighLedgeLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-640, 220)
+size = Vector2(160, 24)
 
-[node name="HighLedgeLeftShape" type="CollisionShape2D" parent="HighLedgeLeft"]
-shape = SubResource("RectangleShape2D_ledge")
-
-[node name="HighLedgeLeftVisual" type="Polygon2D" parent="HighLedgeLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)
-
-[node name="HighLedgeRight" type="StaticBody2D" parent="."]
+[node name="HighLedgeRight" parent="." instance=ExtResource("platform")]
 position = Vector2(640, 220)
-
-[node name="HighLedgeRightShape" type="CollisionShape2D" parent="HighLedgeRight"]
-shape = SubResource("RectangleShape2D_ledge")
-
-[node name="HighLedgeRightVisual" type="Polygon2D" parent="HighLedgeRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)
+size = Vector2(160, 24)
 
 ; The bridge's rock: column x=0, hanging just above the camera's top edge.
 ; Defaults (6 s interval, 1.5 s warning, 25 dmg, 28 px radius, 650 px/s
@@ -161,12 +120,8 @@ position = Vector2(-535, 320)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(535, 320)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 500)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). One floating over the bridge --
 ; going for it means standing where the rock falls -- and one over each

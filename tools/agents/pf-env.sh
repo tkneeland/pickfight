@@ -53,6 +53,20 @@ pf_budget_ok() {
   [ "$(pf_weekly_used)" -lt "$HANDOFF_WEEKLY_USED" ] && return 0
   r=$(pf_weekly_reset); [ "$r" -gt 0 ] && [ $(( r - $(date +%s) )) -le $(( RESET_GRACE_HOURS * 3600 )) ]
 }
+# pf_live_agents: issue numbers (one per line, deduped) of this checkout's worktrees on an issue branch (issue-N or
+# <type>/N-) whose issue is still open and that something wrote to in the last 30 min. Idle leftovers from finished
+# or stalled runs don't count.
+pf_live_agents() {
+  local open; open=" $(gh issue list -R "$REPO" --state open -L 300 --json number -q '.[].number' 2>/dev/null | tr '\n' ' ') "
+  git -C "$ROOT" worktree list --porcelain | awk '/^worktree /{w=$2} /^branch /{sub("refs/heads/","",$2); print w, $2}' |
+  while read -r wt b; do
+    i=$(echo "$b" | sed -nE 's/.*issue-([0-9]+).*/\1/p; s#^[a-z]+/([0-9]+)-.*#\1#p' | head -1); [ -n "$i" ] || continue
+    case "$open" in *" $i "*) ;; *) continue;; esac
+    gd=$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null)
+    { [ -n "$(find "$gd/index" "$gd/HEAD" -mmin -30 2>/dev/null)" ] ||
+      [ -n "$(find "$wt" -path "$wt/.godot" -prune -o -path "$wt/.git" -prune -o -type f -mmin -30 -print 2>/dev/null | head -1)" ]; } && echo "$i"
+  done | sort -un
+}
 pf_five_h_used() { jq -r '.rate_limits.five_hour.used_percentage // 0 | floor' "$PF_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
 # worker target right now: the mode's DAY_AGENTS / NIGHT_AGENTS, 1 once the 5h window reaches FIVE_H_SLOW_USED,
 # 0 at FIVE_H_STOP_USED or when the weekly budget says stop. Start workers only while running < target; never above it.

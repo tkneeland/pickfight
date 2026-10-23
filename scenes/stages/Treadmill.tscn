@@ -1,22 +1,11 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Conveyor.tscn" id="conveyor"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MudPatch.tscn" id="mud"]
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
-
-[sub_resource type="RectangleShape2D" id="R_1500x40"]
-size = Vector2(1500, 40)
-
-[sub_resource type="RectangleShape2D" id="R_260x24"]
-size = Vector2(260, 24)
-
-[sub_resource type="RectangleShape2D" id="R_160x24"]
-size = Vector2(160, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Treadmill (issue #934): a mid-size symmetric floor split into two opposing
 ; belts that carry fighters in towards a mud patch where they meet. A bounce
@@ -34,45 +23,21 @@ background_silhouette = Color(0.1, 0.09, 0.09, 1)
 background_layers = PackedStringArray("clouds", "mountains", "hills")
 competitive = false
 
-[node name="Floor" type="StaticBody2D" parent="."]
+[node name="Floor" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 400)
+size = Vector2(1500, 40)
 
-[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
-shape = SubResource("R_1500x40")
-
-[node name="FloorVisual" type="Polygon2D" parent="Floor"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-750, -20, 750, -20, 750, 20, -750, 20)
-
-[node name="LedgeLeft" type="StaticBody2D" parent="."]
+[node name="LedgeLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-510, 150)
+size = Vector2(260, 24)
 
-[node name="LedgeLeftShape" type="CollisionShape2D" parent="LedgeLeft"]
-shape = SubResource("R_260x24")
-
-[node name="LedgeLeftVisual" type="Polygon2D" parent="LedgeLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
-
-[node name="LedgeRight" type="StaticBody2D" parent="."]
+[node name="LedgeRight" parent="." instance=ExtResource("platform")]
 position = Vector2(510, 150)
+size = Vector2(260, 24)
 
-[node name="LedgeRightShape" type="CollisionShape2D" parent="LedgeRight"]
-shape = SubResource("R_260x24")
-
-[node name="LedgeRightVisual" type="Polygon2D" parent="LedgeRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
-
-[node name="MidDeck" type="StaticBody2D" parent="."]
+[node name="MidDeck" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 220)
-
-[node name="MidDeckShape" type="CollisionShape2D" parent="MidDeck"]
-shape = SubResource("R_160x24")
-
-[node name="MidDeckVisual" type="Polygon2D" parent="MidDeck"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)
+size = Vector2(160, 24)
 
 ; Opposing belts (issue #934): both carry towards the middle at 140 px/s, mirrored, so a fighter on either strip is walked into the mud.
 [node name="BeltLeft" parent="." instance=ExtResource("conveyor")]
@@ -125,12 +90,8 @@ position = Vector2(-420, 100)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(420, 100)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)
-script = ExtResource("kz")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickups on the ledges and the deck over the mud, none on a belt or the mud itself.
 [node name="PickupSpawn0" type="Marker2D" parent="."]

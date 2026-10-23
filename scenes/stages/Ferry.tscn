@@ -1,14 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_pad"]
-size = Vector2(420, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Two fixed pads separated by open water, with a single moving platform
 ; ferrying between them -- the only crossing in the stage (issue #19: the
@@ -62,25 +57,13 @@ one_way_sec = 4.545
 
 ; Widened for issue #137: each pad ran out to x=+-600; now +-720. The inner
 ; edges (and so the 600 px of water and the barge's run-in) are untouched.
-[node name="PadLeft" type="StaticBody2D" parent="."]
+[node name="PadLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-510, 380)
+size = Vector2(420, 24)
 
-[node name="PadLeftShape" type="CollisionShape2D" parent="PadLeft"]
-shape = SubResource("RectangleShape2D_pad")
-
-[node name="PadLeftVisual" type="Polygon2D" parent="PadLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-210, -12, 210, -12, 210, 12, -210, 12)
-
-[node name="PadRight" type="StaticBody2D" parent="."]
+[node name="PadRight" parent="." instance=ExtResource("platform")]
 position = Vector2(510, 380)
-
-[node name="PadRightShape" type="CollisionShape2D" parent="PadRight"]
-shape = SubResource("RectangleShape2D_pad")
-
-[node name="PadRightVisual" type="Polygon2D" parent="PadRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-210, -12, 210, -12, 210, 12, -210, 12)
+size = Vector2(420, 24)
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-450, 300)
@@ -108,12 +91,8 @@ position = Vector2(-360, 300)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(360, 300)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 560)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). Floating over the water, only reachable by riding the barge or a committed swing: the ferry becomes worth fighting for twice over.
 [node name="PickupSpawn0" type="Marker2D" parent="."]

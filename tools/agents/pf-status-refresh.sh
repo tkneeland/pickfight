@@ -13,12 +13,11 @@ lm=$(gh pr list -R $REPO -s merged -L 1 --json number,mergedAt -q '.[0]|"\(.numb
 ago=""; if [ -n "$lm" ]; then t=$(pf_iso_to_epoch "${lm#* }"); m=$(( ($(date +%s)-t)/60 )); [ $m -ge 60 ] && ago="$((m/60))h ago" || ago="${m}m ago"; fi
 tm=$(pf_triagemaster)
 min=$(pf_worker_target)
-# running agents = worktrees on an issue branch
+# running agents = live worktrees on an issue branch, one row per open issue
 agents=""; n=0
-for b in $(git -C $R worktree list --porcelain | awk '/^branch /{sub("refs/heads/","",$2);print $2}' | grep -E "issue-[0-9]+"); do
-  i=$(echo "$b" | sed -E 's/.*issue-([0-9]+).*/\1/')
+for i in $(pf_live_agents); do
   t=$(echo "$iss" | jq -r ".[]|select(.number==$i and .pull_request==null)|.title")
-  [ -z "$t" ] && continue   # issue closed: stale worktree, not a running agent
+  [ -z "$t" ] && continue   # issue closed: not a running agent
   n=$((n+1)); agents+=$'\n'"  #$i $t"
 done
 printf 'agents %d/%s · %s · PRs %s · last merge #%s %s · tm %s%s\n' "$n" "$min" "$rd" "$prs" "${lm%% *}" "$ago" "$tm" "$agents" > $out.tmp && mv $out.tmp $out

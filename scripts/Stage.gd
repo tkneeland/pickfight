@@ -127,7 +127,9 @@ func _mark_team_zones() -> void:
 
 ## Recolours every static platform or stage-body visual: the Polygon2Ds under
 ## a plain StaticBody2D (no script, so breakables, ledges and pads keep their
-## own colours) take the mood's platform colour.
+## own colours) take the mood's platform colour, and so does every part with a
+## `set_platform_color()` -- `scenes/parts/Platform.tscn`, the plain platform
+## most stages are built from, among them.
 func _tint_bodies(node: Node) -> void:
 	for child in node.get_children():
 		if child.has_method("set_platform_color"):

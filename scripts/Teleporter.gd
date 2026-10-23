@@ -17,8 +17,8 @@ extends Area2D
 ## builds the detector and ring visual from the exports; a portal with no
 ## resolvable twin does nothing.
 
-## Preloaded by path, never by `class_name` (CLAUDE.md), for `HEAD_GROUP`.
-const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
+## Preloaded by path, never by `class_name` (CLAUDE.md).
+const PartKitScript := preload("res://scripts/PartKit.gd")
 
 ## The other end of the pair.
 @export var twin: NodePath
@@ -83,7 +83,7 @@ func _physics_process(delta: float) -> void:
 	if _pulse_remaining > 0.0:
 		_pulse_remaining = maxf(0.0, _pulse_remaining - delta)
 		var t: float = _pulse_remaining / _PULSE_SEC
-		_ring.scale = Vector2.ONE if _reduce_flash() else Vector2.ONE * lerpf(1.0, _PULSE_SCALE, t)
+		_ring.scale = Vector2.ONE if PartKitScript.reduce_flash(self) else Vector2.ONE * lerpf(1.0, _PULSE_SCALE, t)
 	var destination: Node2D = get_twin()
 	if destination == null:
 		return
@@ -98,42 +98,21 @@ func _can_travel(body: Node2D) -> bool:
 
 func _send(body: RigidBody2D, destination: Node2D) -> void:
 	var offset: Vector2 = destination.global_position - body.global_position
-	var parts: Array[RigidBody2D] = _weapon_bodies_of(body)
+	# The weapon (head and haft) travels with the body; see `Conveyor`.
+	var parts: Array[RigidBody2D] = PartKitScript.weapon_bodies_of(get_tree(), body)
 	body.global_position += offset
 	for part: RigidBody2D in parts:
 		part.global_position += offset
 	_ignored[body] = _clock + COOLDOWN_SEC
 	_flash()
-	_sfx(&"teleport", body.global_position - offset)
+	PartKitScript.sfx(self, &"teleport", body.global_position - offset)
 	destination.receive(body)
 
 ## Called by the portal a body arrived from: start ignoring it here too.
 func receive(body: Node2D) -> void:
 	_ignored[body] = _clock + COOLDOWN_SEC
 	_flash()
-	_sfx(&"teleport", global_position)
+	PartKitScript.sfx(self, &"teleport", global_position)
 
 func _flash() -> void:
 	_pulse_remaining = _PULSE_SEC
-
-## The rigid bodies of `body`'s weapon (head and haft); see
-## `Conveyor._weapon_bodies_of()`.
-func _weapon_bodies_of(body: RigidBody2D) -> Array[RigidBody2D]:
-	var parts: Array[RigidBody2D] = []
-	var rid: RID = body.get_rid()
-	for head: Node in get_tree().get_nodes_in_group(WeaponHeadType.HEAD_GROUP):
-		if head.is_queued_for_deletion() or not (head is RigidBody2D) or not rid in head.sweep_exclude:
-			continue
-		for child: Node in head.get_parent().get_children():
-			if child is RigidBody2D and child != body and not parts.has(child):
-				parts.append(child as RigidBody2D)
-	return parts
-
-func _sfx(sound: StringName, at: Vector2) -> void:
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
-	if sfx != null:
-		sfx.play(sound, at, 1.0)
-
-func _reduce_flash() -> bool:
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
-	return sfx != null and bool(sfx.get("reduce_flash"))

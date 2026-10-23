@@ -34,6 +34,12 @@ const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.g
 const CosmeticsPanelScript: GDScript = preload("res://scripts/OnlineCosmeticsPanel.gd")
 const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
+## Issue #976: the host's effects, screens and HUD, drawn by the host's scripts.
+const RemoteEffectsScript: GDScript = preload("res://scripts/RemoteEffects.gd")
+const RemoteHudScript: GDScript = preload("res://scripts/RemoteHud.gd")
+const UiMirrorScript: GDScript = preload("res://scripts/UiMirror.gd")
+const ModifierBannerScript: GDScript = preload("res://scripts/ModifierBanner.gd")
+const HostHudScene: PackedScene = preload("res://scenes/HostHud.tscn")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
 ## Room-code alphabet and length: Relay.CODE_LETTERS (no I and no O) / CODE_LENGTH.
@@ -146,12 +152,15 @@ var _join_button: Button
 var _cancel_button: Button
 var _update_link: LinkButton
 var _hud: Control
-var _score_box: VBoxContainer
-var _feed_label: Label
-var _banner_label: Label
-var _mode_label: Label
-var _result_label: Label
-var _podium_label: Label
+## Issue #976: the host's own HUD scene (scores, scoreboard, join corner, kill
+## feed), its modifier banner, and the effects player with its screens.
+var _host_hud: CanvasLayer
+var _modifier_label: Label
+var effects: Node2D
+var _last_round_phase: int = 0
+var _ui_text: String = ""
+var _screens: Dictionary = {}
+var _victory_text: String = ""
 var _leave_button: Button
 var _wait_label: Label
 var _lobby_panel: Control
@@ -310,6 +319,7 @@ func _process(_delta: float) -> void:
 	_watch_snapshots()
 	if state == State.PLAYING:
 		_render()
+		_track_heads()
 
 func _physics_process(_delta: float) -> void:
 	if state == State.PLAYING:
@@ -387,6 +397,9 @@ func _input(event: InputEvent) -> void:
 			if not idle: # an idle back swaps the scene; do not starve a host sharing this tree of its Esc
 				get_viewport().set_input_as_handled()
 		return
+	if _victory_input(event) or _replay_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	var pad_button := event as InputEventJoypadButton
 	if pad_button != null and pad_button.pressed and not menu_open and (pad_button.button_index == JOY_BUTTON_A or pad_button.button_index == JOY_BUTTON_START) and _ready_button != null and _ready_button.is_visible_in_tree():
 		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
@@ -425,6 +438,29 @@ func _input(event: InputEvent) -> void:
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		toggle_menu()
 		get_viewport().set_input_as_handled()
+
+## Issue #976: on the host's victory screen, Space, A or a left click is
+## Continue, as on the host (#337, #640): this seat's Ready.
+func _victory_input(event: InputEvent) -> bool:
+	if menu_open or not victory_visible():
+		return false
+	var key := event as InputEventKey
+	var pad := event as InputEventJoypadButton
+	var click := event as InputEventMouseButton
+	var go: bool = (key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE) \
+		or (pad != null and pad.pressed and pad.button_index == JOY_BUTTON_A) \
+		or (click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT)
+	if go:
+		_send_json({"t": "ready", "v": true})
+	return go
+
+## F9 saves this screen's last ~10 s as a clip, as on the host (#329, #976).
+func _replay_input(event: InputEvent) -> bool:
+	var key := event as InputEventKey
+	if effects == null or key == null or not key.pressed or key.echo or key.physical_keycode != KEY_F9:
+		return false
+	effects.replay.save_and_toast()
+	return true
 
 ## A non-shoulder action button went down or came up: a tap counts on key-up.
 func _action_edge(id: int, pressed: bool) -> void:
@@ -722,6 +758,8 @@ func receive_snapshot_packet(payload: PackedByteArray) -> void:
 	if decoded is Dictionary and not (decoded as Dictionary).is_empty():
 		apply_snapshot(decoded)
 	_play_sounds(split.get("events", []), str(split.get("track", "")))
+	if effects != null:
+		effects.queue(split.get("effects", []))
 
 ## Applies a decoded snapshot: a full one becomes the new world (and snaps the
 ## puppets only when a round starts or the stage changes; mid-round fulls, which
@@ -905,6 +943,18 @@ func _clear_world() -> void:
 	_puppets.clear()
 	_hud_signature = ""
 	hud = {}
+	_last_round_phase = 0
+	_ui_text = ""
+	_screens = {}
+	_victory_text = ""
+	if effects != null:
+		effects.round_left()
+		effects.show_victory({})
+		effects.apply_mode_hud("", {})
+	if _host_hud != null:
+		_host_hud.visible = false
+	if _modifier_label != null:
+		_modifier_label.visible = false
 	if _puppet_holder != null:
 		for child in _puppet_holder.get_children():
 			_puppet_holder.remove_child(child)
@@ -1095,15 +1145,53 @@ func _build_world() -> void:
 	_puppet_holder = Node2D.new()
 	_puppet_holder.name = "Puppets"
 	_world_root.add_child(_puppet_holder)
+	effects = RemoteEffectsScript.new()
+	effects.delay_msec = INTERP_MSEC
+	_world_root.add_child(effects)
 	_camera = Camera2D.new()
 	_camera.name = "Camera"
 	add_child(_camera)
 	_camera.make_current()
+	effects.camera = _camera
+	effects.round_playing = func() -> bool: return int(_world.get("round_phase", 0)) == PHASE_ROUND_ACTIVE
+	effects.name_tag_of = _name_tag
+	effects.screen.pad_check = func() -> bool: return _pad_driving
 	_fit_camera()
+
+## The joiner's name tag Label for `slot`, or null (MATCH POINT dots, #976).
+func _name_tag(slot: int) -> Label:
+	var tags: Node = find_child("NameTags", true, false)
+	return tags.name_tag(slot) if tags != null and tags.has_method("name_tag") else null
+
+## Issue #976: head trails follow each shown player puppet's weapon head.
+func _track_heads() -> void:
+	if effects == null:
+		return
+	var players: Array = []
+	for puppet: Node in _puppets.values():
+		if puppet.kind == PuppetScript.Kind.PLAYER:
+			players.append(puppet)
+	effects.track_heads(players)
+	# The host's edge arrows follow each fighter as the snapshot has it.
+	var placed: Dictionary = {}
+	if _round_shown():
+		for p: Variant in _world.get("players", []):
+			if p is Dictionary:
+				var id: int = int(p.get("player_id", 0))
+				var puppet: Node2D = player_puppet(id)
+				placed[id] = true
+				effects.place_fighter(id, puppet, int(p.get("state", 1)) != SnapshotCaptureScript.STATE_DEAD,
+					int(p.get("team", -1)), puppet.color if puppet != null else Color.WHITE)
+	for id in RemoteEffectsScript.MAX_SLOTS:
+		if not placed.has(id):
+			effects.place_fighter(id, null, false, -1, Color.WHITE)
 
 func _build_ui() -> void:
 	_ui = CanvasLayer.new()
 	_ui.name = "UI"
+	# Over the host's screens (#976: HUD 1, victory 5, cards 10-12, flash 50):
+	# the joiner's own lobby, menu and join panels stay on top.
+	_ui.layer = 60
 	add_child(_ui)
 	_build_hud()
 	_build_lobby_panel()
@@ -1262,38 +1350,38 @@ func _on_join_pressed() -> void:
 	join(_room_edit.text, _name_edit.text)
 
 func _build_hud() -> void:
+	# Issue #976: the host's own HUD scene, its kill feed played from the
+	# host's recorded events (mirror: it records nothing itself).
+	_host_hud = HostHudScene.instantiate() as CanvasLayer
+	_host_hud.name = "HostHud"
+	var feed: Control = _host_hud.get_node("KillFeed") as Control
+	feed.mirror = true
+	# The scene's placeholder texts are the host's own start-up lines, in
+	# English; every label shows the host's text once its first frame lands.
+	for label: Node in _host_hud.find_children("*", "Label", true, false):
+		(label as Label).text = ""
+	_host_hud.visible = false
+	add_child(_host_hud)
+	if effects != null:
+		effects.kill_feed = feed
+	_modifier_label = ModifierBannerScript.build(self)
 	_hud = Control.new()
 	_hud.name = "Hud"
 	_hud.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ui.add_child(_hud)
-	_score_box = VBoxContainer.new()
-	_score_box.position = Vector2(16, 12)
-	_hud.add_child(_score_box)
-	_feed_label = _label("", 18)
-	_feed_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_feed_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_feed_label.position = Vector2(-16, 12)
-	_feed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_hud.add_child(_feed_label)
-	_banner_label = _label("", 36, UiThemeScript.YELLOW, UiThemeScript.HEADING_LABEL)
-	_banner_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_banner_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_banner_label.position = Vector2(0, 12)
-	_hud.add_child(_banner_label)
-	_mode_label = _label("", 22, UiThemeScript.SKY, UiThemeScript.HEADING_LABEL)
-	_mode_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_mode_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_mode_label.position = Vector2(0, 58)
-	_hud.add_child(_mode_label)
-	_result_label = _label("", 40, UiThemeScript.YELLOW, UiThemeScript.HEADING_LABEL)
-	_result_label.set_anchors_preset(Control.PRESET_CENTER)
-	_result_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_hud.add_child(_result_label)
 	_wait_label = _label(tr("JOIN_WAITING"), 28, Color.WHITE, UiThemeScript.HEADING_LABEL)
 	_wait_label.set_anchors_preset(Control.PRESET_CENTER)
 	_wait_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_hud.add_child(_wait_label)
+
+## The joiner's copy of the host's HUD scene (#976).
+func host_hud() -> CanvasLayer:
+	return _host_hud
+
+## The joiner's modifier banner, `ModifierBanner.gd`'s like the host's (#976).
+func modifier_label() -> Label:
+	return _modifier_label
 
 func _build_lobby_panel() -> void:
 	_lobby_panel = Control.new()
@@ -1352,9 +1440,6 @@ func _build_lobby_panel() -> void:
 	up.text = "+"
 	up.pressed.connect(func() -> void: _send_json({"t": "target", "n": int(lobby.get("target", 5)) + 1}))
 	_host_row.add_child(up)
-	_podium_label = _label("", 22)
-	_podium_label.name = "Podium"
-	box.add_child(_podium_label)
 	_leave_button = Button.new()
 	_leave_button.name = "LeaveLobby"
 	_leave_button.text = tr("JOIN_LEAVE_MATCH")
@@ -1477,7 +1562,8 @@ func _refresh_lobby() -> void:
 	if _lobby_panel == null or state != State.PLAYING:
 		return
 	var phase: String = str(lobby.get("phase", ""))
-	_lobby_panel.visible = phase == "lobby" or phase == "countdown" or phase == "victory"
+	# Issue #976: on victory the host's own victory screen shows instead.
+	_lobby_panel.visible = phase == "lobby" or phase == "countdown" or (phase == "victory" and not victory_visible())
 	if phase == "countdown":
 		_lobby_title.text = tr("JOIN_ROOM_STARTING") % [room_code, int(lobby.get("count", 0))]
 	elif phase == "victory":
@@ -1514,111 +1600,52 @@ func _refresh_hud() -> void:
 	if _hud == null:
 		return
 	_wait_label.visible = false
-	var scores: Dictionary = _world.get("scores", {})
-	var names: Dictionary = {}
-	var colors: Dictionary = {}
-	for p: Variant in _world.get("players", []):
-		if p is Dictionary:
-			names[int(p.get("player_id", 0))] = str(p.get("name", ""))
-			colors[int(p.get("player_id", 0))] = PaletteScript.PLAYERS[int(p.get("color", 0)) % PaletteScript.PLAYERS.size()]
-	var signature: String = str(scores) + str(names)
-	if signature != _hud_signature:
-		_hud_signature = signature
-		for child in _score_box.get_children():
-			_score_box.remove_child(child)
-			child.queue_free()
-		for id: int in names:
-			var shown: String = names[id] if not (names[id] as String).is_empty() else "P%d" % (id + 1)
-			_score_box.add_child(_label("%s  %d" % [shown, int(scores.get(id, 0))], 20, colors[id]))
-	var feed: PackedStringArray = PackedStringArray()
-	for entry: Variant in _world.get("kill_feed", []):
-		if entry is Dictionary:
-			feed.append(str(entry.get("text", "")))
-	_feed_label.text = "\n".join(feed)
+	# The modifier banner shows while the host's does (the snapshot's
+	# announcer text), in the same ModifierBanner label.
 	var banner: String = str(_world.get("announcer_text", ""))
-	if banner.is_empty() and int(_world.get("timer_ms", 0)) > 0:
-		banner = str(ceili(int(_world["timer_ms"]) / 1000.0))
-	_banner_label.text = banner
+	_modifier_label.text = banner
+	_modifier_label.visible = not banner.is_empty()
+	var phase: int = int(_world.get("round_phase", 0))
+	if phase != _last_round_phase and effects != null:
+		if phase == PHASE_ROUND_ACTIVE:
+			effects.round_started()
+		elif phase != PHASE_ROUND_END:
+			effects.round_left()
+	_last_round_phase = phase
 	_refresh_extras()
 
-## The parts of the host screen that come from the `hud` frame (issue #436).
-## Plain text built here with `tr()`, so it follows the player's locale.
+## The parts of the host screen that come from the `hud` frame (issues #436,
+## #976): the host's HUD scene and mode HUD in the host's state, and the
+## host's victory screen with every award.
 func _refresh_extras() -> void:
-	if _hud == null:
+	if _hud == null or _host_hud == null:
 		return
-	var state: int = int(hud.get("state", 0))
-	var banner: Array = hud.get("banner", [])
-	if not banner.is_empty() and str(_banner_label.text).is_empty():
-		_banner_label.text = ("%s %s" % banner).strip_edges()
-	_mode_label.text = mode_text()
-	_result_label.text = round_result_text() if state == PHASE_ROUND_END else ""
-	_podium_label.text = podium_text()
-	_podium_label.visible = not _podium_label.text.is_empty()
+	# Unpacked and applied only when the host's frame changed it.
+	var ui_text: String = str(hud.get("ui", ""))
+	if ui_text != _ui_text:
+		_ui_text = ui_text
+		_screens = RemoteHudScript.unpack(ui_text, {})
+		UiMirrorScript.apply(_host_hud, _screens.get("main", {}) if _screens.get("main") is Dictionary else {})
+	var screens: Dictionary = _screens
+	var phase: String = str(lobby.get("phase", ""))
+	# The host's lobby screen covers its HUD; the joiner's lobby panel is here.
+	_host_hud.visible = phase != "lobby" and phase != "countdown" and state == State.PLAYING
+	if effects == null:
+		return
+	var mode_state: Dictionary = screens.get("mode", {}) if screens.get("mode") is Dictionary else {}
+	effects.apply_mode_hud(str(screens.get("mode_script", "")), mode_state)
+	effects.set_numbers(screens.get("numbers"))
+	if effects.mode_hud != null:
+		effects.mode_hud.visible = _host_hud.visible
+	var victory_text: String = str(hud.get("victory", "")) if int(hud.get("state", 0)) == RemoteHudScript.STATE_VICTORY else ""
+	if victory_text != _victory_text:
+		_victory_text = victory_text
+		effects.show_victory(RemoteHudScript.unpack(victory_text, {}))
+	_refresh_lobby()
 
-func _name_of(slot: int) -> String:
-	for row: Variant in hud.get("board", []):
-		if int(row[0]) == slot:
-			return str(row[1]) if not str(row[1]).is_empty() else "P%d" % (slot + 1)
-	return "P%d" % (slot + 1)
-
-## The round's result line, or "" (the host's round-end banner).
-func round_result_text() -> String:
-	var team: int = int(hud.get("round_winner_team", -1))
-	if team >= 0:
-		return tr("HUD_TEAM_TAKES_ROUND") % TeamsScript.team_name(team)
-	var winner: int = int(hud.get("round_winner", -1))
-	if winner >= 0:
-		return tr("HUD_TAKES_ROUND") % _name_of(winner)
-	return tr("HUD_ROUND_DRAWN") if hud.has("round_winner") else ""
-
-## The match podium once the match is over: places, names, scores.
-func podium_text() -> String:
-	if str(lobby.get("phase", "")) != "victory" or int(hud.get("state", 0)) != 5:
-		return ""
-	var lines: PackedStringArray = PackedStringArray()
-	var team: int = int(lobby.get("winner_team", -1))
-	var winner: int = int(lobby.get("winner", -1))
-	if team >= 0:
-		lines.append(tr("HUD_TEAM_WINS_MATCH") % TeamsScript.team_name(team))
-	elif winner >= 0:
-		lines.append(tr("HUD_WINS_MATCH") % _name_of(winner))
-	var place: int = 0
-	for row: Variant in hud.get("board", []):
-		place += 1
-		lines.append(tr("HUD_PODIUM_ROW") % [place, _name_of(int(row[0])), int(row[2])])
-	return "\n".join(lines)
-
-## The game mode's own HUD line, or "" (Classic has none).
-func mode_text() -> String:
-	var m: Dictionary = hud.get("m", {})
-	if m.is_empty():
-		return ""
-	match str(hud.get("mode", "")):
-		"king_of_the_hill":
-			var parts: PackedStringArray = PackedStringArray()
-			var hold: Dictionary = m.get("hold", {})
-			for key: Variant in hold:
-				parts.append(tr("HUD_HOLD") % [_name_of(int(key)), int(hold[key]), int(m.get("win", 0))])
-			if bool(m.get("moving", false)):
-				parts.append(tr("HUD_HILL_MOVING"))
-			return "  ".join(parts)
-		"capture_the_flag":
-			var sc: Array = m.get("score", [0, 0])
-			var fl: Array = m.get("flag", [0, 0])
-			return tr("HUD_CTF") % [int(sc[0]), int(sc[1]), tr("HUD_FLAG_%d" % int(fl[0])), tr("HUD_FLAG_%d" % int(fl[1]))]
-		"soccer":
-			var sc2: Array = m.get("score", [0, 0])
-			return tr("HUD_SOCCER") % [int(sc2[0]), int(sc2[1]), int(m.get("win", 0))]
-		"hot_potato":
-			return tr("HUD_POTATO") % [_name_of(int(m.get("it", -1))), int(m.get("fuse", 0))] if int(m.get("it", -1)) >= 0 else ""
-		"stock":
-			var lives: Dictionary = m.get("lives", {})
-			var bits: PackedStringArray = PackedStringArray()
-			for key2: Variant in lives:
-				bits.append(tr("HUD_LIVES") % [_name_of(int(key2)), int(lives[key2])])
-			var clock: String = str(m.get("clock", ""))
-			return ("%s  " % clock if not clock.is_empty() else "") + "  ".join(bits)
-	return ""
+## Whether the host's victory screen is up on this joiner (#976).
+func victory_visible() -> bool:
+	return effects != null and effects.victory_visible()
 
 # --- Cosmetics picker (issue #441) ------------------------------------------------
 
