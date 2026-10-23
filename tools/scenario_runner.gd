@@ -1117,6 +1117,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"replay_capture_keeps_twelve_fps_review_gp",
 	"ctf_carried_flag_follows_carrier_in_capture_pause_review_gp",
 	"soccer_last_touch_is_nearest_player_review_gp",
+	"bot_skips_pickup_of_held_weapon",
 	"bot_death_and_stage_read_reset_brain_review_gp",
 	"relay_phone_seat_is_buzzed_pc_remote_is_not_review_net",
 	"network_client_cannot_claim_a_reserved_id_review_net",
@@ -3806,6 +3807,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ctf_carried_flag_follows_carrier_in_capture_pause_review_gp()
 		"soccer_last_touch_is_nearest_player_review_gp":
 			return await _scenario_soccer_last_touch_is_nearest_player_review_gp()
+		"bot_skips_pickup_of_held_weapon":
+			return await _scenario_bot_skips_pickup_of_held_weapon()
 		"bot_death_and_stage_read_reset_brain_review_gp":
 			return await _scenario_bot_death_and_stage_read_reset_brain_review_gp()
 		"relay_phone_seat_is_buzzed_pc_remote_is_not_review_net":
@@ -53007,6 +53010,38 @@ func _scenario_soccer_last_touch_is_nearest_player_review_gp() -> Array[String]:
 		failures.append("the last touch went to slot %s, want the nearest player, slot 0" % soccer._last_touch)
 	soccer.free()
 	await _teardown(holder)
+	return failures
+## Issue #1007: a bot holding the sword passes over a sword pickup for the
+## staff one, and with only the sword pickup around it targets nothing; a bot
+## holding the pickaxe (the control) still takes the nearer sword pickup.
+func _scenario_bot_skips_pickup_of_held_weapon() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, -400.0, 400.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	await _await_ticks(30)
+	var scene: PackedScene = load("res://scenes/Pickup.tscn") as PackedScene
+	var sword_pickup: Area2D = scene.instantiate() as Area2D
+	sword_pickup.set_weapon(load("res://resources/sword.tres"))
+	stage.add_child(sword_pickup)
+	sword_pickup.global_position = Vector2(-250, 250)
+	var staff_pickup: Area2D = scene.instantiate() as Area2D
+	staff_pickup.set_weapon(load("res://resources/staff.tres"))
+	stage.add_child(staff_pickup)
+	staff_pickup.global_position = Vector2(250, 250)
+	await _await_ticks(2)
+	if bot._nearest_pickup() != sword_pickup:
+		failures.append("control: a pickaxe bot should take the nearer sword pickup, got %s" % bot._nearest_pickup())
+	player.set_weapon_stats(load("res://resources/sword.tres"))
+	await _await_ticks(2)
+	if bot._nearest_pickup() != staff_pickup:
+		failures.append("a sword bot targets %s, want the staff pickup" % bot._nearest_pickup())
+	staff_pickup.queue_free()
+	await _await_ticks(2)
+	if bot._nearest_pickup() != null:
+		failures.append("a sword bot with only a sword pickup targets %s, want none" % bot._nearest_pickup())
+	await _teardown(stage)
 	return failures
 ## A bot that dies forgets its hook, wiggle, flight and pickup chase, and a
 ## fresh stage read drops shuns and ignored pickups that have run out.
