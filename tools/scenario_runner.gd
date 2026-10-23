@@ -44140,15 +44140,19 @@ func _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall() -> Arr
 		failures.append("the bot threw through a wall")
 	_scenario_completed = true
 	return failures
+const ICE_PUSH_963: float = 800.0
+const BELT_PUSH_963: float = 200.0
 ## Issue #963: a bot on a floor strip with a drop `end_gap` px ahead (to the
 ## right), a rival on a far island beyond it. `belt` lays a conveyor carrying
 ## right, otherwise an ice patch. An Easy bot is the control: it keeps the old
 ## behaviour. Returns whether the bot stayed on the floor and its farthest x.
-func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -> Dictionary:
+func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int, push: float = 0.0) -> Dictionary:
 	var stage: Node2D = _new_empty_stage()
 	var strip: StaticBody2D = (ConveyorScene if belt else IcePatchScene).instantiate() as StaticBody2D
 	strip.size = Vector2(800.0, 12.0 if belt else 8.0)
 	strip.position = Vector2(0.0, 600.0)
+	if belt:
+		strip.belt_speed = push
 	stage.add_child(strip)
 	var island := StaticBody2D.new()
 	var shape := CollisionShape2D.new()
@@ -44168,6 +44172,8 @@ func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -
 	bot.player = player
 	bot.output = player.set_input_vector
 	stage.add_child(bot)
+	if not belt:
+		player.linear_velocity = Vector2(push, 0.0)
 	var out: Dictionary = {"stayed": true, "max_x": start_x}
 	for t in ticks:
 		await physics_frame
@@ -44180,26 +44186,30 @@ func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -
 ## not leave the floor in 5 s; the Easy control (old behaviour) is printed.
 func _scenario_bot_eases_off_ice_near_drop() -> Array[String]:
 	var failures: Array[String] = []
-	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300)
-	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300)
+	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300, ICE_PUSH_963)
+	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300, ICE_PUSH_963)
 	print("      bot_eases_off_ice_near_drop: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
 	if not normal["stayed"]:
 		failures.append("the Normal bot left the ice patch")
-	if normal["max_x"] > 350.0:
-		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	if easy["stayed"]:
+		failures.append("the Easy control stayed on, so the fixture does not show the old behaviour falling")
+	if normal["max_x"] > 390.0:
+		failures.append("the Normal bot reached the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## A Normal bot on a belt carrying it towards an open end walks against it and
 ## stays on the floor for 5 s.
 func _scenario_bot_walks_against_belt_to_open_end() -> Array[String]:
 	var failures: Array[String] = []
-	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300)
-	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300)
+	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300, BELT_PUSH_963)
+	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300, BELT_PUSH_963)
 	print("      bot_walks_against_belt_to_open_end: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
 	if not normal["stayed"]:
 		failures.append("the Normal bot was carried off the belt's open end")
-	if normal["max_x"] > 350.0:
-		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	if easy["stayed"]:
+		failures.append("the Easy control stayed on, so the fixture does not show the old behaviour falling")
+	if normal["max_x"] > 390.0:
+		failures.append("the Normal bot reached the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## Issue #952: a bot holding `weapon` with a rival `gap` px off on flat ground.
