@@ -316,6 +316,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"magnet_pushes_with_negative_force",
 	"magnet_ignores_wielder_dead_and_dropped",
 	"magnet_does_not_pull_through_solid_terrain",
+	"magnet_plays_pull_sound_rate_limited",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -2210,6 +2211,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_magnet_ignores_wielder_dead_and_dropped()
 		"magnet_does_not_pull_through_solid_terrain":
 			return await _scenario_magnet_does_not_pull_through_solid_terrain()
+		"magnet_plays_pull_sound_rate_limited":
+			return await _scenario_magnet_plays_pull_sound_rate_limited()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -21488,6 +21491,59 @@ func _magnet_wall_trial(wielder_stats: Resource, wall: bool) -> Array[float]:
 	var moved: Array[float] = [victim.global_position.x - start]
 	await _teardown(stage, false)
 	return moved
+## Issue #978: a magnet with a rival in range and clear line plays magnet_pull
+## at the start and at most once per 1.5 s after; nobody in range, or a wall
+## in the way, is silent.
+func _scenario_magnet_plays_pull_sound_rate_limited() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"magnet_pull"):
+		return ["magnet_pull is not in the sound table"]
+	var stats: Resource = load(MAGNET_PATH)
+	var open_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_NEAR, false)
+	var far_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_OUTSIDE, false)
+	var wall_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_NEAR, true)
+	print("      pull sounds: open %d, out of range %d, walled %d" % [open_n, far_n, wall_n])
+	if open_n < 1:
+		failures.append("a rival in range and clear line: magnet_pull never played")
+	# 200 ticks at 60 Hz is 3.3 s, so the 1.5 s limit allows at most 3.
+	if open_n > 3:
+		failures.append("magnet_pull played %d times in about 3.3 s; limit is one per 1.5 s" % open_n)
+	if far_n != 0:
+		failures.append("a rival out of range still played magnet_pull %d times" % far_n)
+	if wall_n != 0:
+		failures.append("a rival behind a wall still played magnet_pull %d times" % wall_n)
+	_scenario_completed = true
+	return failures
+## Counts magnet_pull plays over 200 ticks with one victim at `offset`.
+func _magnet_sound_trial(sfx: Node, wielder_stats: Resource, offset: Vector2, wall: bool) -> int:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + offset)
+	if wall:
+		var slab := StaticBody2D.new()
+		slab.collision_layer = 1
+		slab.collision_mask = 0
+		var slab_shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(20, 400)
+		slab_shape.shape = rect
+		slab.add_child(slab_shape)
+		slab.position = DEEP_PARK_POSITION + offset * 0.5
+		stage.add_child(slab)
+	await _await_ticks(2)
+	sfx.start_recording()
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	victim.linear_velocity = Vector2.ZERO
+	await _await_ticks(200)
+	var played: int = _sfx_count(sfx, "magnet_pull")
+	sfx.stop_recording()
+	await _teardown(stage, false)
+	return played
 func _scenario_magnet_ignores_wielder_dead_and_dropped() -> Array[String]:
 	var failures: Array[String] = []
 	# Unbraced wielder alone: with nobody to pull, the field must not shove its own
