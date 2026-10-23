@@ -52,7 +52,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Parts: fan (air column along its facing; can travel, spin or sweep; Carousel) and stage-wide gust (periodic, one direction, 1.5 s warning with tint, streaks and wind sound; Pillars) (#281)
 - Parts: falling rocks, collapsing floor, breakable walls (#53)
 - Parts: spikes and saw (travels a path) deal big damage plus knockback with a per-player hit cooldown (#282); a landed hit plays its own `hazard_hit` sound once per hit, none when blocked by spawn protection (#874)
-- Per-stage gradient sky and parallax silhouettes (#117); stage title card (#120)
+- Per-stage gradient sky and parallax silhouettes (#117); stage title card (#120), with a "Stage title card" switch in Settings > More options (#942, on by default, saved in `user://audio.cfg`, put back by Restore defaults); off, no card sweeps at round start and the countdown, banners and Match point plate are unchanged
 
 ## Match flow and scoring
 - Endless round loop over the live roster (ADR-0004, ADR-0007)

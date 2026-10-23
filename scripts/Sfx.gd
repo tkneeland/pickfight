@@ -345,6 +345,9 @@ var damage_numbers: bool = true
 ## Whether the "MATCH POINT: name" plate (#825) shows at round start (#892). On by
 ## default; the gold dots and all scoring are unaffected. Set through `set_match_point_plate()`.
 var match_point_plate: bool = true
+## Whether `RoundCards` sweeps the stage title card (#120) at round start (#942). On by
+## default; the countdown, banners and plates are unaffected. Set through `set_stage_title_card()`.
+var stage_title_card: bool = true
 ## Whether `Juice` freezes the game for 3 ticks on a heavy strike (#916). On by
 ## default; shake and slow-motion are unaffected. Set through `set_hit_pause()`.
 var hit_pause: bool = true
@@ -699,6 +702,11 @@ func set_match_point_plate(value: bool) -> void:
 	match_point_plate = value
 	_save_settings()
 
+## Turn the stage title card (#942) on or off, and remember the choice.
+func set_stage_title_card(value: bool) -> void:
+	stage_title_card = value
+	_save_settings()
+
 ## Turn the hit-stop freeze (#916) on or off, and remember the choice.
 func set_hit_pause(value: bool) -> void:
 	hit_pause = value
@@ -803,6 +811,7 @@ func restore_defaults() -> void:
 	kill_feed = true
 	damage_numbers = true
 	match_point_plate = true
+	stage_title_card = true
 	hit_pause = true
 	pickup_callouts = true
 	reduce_flash = false
@@ -917,6 +926,7 @@ func load_settings() -> void:
 		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
 		damage_numbers = _flag(config.get_value("display", "damage_numbers", true), true)
 		match_point_plate = _flag(config.get_value("display", "match_point_plate", true), true)
+		stage_title_card = _flag(config.get_value("display", "stage_title_card", true), true)
 		hit_pause = _flag(config.get_value("display", "hit_pause", true), true)
 		pickup_callouts = _flag(config.get_value("display", "pickup_callouts", true), true)
 		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
@@ -949,6 +959,7 @@ func _save_settings() -> void:
 	config.set_value("display", "kill_feed", kill_feed)
 	config.set_value("display", "damage_numbers", damage_numbers)
 	config.set_value("display", "match_point_plate", match_point_plate)
+	config.set_value("display", "stage_title_card", stage_title_card)
 	config.set_value("display", "hit_pause", hit_pause)
 	config.set_value("display", "pickup_callouts", pickup_callouts)
 	config.set_value("display", "reduce_flash", reduce_flash)

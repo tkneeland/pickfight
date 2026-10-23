@@ -196,6 +196,7 @@ SETTINGS_FEEDBACK,Feedback,Feedback,Avis,Comentarios,Feedback,反馈,フィー�
 SETTINGS_FULLSCREEN,Full (F11),Voll (F11),Plein (F11),Completa (F11),Cheia (F11),全屏 (F11),フルスクリーン (F11),전체 화면 (F11),Во весь экран (F11)
 SETTINGS_KILL_FEED,Kill feed,Kill-Feed,Fil des KO,Registro de KO,Registro de KOs,击杀信息,キルフィード,킬 피드,Лента убийств
 SETTINGS_DAMAGE_NUMBERS,Damage numbers,Schadenszahlen,Nombres de dégâts,Números de daño,Números de dano,伤害数字,ダメージ数字,피해 숫자,Числа урона
+SETTINGS_STAGE_TITLE_CARD,Stage title card,Stage-Titelkarte,Carton de titre du niveau,Cartel del título del escenario,Cartaz do título do cenário,关卡名称提示,ステージタイトル表示,스테이지 제목 표시,Заставка названия арены
 SETTINGS_MATCH_POINT_PLATE,Match point plate,Matchpunkt-Anzeige,Bandeau balle de match,Cartel de punto de partido,Aviso de ponto de partida,赛点提示,マッチポイント表示,매치 포인트 표시,Табличка матчбола
 SETTINGS_PICKUP_CALLOUTS,Pickup callouts,Aufnahme-Hinweise,Annonces de ramassage,Avisos de recogida,Avisos de coleta,拾取提示,取得表示,획득 알림,Подсказки подбора
 SETTINGS_HIDE_ROOM_CODE,Hide room code,Raumcode verstecken,Masquer le code du salon,Ocultar código de sala,Ocultar código da sala,隐藏房间码,ルームコードを隠す,방 코드 숨기기,Скрыть код комнаты
