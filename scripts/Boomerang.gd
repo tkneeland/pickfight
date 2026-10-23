@@ -158,6 +158,7 @@ func _move(motion: Vector2) -> void:
 	var blocker: Node = ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, _shape.radius)
 	if blocker != null and blocker != _shield_turned:
 		_shield_turned = blocker
+		ShotSweepScript.shield_blocked(self, blocker, global_position)
 		impacted.emit(blocker, global_position)
 		if leg == Leg.OUT:
 			velocity = Vector2.ZERO
@@ -213,7 +214,9 @@ func _hit_player(victim: Node, point: Vector2) -> void:
 		return
 	hits[id] = true
 	impacted.emit(victim, point)
-	if victim is RigidBody2D and velocity.length_squared() > 0.0:
+	# A spawn-protected fighter is not knocked (#1004); the hit is still
+	# recorded above, so it does not land twice on one leg.
+	if victim is RigidBody2D and velocity.length_squared() > 0.0 and victim.get("spawn_protected") != true:
 		(victim as RigidBody2D).apply_central_impulse(velocity.normalized() * float(_stats.projectile_knockback))
 	shooter.land_projectile_hit(victim, float(_stats.projectile_damage), point)
 

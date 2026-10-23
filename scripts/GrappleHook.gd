@@ -76,6 +76,10 @@ var rope_length: float = 0.0
 ## Pixels flown so far on the way out.
 var travelled: float = 0.0
 
+## A re-latch inside this window stays silent (#1001).
+const RELATCH_SEC: float = 0.2
+var _last_latch_msec: int = -1
+
 var _stats: Resource
 ## The flight velocity, px/s. Starts at `direction * projectile_speed`.
 var _velocity: Vector2 = Vector2.ZERO
@@ -159,7 +163,9 @@ func _fly(delta: float) -> void:
 			direction = _velocity.normalized()
 			rotation = direction.angle()
 	var motion: Vector2 = (_velocity * delta).limit_length(left)
-	if ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, _shape.radius) != null:
+	var blocker: Node = ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, _shape.radius)
+	if blocker != null:
+		ShotSweepScript.shield_blocked(self, blocker, global_position)
 		state = State.HOME
 		return
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
@@ -190,6 +196,7 @@ func _meet(collider: Object, point: Vector2) -> void:
 			_stuck_to = node as Node2D
 			_stuck_local = _stuck_to.to_local(global_position)
 			state = State.STUCK
+			_latch()
 			rope_length = maxf((global_position - shooter.global_position).length(), float(_stats.reel_min_length))
 			return
 		if node != shooter and bool(node.get("alive")):
@@ -201,6 +208,7 @@ func _meet(collider: Object, point: Vector2) -> void:
 					_reeled = node as RigidBody2D
 					_reel_time = 0.0
 					state = State.REELING
+					_latch()
 				else:
 					state = State.HOME
 				return
@@ -221,9 +229,22 @@ func _meet(collider: Object, point: Vector2) -> void:
 		_stuck_to = node as Node2D
 		_stuck_local = _stuck_to.to_local(global_position)
 		state = State.STUCK
+		_latch()
 		rope_length = maxf((global_position - shooter.global_position).length(), float(_stats.reel_min_length))
 		return
 	state = State.HOME
+
+## Issue #1001: a clink where the hook latches (terrain, a player anchor or a
+## reeled player), at most once per RELATCH_SEC. Host only; online clients
+## hear it through the generic Sfx snapshot trailer.
+func _latch() -> void:
+	var now: int = Time.get_ticks_msec()
+	if _last_latch_msec >= 0 and now - _last_latch_msec < int(RELATCH_SEC * 1000.0):
+		return
+	_last_latch_msec = now
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(&"hook_latch", global_position, 1.0)
 
 func _hold(delta: float) -> void:
 	if not is_instance_valid(_stuck_to) or not _stuck_to.is_inside_tree() or not _solid(_stuck_to):

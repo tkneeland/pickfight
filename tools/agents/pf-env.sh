@@ -53,6 +53,15 @@ pf_budget_ok() {
   [ "$(pf_weekly_used)" -lt "$HANDOFF_WEEKLY_USED" ] && return 0
   r=$(pf_weekly_reset); [ "$r" -gt 0 ] && [ $(( r - $(date +%s) )) -le $(( RESET_GRACE_HOURS * 3600 )) ]
 }
+pf_five_h_used() { jq -r '.rate_limits.five_hour.used_percentage // 0 | floor' "$PF_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
+# worker target right now: the mode's DAY_AGENTS / NIGHT_AGENTS, 1 once the 5h window reaches FIVE_H_SLOW_USED,
+# 0 at FIVE_H_STOP_USED or when the weekly budget says stop. Start workers only while running < target; never above it.
+pf_worker_target() {
+  pf_budget_ok || { echo 0; return; }
+  local f; f=$(pf_five_h_used)
+  if [ "$f" -ge "$FIVE_H_STOP_USED" ]; then echo 0; elif [ "$f" -ge "$FIVE_H_SLOW_USED" ]; then echo 1
+  elif [ "$(pf_daynight)" = day ]; then echo "$DAY_AGENTS"; else echo "$NIGHT_AGENTS"; fi
+}
 # prints "day" or "night" (ignores MT mode)
 pf_daynight() {
   h=$(date +%H); h=$((10#$h)); u=$(cat "$PF_STATE/pf-day-until" 2>/dev/null || echo 0)

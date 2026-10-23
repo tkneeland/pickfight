@@ -271,6 +271,10 @@ func _on_body_entered(body: Node) -> void:
 		return
 	if not body.is_in_group("players") or not body.alive:
 		return
+	# #1006: a fighter already holding this weapon gains nothing; leave the
+	# pickup for someone else (or for them once they switch).
+	if body.weapon_stats != null and body.weapon_stats.resource_path == weapon_stats.resource_path:
+		return
 	_claimed = true
 	# Safe mid-flush: set_weapon_stats() only records the weapon and defers
 	# the rig rebuild itself, which is the part the physics server would

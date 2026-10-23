@@ -41,7 +41,16 @@ const _DETECTOR_ABOVE: float = 6.0
 const _DETECTOR_BELOW: float = 2.0
 const _SPECK_SPACING: float = 14.0
 
+## Issue #987: a squelch when a living fighter wades in, at most once per
+## fighter per second. Played on the host only; online clients hear it through
+## the generic Sfx snapshot trailer, so nothing here is replicated.
+const SQUELCH_INTERVAL_SEC: float = 1.0
+
 var _detector: Area2D
+## Instance ids of the fighters bogging last tick.
+var _bogging_last: Dictionary = {}
+## Instance id -> seconds until that fighter may squelch again.
+var _squelch_wait: Dictionary = {}
 
 func _ready() -> void:
 	var half: Vector2 = size / 2.0
@@ -90,9 +99,25 @@ func _ready() -> void:
 	add_child(_detector)
 
 func _physics_process(delta: float) -> void:
+	for id: int in _squelch_wait.keys():
+		var left: float = float(_squelch_wait[id]) - delta
+		if left <= 0.0:
+			_squelch_wait.erase(id)
+		else:
+			_squelch_wait[id] = left
+	var now: Dictionary = {}
 	for body: Node2D in _detector.get_overlapping_bodies():
 		if body is RigidBody2D and body.is_in_group("players") and _touching(body):
 			_bog(body as RigidBody2D, delta)
+			if bool(body.get("alive")):
+				var id: int = body.get_instance_id()
+				now[id] = true
+				if not _bogging_last.has(id) and not _squelch_wait.has(id):
+					_squelch_wait[id] = SQUELCH_INTERVAL_SEC
+					var sfx: Node = get_node_or_null(^"/root/Sfx")
+					if sfx != null:
+						sfx.play(&"mud_squelch", body.global_position, 1.0)
+	_bogging_last = now
 
 func _touching(body: RigidBody2D) -> bool:
 	return body.contact_monitor and body.get_colliding_bodies().has(self)

@@ -166,12 +166,14 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
 	"ice_patch_two_more_stages_spawns_clear",
+	"ice_patch_plays_skid_once_on_entry",
 	"treadmill_belts_oppose_and_mud_sits_between",
 	"mud_patch_overpass_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
 	"stage_speed_strips_placed",
 	"mud_patch_slows_player",
+	"mud_patch_plays_squelch_once_on_entry",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -226,6 +228,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_spots_skip_player_spawns",
 	"every_stage_has_pickup_spot_clear_of_spawns",
 	"spawn_protection_blocks_damage_then_expires",
+	"bullet_does_not_knock_spawn_protected",
+	"boomerang_does_not_knock_spawn_protected",
+	"meteor_does_not_knock_spawn_protected",
+	"rock_does_not_shove_spawn_protected",
 	"roster_heads_do_not_clip_platform_in_play",
 	"trapped_head_phases_home_after_release",
 	"wedged_head_swung_into_wall_frees_on_release",
@@ -316,6 +322,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"magnet_pushes_with_negative_force",
 	"magnet_ignores_wielder_dead_and_dropped",
 	"magnet_does_not_pull_through_solid_terrain",
+	"magnet_plays_pull_sound_rate_limited",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -500,6 +507,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"themed_pool_never_draws_a_disabled_weapon",
 	"bot_stops_before_spikes",
 	"bot_dodges_moving_saw",
+	"bot_dodges_meteor",
+	"bot_sidesteps_incoming_bullet",
+	"bot_sidestep_bullet_keeps_footing_997",
 	"bot_braces_for_gust_warning",
 	"hazard_death_credits_last_hitter_within_window",
 	"hazard_death_after_window_gives_no_credit",
@@ -532,10 +542,13 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_streaker_award_needs_three_unbroken_kos",
 	"victory_combo_award_needs_two_kos_inside_three_seconds",
 	"award_sharpshooter_counts_ranged_kos",
+	"award_jack_counts_distinct_weapons",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
 	"pickup_spawn_rules_unchanged_by_pop_816",
+	"pickup_spawn_plays_sound_once",
+	"pickup_spawn_refused_plays_no_sound",
 	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_leaves_loose_pickups_alone",
@@ -648,6 +661,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"shield_blocks_a_hit_on_its_face",
 	"shield_bash_knocks_back_harder_than_pickaxe",
 	"shield_is_in_the_pickup_set",
+	"pickup_of_held_weapon_is_left_on_stage",
 	"pickup_shows_weapon_name_callout_818",
 	"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818",
 	"announcer_calls_each_mode_at_round_start",
@@ -880,6 +894,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"burst_of_action_taps_counts_each_press_601",
 	"respawn_skips_spawns_with_no_floor_605",
 	"respawn_stays_on_own_half_605",
+	"respawn_avoids_hazard_adjacent_spawn",
 	"respawn_alone_does_not_always_pick_spawn0_605",
 	"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648",
 	"soccer_respawn_never_lands_in_a_goal_648",
@@ -931,6 +946,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
 	"pogo_chained_hops_keep_their_height",
 	"grapple_hit_on_player_anchors_and_thrower_zips_to_them",
+	"hook_latch_plays_once_per_latch",
 	"grapple_anchored_player_feels_no_force_from_the_rope",
 	"grapple_release_lets_go_of_an_anchored_player",
 	"grapple_lets_go_when_either_player_is_knocked_out",
@@ -951,6 +967,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomerang_blocked_by_shield_face_631",
 	"boomerang_passes_through_other_weapon_head_631",
 	"boomerang_passes_through_shield_back_631",
+	"shield_block_plays_sound_and_spark",
 	"career_match_end_sends_per_seat_deltas_503",
 	"career_ko_of_bot_is_not_counted_503",
 	"career_abandoned_match_sends_rounds_not_match_503",
@@ -966,6 +983,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_walks_against_belt_to_open_end",
 	"bot_aims_boomstick_at_rival",
 	"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952",
+	"bot_faces_shield_at_incoming_shot",
+	"bot_shield_ignores_shot_on_easy_or_other_weapon_977",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -1086,6 +1105,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
 	"surprise_me_random_pick_is_clean_free_and_repeatable_865",
 	"controller_page_has_surprise_me_button_with_existing_messages_865",
+	"join_screen_paste_fills_room_code_906",
 	"pickup_drop_falls_through_players_to_terrain_review_gp",
 	"sudden_death_chip_cleared_without_modifier_review_gp",
 	"round_start_clears_stale_round_flags_review_gp",
@@ -1776,6 +1796,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_no_single_strike_kills()
 		"pickup_appears_at_round_start":
 			return await _scenario_pickup_appears_at_round_start()
+		"pickup_of_held_weapon_is_left_on_stage":
+			return await _scenario_pickup_of_held_weapon_is_left_on_stage()
 		"pickup_shows_weapon_name_callout_818":
 			return await _scenario_pickup_shows_weapon_name_callout_818()
 		"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818":
@@ -1906,6 +1928,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_summit_spawns_clear()
 		"ice_patch_two_more_stages_spawns_clear":
 			return await _scenario_ice_patch_two_more_stages_spawns_clear()
+		"ice_patch_plays_skid_once_on_entry":
+			return await _scenario_ice_patch_plays_skid_once_on_entry()
 		"treadmill_belts_oppose_and_mud_sits_between":
 			return await _scenario_treadmill_belts_oppose_and_mud_sits_between()
 		"mud_patch_overpass_spawns_clear":
@@ -1918,6 +1942,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_speed_strips_placed()
 		"mud_patch_slows_player":
 			return await _scenario_mud_patch_slows_player()
+		"mud_patch_plays_squelch_once_on_entry":
+			return await _scenario_mud_patch_plays_squelch_once_on_entry()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -2026,6 +2052,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_every_stage_has_pickup_spot_clear_of_spawns()
 		"spawn_protection_blocks_damage_then_expires":
 			return await _scenario_spawn_protection_blocks_damage_then_expires()
+		"bullet_does_not_knock_spawn_protected":
+			return await _scenario_bullet_does_not_knock_spawn_protected()
+		"boomerang_does_not_knock_spawn_protected":
+			return await _scenario_boomerang_does_not_knock_spawn_protected()
+		"meteor_does_not_knock_spawn_protected":
+			return await _scenario_meteor_does_not_knock_spawn_protected()
+		"rock_does_not_shove_spawn_protected":
+			return await _scenario_rock_does_not_shove_spawn_protected()
 		"roster_heads_do_not_clip_platform_in_play":
 			return await _scenario_roster_heads_do_not_clip_platform_in_play()
 		"trapped_head_phases_home_after_release":
@@ -2206,6 +2240,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_magnet_ignores_wielder_dead_and_dropped()
 		"magnet_does_not_pull_through_solid_terrain":
 			return await _scenario_magnet_does_not_pull_through_solid_terrain()
+		"magnet_plays_pull_sound_rate_limited":
+			return await _scenario_magnet_plays_pull_sound_rate_limited()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -2574,6 +2610,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_stops_before_spikes()
 		"bot_dodges_moving_saw":
 			return await _scenario_bot_dodges_moving_saw()
+		"bot_dodges_meteor":
+			return await _scenario_bot_dodges_meteor()
+		"bot_sidesteps_incoming_bullet":
+			return await _scenario_bot_sidesteps_incoming_bullet()
+		"bot_sidestep_bullet_keeps_footing_997":
+			return await _scenario_bot_sidestep_bullet_keeps_footing_997()
 		"bot_braces_for_gust_warning":
 			return await _scenario_bot_braces_for_gust_warning()
 		"hazard_death_credits_last_hitter_within_window":
@@ -2638,6 +2680,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_victory_combo_award_needs_two_kos_inside_three_seconds()
 		"award_sharpshooter_counts_ranged_kos":
 			return await _scenario_award_sharpshooter_counts_ranged_kos()
+		"award_jack_counts_distinct_weapons":
+			return await _scenario_award_jack_counts_distinct_weapons()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -2646,6 +2690,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_pops_in_when_spawned_816()
 		"pickup_spawn_rules_unchanged_by_pop_816":
 			return await _scenario_pickup_spawn_rules_unchanged_by_pop_816()
+		"pickup_spawn_plays_sound_once":
+			return await _scenario_pickup_spawn_plays_sound_once()
+		"pickup_spawn_refused_plays_no_sound":
+			return await _scenario_pickup_spawn_refused_plays_no_sound()
 		"replay_buffer_bounded_and_saves_clip":
 			return await _scenario_replay_buffer_bounded_and_saves_clip()
 		"ghost_hidden_until_touch_then_fades":
@@ -3330,6 +3378,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_respawn_skips_spawns_with_no_floor_605()
 		"respawn_stays_on_own_half_605":
 			return await _scenario_respawn_stays_on_own_half_605()
+		"respawn_avoids_hazard_adjacent_spawn":
+			return await _scenario_respawn_avoids_hazard_adjacent_spawn()
 		"respawn_alone_does_not_always_pick_spawn0_605":
 			return await _scenario_respawn_alone_does_not_always_pick_spawn0_605()
 		"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648":
@@ -3426,6 +3476,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_uncharged_ground_contact_bounces_at_least_this_high()
 		"pogo_chained_hops_keep_their_height":
 			return await _scenario_pogo_chained_hops_keep_their_height()
+		"hook_latch_plays_once_per_latch":
+			return await _scenario_hook_latch_plays_once_per_latch()
 		"grapple_hit_on_player_anchors_and_thrower_zips_to_them":
 			return await _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them()
 		"grapple_anchored_player_feels_no_force_from_the_rope":
@@ -3448,6 +3500,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_fishing_rod_reel_breaks_on_release()
 		"fishing_rod_reels_teammate_undamaged":
 			return await _scenario_fishing_rod_reels_teammate_undamaged()
+		"shield_block_plays_sound_and_spark":
+			return await _scenario_shield_block_plays_sound_and_spark()
 		"bullet_blocked_by_shield_face_631":
 			return await _scenario_bullet_blocked_by_shield_face_631()
 		"bullet_passes_through_other_weapon_head_631":
@@ -3498,6 +3552,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_aims_boomstick_at_rival()
 		"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952":
 			return await _scenario_bot_boomstick_no_aim_952()
+		"bot_faces_shield_at_incoming_shot":
+			return await _scenario_bot_faces_shield_at_incoming_shot()
+		"bot_shield_ignores_shot_on_easy_or_other_weapon_977":
+			return await _scenario_bot_shield_ignores_shot_977()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -3722,6 +3780,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865()
 		"controller_page_has_surprise_me_button_with_existing_messages_865":
 			return _scenario_controller_page_has_surprise_me_button_with_existing_messages_865()
+		"join_screen_paste_fills_room_code_906":
+			return await _scenario_join_screen_paste_fills_room_code_906()
 		"pickup_drop_falls_through_players_to_terrain_review_gp":
 			return await _scenario_pickup_drop_falls_through_players_to_terrain_review_gp()
 		"sudden_death_chip_cleared_without_modifier_review_gp":
@@ -9756,6 +9816,92 @@ func _scenario_boomstick_bullet_damages_and_shoves() -> Array[String]:
 		failures.append("the victim was shoved %.1f px along the shot, under a body width (%.0f px)" % [shove, BOOMSTICK_SHOVE_MIN])
 	await _teardown(stage)
 	return failures
+## #1004: a boomstick bullet neither hurts nor knocks a spawn-protected fighter,
+## yet is still spent. The unprotected control is both hurt and knocked.
+func _scenario_bullet_does_not_knock_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var shoves: Array[float] = []
+	var damages: Array[float] = []
+	var left: Array[int] = []
+	for protected_flag: bool in [true, false]:
+		var stage: Node2D = _new_stage()
+		var centre: Vector2 = DEEP_PARK_POSITION
+		var shooter: RigidBody2D = _spawn_player(stage, centre)
+		var victim: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+		shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		_brace(shooter)
+		_aim(shooter, 0.0)
+		var hold := func() -> void:
+			victim.spawn_protected = protected_flag
+			victim.teleport_to(centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+		var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS, hold)
+		if shot["bullet"] == null:
+			failures.append("the boomstick never fired")
+			await _teardown(stage)
+			return failures
+		var start_x: float = victim.global_position.x
+		await _await_ticks(BOOMSTICK_SHOVE_TICKS * 2)
+		shoves.append(victim.global_position.x - start_x)
+		damages.append(victim.damage)
+		left.append(_projectiles_of(shooter).size())
+		await _teardown(stage)
+	print("      bullet: protected shove %.1f dmg %.1f; unprotected shove %.1f dmg %.1f" % [shoves[0], damages[0], shoves[1], damages[1]])
+	if damages[1] <= 0.0 or shoves[1] < BOOMSTICK_SHOVE_MIN:
+		failures.append("control: the unprotected fighter was not hurt and knocked (dmg %.1f, shove %.1f)" % [damages[1], shoves[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a bullet" % damages[0])
+	if absf(shoves[0]) > 4.0:
+		failures.append("the protected fighter was knocked %.1f px by a bullet" % shoves[0])
+	if left[0] != 0:
+		failures.append("the bullet was not consumed by the protected fighter")
+	return failures
+## #1004: the same for a boomerang, which also hits the protected fighter only
+## once per leg.
+func _scenario_boomerang_does_not_knock_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var peaks: Array[float] = []
+	var damages: Array[float] = []
+	var counts: Array[int] = []
+	for protected_flag: bool in [true, false]:
+		var stage: Node2D = _new_stage()
+		var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+		var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(200, -20))
+		await _await_ticks(2)
+		await _equip(thrower, BOOMERANG_PATH)
+		_brace(thrower)
+		victim.gravity_scale = 0.0
+		victim.linear_velocity = Vector2.ZERO
+		victim.spawn_protected = protected_flag
+		var strikes: Array = []
+		_record_strikes(thrower, strikes)
+		await _flick(thrower, Vector2.RIGHT)
+		var boomerang: Node2D = thrower.launched_boomerang()
+		if boomerang == null:
+			failures.append("a flick did not throw the boomerang")
+			await _teardown(stage)
+			return failures
+		var peak: float = 0.0
+		var start: Vector2 = victim.global_position
+		for _i in 240:
+			if not is_instance_valid(boomerang):
+				break
+			await physics_frame
+			peak = maxf(peak, absf(victim.global_position.x - start.x))
+		peaks.append(peak)
+		damages.append(victim.damage)
+		counts.append(strikes.size())
+		await _teardown(stage)
+	print("      boomerang: protected moved %.1f dmg %.1f; unprotected moved %.1f dmg %.1f" % [peaks[0], damages[0], peaks[1], damages[1]])
+	if damages[1] <= 0.0 or peaks[1] < 4.0:
+		failures.append("control: the unprotected fighter was not hurt and knocked (dmg %.1f, moved %.1f)" % [damages[1], peaks[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a boomerang" % damages[0])
+	if peaks[0] > 1.0:
+		failures.append("the protected fighter was moved %.1f px by a boomerang" % peaks[0])
+	if counts[0] > 2:
+		failures.append("the boomerang hit the protected fighter %d times, at most once per leg (2)" % counts[0])
+	return failures
 ## Issue #55: a bullet disappears on terrain -- even terrain thinner than one
 ## tick of its flight, which only a swept bullet can see -- and nobody behind
 ## it is hurt.
@@ -11389,6 +11535,61 @@ func _scenario_ice_patch_slides_player_and_restores() -> Array[String]:
 		failures.append("the player's material was not restored after leaving the ice")
 	await _teardown(stage)
 	return failures
+## Issue #993: stepping onto ice plays ice_skid once; staying is silent; a
+## re-entry within 1 s is silent, after 1 s plays again; a ghost plays none.
+func _ice_skid_drop(player: RigidBody2D, ice: StaticBody2D, sfx: Node) -> int:
+	player.global_position = ice.position + Vector2(0, -60)
+	player.linear_velocity = Vector2.ZERO
+	var before: int = _sfx_count(sfx, "ice_skid")
+	for _tick in 40:
+		await physics_frame
+	return _sfx_count(sfx, "ice_skid") - before
+func _scenario_ice_patch_plays_skid_once_on_entry() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"ice_skid"):
+		return ["ice_skid is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var ice: StaticBody2D = _ice_ground(stage, true)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -ICE_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	sfx.start_recording()
+	for _tick in 90:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "ice_skid")
+	var last: Dictionary = _sfx_last(sfx, "ice_skid")
+	for _tick in 90:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "ice_skid") - first
+	var again: int = await _ice_skid_drop(player, ice, sfx)
+	var quick: int = await _ice_skid_drop(player, ice, sfx)
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _ice_skid_drop(player, ice, sfx)
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _ice_skid_drop(player, ice, sfx)
+	sfx.stop_recording()
+	print("      skids: entry %d, staying %d, first drop %d, quick re-entry %d, later re-entry %d, dead %d" % [first, stayed, again, quick, later, dead])
+	if first != 1:
+		failures.append("stepping onto ice played ice_skid %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("ice_skid was not positional")
+	if stayed != 0:
+		failures.append("staying on the ice played %d more skids" % stayed)
+	if again != 1:
+		failures.append("re-entering after more than 1 s played %d skids, want 1" % again)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d skids" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s (later) played %d skids, want 1" % later)
+	if dead != 0:
+		failures.append("a ghost played %d skids" % dead)
+	await _teardown(stage)
+	return failures
 ## Summit (#860) carries an ice patch on its floor; no spawn or pickup spot
 ## lies over it.
 func _scenario_ice_patch_summit_spawns_clear() -> Array[String]:
@@ -11736,6 +11937,68 @@ func _scenario_mud_patch_slows_player() -> Array[String]:
 		# leaving, the runner need only be clearly above the mud pace.
 		if runner.linear_velocity.x <= on_mud * 1.3:
 			failures.append("speed %.1f px/s 0.3 s after leaving the mud, still near the mud pace %.1f" % [runner.linear_velocity.x, on_mud])
+	await _teardown(stage)
+	return failures
+## Issue #987: wading onto mud plays mud_squelch once; staying is silent; a
+## second entry within 1 s is silent, after 1 s plays again; a dead fighter
+## (ghost) plays none.
+func _mud_squelch_drop(stage: Node2D, player: RigidBody2D, mud: StaticBody2D, sfx: Node) -> int:
+	# Lift the player clear of the strip, then drop it back on.
+	player.global_position = mud.position + Vector2(0, -60)
+	player.linear_velocity = Vector2.ZERO
+	var before: int = _sfx_count(sfx, "mud_squelch")
+	for _tick in 40:
+		await physics_frame
+	return _sfx_count(sfx, "mud_squelch") - before
+func _scenario_mud_patch_plays_squelch_once_on_entry() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"mud_squelch"):
+		return ["mud_squelch is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var mud: StaticBody2D = _mud_ground(stage, Vector2(1600, 10), PART_POSITION, true)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	sfx.start_recording()
+	for _tick in 90:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "mud_squelch")
+	var last: Dictionary = _sfx_last(sfx, "mud_squelch")
+	# Stay on the mud 1.5 s more: nothing further.
+	for _tick in 90:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "mud_squelch") - first
+	# Step off (lift) and back: the first drop is long after the entry, so it
+	# plays; the next one lands within 1 s of it and is rate-limited.
+	var again: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	var quick: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	# Wait past 1 s, then step off and on again.
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	# A dead fighter is silent.
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _mud_squelch_drop(stage, player, mud, sfx)
+	sfx.stop_recording()
+	print("      squelches: entry %d, staying %d, quick re-entry %d, later re-entry %d, dead %d" % [first, stayed, quick, later, dead])
+	if first != 1:
+		failures.append("walking onto mud played mud_squelch %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("mud_squelch was not positional")
+	if stayed != 0:
+		failures.append("staying on the mud played %d more squelches" % stayed)
+	if again != 1:
+		failures.append("re-entering after more than 1 s (first drop) played %d squelches, want 1" % again)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d squelches" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s played %d squelches, want 1" % later)
+	if dead != 0:
+		failures.append("a dead fighter played %d squelches" % dead)
 	await _teardown(stage)
 	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
@@ -19543,7 +19806,9 @@ func _scenario_hazards_report_only_damage_dealt() -> Array[String]:
 				if tick > 20:
 					break
 		# Gone and the player knocked aside: it met the player, not the floor.
-		var hit: bool = meteor_ref.get_ref() == null and knock >= METEOR_MIN_KNOCK_SPEED
+		# A protected player is no longer knocked (#991), so the knock only
+		# proves the hit for an unprotected one.
+		var hit: bool = meteor_ref.get_ref() == null and (protected or knock >= METEOR_MIN_KNOCK_SPEED)
 		var taken: float = player.damage - before
 		print("      meteor on a %s player: hit %s (knock %.0f px/s), took %.1f, reported %s" % [label, hit, knock, taken, reports])
 		if not hit:
@@ -21476,6 +21741,59 @@ func _magnet_wall_trial(wielder_stats: Resource, wall: bool) -> Array[float]:
 	var moved: Array[float] = [victim.global_position.x - start]
 	await _teardown(stage, false)
 	return moved
+## Issue #978: a magnet with a rival in range and clear line plays magnet_pull
+## at the start and at most once per 1.5 s after; nobody in range, or a wall
+## in the way, is silent.
+func _scenario_magnet_plays_pull_sound_rate_limited() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"magnet_pull"):
+		return ["magnet_pull is not in the sound table"]
+	var stats: Resource = load(MAGNET_PATH)
+	var open_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_NEAR, false)
+	var far_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_OUTSIDE, false)
+	var wall_n: int = await _magnet_sound_trial(sfx, stats, MAGNET_NEAR, true)
+	print("      pull sounds: open %d, out of range %d, walled %d" % [open_n, far_n, wall_n])
+	if open_n < 1:
+		failures.append("a rival in range and clear line: magnet_pull never played")
+	# 200 ticks at 60 Hz is 3.3 s, so the 1.5 s limit allows at most 3.
+	if open_n > 3:
+		failures.append("magnet_pull played %d times in about 3.3 s; limit is one per 1.5 s" % open_n)
+	if far_n != 0:
+		failures.append("a rival out of range still played magnet_pull %d times" % far_n)
+	if wall_n != 0:
+		failures.append("a rival behind a wall still played magnet_pull %d times" % wall_n)
+	_scenario_completed = true
+	return failures
+## Counts magnet_pull plays over 200 ticks with one victim at `offset`.
+func _magnet_sound_trial(sfx: Node, wielder_stats: Resource, offset: Vector2, wall: bool) -> int:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + offset)
+	if wall:
+		var slab := StaticBody2D.new()
+		slab.collision_layer = 1
+		slab.collision_mask = 0
+		var slab_shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(20, 400)
+		slab_shape.shape = rect
+		slab.add_child(slab_shape)
+		slab.position = DEEP_PARK_POSITION + offset * 0.5
+		stage.add_child(slab)
+	await _await_ticks(2)
+	sfx.start_recording()
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	victim.linear_velocity = Vector2.ZERO
+	await _await_ticks(200)
+	var played: int = _sfx_count(sfx, "magnet_pull")
+	sfx.stop_recording()
+	await _teardown(stage, false)
+	return played
 func _scenario_magnet_ignores_wielder_dead_and_dropped() -> Array[String]:
 	var failures: Array[String] = []
 	# Unbraced wielder alone: with nobody to pull, the field must not shove its own
@@ -29922,6 +30240,108 @@ func _scenario_bot_stops_before_spikes() -> Array[String]:
 		failures.append("the bot reached x=%.0f, past the spikes' left edge" % max_x)
 	await _teardown(made[0])
 	return failures
+## Issue #985: a meteor falling at 900 px/s from 600 px above a bot: a Normal
+## bot leaves the strike line and takes no damage; an Easy bot is still hit.
+func _scenario_bot_dodges_meteor() -> Array[String]:
+	var failures: Array[String] = []
+	var taken: Dictionary = {}
+	for level: String in ["normal", "easy"]:
+		var made: Array = _bot313(true, -60.0, 60.0)
+		var player: RigidBody2D = made[1]
+		made[2].difficulty = level
+		player.spawn_protected = false
+		await _await_ticks(5)
+		var meteor: Node2D = MeteorType.new()
+		meteor.setup(player.global_position + Vector2(0.0, -600.0), Vector2(0.0, 900.0), 12.0, 650.0, 16.0, 5000.0)
+		made[0].add_child(meteor)
+		var before: float = player.damage
+		await _await_ticks(90)
+		taken[level] = player.damage - before
+		await _teardown(made[0], false)
+	print("      meteor damage: normal %.1f, easy %.1f" % [taken["normal"], taken["easy"]])
+	if taken["easy"] <= 0.0:
+		failures.append("the fixture is empty: the Easy bot was not hit by the meteor")
+	if taken["normal"] > 0.0:
+		failures.append("the Normal bot took %.1f from the meteor it should have dodged" % taken["normal"])
+	# Next to the floor's right edge (x 600), with the meteor just inboard so
+	# the sideways dodge is off the ledge: the bot dodges the other way or
+	# stays, and is still on the floor.
+	var ledge: Array = _bot313(true, 540.0, 100.0)
+	var ledge_player: RigidBody2D = ledge[1]
+	ledge_player.spawn_protected = false
+	await _await_ticks(5)
+	var drop: Node2D = MeteorType.new()
+	drop.setup(ledge_player.global_position + Vector2(0.0, -600.0), Vector2(0.0, 900.0), 12.0, 650.0, 16.0, 5000.0)
+	ledge[0].add_child(drop)
+	await _await_ticks(50)
+	print("      ledge bot at x=%.0f y=%.0f, damage %.1f" % [ledge_player.global_position.x, ledge_player.global_position.y, ledge_player.damage])
+	if ledge_player.global_position.x > 600.0 or ledge_player.global_position.y > 330.0:
+		failures.append("the bot dodged off the floor's edge to x=%.0f" % ledge_player.global_position.x)
+	await _teardown(ledge[0], false)
+	_scenario_completed = true
+	return failures
+## Issue #997: a bot at (x, 274) with a rival 600 px to its left and a boomstick
+## bullet from `from` (relative to the bot) flying at it. Returns the damage the
+## bot took and where it ended.
+func _bot_bullet_run_997(level: String, bot_x: float, from: Vector2, weapon: String = "") -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(bot_x, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(bot_x - 600.0, 274.0))
+	await _await_ticks(2)
+	if weapon != "":
+		await _equip(player, weapon)
+	var gun: Resource = load(BOOMSTICK_PATH)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	player.spawn_protected = false
+	await _await_ticks(30)
+	var bullet: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+	# Aimed where the bot will be when it arrives, as a human leads a mover.
+	var target: Vector2 = player.global_position + Vector2(player.linear_velocity.x * from.length() / 900.0, 0.0)
+	bullet.setup(rival, target + from, -from.normalized(), gun)
+	stage.add_child(bullet)
+	var before: float = player.damage
+	await _await_ticks(80)
+	var out: Dictionary = {"taken": player.damage - before, "x": player.global_position.x, "y": player.global_position.y}
+	await _teardown(stage, false)
+	return out
+## A Normal and a Hard bot with a bullet coming flat at them from 350 px leave
+## the line and take nothing.
+func _scenario_bot_sidesteps_incoming_bullet() -> Array[String]:
+	var failures: Array[String] = []
+	var easy: Dictionary = await _bot_bullet_run_997("easy", 0.0, Vector2(350.0, 0.0))
+	var normal: Dictionary = await _bot_bullet_run_997("normal", 0.0, Vector2(350.0, 0.0))
+	var hard: Dictionary = await _bot_bullet_run_997("hard", 0.0, Vector2(350.0, 0.0))
+	print("      bot_sidesteps_incoming_bullet: taken easy %.1f normal %.1f hard %.1f" % [easy["taken"], normal["taken"], hard["taken"]])
+	if easy["taken"] <= 0.0:
+		failures.append("the control is empty: the Easy bot was not hit")
+	if normal["taken"] > 0.0:
+		failures.append("the Normal bot took %.1f from the bullet" % normal["taken"])
+	if hard["taken"] > 0.0:
+		failures.append("the Hard bot took %.1f from the bullet" % hard["taken"])
+	_scenario_completed = true
+	return failures
+## A bullet coming down at a slant is dodged sideways, and at the floor's edge
+## the bot does not leave the floor to do it; a bot holding the shield still
+## blocks it (#977), not dodges.
+func _scenario_bot_sidestep_bullet_keeps_footing_997() -> Array[String]:
+	var failures: Array[String] = []
+	var slant: Dictionary = await _bot_bullet_run_997("normal", 0.0, Vector2(60.0, -160.0))
+	var easy: Dictionary = await _bot_bullet_run_997("easy", 0.0, Vector2(60.0, -160.0))
+	var edge: Dictionary = await _bot_bullet_run_997("normal", 570.0, Vector2(-60.0, -160.0))
+	print("      bot_sidestep_bullet_keeps_footing_997: slant taken %.1f (easy %.1f), edge x=%.0f y=%.0f" % [slant["taken"], easy["taken"], edge["x"], edge["y"]])
+	if easy["taken"] <= 0.0:
+		failures.append("the control is empty: the Easy bot was not hit by the slanted bullet")
+	if slant["taken"] > 0.0:
+		failures.append("the Normal bot took %.1f from the slanted bullet" % slant["taken"])
+	if edge["x"] > 600.0 or edge["y"] > 330.0:
+		failures.append("the bot left the floor to dodge, ending at x=%.0f y=%.0f" % [edge["x"], edge["y"]])
+	_scenario_completed = true
+	return failures
 ## A saw patrolling the floor between a bot and its rival: the bot is hit with
 ## avoidance off and not at all with it on, over ten seconds.
 func _scenario_bot_dodges_moving_saw() -> Array[String]:
@@ -30766,6 +31186,42 @@ func _scenario_award_sharpshooter_counts_ranged_kos() -> Array[String]:
 	stats.begin_match()
 	if not stats.ranged_kos.is_empty():
 		failures.append("begin_match left ranged KOs behind")
+	_scenario_completed = true
+	return failures
+
+## Issue #970: Jack of All Trades goes to the most distinct weapons landed, at least 3, no ties.
+func _scenario_award_jack_counts_distinct_weapons() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Jack of All Trades")
+	var hit := func(stats: RefCounted, who: int, weapons: Array, real: bool = true) -> void:
+		var t: int = 1000
+		for w: String in weapons:
+			stats.record_hit(who, 3, 10.0, t, w, real)
+			t += 100
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	hit.call(stats, 0, ["pickaxe", "pickaxe", "boomstick", "hammer"])
+	hit.call(stats, 1, ["pickaxe", "boomstick"])
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "3 different weapons":
+		failures.append("expected Jack for slot 0 with 3 distinct weapons, got %s" % [found])
+	var few: RefCounted = MatchStatsScript.new()
+	few.begin_match()
+	hit.call(few, 0, ["pickaxe", "pickaxe", "pickaxe", "boomstick"])
+	if not find.call(few).is_empty():
+		failures.append("Jack given for only 2 distinct weapons")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	hit.call(tied, 0, ["pickaxe", "boomstick", "hammer"])
+	hit.call(tied, 1, ["pickaxe", "boomstick", "hammer"])
+	if not find.call(tied).is_empty():
+		failures.append("Jack given for a tie")
+	var bot: RefCounted = MatchStatsScript.new()
+	bot.begin_match()
+	hit.call(bot, 0, ["pickaxe", "boomstick", "hammer"], false)
+	if not find.call(bot).is_empty():
+		failures.append("a bot earned Jack")
 	_scenario_completed = true
 	return failures
 
@@ -41442,6 +41898,72 @@ func _scenario_umbrella_canopy_reduces_a_meteor_569() -> Array[String]:
 		failures.append("a meteor on the canopy face took %.1f of 40, expected it reduced" % player.damage)
 	await _teardown(stage)
 	return failures
+## #991: a spawn-protected fighter is neither hurt nor knocked by a meteor. The
+## unprotected control beside it is both, so the check cannot pass vacuously.
+func _scenario_meteor_does_not_knock_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var speeds: Array[float] = []
+	var damages: Array[float] = []
+	for protected_flag: bool in [true, false]:
+		var player: RigidBody2D = _spawn_player(stage, Vector2(600.0, GROUND_TOP - PLAYER_RADIUS))
+		await _await_ticks(SETTLE_TICKS)
+		player.spawn_protected = protected_flag
+		var meteor: Node2D = preload("res://scripts/Meteor.gd").new()
+		meteor.setup(player.global_position + Vector2(-8.0, -300.0), Vector2(0.0, 900.0), 40.0, 650.0, 16.0, 4000.0)
+		stage.add_child(meteor)
+		var peak: float = 0.0
+		for _i in 40:
+			await physics_frame
+			peak = maxf(peak, absf(player.linear_velocity.x))
+		speeds.append(peak)
+		damages.append(player.damage)
+		player.queue_free()
+		await physics_frame
+	print("      meteor: protected speed %.0f dmg %.0f; unprotected speed %.0f dmg %.0f" % [speeds[0], damages[0], speeds[1], damages[1]])
+	if damages[1] <= 0.0 or speeds[1] < 200.0:
+		failures.append("control: the unprotected fighter was not hurt and knocked (dmg %.1f, speed %.0f)" % [damages[1], speeds[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a meteor" % damages[0])
+	if speeds[0] > 50.0:
+		failures.append("the protected fighter was knocked to %.0f px/s by a meteor" % speeds[0])
+	await _teardown(stage)
+	return failures
+## #991: the same for a falling rock.
+func _scenario_rock_does_not_shove_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var speeds: Array[float] = []
+	var damages: Array[float] = []
+	for protected_flag: bool in [true, false]:
+		var rock: Node2D = FallingRockScene.instantiate()
+		rock.auto_drop = false
+		rock.one_shot = true
+		rock.warning_sec = 0.1
+		rock.damage = 40.0
+		rock.position = ROCK_COLUMN_TOP
+		stage.add_child(rock)
+		var player: RigidBody2D = _spawn_player(stage, Vector2(ROCK_COLUMN_TOP.x + 10.0, GROUND_TOP - PLAYER_RADIUS))
+		await _await_ticks(SETTLE_TICKS)
+		player.spawn_protected = protected_flag
+		rock.drop_now()
+		var peak: float = 0.0
+		for _i in ROCK_FALL_TICKS + 60:
+			await physics_frame
+			peak = maxf(peak, absf(player.linear_velocity.x))
+		speeds.append(peak)
+		damages.append(player.damage)
+		player.queue_free()
+		await physics_frame
+	print("      rock: protected speed %.0f dmg %.0f; unprotected speed %.0f dmg %.0f" % [speeds[0], damages[0], speeds[1], damages[1]])
+	if damages[1] <= 0.0 or speeds[1] < 200.0:
+		failures.append("control: the unprotected fighter was not hurt and shoved (dmg %.1f, speed %.0f)" % [damages[1], speeds[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a rock" % damages[0])
+	if speeds[0] > 50.0:
+		failures.append("the protected fighter was shoved to %.0f px/s by a rock" % speeds[0])
+	await _teardown(stage)
+	return failures
 ## #569: in Sudden Death a hit on the shield face or open canopy face does not
 ## eliminate; an unblocked hit still does, and is reported lethal.
 func _scenario_sudden_death_block_does_not_eliminate_569() -> Array[String]:
@@ -42752,6 +43274,51 @@ func _scenario_respawn_stays_on_own_half_605() -> Array[String]:
 		await _teardown(mrig["stage"], false)
 	_scenario_completed = true
 	return failures
+## #982: a spawn within 120 px of spikes or a saw is passed over while another
+## is clear; with every spawn near a hazard the old choice stands.
+func _scenario_respawn_avoids_hazard_adjacent_spawn() -> Array[String]:
+	var failures: Array[String] = []
+	var points: Array[Vector2] = [Vector2(-300.0, 400.0), Vector2(300.0, 400.0), Vector2(900.0, 400.0)]
+	var rig: Dictionary = await _respawn_rig_605(points, [-300.0, 300.0, 900.0])
+	if rig.is_empty():
+		return ["the round never started"]
+	rig["players"][1].global_position = Vector2(-300.0, 400.0)
+	var respawn: RefCounted = rig["respawn"]
+	var stage: Node = rig["stage"]
+	# The rig's fighter drifts between ticks; pin it where the scenario wants it.
+	var _pick := func(slot: int) -> Vector2:
+		rig["players"][1].global_position = Vector2(-300.0, 400.0)
+		return respawn.farthest_spawn(slot)
+	# Control: no hazard, the farthest spawn wins as before.
+	if _pick.call(0) != points[2]:
+		failures.append("without a hazard the pick was %s, want the farthest %s" % [_pick.call(0), points[2]])
+	var spikes: Node2D = preload("res://scripts/Spikes.gd").new()
+	spikes.position = Vector2(960.0, 400.0)
+	stage.add_child(spikes)
+	await _await_ticks(2)
+	if _pick.call(0) != points[1]:
+		failures.append("a spawn 60 px from spikes was still picked: %s" % _pick.call(0))
+	# A saw counts at its current position.
+	spikes.position = Vector2(960.0, -2000.0)
+	var saw: Node2D = preload("res://scripts/Saw.gd").new()
+	saw.position = Vector2(900.0, 330.0)
+	stage.add_child(saw)
+	await _await_ticks(2)
+	if _pick.call(0) != points[1]:
+		failures.append("a spawn 70 px from a saw was still picked: %s" % _pick.call(0))
+	saw.position = Vector2(900.0, -2000.0)
+	if _pick.call(0) != points[2]:
+		failures.append("a saw that moved away still blocked the spawn")
+	# Every spawn near a hazard: today's choice.
+	for point: Vector2 in points:
+		var extra: Node2D = preload("res://scripts/Saw.gd").new()
+		extra.position = point + Vector2(0.0, -50.0)
+		stage.add_child(extra)
+	await _await_ticks(2)
+	if _pick.call(0) != points[2]:
+		failures.append("with every spawn near a hazard the pick was %s, want today's %s" % [_pick.call(0), points[2]])
+	await _teardown(stage)
+	return failures
 func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 	var failures: Array[String] = []
 	var points: Array[Vector2] = [Vector2(0.0, 400.0), Vector2(500.0, 400.0)]
@@ -43437,6 +44004,98 @@ func _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them() -> Array
 	await _teardown(z["stage"])
 	_scenario_completed = true
 	return failures
+## Issue #1001: a hook latching plays one `hook_latch` at the hook; a miss and
+## a shield-turned hook play none. The wall, player-anchor and rod-catch
+## counts are the control: they are 0 without the sound.
+func _hook_latch_wall(sfx: Node) -> int:
+	var stage: Node2D = _new_stage()
+	_add_bar(stage, Vector2(0, 0), Vector2(240, 24))
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	sfx.start_recording()
+	await _flick(player, Vector2.UP)
+	var hook: Node2D = player.launched_hook()
+	await _await_condition(func() -> bool: return not is_instance_valid(hook) or not hook.is_flying(), 1000)
+	await _await_ticks(60)
+	sfx.stop_recording()
+	var n: int = _sfx_count(sfx, "hook_latch")
+	var last: Dictionary = _sfx_last(sfx, "hook_latch")
+	if n == 1 and not (last["position"] is Vector2):
+		n = -1
+	await _teardown(stage)
+	return n
+func _hook_latch_player(sfx: Node, path: String) -> int:
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(260, 0))
+	await _await_ticks(2)
+	await _equip(shooter, path)
+	_brace(shooter)
+	victim.freeze = true
+	sfx.start_recording()
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	victim.freeze = false
+	await _await_condition(func() -> bool: return not is_instance_valid(hook) or not hook.is_flying(), 1000)
+	await _await_ticks(60)
+	sfx.stop_recording()
+	var n: int = _sfx_count(sfx, "hook_latch")
+	await _teardown(stage)
+	return n
+func _hook_latch_miss(sfx: Node) -> int:
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	sfx.start_recording()
+	await _flick(shooter, Vector2.RIGHT)
+	await _await_ticks(240)
+	sfx.stop_recording()
+	var n: int = _sfx_count(sfx, "hook_latch")
+	await _teardown(stage)
+	return n
+func _scenario_hook_latch_plays_once_per_latch() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"hook_latch"):
+		return ["hook_latch is not in the sound table"]
+	var wall: int = await _hook_latch_wall(sfx)
+	var anchor: int = await _hook_latch_player(sfx, GRAPPLE_PATH)
+	var rod: int = await _hook_latch_player(sfx, FISHING_ROD_PATH)
+	var miss: int = await _hook_latch_miss(sfx)
+	var shielded: int = 0
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(300, 0))
+	await _await_ticks(2)
+	await _equip(holder, SHIELD_PATH)
+	await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	_brace(holder)
+	_aim(holder, PI)
+	await _await_ticks(SETTLE_TICKS)
+	sfx.start_recording()
+	await _flick(shooter, Vector2.RIGHT)
+	await _await_ticks(240)
+	sfx.stop_recording()
+	shielded = _sfx_count(sfx, "hook_latch")
+	await _teardown(stage)
+	print("      hook_latch: wall %d, anchor %d, rod %d, miss %d, shielded %d" % [wall, anchor, rod, miss, shielded])
+	if wall != 1:
+		failures.append("a grapple hooking a wall played hook_latch %d times, want 1 (-1 = not positional)" % wall)
+	if anchor != 1:
+		failures.append("a grapple anchoring to a player played hook_latch %d times, want 1" % anchor)
+	if rod != 1:
+		failures.append("a fishing rod catching a player played hook_latch %d times, want 1" % rod)
+	if miss != 0:
+		failures.append("a missed hook played hook_latch %d times" % miss)
+	if shielded != 0:
+		failures.append("a hook turned back by a shield played hook_latch %d times" % shielded)
+	_scenario_completed = true
+	return failures
 func _scenario_grapple_anchored_player_feels_no_force_from_the_rope() -> Array[String]:
 	var failures: Array[String] = []
 	var z: Dictionary = await _zip_setup()
@@ -43717,6 +44376,48 @@ func _shot_at_holder(shot: String, weapon_path: String, toward_shooter: bool) ->
 	var taken: float = holder.damage
 	await _teardown(stage)
 	return taken
+var _spark_bursts: int = 0
+func _count_spark_burst(node: Node) -> void:
+	var script: Script = node.get_script()
+	if script != null and script.resource_path == "res://scripts/ShieldSpark.gd":
+		_spark_bursts += 1
+## One shot at a shield holder: how many `shield_block` sounds and spark
+## bursts it caused (#969).
+func _shield_block_counts(shot: String, toward_shooter: bool) -> Dictionary:
+	var sfx: Node = _sfx()
+	_spark_bursts = 0
+	node_added.connect(_count_spark_burst)
+	sfx.start_recording()
+	await _shot_at_holder(shot, SHIELD_PATH, toward_shooter)
+	sfx.stop_recording()
+	node_added.disconnect(_count_spark_burst)
+	var res: Dictionary = {"sound": _sfx_count(sfx, "shield_block"), "sparks": _spark_bursts}
+	return res
+## Issue #969: a shield face stopping a bullet, hook or boomerang plays one
+## `shield_block` and throws one spark burst; the back does neither; Reduce
+## flashes drops the sparks but keeps the sound.
+func _scenario_shield_block_plays_sound_and_spark() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"shield_block"):
+		return ["shield_block is not in the sound table"]
+	var saved: bool = bool(sfx.get("reduce_flash"))
+	sfx.set("reduce_flash", false)
+	for shot: String in ["bullet", "hook", "boomerang"]:
+		var face: Dictionary = await _shield_block_counts(shot, true)
+		print("      shield_block_plays_sound_and_spark: %s face %s" % [shot, face])
+		if face["sound"] != 1 or face["sparks"] != 1:
+			failures.append("%s stopped by the face: %s, expected 1 sound and 1 burst" % [shot, face])
+		var back: Dictionary = await _shield_block_counts(shot, false)
+		if back["sound"] != 0 or back["sparks"] != 0:
+			failures.append("%s past the back: %s, expected none" % [shot, back])
+	sfx.set("reduce_flash", true)
+	var calm: Dictionary = await _shield_block_counts("bullet", true)
+	if calm["sound"] != 1 or calm["sparks"] != 0:
+		failures.append("Reduce flashes on: %s, expected 1 sound and 0 bursts" % calm)
+	sfx.set("reduce_flash", saved)
+	_scenario_completed = true
+	return failures
 func _scenario_bullet_blocked_by_shield_face_631() -> Array[String]:
 	var failures: Array[String] = []
 	var damage: float = await _shot_at_holder("bullet", SHIELD_PATH, true)
@@ -44140,15 +44841,19 @@ func _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall() -> Arr
 		failures.append("the bot threw through a wall")
 	_scenario_completed = true
 	return failures
+const ICE_PUSH_963: float = 800.0
+const BELT_PUSH_963: float = 200.0
 ## Issue #963: a bot on a floor strip with a drop `end_gap` px ahead (to the
 ## right), a rival on a far island beyond it. `belt` lays a conveyor carrying
 ## right, otherwise an ice patch. An Easy bot is the control: it keeps the old
 ## behaviour. Returns whether the bot stayed on the floor and its farthest x.
-func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -> Dictionary:
+func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int, push: float = 0.0) -> Dictionary:
 	var stage: Node2D = _new_empty_stage()
 	var strip: StaticBody2D = (ConveyorScene if belt else IcePatchScene).instantiate() as StaticBody2D
 	strip.size = Vector2(800.0, 12.0 if belt else 8.0)
 	strip.position = Vector2(0.0, 600.0)
+	if belt:
+		strip.belt_speed = push
 	stage.add_child(strip)
 	var island := StaticBody2D.new()
 	var shape := CollisionShape2D.new()
@@ -44168,6 +44873,8 @@ func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -
 	bot.player = player
 	bot.output = player.set_input_vector
 	stage.add_child(bot)
+	if not belt:
+		player.linear_velocity = Vector2(push, 0.0)
 	var out: Dictionary = {"stayed": true, "max_x": start_x}
 	for t in ticks:
 		await physics_frame
@@ -44180,26 +44887,30 @@ func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -
 ## not leave the floor in 5 s; the Easy control (old behaviour) is printed.
 func _scenario_bot_eases_off_ice_near_drop() -> Array[String]:
 	var failures: Array[String] = []
-	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300)
-	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300)
+	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300, ICE_PUSH_963)
+	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300, ICE_PUSH_963)
 	print("      bot_eases_off_ice_near_drop: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
 	if not normal["stayed"]:
 		failures.append("the Normal bot left the ice patch")
-	if normal["max_x"] > 350.0:
-		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	if easy["stayed"]:
+		failures.append("the Easy control stayed on, so the fixture does not show the old behaviour falling")
+	if normal["max_x"] > 390.0:
+		failures.append("the Normal bot reached the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## A Normal bot on a belt carrying it towards an open end walks against it and
 ## stays on the floor for 5 s.
 func _scenario_bot_walks_against_belt_to_open_end() -> Array[String]:
 	var failures: Array[String] = []
-	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300)
-	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300)
+	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300, BELT_PUSH_963)
+	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300, BELT_PUSH_963)
 	print("      bot_walks_against_belt_to_open_end: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
 	if not normal["stayed"]:
 		failures.append("the Normal bot was carried off the belt's open end")
-	if normal["max_x"] > 350.0:
-		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	if easy["stayed"]:
+		failures.append("the Easy control stayed on, so the fixture does not show the old behaviour falling")
+	if normal["max_x"] > 390.0:
+		failures.append("the Normal bot reached the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## Issue #952: a bot holding `weapon` with a rival `gap` px off on flat ground.
@@ -44272,6 +44983,65 @@ func _scenario_bot_boomstick_no_aim_952() -> Array[String]:
 		failures.append("the bot aimed the boomstick through a wall (%.1f degrees)" % walled["best"])
 	if easy["best"] >= 0.0 and easy["best"] <= 15.0:
 		failures.append("an Easy bot aimed the boomstick (%.1f degrees)" % easy["best"])
+	_scenario_completed = true
+	return failures
+## Issue #977: a bot holding `weapon` with a rival 600 px to its left (its
+## target) and a boomstick bullet flying left at it from the right. Returns the
+## smallest angle (degrees) between the head's line from the body and the line
+## to the bullet before it arrives, and the damage the bot took.
+func _bot_shield_shot_run_977(weapon: String, level: String) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(-600.0, 274.0))
+	await _await_ticks(2)
+	await _equip(player, weapon)
+	var gun: Resource = load(BOOMSTICK_PATH)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	await _await_ticks(30)
+	var bullet: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+	var origin: Vector2 = player.global_position + Vector2(900.0, 0.0)
+	bullet.setup(rival, origin, Vector2.LEFT, gun)
+	stage.add_child(bullet)
+	var before: float = player.damage
+	var best: float = 360.0
+	for t in 80:
+		await physics_frame
+		if not is_instance_valid(bullet) or bullet.is_queued_for_deletion():
+			break
+		var face: Vector2 = player.weapon_head_position() - player.global_position
+		var line: Vector2 = bullet.global_position - player.global_position
+		if line.x > 100.0:
+			best = rad_to_deg(absf(face.angle_to(line)))
+	await _await_ticks(20)
+	var out: Dictionary = {"best": best, "taken": player.damage - before, "damage": float(gun.projectile_damage)}
+	await _teardown(stage, false)
+	return out
+## A Normal bot holding the shield, a bullet coming from the right: the face
+## points within 30 degrees of the bullet's line and the bullet is blocked.
+func _scenario_bot_faces_shield_at_incoming_shot() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _bot_shield_shot_run_977(SHIELD_PATH, "normal")
+	print("      bot_faces_shield_at_incoming_shot: best angle=%.1f taken=%.1f of %.1f" % [run["best"], run["taken"], run["damage"]])
+	if run["best"] > 30.0:
+		failures.append("the shield face came within %.1f degrees of the bullet's line, not 30" % run["best"])
+	if run["taken"] > run["damage"] * 0.3:
+		failures.append("the bullet was not blocked (took %.1f of %.1f)" % [run["taken"], run["damage"]])
+	_scenario_completed = true
+	return failures
+## Controls: an Easy bot keeps today's behaviour (faces its target, the bullet
+## lands), and so does a bot holding another weapon.
+func _scenario_bot_shield_ignores_shot_977() -> Array[String]:
+	var failures: Array[String] = []
+	var easy: Dictionary = await _bot_shield_shot_run_977(SHIELD_PATH, "easy")
+	var pick: Dictionary = await _bot_shield_shot_run_977("res://resources/pickaxe.tres", "normal")
+	print("      bot_shield_ignores_shot_977: easy best=%.1f taken=%.1f pickaxe best=%.1f" % [easy["best"], easy["taken"], pick["best"]])
+	if easy["best"] <= 30.0:
+		failures.append("the Easy control faced the bullet (%.1f degrees), so the fixture does not show the old behaviour" % easy["best"])
 	_scenario_completed = true
 	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
@@ -49973,6 +50743,52 @@ func _callouts_818(loop: Dictionary) -> Array[Node]:
 		if not node.is_queued_for_deletion():
 			found.append(node)
 	return found
+## Issue #1006: touching a pickup of the weapon already held leaves it on the
+## stage (no claim, callout, signal); another weapon, or the same one after a
+## switch, takes it as before.
+func _scenario_pickup_of_held_weapon_is_left_on_stage() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	var fighter: RigidBody2D = players[1]
+	fighter.set_weapon_stats(load("res://resources/boomstick.tres"))
+	await _await_ticks(3)
+	var picks: Array = [0]
+	fighter.weapon_picked_up.connect(func(_n: String) -> void: picks[0] += 1)
+	var pickup: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	pickup.set_weapon(load("res://resources/boomstick.tres"))
+	loop["stage"].add_child(pickup)
+	pickup.global_position = fighter.global_position
+	await _await_ticks(5)
+	if not is_instance_valid(pickup) or pickup.is_queued_for_deletion() or pickup._claimed:
+		failures.append("pickup of the held weapon was consumed")
+	elif not pickup.is_in_group("pickups"):
+		failures.append("pickup left the pickups group")
+	if picks[0] != 0:
+		failures.append("weapon_picked_up fired %d times for a held weapon" % picks[0])
+	if not _callouts_818(loop).is_empty():
+		failures.append("a callout appeared for a held weapon")
+	# After the fighter switches, the same pickup can be claimed.
+	if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
+		fighter.set_weapon_stats(load("res://resources/pickaxe.tres"))
+		await _await_ticks(3)
+		pickup._on_body_entered(fighter)
+		await _await_ticks(3)
+		if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
+			pickup.queue_free()
+		if picks[0] != 1:
+			failures.append("pickup not claimable after the fighter switched weapons")
+	# A different weapon is taken as today.
+	var other: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	other.set_weapon(load("res://resources/axe.tres"))
+	loop["stage"].add_child(other)
+	other.global_position = players[2].global_position
+	await _await_ticks(5)
+	if is_instance_valid(other) and not other.is_queued_for_deletion():
+		failures.append("a different-weapon pickup was not taken")
+		other.queue_free()
+	await _teardown(loop["stage"])
+	return failures
 func _scenario_pickup_shows_weapon_name_callout_818() -> Array[String]:
 	var failures: Array[String] = []
 	var loop: Dictionary = await _ghost_round()
@@ -50078,6 +50894,68 @@ func _scenario_pickup_spawn_rules_unchanged_by_pop_816() -> Array[String]:
 		failures.append("pickups exceeded the cap of %d" % director.cap())
 	rm.free()
 	player.queue_free()
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+## Issue #998: each spawned pickup plays pickup_spawn once, at its spot.
+func _scenario_pickup_spawn_plays_sound_once() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"pickup_spawn"):
+		_scenario_completed = true
+		return ["pickup_spawn is not in the sound table"]
+	var spot_a := Vector2(100, -40)
+	var spot_b := Vector2(600, -40)
+	var stage: Node2D = _make_pickup_stub_stage("SpawnSfxStage", PackedVector2Array([Vector2(-900, -40)]), PackedVector2Array([spot_a, spot_b])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var director: Node = rm._pickup_director
+	sfx.start_recording()
+	director._spawn_pickup()
+	var one: int = _sfx_count(sfx, "pickup_spawn")
+	var last: Dictionary = _sfx_last(sfx, "pickup_spawn")
+	director._spawn_pickup()
+	var two: int = _sfx_count(sfx, "pickup_spawn")
+	sfx.stop_recording()
+	var made: int = director._live_pickups().size()
+	print("      pickup_spawn sounds: after 1 spawn %d, after 2 spawns %d (pickups %d)" % [one, two, made])
+	if one != 1:
+		failures.append("one spawn played pickup_spawn %d times, want 1" % one)
+	elif not (last["position"] is Vector2) or not (director._live_pickups()[0].global_position.distance_to(last["position"]) < 1.0):
+		failures.append("pickup_spawn did not play at the pickup's spot")
+	if two != made:
+		failures.append("%d sounds for %d pickups" % [two, made])
+	rm.free()
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+## Issue #998: a refused spawn (no spot free) plays nothing.
+func _scenario_pickup_spawn_refused_plays_no_sound() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		_scenario_completed = true
+		return ["the Sfx autoload is missing"]
+	var spot := Vector2(100, -40)
+	var stage: Node2D = _make_pickup_stub_stage("SpawnSfxFullStage", PackedVector2Array([Vector2(-900, -40)]), PackedVector2Array([spot])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var director: Node = rm._pickup_director
+	director._spawn_pickup()
+	sfx.start_recording()
+	for i in 20:
+		director._spawn_pickup()
+	var extra: int = _sfx_count(sfx, "pickup_spawn")
+	var made: int = director._live_pickups().size()
+	sfx.stop_recording()
+	print("      refused spawns: %d extra sounds, %d pickups" % [extra, made])
+	if extra != made - 1:
+		failures.append("%d sounds for %d additional pickups" % [extra, made - 1])
+	rm.free()
 	await _teardown(stage)
 	_scenario_completed = true
 	return failures
@@ -51805,6 +52683,68 @@ func _scenario_controller_page_has_surprise_me_button_with_existing_messages_865
 		if not text.contains("getElementById(\"surprise-btn\").addEventListener(\"click\", surpriseMe)"):
 			failures.append("the button is not wired to surpriseMe")
 	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
+	_scenario_completed = true
+	return failures
+## Issue #906: the PC join screen's Paste button fills the room field from the clipboard (getter seam, never the real one).
+func _scenario_join_screen_paste_fills_room_code_906() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScript241.new()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await _await_ticks(4)
+	var paste: Button = client.find_child("Paste", true, false) as Button
+	if paste == null or not client.has_method("_on_paste_pressed") or not ("clipboard_getter" in client):
+		failures.append("the join screen has no Paste button with a clipboard_getter seam")
+		client.queue_free()
+		await _await_ticks(2)
+		_scenario_completed = true
+		return failures
+	var room: LineEdit = client.find_child("RoomCode", true, false) as LineEdit
+	var clip: Array[String] = [""]
+	client.clipboard_getter = func() -> String: return clip[0]
+	if not paste.is_visible_in_tree() or paste.disabled:
+		failures.append("Paste is not shown and enabled on the join screen")
+	if paste.focus_mode != Control.FOCUS_ALL:
+		failures.append("Paste is not in the gamepad focus chain (focus_mode %d)" % paste.focus_mode)
+	elif room.find_valid_focus_neighbor(SIDE_RIGHT) != paste:
+		failures.append("the focus chain does not lead from the room field to Paste")
+	if paste.text != client.tr("JOIN_PASTE") or paste.text == "JOIN_PASTE":
+		failures.append("Paste reads '%s', not a translated label" % paste.text)
+	if paste.get_global_rect().position.x < room.get_global_rect().end.x - 1.0:
+		failures.append("Paste is not beside the room field")
+	var cases: Array = [
+		["abcd", "ABCD"],
+		["Join with code: wxyz", "WXYZ"],
+		["  qrst\n", "QRST"],
+		["Come over, code kLmN, bring friends", "KLMN"],
+		["ab cd", "ABCD"],
+		["AB-CD", "ABCD"],
+	]
+	for pair: Array in cases:
+		room.text = ""
+		client.status_text = ""
+		clip[0] = pair[0]
+		paste.pressed.emit()
+		if room.text != pair[1]:
+			failures.append("pasting '%s' filled the room field with '%s', expected %s" % [pair[0], room.text, pair[1]])
+	# No usable code: the field is untouched and the status line says why.
+	for junk: String in ["", "hello", "i o i o", "abc", "12345678", "ABCDE"]:
+		room.text = "WXYZ"
+		client.status_text = ""
+		clip[0] = junk
+		paste.pressed.emit()
+		if room.text != "WXYZ":
+			failures.append("pasting '%s' changed the room field to '%s'" % [junk, room.text])
+		if client.status_text != client.tr("JOIN_NO_CODE_ON_CLIPBOARD") or client.status_text == "JOIN_NO_CODE_ON_CLIPBOARD":
+			failures.append("pasting '%s' left the status line '%s'" % [junk, client.status_text])
+	# It joins nothing by itself.
+	room.text = ""
+	clip[0] = "abcd"
+	paste.pressed.emit()
+	if client.state != RcState241.JOIN:
+		failures.append("Paste started a join (state %s)" % client.state)
+	client.queue_free()
+	await _await_ticks(2)
 	_scenario_completed = true
 	return failures
 # --- Review fixes: gameplay (review_gp) -----------------------------------------
