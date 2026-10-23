@@ -1525,9 +1525,13 @@ func _run_one(name: String) -> Array[String]:
 	_scenario_completed = false
 	var statics: Dictionary = _snapshot_statics()
 	var world: World2D = _fresh_physics_world()
+	var roots_before: int = _live_root_children()
 	var failures: Array[String] = await _run_scenario(name)
 	get_root().world_2d = world
 	_restore_statics(statics)
+	var leaked: int = _live_root_children() - roots_before
+	if leaked > 0:
+		print("LEAKCHECK %s %d" % [name, leaked])
 	if not _scenario_completed:
 		failures.append("scenario did not run to completion -- look for a SCRIPT ERROR above")
 	return failures
@@ -1587,6 +1591,13 @@ func _fresh_physics_world() -> World2D:
 	var previous: World2D = get_root().world_2d
 	get_root().world_2d = World2D.new()
 	return previous
+## The root's children that are not already on their way out.
+func _live_root_children() -> int:
+	var count: int = 0
+	for child: Node in get_root().get_children():
+		if not child.is_queued_for_deletion():
+			count += 1
+	return count
 func _snapshot_statics() -> Dictionary:
 	var snapshot: Dictionary = {
 		"modifier_rolls_enabled": RoundManagerType.modifier_rolls_enabled,
@@ -24797,6 +24808,7 @@ func _relay_start() -> Node:
 		_relay_port_next += 1
 		if relay.start(_relay_port_next) == OK:
 			return relay
+	relay.queue_free()
 	return null
 func _relay_stop(relay: Node, clients: Array) -> void:
 	for c: WebSocketPeer in clients:
@@ -38643,6 +38655,7 @@ func _bots_rig_445(kind: String, relay_up: bool, failures: Array[String]) -> Dic
 		relay = _relay_start()
 		if relay == null:
 			failures.append("no free port for the relay")
+			built["main"].free()
 			return {}
 		port = _relay_port_next
 	var rig: Dictionary = {"main": built["main"], "server": built["server"], "rm": built["rm"], "relay": relay, "clients": [], "nodes": [],
@@ -41226,6 +41239,10 @@ func _scenario_lobby_kind_keys_and_join_only_online_547() -> Array[String]:
 		await _await_ticks(2)
 		if not is_instance_valid(rig["main"]) or not (rig["main"] as Node).is_inside_tree():
 			failures.append("J left the %s lobby" % kind)
+			if is_instance_valid(rig["main"]):
+				await _kind_close_435(rig)
+			else:
+				_relay_stop(rig["relay"], [])
 			return failures
 	await _kind_close_435(rig)
 	return failures
@@ -42188,6 +42205,7 @@ func _scenario_burst_of_action_taps_counts_each_press_601() -> Array[String]:
 func _respawn_rig_605(points: Array[Vector2], floors: Array[float]) -> Dictionary:
 	var rig: Dictionary = _mode_rig(2, GameModesType.STOCK)
 	if not await _mode_started(rig):
+		await _teardown(rig["stage"]) # every caller returns straight away on {}
 		return {}
 	var rm: Node = rig["rm"]
 	rm._stage_spawn_points = points
@@ -42349,6 +42367,7 @@ func _scenario_bot_holds_hill_and_flag_without_hopping_607() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _bot_mode_rig_353(2, GameModesType.KING_OF_THE_HILL, [Vector2(-620.0, 274.0), Vector2(0.0, 274.0)])
 	if not rig["started"]:
+		await _teardown(rig["stage"])
 		return ["the King of the Hill round never started"]
 	var bot_player: RigidBody2D = rig["players"][1]
 	var hill_at: Vector2 = rig["node"].hill_position
@@ -46765,6 +46784,7 @@ func _rig_298(kind: String, steam_running: bool) -> Dictionary:
 	steam.calls_for_test.clear()
 	var relay: Node = _relay_start()
 	if relay == null:
+		steam.fake_running_for_test = false
 		return {}
 	var old: Variant = _relay_setting_239(_relay_port_next)
 	var rig: Dictionary = await _phone_rig_164(3, "Steam298")
