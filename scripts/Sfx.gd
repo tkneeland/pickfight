@@ -172,6 +172,8 @@ const SOUNDS: Dictionary = {
 		"kenney_scifi/forceField_001.ogg"], "db": -4.0, "max_sec": 0.6},
 	"teleport": {"files": [
 		"kenney_scifi/spaceEngineLow_000.ogg"], "db": -6.0, "max_sec": 0.6},
+	"magnet_pull": {"files": [
+		"kenney_scifi/forceField_000.ogg"], "db": -6.0, "max_sec": 0.6},
 	"hazard_hit": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",
 		"kenney_impact/impactPlate_shield_001.ogg"], "db": -2.0, "max_sec": 0.7},
