@@ -543,6 +543,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
 	"pickup_spawn_rules_unchanged_by_pop_816",
+	"pickup_spawn_plays_sound_once",
+	"pickup_spawn_refused_plays_no_sound",
 	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_leaves_loose_pickups_alone",
@@ -2671,6 +2673,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_pops_in_when_spawned_816()
 		"pickup_spawn_rules_unchanged_by_pop_816":
 			return await _scenario_pickup_spawn_rules_unchanged_by_pop_816()
+		"pickup_spawn_plays_sound_once":
+			return await _scenario_pickup_spawn_plays_sound_once()
+		"pickup_spawn_refused_plays_no_sound":
+			return await _scenario_pickup_spawn_refused_plays_no_sound()
 		"replay_buffer_bounded_and_saves_clip":
 			return await _scenario_replay_buffer_bounded_and_saves_clip()
 		"ghost_hidden_until_touch_then_fades":
@@ -50581,6 +50587,68 @@ func _scenario_pickup_spawn_rules_unchanged_by_pop_816() -> Array[String]:
 		failures.append("pickups exceeded the cap of %d" % director.cap())
 	rm.free()
 	player.queue_free()
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+## Issue #998: each spawned pickup plays pickup_spawn once, at its spot.
+func _scenario_pickup_spawn_plays_sound_once() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"pickup_spawn"):
+		_scenario_completed = true
+		return ["pickup_spawn is not in the sound table"]
+	var spot_a := Vector2(100, -40)
+	var spot_b := Vector2(600, -40)
+	var stage: Node2D = _make_pickup_stub_stage("SpawnSfxStage", PackedVector2Array([Vector2(-900, -40)]), PackedVector2Array([spot_a, spot_b])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var director: Node = rm._pickup_director
+	sfx.start_recording()
+	director._spawn_pickup()
+	var one: int = _sfx_count(sfx, "pickup_spawn")
+	var last: Dictionary = _sfx_last(sfx, "pickup_spawn")
+	director._spawn_pickup()
+	var two: int = _sfx_count(sfx, "pickup_spawn")
+	sfx.stop_recording()
+	var made: int = director._live_pickups().size()
+	print("      pickup_spawn sounds: after 1 spawn %d, after 2 spawns %d (pickups %d)" % [one, two, made])
+	if one != 1:
+		failures.append("one spawn played pickup_spawn %d times, want 1" % one)
+	elif not (last["position"] is Vector2) or not (director._live_pickups()[0].global_position.distance_to(last["position"]) < 1.0):
+		failures.append("pickup_spawn did not play at the pickup's spot")
+	if two != made:
+		failures.append("%d sounds for %d pickups" % [two, made])
+	rm.free()
+	await _teardown(stage)
+	_scenario_completed = true
+	return failures
+## Issue #998: a refused spawn (no spot free) plays nothing.
+func _scenario_pickup_spawn_refused_plays_no_sound() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		_scenario_completed = true
+		return ["the Sfx autoload is missing"]
+	var spot := Vector2(100, -40)
+	var stage: Node2D = _make_pickup_stub_stage("SpawnSfxFullStage", PackedVector2Array([Vector2(-900, -40)]), PackedVector2Array([spot])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var director: Node = rm._pickup_director
+	director._spawn_pickup()
+	sfx.start_recording()
+	for i in 20:
+		director._spawn_pickup()
+	var extra: int = _sfx_count(sfx, "pickup_spawn")
+	var made: int = director._live_pickups().size()
+	sfx.stop_recording()
+	print("      refused spawns: %d extra sounds, %d pickups" % [extra, made])
+	if extra != made - 1:
+		failures.append("%d sounds for %d additional pickups" % [extra, made - 1])
+	rm.free()
 	await _teardown(stage)
 	_scenario_completed = true
 	return failures
