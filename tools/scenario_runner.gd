@@ -500,6 +500,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"themed_pool_never_draws_a_disabled_weapon",
 	"bot_stops_before_spikes",
 	"bot_dodges_moving_saw",
+	"bot_dodges_meteor",
 	"bot_braces_for_gust_warning",
 	"hazard_death_credits_last_hitter_within_window",
 	"hazard_death_after_window_gives_no_credit",
@@ -2578,6 +2579,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_stops_before_spikes()
 		"bot_dodges_moving_saw":
 			return await _scenario_bot_dodges_moving_saw()
+		"bot_dodges_meteor":
+			return await _scenario_bot_dodges_meteor()
 		"bot_braces_for_gust_warning":
 			return await _scenario_bot_braces_for_gust_warning()
 		"hazard_death_credits_last_hitter_within_window":
@@ -29933,6 +29936,46 @@ func _scenario_bot_stops_before_spikes() -> Array[String]:
 	if max_x > -spikes2.size.x * 0.5:
 		failures.append("the bot reached x=%.0f, past the spikes' left edge" % max_x)
 	await _teardown(made[0])
+	return failures
+## Issue #985: a meteor falling at 900 px/s from 600 px above a bot: a Normal
+## bot leaves the strike line and takes no damage; an Easy bot is still hit.
+func _scenario_bot_dodges_meteor() -> Array[String]:
+	var failures: Array[String] = []
+	var taken: Dictionary = {}
+	for level: String in ["normal", "easy"]:
+		var made: Array = _bot313(true, -60.0, 60.0)
+		var player: RigidBody2D = made[1]
+		made[2].difficulty = level
+		player.spawn_protected = false
+		await _await_ticks(5)
+		var meteor: Node2D = MeteorType.new()
+		meteor.setup(player.global_position + Vector2(0.0, -600.0), Vector2(0.0, 900.0), 12.0, 650.0, 16.0, 5000.0)
+		made[0].add_child(meteor)
+		var before: float = player.damage
+		await _await_ticks(90)
+		taken[level] = player.damage - before
+		await _teardown(made[0], false)
+	print("      meteor damage: normal %.1f, easy %.1f" % [taken["normal"], taken["easy"]])
+	if taken["easy"] <= 0.0:
+		failures.append("the fixture is empty: the Easy bot was not hit by the meteor")
+	if taken["normal"] > 0.0:
+		failures.append("the Normal bot took %.1f from the meteor it should have dodged" % taken["normal"])
+	# Next to the floor's right edge (x 600), with the meteor just inboard so
+	# the sideways dodge is off the ledge: the bot dodges the other way or
+	# stays, and is still on the floor.
+	var ledge: Array = _bot313(true, 540.0, 100.0)
+	var ledge_player: RigidBody2D = ledge[1]
+	ledge_player.spawn_protected = false
+	await _await_ticks(5)
+	var drop: Node2D = MeteorType.new()
+	drop.setup(ledge_player.global_position + Vector2(0.0, -600.0), Vector2(0.0, 900.0), 12.0, 650.0, 16.0, 5000.0)
+	ledge[0].add_child(drop)
+	await _await_ticks(50)
+	print("      ledge bot at x=%.0f y=%.0f, damage %.1f" % [ledge_player.global_position.x, ledge_player.global_position.y, ledge_player.damage])
+	if ledge_player.global_position.x > 600.0 or ledge_player.global_position.y > 330.0:
+		failures.append("the bot dodged off the floor's edge to x=%.0f" % ledge_player.global_position.x)
+	await _teardown(ledge[0], false)
+	_scenario_completed = true
 	return failures
 ## A saw patrolling the floor between a bot and its rival: the bot is hit with
 ## avoidance off and not at all with it on, over ten seconds.
