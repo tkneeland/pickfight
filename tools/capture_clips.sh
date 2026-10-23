@@ -16,7 +16,7 @@ EXTRA=(); [ -n "${CLIP_SECONDS:-}" ] && EXTRA+=(--seconds="$CLIP_SECONDS") # qui
 [ -n "${FRAME_PNG:-}" ] && EXTRA+=(--frame-png="$FRAME_PNG") # also save viewport PNGs at these seconds
 for clip in "${CLIPS[@]}"; do
 	perl -e 'alarm 180; exec @ARGV' godot --path . --write-movie "$OUT/$clip.avi" \
-		--fixed-fps 60 --resolution 1920x1080 -s tools/capture_clips.gd -- --only="$clip" --out="$OUT" "${EXTRA[@]}"
+		--fixed-fps 60 --resolution 1920x1080 -s tools/capture_clips.gd -- --only="$clip" --out="$OUT" ${EXTRA[@]+"${EXTRA[@]}"}
 	rc=$?
 	pgrep -fl "godot.*capture_clips" && { echo "a capture window is still open" >&2; exit 1; }
 	[ $rc -eq 0 ] || echo "clip $clip failed (exit $rc)" >&2

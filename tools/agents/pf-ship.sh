@@ -18,13 +18,13 @@ if ! git merge -q origin/main >/dev/null 2>&1; then
 fi
 bash "$PF_DIR/pf-cjk-refresh.sh" "$W" || { echo "ABORT $i: CJK subset refresh failed"; exit 1; }
 bash "$PF_DIR/pf-msg-leakcheck.sh" "$W" || { echo "ABORT $i: channel topic would be pushed"; exit 1; }
-git push -qu origin HEAD 2>&1 | grep -v remote
+git push -qu origin HEAD 2>&1 | grep -v remote; [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "ABORT $i: git push failed"; exit 1; }
 S=$(jq -r '.rate_limits' "$PF_STATE/usage-snapshot.json")
 p5=$(echo "$S" | jq -r .five_hour.used_percentage); p7=$(echo "$S" | jq -r .seven_day.used_percentage)
 r5=$(pf_epoch_fmt "$(echo "$S" | jq -r .five_hour.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
 r7=$(pf_epoch_fmt "$(echo "$S" | jq -r .seven_day.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
 rate=${PF_RATE:-unknown}; week=${PF_WEEK:-unknown}
-pr=$(gh pr create --title "$t" --body "Closes #$i.
+pr=$(set -o pipefail; gh pr create --title "$t" --body "Closes #$i.
 
 $b
 
@@ -34,7 +34,8 @@ $b
 - *5-hour window resets:* $r5 (${p5}% used)
 - *Weekly window resets:* $r7 (${p7}% used)
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)" | tail -1); n=${pr##*/}; echo "PR $pr"
+🤖 Generated with [Claude Code](https://claude.com/claude-code)" | tail -1) || { echo "ABORT $i: gh pr create failed: $pr"; exit 1; }
+n=${pr##*/}; case $n in ''|*[!0-9]*) echo "ABORT $i: no PR number in '$pr'"; exit 1;; esac; echo "PR $pr"
 if gh pr view $n --json labels -q '.labels[].name' | grep -qx conflict-risk && ! pf_is_triagemaster; then echo "CONFLICT-RISK PR $n opened; only the triagemaster ($(pf_triagemaster)) merges it. Not merging."; exit 0; fi
 sleep 20; i=0; until s=$(gh pr checks $n 2>&1); ! echo "$s" | grep -qE "pending|no checks"; do i=$((i+1)); [ $i -gt 60 ] && { echo "CI TIMEOUT $n (conflict?)"; exit 1; }; sleep 30; done
 if gh pr checks $n 2>&1 | grep -qE "[[:space:]]fail[[:space:]]"; then echo "CI FAILED $n"; gh pr checks $n | grep -E "[[:space:]]fail[[:space:]]"; exit 1; fi
