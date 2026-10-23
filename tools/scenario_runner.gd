@@ -1037,6 +1037,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
 	"edge_arrow_seat_numbers_875",
+	"edge_arrows_switch_off_draws_none",
 	"phone_leave_button_frees_seat_775",
 	"frame_rate_cap_and_vsync_persist_and_apply_774",
 	"demo_title_wishlist_button_shown_only_in_demo_793",
@@ -3557,6 +3558,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_offscreen_fighter_gets_edge_arrow_779()
 		"edge_arrow_seat_numbers_875":
 			return await _scenario_edge_arrow_seat_numbers_875()
+		"edge_arrows_switch_off_draws_none":
+			return await _scenario_edge_arrows_switch_off_draws_none()
 		"phone_leave_button_frees_seat_775":
 			return await _scenario_phone_leave_button_frees_seat_775()
 		"frame_rate_cap_and_vsync_persist_and_apply_774":
@@ -48375,6 +48378,83 @@ func _scenario_offscreen_fighter_gets_edge_arrow_779() -> Array[String]:
 		failures.append("a KO'd fighter kept an edge arrow")
 	await _teardown(loop["stage"])
 	return failures
+## Issue #940: Settings > Edge arrows off draws no arrow for an off-camera fighter; on is unchanged;
+## the choice is saved and Restore defaults turns it back on.
+func _scenario_edge_arrows_switch_off_draws_none() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.edge_arrows, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	sfx.set_edge_arrows(false)
+	var loop: Dictionary = _new_lobby_round(5, 1.0, _main_scoreboard())
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	roster.ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the match never started")
+	else:
+		await _await_ticks(2)
+		var arrows: CanvasLayer = rm.offscreen_indicators()
+		if arrows == null:
+			failures.append("RoundManager built no edge arrows")
+		else:
+			var size: Vector2 = get_root().get_visible_rect().size
+			var in_frame := Vector2(size.x * 0.5, size.y * 0.5)
+			var above := Vector2(size.x * 0.25, -2000.0)
+			for i in 20:
+				players[0].teleport_to(above)
+				players[1].teleport_to(in_frame)
+				await _await_ticks(1)
+			if arrows.arrow_visible(0) or arrows.arrow_alpha(0) > 0.0:
+				failures.append("an arrow showed with Edge arrows off (alpha %.2f)" % arrows.arrow_alpha(0))
+			if arrows.arrow_letter(0) != "" or arrows.arrow_number(0) != 0:
+				failures.append("a badge showed with Edge arrows off")
+			sfx.set_edge_arrows(true)
+			for i in 20:
+				players[0].teleport_to(above)
+				players[1].teleport_to(in_frame)
+				await _await_ticks(1)
+			if not arrows.arrow_visible(0):
+				failures.append("no arrow with Edge arrows back on")
+	await _teardown(loop["stage"])
+	var path: String = OS.get_temp_dir().path_join("pickfight_edge_arrows_940_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_edge_arrows(false)
+	sfx.edge_arrows = true
+	sfx.load_settings()
+	if sfx.edge_arrows:
+		failures.append("Edge arrows off was not remembered in the settings file")
+	sfx.set_edge_arrows(true)
+	sfx.edge_arrows = false
+	sfx.load_settings()
+	if not sfx.edge_arrows:
+		failures.append("Edge arrows on was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.edge_arrows_box()
+	if box == null:
+		failures.append("Settings has no Edge arrows box")
+	else:
+		box.button_pressed = false
+		if sfx.edge_arrows:
+			failures.append("unticking the Edge arrows box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.edge_arrows:
+			failures.append("Restore defaults did not put Edge arrows back on")
+	sfx.edge_arrows = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+
 ## Issue #875: with Player numbers on, an edge arrow also shows its fighter's seat number (after the
 ## team letter in Teams), inside the screen; off, no number.
 func _scenario_edge_arrow_seat_numbers_875() -> Array[String]:
