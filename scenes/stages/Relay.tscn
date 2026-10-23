@@ -1,25 +1,11 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
 [ext_resource type="PackedScene" path="res://scenes/parts/IcePatch.tscn" id="ice"]
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
-
-[sub_resource type="RectangleShape2D" id="R_200x24"]
-size = Vector2(200, 24)
-
-[sub_resource type="RectangleShape2D" id="R_260x24"]
-size = Vector2(260, 24)
-
-[sub_resource type="RectangleShape2D" id="R_300x24"]
-size = Vector2(300, 24)
-
-[sub_resource type="RectangleShape2D" id="R_1500x40"]
-size = Vector2(1500, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Relay (issue #377, a King of the Hill stage with a moving hill): three
 ; platforms, centre, left and right, and the hill hops between them every
@@ -37,55 +23,25 @@ background_layers = PackedStringArray("clouds", "city", "hills")
 mode_weights = {"king_of_the_hill": 4.0, "_other": 0.3}
 hill_moves = true
 
-[node name="Floor" type="StaticBody2D" parent="."]
+[node name="Floor" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 400)
+size = Vector2(1500, 40)
 
-[node name="FloorShape" type="CollisionShape2D" parent="Floor"]
-shape = SubResource("R_1500x40")
-
-[node name="FloorVisual" type="Polygon2D" parent="Floor"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-750, -20, 750, -20, 750, 20, -750, 20)
-
-[node name="Centre" type="StaticBody2D" parent="."]
+[node name="Centre" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 240)
+size = Vector2(300, 24)
 
-[node name="CentreShape" type="CollisionShape2D" parent="Centre"]
-shape = SubResource("R_300x24")
-
-[node name="CentreVisual" type="Polygon2D" parent="Centre"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-150, -12, 150, -12, 150, 12, -150, 12)
-
-[node name="Left" type="StaticBody2D" parent="."]
+[node name="Left" parent="." instance=ExtResource("platform")]
 position = Vector2(-480, 240)
+size = Vector2(260, 24)
 
-[node name="LeftShape" type="CollisionShape2D" parent="Left"]
-shape = SubResource("R_260x24")
-
-[node name="LeftVisual" type="Polygon2D" parent="Left"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
-
-[node name="Right" type="StaticBody2D" parent="."]
+[node name="Right" parent="." instance=ExtResource("platform")]
 position = Vector2(480, 240)
+size = Vector2(260, 24)
 
-[node name="RightShape" type="CollisionShape2D" parent="Right"]
-shape = SubResource("R_260x24")
-
-[node name="RightVisual" type="Polygon2D" parent="Right"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)
-
-[node name="Roof" type="StaticBody2D" parent="."]
+[node name="Roof" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 60)
-
-[node name="RoofShape" type="CollisionShape2D" parent="Roof"]
-shape = SubResource("R_200x24")
-
-[node name="RoofVisual" type="Polygon2D" parent="Roof"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)
+size = Vector2(200, 24)
 
 [node name="PadLeft" parent="." instance=ExtResource("pad")]
 position = Vector2(-250, 372)
@@ -124,12 +80,8 @@ position = Vector2(-460, 320)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(460, 320)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)
-script = ExtResource("kz")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 [node name="HillSpot0" type="Marker2D" parent="."]
 position = Vector2(0, 150)

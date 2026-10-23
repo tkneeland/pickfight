@@ -1,17 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/BreakableWall.tscn" id="3"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_keep"]
-size = Vector2(320, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_bastion"]
-size = Vector2(420, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; A keep in the middle, two flanking bastions outboard, and a breakable wall
 ; sealing each side of the keep (issue #54, part from #53). All four stand
@@ -65,15 +57,9 @@ background_sky_bottom = Color(0.24, 0.22, 0.26, 1)
 background_silhouette = Color(0.1, 0.1, 0.14, 1)
 background_layers = PackedStringArray("clouds", "mountains", "city")
 
-[node name="Keep" type="StaticBody2D" parent="."]
+[node name="Keep" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 320)
-
-[node name="KeepShape" type="CollisionShape2D" parent="Keep"]
-shape = SubResource("RectangleShape2D_keep")
-
-[node name="KeepVisual" type="Polygon2D" parent="Keep"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-160, -20, 160, -20, 160, 20, -160, 20)
+size = Vector2(320, 40)
 
 ; The two walls (issue #53's part): 140 px tall, flush with the keep's own
 ; edges, so the keep's floor and each wall's base line up with no seam.
@@ -87,25 +73,13 @@ size = Vector2(32, 140)
 
 ; Bastions widened outward for issue #137: x=+-300..+-600 -> +-300..+-720.
 ; Their outer ends are still open sky; the keep and walls are untouched.
-[node name="BastionLeft" type="StaticBody2D" parent="."]
+[node name="BastionLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-510, 320)
+size = Vector2(420, 40)
 
-[node name="BastionLeftShape" type="CollisionShape2D" parent="BastionLeft"]
-shape = SubResource("RectangleShape2D_bastion")
-
-[node name="BastionLeftVisual" type="Polygon2D" parent="BastionLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-210, -20, 210, -20, 210, 20, -210, 20)
-
-[node name="BastionRight" type="StaticBody2D" parent="."]
+[node name="BastionRight" parent="." instance=ExtResource("platform")]
 position = Vector2(510, 320)
-
-[node name="BastionRightShape" type="CollisionShape2D" parent="BastionRight"]
-shape = SubResource("RectangleShape2D_bastion")
-
-[node name="BastionRightVisual" type="Polygon2D" parent="BastionRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-210, -20, 210, -20, 210, 20, -210, 20)
+size = Vector2(420, 40)
 
 ; Spawns 0 and 1 in the keep, sheltered by both walls at round start.
 ; Spawns 2 and 3 on the bastions, already exposed on their outer edge.
@@ -137,12 +111,8 @@ position = Vector2(-370, 250)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(370, 250)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). One atop each wall -- the prize
 ; for whoever climbs it or is standing near when it breaks -- and one on

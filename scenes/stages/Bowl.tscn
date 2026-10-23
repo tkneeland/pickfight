@@ -1,13 +1,8 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall"]
-size = Vector2(40, 560)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; A stepped bowl with high walls on both sides: each half is a staircase
 ; descending toward the middle, and the walls run from well above head height
@@ -57,25 +52,13 @@ polygon = PackedVector2Array(660, 208, 300, 208, 300, 288, 60, 288, 60, 440, 660
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(660, 208, 300, 208, 300, 288, 60, 288, 60, 440, 660, 440)
 
-[node name="WallLeft" type="StaticBody2D" parent="."]
+[node name="WallLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-680, 100)
+size = Vector2(40, 560)
 
-[node name="WallLeftShape" type="CollisionShape2D" parent="WallLeft"]
-shape = SubResource("RectangleShape2D_wall")
-
-[node name="WallLeftVisual" type="Polygon2D" parent="WallLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-20, -280, 20, -280, 20, 280, -20, 280)
-
-[node name="WallRight" type="StaticBody2D" parent="."]
+[node name="WallRight" parent="." instance=ExtResource("platform")]
 position = Vector2(680, 100)
-
-[node name="WallRightShape" type="CollisionShape2D" parent="WallRight"]
-shape = SubResource("RectangleShape2D_wall")
-
-[node name="WallRightVisual" type="Polygon2D" parent="WallRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-20, -280, 20, -280, 20, 280, -20, 280)
+size = Vector2(40, 560)
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-400, 140)
@@ -103,12 +86,8 @@ position = Vector2(-580, 140)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(580, 140)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 560)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). On each lower step and floating over the drain.
 [node name="PickupSpawn0" type="Marker2D" parent="."]

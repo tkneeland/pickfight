@@ -1,19 +1,11 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="3"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MudPatch.tscn" id="mud"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_street"]
-size = Vector2(1010, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_deck"]
-size = Vector2(400, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; A two-storey interchange (issue #144, a large stage for five to eight
 ; players): a long street with a drain down the middle and open ends, and an
@@ -36,50 +28,26 @@ view_size = Vector2(2400, 1350)
 ; The street: two long halves, x = -1060..-50 and 50..1060, with a 100 px drain
 ; between them down the middle -- twice a body's width -- and open ends. Those are the ring-outs; the deck only ever drops you onto the street.
 
-[node name="StreetLeft" type="StaticBody2D" parent="."]
+[node name="StreetLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-555, 440)
+size = Vector2(1010, 40)
 
-[node name="StreetLeftShape" type="CollisionShape2D" parent="StreetLeft"]
-shape = SubResource("RectangleShape2D_street")
-
-[node name="StreetLeftVisual" type="Polygon2D" parent="StreetLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-505, -20, 505, -20, 505, 20, -505, 20)
-
-[node name="StreetRight" type="StaticBody2D" parent="."]
+[node name="StreetRight" parent="." instance=ExtResource("platform")]
 position = Vector2(555, 440)
-
-[node name="StreetRightShape" type="CollisionShape2D" parent="StreetRight"]
-shape = SubResource("RectangleShape2D_street")
-
-[node name="StreetRightVisual" type="Polygon2D" parent="StreetRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-505, -20, 505, -20, 505, 20, -505, 20)
+size = Vector2(1010, 40)
 
 ; The deck: an overpass 260 px above the street, too high to hook from below.
 ; Its ends (x = -580..-180 and 180..580) are solid; its middle is three
 ; crumbling ledges (#18) over the drain, which give under whoever stops on
 ; them and come back three seconds later.
 
-[node name="DeckLeft" type="StaticBody2D" parent="."]
+[node name="DeckLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-380, 172)
+size = Vector2(400, 24)
 
-[node name="DeckLeftShape" type="CollisionShape2D" parent="DeckLeft"]
-shape = SubResource("RectangleShape2D_deck")
-
-[node name="DeckLeftVisual" type="Polygon2D" parent="DeckLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-200, -12, 200, -12, 200, 12, -200, 12)
-
-[node name="DeckRight" type="StaticBody2D" parent="."]
+[node name="DeckRight" parent="." instance=ExtResource("platform")]
 position = Vector2(380, 172)
-
-[node name="DeckRightShape" type="CollisionShape2D" parent="DeckRight"]
-shape = SubResource("RectangleShape2D_deck")
-
-[node name="DeckRightVisual" type="Polygon2D" parent="DeckRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-200, -12, 200, -12, 200, 12, -200, 12)
+size = Vector2(400, 24)
 
 [node name="SpanLeft" parent="." instance=ExtResource("2")]
 position = Vector2(-120, 172)
@@ -140,12 +108,8 @@ position = Vector2(-500, 360)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(500, 360)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 720)
-script = ExtResource("4")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points: on the crumbling middle span (stopping to take it starts
 ; it crumbling), by the drain on each side of the street, and out at the
