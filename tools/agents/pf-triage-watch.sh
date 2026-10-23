@@ -5,8 +5,8 @@
 #   MYTICKET <n>       ready-for-agent ticket assigned to this account and no worktree in progress
 #   FEATURES? PR <n>   (triagemaster only) open PR changes scripts/ or controller/ without docs/FEATURES.md (once per PR)
 #   PEER_BEACON        a WATCH_PEERS account's #432 usage beacon became fresh (once)
-#   IDLE_SLOTS <n>/<min>  hourly: fewer active work packages than the mode's minimum (day DAY_MIN_AGENTS,
-#                      night the low end of NIGHT_PREFERRED_AGENTS); skipped when the weekly budget says stop
+#   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than pf_worker_target (day DAY_AGENTS, night
+#                      NIGHT_AGENTS, 1 past FIVE_H_SLOW_USED, 0 past FIVE_H_STOP_USED or the weekly stop)
 #   AUSTIN_QUEUE_LOW <n>  (triagemaster only) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
 #   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
 . "$(dirname "$0")/pf-env.sh" || exit 1
@@ -51,13 +51,13 @@ while true; do
   last=$(cat "$PF_STATE/.pf-slots-last" 2>/dev/null || echo 0)
   if [ $(( $(date +%s) - last )) -ge 3600 ]; then
     date +%s > "$PF_STATE/.pf-slots-last"
-    if [ "$(pf_daynight)" = day ]; then min=$DAY_MIN_AGENTS; else min=${NIGHT_PREFERRED_AGENTS%%-*}; fi
+    min=$(pf_worker_target)
     active=$(ls "$ROOT"/.claude/atlas-state/*.json 2>/dev/null | wc -l | tr -d ' ')
     # plus tickets of mine in flight outside Atlas: open, assigned to me, a branch exists
     for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | .number'); do
       git -C "$ROOT" branch -a --list "*issue-$n-*" | grep -q . && active=$((active+1))
     done
-    if pf_budget_ok && [ "$active" -lt "$min" ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
+    if [ "$active" -lt "$min" ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
     if pf_is_triagemaster && pf_budget_ok; then
       # peers' queues: dev tickets assigned to a peer (meta tickets excluded)
       for peer in ${WATCH_PEERS:-agage-JG}; do
