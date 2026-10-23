@@ -41,13 +41,17 @@ var _mask: int = FALLBACK_LAYER_WORLD | FALLBACK_LAYER_HEAD
 ## The field's shape query, built on the first tick that needs it.
 var _query: PhysicsShapeQueryParameters2D = null
 var _circle: CircleShape2D = null
+## The line-of-sight ray, built once and reused for every body each tick.
+var _ray: PhysicsRayQueryParameters2D = null
+var _world_mask: int = FALLBACK_LAYER_WORLD
 
 func setup(from_wielder: RigidBody2D, stats: Resource) -> void:
 	wielder = from_wielder
 	_range = maxf(0.0, float(stats.launch_range))
 	_force = float(stats.reel_force)
 	var constants: Dictionary = wielder.get_script().get_script_constant_map()
-	_mask = int(constants.get("LAYER_WORLD", FALLBACK_LAYER_WORLD)) | int(constants.get("LAYER_HEAD", FALLBACK_LAYER_HEAD))
+	_world_mask = int(constants.get("LAYER_WORLD", FALLBACK_LAYER_WORLD))
+	_mask = _world_mask | int(constants.get("LAYER_HEAD", FALLBACK_LAYER_HEAD))
 
 ## Stops the field the moment the weapon is dropped; the node itself goes at
 ## end of frame, and until then must not act.
@@ -81,8 +85,13 @@ func _apply_field(delta: float) -> void:
 	if wielder.has_method("weapon_head_rid"):
 		excluded.append(wielder.weapon_head_rid())
 	query.exclude = excluded
+	if _ray == null:
+		_ray = PhysicsRayQueryParameters2D.new()
+		_ray.collide_with_areas = false
+		_ray.collision_mask = _world_mask
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var seen: Dictionary = {}
-	for result: Dictionary in get_world_2d().direct_space_state.intersect_shape(query, MAX_RESULTS):
+	for result: Dictionary in space.intersect_shape(query, MAX_RESULTS):
 		var body: RigidBody2D = result["collider"] as RigidBody2D
 		if body == null or not is_instance_valid(body) or seen.has(body.get_instance_id()):
 			continue
@@ -92,6 +101,8 @@ func _apply_field(delta: float) -> void:
 		var to_wielder: Vector2 = wielder.global_position - body.global_position
 		var distance: float = to_wielder.length()
 		if distance < MIN_DISTANCE or distance >= _range:
+			continue
+		if _terrain_between(space, body, excluded):
 			continue
 		var strength: float = _force * (1.0 - distance / _range)
 		body.apply_central_impulse(to_wielder / distance * strength * delta)
@@ -103,3 +114,22 @@ func _is_movable(body: RigidBody2D) -> bool:
 	if body.has_method("eliminate"):
 		return bool(body.get("alive"))
 	return body.has_method("mass_blocking")
+
+## True when solid terrain (a world-layer collider that is not a physics body,
+## so not another fighter) lies on the line from the wielder to `body`
+## (issue #933). Fighters share the world layer, so a fighter in the way is
+## stepped past rather than treated as a wall; the re-cast is capped at 3.
+func _terrain_between(space: PhysicsDirectSpaceState2D, body: RigidBody2D, base_excluded: Array[RID]) -> bool:
+	_ray.from = wielder.global_position
+	_ray.to = body.global_position
+	var skip: Array[RID] = base_excluded.duplicate()
+	skip.append(body.get_rid())
+	for _i in 3:
+		_ray.exclude = skip
+		var hit: Dictionary = space.intersect_ray(_ray)
+		if hit.is_empty():
+			return false
+		if not (hit["collider"] is RigidBody2D):
+			return true
+		skip.append(hit["rid"])
+	return false
