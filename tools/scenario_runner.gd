@@ -149,6 +149,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomstick_charge_ring_tracks_fire_clock",
 	"roster_heads_do_not_tunnel_thin_platform",
 	"round_modifier_low_gravity_applies_and_undoes",
+	"round_modifier_heavy_gravity_applies_and_undoes",
 	"round_modifier_heavy_weapons_applies_and_undoes",
 	"round_modifier_big_heads_applies_and_undoes",
 	"round_modifier_fast_lava_applies_and_undoes",
@@ -1912,6 +1913,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_roster_heads_do_not_tunnel_thin_platform()
 		"round_modifier_low_gravity_applies_and_undoes":
 			return await _scenario_round_modifier_low_gravity_applies_and_undoes()
+		"round_modifier_heavy_gravity_applies_and_undoes":
+			return await _scenario_round_modifier_heavy_gravity_applies_and_undoes()
 		"round_modifier_heavy_weapons_applies_and_undoes":
 			return await _scenario_round_modifier_heavy_weapons_applies_and_undoes()
 		"round_modifier_big_heads_applies_and_undoes":
@@ -10219,6 +10222,7 @@ const MODIFIER_RIG_TICKS: int = 5
 ## the names the announcement must show for them.
 const MODIFIER_TITLES: Dictionary = {
 	"low_gravity": "Low Gravity",
+	"heavy_gravity": "Heavy Gravity",
 	"heavy_weapons": "Heavy Weapons",
 	"big_heads": "Big Heads",
 	"fast_lava": "Fast Lava",
@@ -10237,6 +10241,9 @@ const MODIFIER_TITLES: Dictionary = {
 const LOW_GRAVITY_FALL_TICKS: int = 20
 const LOW_GRAVITY_RATIO_MIN: float = 0.35
 const LOW_GRAVITY_RATIO_MAX: float = 0.65
+## Heavy gravity is 1.5x gravity: the same fall gains about 1.5x the speed.
+const HEAVY_GRAVITY_RATIO_MIN: float = 1.3
+const HEAVY_GRAVITY_RATIO_MAX: float = 1.7
 ## Heavy weapons put 1.6x the mass in every head. Extending the weapon in clear
 ## air throws the body back by momentum: with the pickaxe's 0.25 head against
 ## a 1.0 body, about 0.25/1.25 of the relative speed plain and 0.4/1.4 heavy,
@@ -10404,6 +10411,40 @@ func _scenario_round_modifier_low_gravity_applies_and_undoes() -> Array[String]:
 				failures.append("low gravity: fell at %.2fx the plain speed, expected about half (%.2f..%.2f)" % [
 					ratio, LOW_GRAVITY_RATIO_MIN, LOW_GRAVITY_RATIO_MAX])
 		_check_undone(failures, "low gravity", values, "fall speed")
+	await _teardown(loop["stage"])
+	return failures
+## Heavy gravity (#840): falls about 1.5x faster, and gravity is back after.
+func _scenario_round_modifier_heavy_gravity_applies_and_undoes() -> Array[String]:
+	var loop: Dictionary = _new_modifier_round("")
+	var players: Array[RigidBody2D] = loop["players"]
+	var saved: Array[float] = []
+	var measure := func(_loop: Dictionary, _instance: Node2D) -> float:
+		var player: RigidBody2D = players[0]
+		player.set_input_vector(Vector2.ZERO)
+		player.teleport_to(MODIFIER_AIR)
+		await _await_ticks(LOW_GRAVITY_FALL_TICKS)
+		return player.linear_velocity.y
+	var inspect := func(_loop: Dictionary, round_index: int) -> Array[String]:
+		var found: Array[String] = []
+		if round_index == 0:
+			saved.assign([players[0].gravity_scale, players[1].gravity_scale])
+		elif round_index == 2:
+			for i in 2:
+				if players[i].gravity_scale != saved[i]:
+					found.append("P%d's gravity_scale is %.3f after the heavy-gravity round, %.3f before it" % [i, players[i].gravity_scale, saved[i]])
+		return found
+	var result: Dictionary = await _modifier_off_on_off(loop, "heavy_gravity", measure, inspect)
+	var failures: Array[String] = result["failures"]
+	var values: Array[float] = result["values"]
+	if values.size() == 3:
+		if values[0] <= 0.0:
+			failures.append("a player in clear air did not fall (%.3f px/s)" % values[0])
+		else:
+			var ratio: float = values[1] / values[0]
+			if ratio < HEAVY_GRAVITY_RATIO_MIN or ratio > HEAVY_GRAVITY_RATIO_MAX:
+				failures.append("heavy gravity: fell at %.2fx the plain speed, expected about 1.5x (%.2f..%.2f)" % [
+					ratio, HEAVY_GRAVITY_RATIO_MIN, HEAVY_GRAVITY_RATIO_MAX])
+		_check_undone(failures, "heavy gravity", values, "fall speed")
 	await _teardown(loop["stage"])
 	return failures
 ## Heavy weapons: the body's recoil from extending the weapon in clear air,
