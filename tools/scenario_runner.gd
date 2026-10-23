@@ -311,6 +311,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"magnet_pulls_weapon_heads",
 	"magnet_pushes_with_negative_force",
 	"magnet_ignores_wielder_dead_and_dropped",
+	"magnet_does_not_pull_through_solid_terrain",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -2111,6 +2112,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_magnet_pushes_with_negative_force()
 		"magnet_ignores_wielder_dead_and_dropped":
 			return await _scenario_magnet_ignores_wielder_dead_and_dropped()
+		"magnet_does_not_pull_through_solid_terrain":
+			return await _scenario_magnet_does_not_pull_through_solid_terrain()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -21063,6 +21066,48 @@ func _scenario_magnet_pulls_weapon_heads() -> Array[String]:
 	return failures
 ## The field leaves its own wielder and the wielder's head alone, does not move a
 ## dead player, and goes when the weapon does.
+func _scenario_magnet_does_not_pull_through_solid_terrain() -> Array[String]:
+	var failures: Array[String] = []
+	var stats: WeaponStatsType = load(MAGNET_PATH)
+	var control: Array[float] = await _magnet_wall_trial(load(PICKAXE_PATH_MAGNET_CONTROL), true)
+	var open: Array[float] = await _magnet_wall_trial(stats, false)
+	var walled: Array[float] = await _magnet_wall_trial(stats, true)
+	var open_gain: float = control[0] - open[0]
+	var walled_gain: float = absf(control[0] - walled[0])
+	print("      control dx %.1f, open dx %.1f, walled dx %.1f -> open pull %.1f px, walled %.1f px" % [control[0], open[0], walled[0], open_gain, walled_gain])
+	if open_gain < 20.0:
+		failures.append("the near victim in the open moved only %.1f px toward the magnet; it should be pulled at least 20" % open_gain)
+	if walled_gain > 1.0:
+		failures.append("a victim behind a solid wall still moved %.1f px against the control; the field should stop at terrain" % walled_gain)
+	_scenario_completed = true
+	return failures
+## One near victim at MAGNET_NEAR, with a thin solid wall between it and the
+## wielder when `wall` is set. Returns the victim's x displacement in a one-item array.
+func _magnet_wall_trial(wielder_stats: Resource, wall: bool) -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + MAGNET_NEAR)
+	if wall:
+		var slab := StaticBody2D.new()
+		slab.collision_layer = 1
+		slab.collision_mask = 0
+		var slab_shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(20, 400)
+		slab_shape.shape = rect
+		slab.add_child(slab_shape)
+		slab.position = DEEP_PARK_POSITION + MAGNET_NEAR * 0.5
+		stage.add_child(slab)
+	await _await_ticks(2)
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	victim.linear_velocity = Vector2.ZERO
+	var start: float = victim.global_position.x
+	await _await_ticks(MAGNET_TRIAL_TICKS)
+	var moved: Array[float] = [victim.global_position.x - start]
+	await _teardown(stage, false)
+	return moved
 func _scenario_magnet_ignores_wielder_dead_and_dropped() -> Array[String]:
 	var failures: Array[String] = []
 	# Unbraced wielder alone: with nobody to pull, the field must not shove its own
