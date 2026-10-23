@@ -170,6 +170,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mud_patch_overpass_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
+	"stage_speed_strips_placed",
 	"mud_patch_slows_player",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
@@ -962,6 +963,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_opens_umbrella_while_falling",
 	"bot_throws_boomerang_at_rival_in_range",
 	"bot_does_not_throw_boomerang_at_teammate_or_through_wall",
+	"bot_eases_off_ice_near_drop",
+	"bot_walks_against_belt_to_open_end",
 	"bot_aims_boomstick_at_rival",
 	"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952",
 	"join_help_opens_lists_urls_and_closes_680",
@@ -1911,6 +1914,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_restores_when_stage_freed()
 		"speed_strip_boosts_run_distance":
 			return await _scenario_speed_strip_boosts_run_distance()
+		"stage_speed_strips_placed":
+			return await _scenario_stage_speed_strips_placed()
 		"mud_patch_slows_player":
 			return await _scenario_mud_patch_slows_player()
 		"bounce_pad_launches_body":
@@ -3487,6 +3492,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_throws_boomerang_at_rival_in_range()
 		"bot_does_not_throw_boomerang_at_teammate_or_through_wall":
 			return await _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall()
+		"bot_eases_off_ice_near_drop":
+			return await _scenario_bot_eases_off_ice_near_drop()
+		"bot_walks_against_belt_to_open_end":
+			return await _scenario_bot_walks_against_belt_to_open_end()
 		"bot_aims_boomstick_at_rival":
 			return await _scenario_bot_aims_boomstick_at_rival()
 		"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952":
@@ -11595,6 +11604,36 @@ func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
 	if not was_boosted or not left:
 		failures.append("the runner was never boosted or never left the strip (boosted=%s)" % was_boosted)
 	await _teardown(stage)
+	return failures
+## Speed strips on two more stages (#961): Flatlands carries one on its floor
+## and Switchyard a mirrored pair, each inside the floor's width, at least 100 px
+## from either floor edge, with no spawn, pickup spot or hill spot over it.
+func _scenario_stage_speed_strips_placed() -> Array[String]:
+	var failures: Array[String] = []
+	var floors: Dictionary = {"Flatlands": 720.0, "Switchyard": 1100.0}
+	for stage_name: String in floors:
+		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
+		get_root().add_child(stage)
+		var strips: Array[StaticBody2D] = []
+		for child: Node in stage.get_children():
+			if child is StaticBody2D and child.has_method("is_boosting"):
+				strips.append(child as StaticBody2D)
+		if strips.is_empty():
+			failures.append("%s has no speed strip" % stage_name)
+		for strip: StaticBody2D in strips:
+			var half_x: float = strip.size.x / 2.0
+			if strip.position.x - half_x < -floors[stage_name] + 100.0 or strip.position.x + half_x > floors[stage_name] - 100.0:
+				failures.append("%s %s is not 100 px inside the floor" % [stage_name, strip.name])
+			for child: Node in stage.get_children():
+				if not (child is Marker2D) or not (child.name.begins_with("Spawn") or child.name.begins_with("PickupSpawn") or child.name.begins_with("HillSpot")):
+					continue
+				var marker: Node2D = child as Node2D
+				if marker.position.y < strip.position.y - 120.0:
+					continue
+				if absf(marker.position.x - strip.position.x) <= half_x + PLAYER_RADIUS:
+					failures.append("%s %s at x=%.0f is over %s" % [stage_name, child.name, marker.position.x, strip.name])
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## Mud patch (#880): a body is pushed along a strip of mud (or plain ground)
 ## by a steady force, standing in for running, and the fastest it gets is
@@ -44141,6 +44180,68 @@ func _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall() -> Arr
 		failures.append("the bot threw at a rival 900 px away")
 	if walled["throws"] > 0:
 		failures.append("the bot threw through a wall")
+	_scenario_completed = true
+	return failures
+## Issue #963: a bot on a floor strip with a drop `end_gap` px ahead (to the
+## right), a rival on a far island beyond it. `belt` lays a conveyor carrying
+## right, otherwise an ice patch. An Easy bot is the control: it keeps the old
+## behaviour. Returns whether the bot stayed on the floor and its farthest x.
+func _bot_strip_run_963(belt: bool, level: String, end_gap: float, ticks: int) -> Dictionary:
+	var stage: Node2D = _new_empty_stage()
+	var strip: StaticBody2D = (ConveyorScene if belt else IcePatchScene).instantiate() as StaticBody2D
+	strip.size = Vector2(800.0, 12.0 if belt else 8.0)
+	strip.position = Vector2(0.0, 600.0)
+	stage.add_child(strip)
+	var island := StaticBody2D.new()
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(600.0, 12.0)
+	shape.shape = rect
+	island.add_child(shape)
+	island.position = Vector2(1050.0, 600.0)
+	stage.add_child(island)
+	var start_x: float = 400.0 - end_gap
+	var player: RigidBody2D = _spawn_player(stage, Vector2(start_x, 560.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(1100.0, 560.0))
+	await _await_ticks(30)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var out: Dictionary = {"stayed": true, "max_x": start_x}
+	for t in ticks:
+		await physics_frame
+		out["max_x"] = maxf(out["max_x"], player.global_position.x)
+		if player.global_position.y > 640.0:
+			out["stayed"] = false
+	await _teardown(stage, false)
+	return out
+## A Normal bot on ice with an open edge 150 px ahead, a rival beyond it, does
+## not leave the floor in 5 s; the Easy control (old behaviour) is printed.
+func _scenario_bot_eases_off_ice_near_drop() -> Array[String]:
+	var failures: Array[String] = []
+	var normal: Dictionary = await _bot_strip_run_963(false, "normal", 150.0, 300)
+	var easy: Dictionary = await _bot_strip_run_963(false, "easy", 150.0, 300)
+	print("      bot_eases_off_ice_near_drop: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
+	if not normal["stayed"]:
+		failures.append("the Normal bot left the ice patch")
+	if normal["max_x"] > 350.0:
+		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
+	_scenario_completed = true
+	return failures
+## A Normal bot on a belt carrying it towards an open end walks against it and
+## stays on the floor for 5 s.
+func _scenario_bot_walks_against_belt_to_open_end() -> Array[String]:
+	var failures: Array[String] = []
+	var normal: Dictionary = await _bot_strip_run_963(true, "normal", 150.0, 300)
+	var easy: Dictionary = await _bot_strip_run_963(true, "easy", 150.0, 300)
+	print("      bot_walks_against_belt_to_open_end: normal stayed=%s max_x=%.0f easy(control) stayed=%s max_x=%.0f" % [normal["stayed"], normal["max_x"], easy["stayed"], easy["max_x"]])
+	if not normal["stayed"]:
+		failures.append("the Normal bot was carried off the belt's open end")
+	if normal["max_x"] > 350.0:
+		failures.append("the Normal bot got within 50 px of the open end (x=%.0f)" % normal["max_x"])
 	_scenario_completed = true
 	return failures
 ## Issue #952: a bot holding `weapon` with a rival `gap` px off on flat ground.
