@@ -116,7 +116,6 @@ func clear_submerged() -> void:
 	for pickup: Node2D in _live_pickups():
 		if pickup.global_position.y >= lava:
 			pickup.queue_free()
-	_live_pickups()
 
 ## The global y of the active stage's floor kill zone surface, or INF on a
 ## stage without one.
@@ -233,11 +232,12 @@ func free_spot() -> Variant:
 		spots = [origin + FALLBACK_PICKUP_OFFSET]
 	var free: Array[Vector2] = []
 	var lava: float = lava_surface_y()
+	var live: Array[Node2D] = _live_pickups()
 	for spot: Vector2 in spots:
 		if spot.y >= lava:
 			continue
 		var taken: bool = false
-		for pickup: Node2D in _live_pickups():
+		for pickup: Node2D in live:
 			if pickup.global_position.distance_to(spot) < PICKUP_SPOT_EPSILON:
 				taken = true
 				break
@@ -254,9 +254,12 @@ func free_spot() -> Variant:
 	if not clear_spots.is_empty():
 		return clear_spots[rng.randi() % clear_spots.size()]
 	var best: Vector2 = free[0]
+	var best_distance: float = _distance_to_nearest_spawn(best)
 	for spot: Vector2 in free:
-		if _distance_to_nearest_spawn(spot) > _distance_to_nearest_spawn(best):
+		var distance: float = _distance_to_nearest_spawn(spot)
+		if distance > best_distance:
 			best = spot
+			best_distance = distance
 	return best
 
 ## Whether a living player stands on or hovers over `spot`, close enough that

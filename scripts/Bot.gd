@@ -391,6 +391,15 @@ var _unhook_side: float = 1.0
 ## not once a ray (issue #165).
 var _rids: Array[RID] = []
 var _rids_frame: int = -1
+## `_lava_top()` for `_lava_top_frame`: the lava does not move within a tick,
+## and the lookup behind it asks the tree for the round manager.
+var _lava_top_frame: int = -1
+var _lava_top_value: float = INF
+## `_footing()` answers for `_footing_frame`, by exact point (one dictionary
+## per `past_danger`): the scans ask about the same points many times a tick.
+var _footing_frame: int = -1
+var _footing_memo: Dictionary = {}
+var _footing_memo_past: Dictionary = {}
 
 func _init() -> void:
 	rng.randomize()
@@ -410,6 +419,8 @@ func think(delta: float) -> Vector2:
 		# respawns: it is re-read only when the round's stage changes (#607).
 		_wall_target = null
 		_danger_frame = -1
+		_footing_frame = -1
+		_lava_top_frame = -1
 		_pad_route = false
 		_edge_wait = 0.0
 		_desperate_left = 0.0
@@ -778,7 +789,9 @@ func _nearest_enemy() -> Node2D:
 			continue
 		var at: Vector2 = (other as Node2D).global_position
 		var cost: float = _hunt_cost(at)
-		var reachable: bool = _walkable_to(at.x)
+		# Only asked where the answer is used: the hunted rival, or one cheaper
+		# than the best walkable so far (the walk check casts many rays).
+		var reachable: bool = (other == _target or cost < walkable_cost) and _walkable_to(at.x)
 		if other == _target:
 			current = other as Node2D
 			current_cost = cost
@@ -1324,6 +1337,21 @@ func _standing_on() -> int:
 ## below it, above the lava, with no hazard (or falling rock's column) in
 ## between. A point inside terrain counts as that terrain.
 func _footing(point: Vector2, past_danger: bool = false) -> int:
+	var frame: int = Engine.get_physics_frames()
+	if frame != _footing_frame:
+		_footing_frame = frame
+		_footing_memo.clear()
+		_footing_memo_past.clear()
+	var memo: Dictionary = _footing_memo_past if past_danger else _footing_memo
+	if memo.has(point):
+		return memo[point]
+	var kind: int = _footing_uncached(point, past_danger)
+	# The lookup inside may have re-read the stage, which resets the memo.
+	if _footing_frame == frame:
+		memo[point] = kind
+	return kind
+
+func _footing_uncached(point: Vector2, past_danger: bool) -> int:
 	var bottom: float = minf(point.y + GROUND_PROBE, _lava_top())
 	if bottom <= point.y:
 		return FOOT_NONE
@@ -1430,24 +1458,28 @@ func _danger_rects() -> Array[Rect2]:
 		if is_instance_valid(saw) and saw.is_inside_tree():
 			var reach: float = float(saw.get("radius")) + BODY_RADIUS + HAZARD_MARGIN
 			_danger.append(Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0))
-	var all_rocks: Array[Node2D] = _rocks.duplicate()
+	# The stage's rocks first, then any not in the stage read: rocks spawned
+	# mid-round (the overtime rain, #611). Same order as before, no copy.
+	for rock: Node2D in _rocks:
+		_add_rock_danger(rock)
 	if is_inside_tree():
-		# Rocks spawned mid-round (the overtime rain) are not in the stage read (#611).
 		for node: Node in get_tree().get_nodes_in_group(&"falling_rocks"):
-			if node is Node2D and not all_rocks.has(node):
-				all_rocks.append(node as Node2D)
-	for rock: Node2D in all_rocks:
-		if not is_instance_valid(rock) or not rock.is_inside_tree():
-			continue
-		var state: String = rock.call("state_name")
-		if state != "warning" and state != "falling":
-			continue
-		var half: float = float(rock.get("rock_radius")) + BODY_RADIUS + ROCK_MARGIN
-		var top: float = (rock.call("rock_position") as Vector2).y
-		var landing: Vector2 = rock.call("landing_point")
-		var bottom: float = landing.y + BODY_RADIUS * 2.0 if not is_nan(landing.y) else top + GROUND_PROBE * 3.0
-		_danger.append(Rect2(rock.global_position.x - half, top, half * 2.0, maxf(bottom - top, 1.0)))
+			if node is Node2D and not _rocks.has(node):
+				_add_rock_danger(node as Node2D)
 	return _danger
+
+## Adds the column under `rock` to `_danger` while it is warning or falling.
+func _add_rock_danger(rock: Node2D) -> void:
+	if not is_instance_valid(rock) or not rock.is_inside_tree():
+		return
+	var state: String = rock.call("state_name")
+	if state != "warning" and state != "falling":
+		return
+	var half: float = float(rock.get("rock_radius")) + BODY_RADIUS + ROCK_MARGIN
+	var top: float = (rock.call("rock_position") as Vector2).y
+	var landing: Vector2 = rock.call("landing_point")
+	var bottom: float = landing.y + BODY_RADIUS * 2.0 if not is_nan(landing.y) else top + GROUND_PROBE * 3.0
+	_danger.append(Rect2(rock.global_position.x - half, top, half * 2.0, maxf(bottom - top, 1.0)))
 
 ## Where to go to get out of trouble (issue #176), or Vector2.INF when the
 ## bot is in none: from under a falling rock's warning, out of a hazard's
@@ -1615,6 +1647,14 @@ func _my_slot() -> int:
 
 ## The top of the stage's floor kill zone, or INF where there is none.
 func _lava_top() -> float:
+	var frame: int = Engine.get_physics_frames()
+	# A lava freed or taken out mid-tick is let go of at once, as before.
+	if frame != _lava_top_frame or (_lava != null and (not is_instance_valid(_lava) or not _lava.is_inside_tree())):
+		_lava_top_value = _lava_top_uncached()
+		_lava_top_frame = frame
+	return _lava_top_value
+
+func _lava_top_uncached() -> float:
 	if _lava != null and (not is_instance_valid(_lava) or not _lava.is_inside_tree()):
 		_lava = null
 	var stage_id: int = _stage_instance_id()
@@ -1652,6 +1692,7 @@ func _read_stage() -> void:
 	_saws.clear()
 	_gusts.clear()
 	_danger_frame = -1
+	_footing_frame = -1
 	if _lava == null or _lava.get_parent() == null:
 		return
 	for node: Node in _lava.get_parent().find_children("*", "", true, false):

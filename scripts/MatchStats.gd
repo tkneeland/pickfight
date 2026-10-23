@@ -554,11 +554,20 @@ func best_weapon_of(slots: Array) -> String:
 			best = weapon
 	return best
 
+## The size of the file at `path` in bytes, without reading it in; 0 if it cannot be opened.
+static func _file_size(path: String) -> int:
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return 0
+	var length: int = file.get_length()
+	file.close()
+	return length
+
 ## Appends `line` to `path`. False (never an error) when it cannot be written.
 static func append_line(path: String, line: String) -> bool:
 	if line == "":
 		return false
-	if FileAccess.file_exists(path) and FileAccess.get_file_as_bytes(path).size() > LOG_MAX_BYTES:
+	if FileAccess.file_exists(path) and _file_size(path) > LOG_MAX_BYTES:
 		DirAccess.rename_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(path) + ".1")  # rotate (#609)
 	var file: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)
 	if file == null:
