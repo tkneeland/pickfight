@@ -1,8 +1,9 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Teleporter.tscn" id="tele960"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
 size = Vector2(1440, 40)
@@ -174,3 +175,11 @@ position = Vector2(220, 112)
 [node name="PickupSpawn2" type="Marker2D" parent="."]
 position = Vector2(0, -290)
 
+; Teleporter pair (issue #960): a shortcut up the tower, from Ledge1 (clear of its pickup at x=-250) to Ledge4 (the rung below the summit). Not on the ground, so a shove from a spawn still rings out.
+[node name="TeleporterW" parent="." instance=ExtResource("tele960")]
+position = Vector2(-110, 198)
+twin = NodePath("../TeleporterE")
+
+[node name="TeleporterE" parent="." instance=ExtResource("tele960")]
+position = Vector2(250, -132)
+twin = NodePath("../TeleporterW")
