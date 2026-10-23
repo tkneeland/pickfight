@@ -1529,9 +1529,11 @@ func _run_one(name: String) -> Array[String]:
 	var failures: Array[String] = await _run_scenario(name)
 	get_root().world_2d = world
 	_restore_statics(statics)
+	# A scenario must take down what it put under the root: a live round, relay
+	# or Main left behind keeps running (and holding ports) under every later one.
 	var leaked: int = _live_root_children() - roots_before
 	if leaked > 0:
-		print("LEAKCHECK %s %d" % [name, leaked])
+		failures.append("leaked %d node(s) under the root" % leaked)
 	if not _scenario_completed:
 		failures.append("scenario did not run to completion -- look for a SCRIPT ERROR above")
 	return failures
@@ -30164,6 +30166,7 @@ func _scenario_night_keeps_key_nodes_lit() -> Array[String]:
 	player.queue_free()
 	pickup.queue_free()
 	night.free()
+	await physics_frame # the player's rig goes once the player has left the tree
 	_scenario_completed = true
 	return failures
 func _scenario_night_lamps_steady_with_reduce_flash() -> Array[String]:
