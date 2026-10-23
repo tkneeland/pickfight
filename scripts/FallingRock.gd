@@ -311,29 +311,14 @@ func _strike(victim: Node) -> void:
 	var victim_body := victim as Node2D
 	var to_victim: Vector2 = victim_body.global_position - _rock.global_position
 	var point: Vector2 = _rock.global_position + to_victim.normalized() * rock_radius
-	# Report what the hit actually took off (issue #162): a spawn-protected
-	# player takes nothing, and a report of the full damage would put a
-	# phantom number on screen and buzz their phone. Nothing dealt, nothing
-	# reported; the shove still lands.
-	var before: Variant = victim.get("damage")
-	if victim.has_method("mark_hazard"):
-		victim.mark_hazard("rock")  # achievements (#689)
-	victim.take_damage(damage, point)
-	var after: Variant = victim.get("damage")
-	var dealt: float = damage
-	if before != null and after != null:
-		dealt = float(after) - float(before)
-	if dealt > 0.0 and victim.has_signal("strike_landed"):
-		victim.emit_signal("strike_landed", victim, dealt, point, not victim.alive)
-	if not victim.alive:
-		return
 	var side: float = signf(victim_body.global_position.x - global_position.x)
 	if side == 0.0:
 		side = 1.0
-	var direction: Vector2 = Vector2(side, -SHOVE_LIFT).normalized()
-	var body := victim as RigidBody2D
-	if body != null:
-		body.apply_central_impulse(direction * shove_speed * body.mass)
+	# Only what the hit actually took off is reported (issue #162): a
+	# spawn-protected player takes nothing, and a report of the full damage
+	# would put a phantom number on screen and buzz their phone. The shove
+	# still lands on anyone left standing.
+	PartKitScript.hazard_strike(victim, damage, point, "rock", side, SHOVE_LIFT, shove_speed)
 
 func _shatter() -> void:
 	_state = _RockState.SHATTERED

@@ -95,3 +95,29 @@ static func sfx(from: Node, sound: StringName, at: Vector2, strength: float = 1.
 static func reduce_flash(from: Node) -> bool:
 	var player: Node = from.get_node_or_null(^"/root/Sfx")
 	return player != null and bool(player.get("reduce_flash"))
+
+## A hazard (a falling rock, a meteor) strikes `victim` for `amount` at
+## `point`, down the same path a weapon strike takes: the hazard is marked as
+## `kind` for the achievements (#689), the damage goes through `take_damage()`,
+## and what it actually took off goes out on the victim's own `strike_landed`
+## (issue #162: a spawn-protected player takes nothing, and nothing dealt is
+## nothing reported). A victim still standing is then shoved at `speed` along
+## (`side`, -`lift`) normalised. Returns the damage dealt.
+static func hazard_strike(victim: Node, amount: float, point: Vector2, kind: String, side: float, lift: float,
+		speed: float) -> float:
+	var before: Variant = victim.get("damage")
+	if victim.has_method("mark_hazard"):
+		victim.mark_hazard(kind)
+	victim.take_damage(amount, point)
+	var after: Variant = victim.get("damage")
+	var dealt: float = amount
+	if before != null and after != null:
+		dealt = float(after) - float(before)
+	if dealt > 0.0 and victim.has_signal("strike_landed"):
+		victim.emit_signal("strike_landed", victim, dealt, point, not victim.alive)
+	if not victim.alive:
+		return dealt
+	var body := victim as RigidBody2D
+	if body != null:
+		body.apply_central_impulse(Vector2(side, -lift).normalized() * speed * body.mass)
+	return dealt
