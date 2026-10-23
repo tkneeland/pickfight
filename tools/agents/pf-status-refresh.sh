@@ -12,7 +12,7 @@ prs=$(echo "$iss" | jq '[.[]|select(.pull_request!=null)]|length')
 lm=$(gh pr list -R $REPO -s merged -L 1 --json number,mergedAt -q '.[0]|"\(.number) \(.mergedAt)"' 2>/dev/null)
 ago=""; if [ -n "$lm" ]; then t=$(pf_iso_to_epoch "${lm#* }"); m=$(( ($(date +%s)-t)/60 )); [ $m -ge 60 ] && ago="$((m/60))h ago" || ago="${m}m ago"; fi
 tm=$(pf_triagemaster)
-if [ "$(pf_daynight)" = day ]; then min=$DAY_MIN_AGENTS; else min=$NIGHT_PREFERRED_AGENTS; fi
+min=$(pf_worker_target)
 # running agents = worktrees on an issue branch
 agents=""; n=0
 for b in $(git -C $R worktree list --porcelain | awk '/^branch /{sub("refs/heads/","",$2);print $2}' | grep -E "issue-[0-9]+"); do
