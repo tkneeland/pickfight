@@ -882,6 +882,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"burst_of_action_taps_counts_each_press_601",
 	"respawn_skips_spawns_with_no_floor_605",
 	"respawn_stays_on_own_half_605",
+	"respawn_avoids_hazard_adjacent_spawn",
 	"respawn_alone_does_not_always_pick_spawn0_605",
 	"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648",
 	"soccer_respawn_never_lands_in_a_goal_648",
@@ -3339,6 +3340,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_respawn_skips_spawns_with_no_floor_605()
 		"respawn_stays_on_own_half_605":
 			return await _scenario_respawn_stays_on_own_half_605()
+		"respawn_avoids_hazard_adjacent_spawn":
+			return await _scenario_respawn_avoids_hazard_adjacent_spawn()
 		"respawn_alone_does_not_always_pick_spawn0_605":
 			return await _scenario_respawn_alone_does_not_always_pick_spawn0_605()
 		"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648":
@@ -42855,6 +42858,51 @@ func _scenario_respawn_stays_on_own_half_605() -> Array[String]:
 				failures.append("%s hands its Respawn no own-half filter" % mode_name)
 		await _teardown(mrig["stage"], false)
 	_scenario_completed = true
+	return failures
+## #982: a spawn within 120 px of spikes or a saw is passed over while another
+## is clear; with every spawn near a hazard the old choice stands.
+func _scenario_respawn_avoids_hazard_adjacent_spawn() -> Array[String]:
+	var failures: Array[String] = []
+	var points: Array[Vector2] = [Vector2(-300.0, 400.0), Vector2(300.0, 400.0), Vector2(900.0, 400.0)]
+	var rig: Dictionary = await _respawn_rig_605(points, [-300.0, 300.0, 900.0])
+	if rig.is_empty():
+		return ["the round never started"]
+	rig["players"][1].global_position = Vector2(-300.0, 400.0)
+	var respawn: RefCounted = rig["respawn"]
+	var stage: Node = rig["stage"]
+	# The rig's fighter drifts between ticks; pin it where the scenario wants it.
+	var _pick := func(slot: int) -> Vector2:
+		rig["players"][1].global_position = Vector2(-300.0, 400.0)
+		return respawn.farthest_spawn(slot)
+	# Control: no hazard, the farthest spawn wins as before.
+	if _pick.call(0) != points[2]:
+		failures.append("without a hazard the pick was %s, want the farthest %s" % [_pick.call(0), points[2]])
+	var spikes: Node2D = preload("res://scripts/Spikes.gd").new()
+	spikes.position = Vector2(960.0, 400.0)
+	stage.add_child(spikes)
+	await _await_ticks(2)
+	if _pick.call(0) != points[1]:
+		failures.append("a spawn 60 px from spikes was still picked: %s" % _pick.call(0))
+	# A saw counts at its current position.
+	spikes.position = Vector2(960.0, -2000.0)
+	var saw: Node2D = preload("res://scripts/Saw.gd").new()
+	saw.position = Vector2(900.0, 330.0)
+	stage.add_child(saw)
+	await _await_ticks(2)
+	if _pick.call(0) != points[1]:
+		failures.append("a spawn 70 px from a saw was still picked: %s" % _pick.call(0))
+	saw.position = Vector2(900.0, -2000.0)
+	if _pick.call(0) != points[2]:
+		failures.append("a saw that moved away still blocked the spawn")
+	# Every spawn near a hazard: today's choice.
+	for point: Vector2 in points:
+		var extra: Node2D = preload("res://scripts/Saw.gd").new()
+		extra.position = point + Vector2(0.0, -50.0)
+		stage.add_child(extra)
+	await _await_ticks(2)
+	if _pick.call(0) != points[2]:
+		failures.append("with every spawn near a hazard the pick was %s, want today's %s" % [_pick.call(0), points[2]])
+	await _teardown(stage)
 	return failures
 func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 	var failures: Array[String] = []
