@@ -474,6 +474,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_puppets_track_host",
 	"remote_client_deltas_apply_onto_last_full_snapshot",
 	"remote_client_renders_stage_projectiles_and_pickups",
+	"remote_client_draws_real_player_and_pickup_art_930",
 	"remote_client_interpolates_100ms_behind",
 	"remote_client_esc_menu_resume_and_leave",
 	"remote_client_bad_code_returns_to_join",
@@ -2442,6 +2443,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_deltas_apply_onto_last_full_snapshot()
 		"remote_client_renders_stage_projectiles_and_pickups":
 			return await _scenario_remote_client_renders_stage_projectiles_and_pickups()
+		"remote_client_draws_real_player_and_pickup_art_930":
+			return await _scenario_remote_client_draws_real_player_and_pickup_art_930()
 		"remote_client_interpolates_100ms_behind":
 			return await _scenario_remote_client_interpolates_100ms_behind()
 		"remote_client_esc_menu_resume_and_leave":
@@ -28874,8 +28877,8 @@ func _scenario_remote_client_renders_stage_projectiles_and_pickups() -> Array[St
 	if counts != [2, 1, 1]:
 		failures.append("puppets (players, projectiles, pickups): %s, expected [2, 1, 1]" % [counts])
 	var pickup: Node2D = client._puppets.get("pick9")
-	if pickup == null or pickup.label != RemoteClientScript241._weapon_name(3) or pickup.label.is_empty():
-		failures.append("pickup puppet label is '%s'" % [pickup.label if pickup != null else "<none>"])
+	if pickup == null or pickup.weapon_index != 3 or pickup.pickup_layout()["fallback"]:
+		failures.append("pickup puppet is not drawn as weapon 3's art")
 	var puppet: Node2D = client.player_puppet(1)
 	if puppet == null or puppet.position != Vector2(100, 0) or puppet.damage != 10 or puppet.label != "P1":
 		failures.append("player 1 puppet is wrong")
@@ -28896,6 +28899,31 @@ func _scenario_remote_client_renders_stage_projectiles_and_pickups() -> Array[St
 	await process_frame
 	if client.has_stage() or client._stage_holder.get_child_count() != 0 or client.puppet_count(RcKind241.PLAYER) != 0:
 		failures.append("the stage or puppets stayed on screen outside a round")
+	await _rc_close_241(rig)
+	return failures
+func _scenario_remote_client_draws_real_player_and_pickup_art_930() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	client.looks = {"palette": ["#112233", "#445566"], "looks": [
+		{"slot": 0, "color": 1, "hat": "crown", "eyes": "angry"}, {"slot": 1, "color": 0, "hat": "none", "eyes": "round"}]}
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1)))
+	client._render()
+	var hatted: Node2D = client.player_puppet(0)
+	var bare: Node2D = client.player_puppet(1)
+	if hatted == null or hatted.hat_id() != "crown" or hatted.eyes_id() != "angry":
+		failures.append("player 0 puppet wears hat '%s' eyes '%s', expected crown / angry" % [hatted.hat_id() if hatted != null else "<none>", hatted.eyes_id() if hatted != null else "<none>"])
+	elif hatted.get_node_or_null("Hat") == null or hatted.get_node("Hat").parts("crown").is_empty():
+		failures.append("player 0 puppet has no Hat node with crown art")
+	if hatted != null and hatted.color != Color.html("#445566"):
+		failures.append("player 0 puppet colour %s is not the looks palette's" % hatted.color)
+	if bare != null and bare.hat_id() != "none":
+		failures.append("player 1 puppet should be bare, wears '%s'" % bare.hat_id())
+	if hatted != null and hatted.head_art().size() < 3:
+		failures.append("player puppet has no weapon head art for head_shape_index 1")
+	var pickup: Node2D = client._puppets.get("pick9")
+	if pickup == null or pickup.pickup_layout()["fallback"]:
+		failures.append("pickup puppet still draws the diamond")
 	await _rc_close_241(rig)
 	return failures
 func _scenario_remote_client_interpolates_100ms_behind() -> Array[String]:
