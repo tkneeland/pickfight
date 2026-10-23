@@ -10,8 +10,10 @@ snap=$PF_STATE/usage-snapshot.json
 # Stamp the beacon with when the snapshot was taken, not now: if the status line stops running, the
 # beacon must look stale instead of republishing old numbers as fresh.
 sat=$(pf_mtime "$snap")
-body=$(jq -r --arg a "$PF_ACCOUNT" --argjson sat "$sat" '
-  "\($a) usage @ \($sat|todate)\n5h: \(.rate_limits.five_hour.used_percentage // "?")% (resets \(.rate_limits.five_hour.resets_at // 0|todate))\n7d: \(.rate_limits.seven_day.used_percentage // "?")% (resets \(.rate_limits.seven_day.resets_at // 0|todate))\n<!-- usage \({account:$a, at:$sat, posted:(now|floor), five_hour:.rate_limits.five_hour, seven_day:.rate_limits.seven_day}|tojson) -->"' "$snap") \
+# running worker agents = this checkout's worktrees on an issue branch (the status line counts them the same way)
+agents=$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | grep -cE '^branch refs/heads/.*issue-[0-9]+')
+body=$(jq -r --arg a "$PF_ACCOUNT" --argjson sat "$sat" --argjson ag "${agents:-0}" '
+  "\($a) usage @ \($sat|todate)\n5h: \(.rate_limits.five_hour.used_percentage // "?")% (resets \(.rate_limits.five_hour.resets_at // 0|todate))\n7d: \(.rate_limits.seven_day.used_percentage // "?")% (resets \(.rate_limits.seven_day.resets_at // 0|todate))\nagents: \($ag)\n<!-- usage \({account:$a, at:$sat, posted:(now|floor), agents:$ag, five_hour:.rate_limits.five_hour, seven_day:.rate_limits.seven_day}|tojson) -->"' "$snap") \
   || { log "bad snapshot"; exit 1; }
 idf=$PF_STATE/.beacon-comment-id; id=$(cat "$idf" 2>/dev/null)
 if [ -z "$id" ]; then
