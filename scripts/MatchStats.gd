@@ -35,11 +35,14 @@ const HAYMAKER: String = "HAYMAKER"
 const STREAKER: String = "STREAKER"
 const COMBO: String = "COMBO"
 const SHARPSHOOTER: String = "SHARPSHOOTER"
+const JACK: String = "JACK"
 
 ## Weapon ids whose last hit makes a KO a ranged KO (#953).
 const RANGED_WEAPONS: PackedStringArray = ["boomstick", "boomerang"]
 ## The fewest ranged KOs that earn Sharpshooter (#953).
 const SHARPSHOOTER_MIN: int = 2
+## The fewest distinct weapons that earn Jack of All Trades (#970).
+const JACK_MIN: int = 3
 
 ## The shortest unbroken KO run that earns Streaker (#890).
 const STREAKER_MIN: int = 3
@@ -379,7 +382,32 @@ func extra_awards(slots: Array) -> Array[Dictionary]:
 	var sniper: int = _sharpshooter(slots)
 	if sniper != -1:
 		out.append(_award(SHARPSHOOTER, TranslationServer.translate("AWARD_SHARPSHOOTER"), sniper, TranslationServer.translate("DETAIL_SHARPSHOOTER") % int(ranged_kos[sniper])))
+	var jack: int = _jack(slots)
+	if jack != -1:
+		out.append(_award(JACK, TranslationServer.translate("AWARD_JACK"), jack, TranslationServer.translate("DETAIL_JACK") % _distinct_weapons(jack)))
 	return out
+
+func _distinct_weapons(slot: int) -> int:
+	return (slot_weapon_hits.get(slot, {}) as Dictionary).size()
+
+## "Jack of All Trades" (#970): the most distinct weapons that landed a hit,
+## given only when it is at least JACK_MIN and strictly beats every other
+## fighter's. Reads slot_weapon_hits, which holds real players only.
+func _jack(slots: Array) -> int:
+	var top: int = 0
+	var who: int = -1
+	var tied: bool = false
+	for slot: int in slots:
+		var n: int = _distinct_weapons(slot)
+		if n > top:
+			top = n
+			who = slot
+			tied = false
+		elif n == top and n > 0:
+			tied = true
+	if who == -1 or tied or top < JACK_MIN:
+		return -1
+	return who
 
 ## "Sharpshooter" (#953): the most ranged KOs, given only when it is at least
 ## SHARPSHOOTER_MIN and strictly beats every other fighter's.

@@ -3,6 +3,7 @@ AWARD_BUTTERFINGERS,Butterfingers,Butterfinger,Doigts de beurre,Manos de mantequ
 AWARD_CATEGORY_AIRBORNE,AIRBORNE,LUFTIG,EN L'AIR,AÉREO,NO AR,腾空,空中,공중,ВОЗДУХ
 AWARD_CATEGORY_CLUMSY,CLUMSY,TOLPATSCH,MALADROIT,TORPE,DESAJEITADO,笨手笨脚,ドジ,덤벙,НЕУКЛЮЖИЙ
 AWARD_CATEGORY_COLLECTOR,COLLECTOR,SAMMLER,COLLECTIONNEUR,COLECCIONISTA,COLECIONADOR,收集,コレクター,수집,КОЛЛЕКЦИОНЕР
+AWARD_CATEGORY_JACK,JACK OF ALL TRADES,ALLESKÖNNER,TOUCHE-À-TOUT,TODOTERRENO,FAZ-TUDO,全能手,万能選手,만능선수,УНИВЕРСАЛ
 AWARD_CATEGORY_COMBO,COMBO,KOMBO,COMBO,COMBO,COMBO,连击,コンボ,콤보,КОМБО
 AWARD_CATEGORY_SHARPSHOOTER,SHARPSHOOTER,SCHARFSCHÜTZE,TIREUR D'ÉLITE,TIRADOR,ATIRADOR,神枪手,スナイパー,명사수,СНАЙПЕР
 AWARD_CATEGORY_COMBAT,COMBAT,KAMPF,COMBAT,COMBATE,COMBATE,战斗,バトル,전투,БОЙ
@@ -14,6 +15,7 @@ AWARD_HEAVY_HITTER,Heavy Hitter,Schwergewicht,Poids lourd,Peso pesado,Peso pesad
 AWARD_LONGEST_AIRTIME,Longest Airtime,Längste Flugzeit,Plus long vol,Más tiempo en el aire,Maior tempo no ar,滞空最久,最長滞空,최장 체공,Дольше всех в полёте
 AWARD_MAGPIE,Magpie,Elster,Pie voleuse,Urraca,Pega,喜鹊,カササギ,까치,Сорока
 AWARD_HAYMAKER,Haymaker,Hammerschlag,Uppercut,Puñetazo,Pancada,重拳出击,強烈な一撃,강타,Хук
+AWARD_JACK,Jack of All Trades,Alleskönner,Touche-à-tout,Todoterreno,Faz-tudo,全能手,万能選手,만능선수,Универсал
 AWARD_COMBO,Combo,Kombo,Combo,Combo,Combo,连击,コンボ,콤보,Комбо
 AWARD_SHARPSHOOTER,Sharpshooter,Scharfschütze,Tireur d'élite,Tirador certero,Atirador de elite,神枪手,スナイパー,명사수,Снайпер
 AWARD_STREAKER,Streaker,Serienkiller,En série,Racha,Sequência,连杀王,連勝王,연속 킬,Серийник
@@ -58,6 +60,7 @@ TITLE_SOLO_HINT,You against 3 bots,Du gegen 3 Bots,Toi contre 3 bots,Tú contra 
 DETAIL_AIRBORNE,%.1fs airborne,%.1fs in der Luft,%.1f s en l'air,%.1f s en el aire,%.1f s no ar,腾空 %.1f 秒,滞空 %.1f秒,체공 %.1f초,%.1f с в воздухе
 DETAIL_ALIVE,%s alive,%s am Leben,%s en vie,%s con vida,%s vivos,存活 %s,生存 %s,생존 %s,Жив: %s
 DETAIL_HAYMAKER,%d damage in one hit,%d Schaden in einem Treffer,%d de dégâts en un coup,%d de daño de un golpe,%d de dano em um golpe,一击造成 %d 伤害,一撃で %d ダメージ,한 방에 피해 %d,%d урона одним ударом
+DETAIL_JACK,%d different weapons,%d verschiedene Waffen,%d armes différentes,%d armas distintas,%d armas diferentes,%d 种不同武器,%d種類の武器,무기 %d종,%d разных оружия
 DETAIL_COMBO,%d KOs in 3s,%d KOs in 3 s,%d KO en 3 s,%d KO en 3 s,%d KOs em 3 s,3 秒内 %d 次击倒,3秒で%d KO,3초 내 %d KO,%d KO за 3 с
 DETAIL_SHARPSHOOTER,%d ranged KOs,%d Fernkampf-KOs,%d KO à distance,%d KO a distancia,%d KOs à distância,%d 次远程击倒,遠距離で%d KO,원거리 %d KO,%d KO издалека
 DETAIL_STREAK,%d in a row,%d am Stück,%d d'affilée,%d seguidos,%d seguidos,连续 %d 次,%d連続,%d연속,%d подряд
