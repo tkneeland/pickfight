@@ -915,12 +915,13 @@ var _hook_aim: Vector2 = Vector2.RIGHT
 func _hook_drive(delta: float) -> Vector2:
 	_hook_cd = maxf(_hook_cd - delta, 0.0)
 	var stats: Variant = player.get("weapon_stats")
-	if not (stats is Resource) or (stats as Resource).get("special") != &"grapple" \
-			or not player.has_method("launched_hook"):
+	var special: Variant = (stats as Resource).get("special") if stats is Resource else null
+	var throws: bool = special == &"boomerang"
+	if not (special == &"grapple" or throws) or not player.has_method("launched_hook"):
 		_hook_phase = 0
 		return Vector2.INF
 	var hook: Node2D = player.launched_hook()
-	if hook != null:
+	if hook != null and not throws:
 		_hook_phase = 2
 		# Hold the drag only while the hook flies or is doing its job (stuck
 		# or reeling), and let go once the zip or reel has closed in or the
@@ -943,7 +944,7 @@ func _hook_drive(delta: float) -> Vector2:
 		return Vector2.INF
 	if _hook_cd > 0.0 or not player.special_ready():
 		return Vector2.INF
-	var aim: Vector2 = _hook_aim_now()
+	var aim: Vector2 = _boomerang_aim_now() if throws else _hook_aim_now()
 	if aim == Vector2.INF:
 		return Vector2.INF
 	_hook_aim = aim
@@ -956,6 +957,25 @@ func _hook_drive(delta: float) -> Vector2:
 ## Seconds between hook casts on this bot's level: the rod's or the grapple's.
 func hook_cooldown_sec(reels: bool) -> float:
 	return react_sec(ROD_COOLDOWN_SEC if reels else GRAPPLE_COOLDOWN_SEC)
+
+## Issue #932: the boomerang's flick aim at the current target, or Vector2.INF.
+## A living rival (never a teammate) within BOOMERANG_RANGE_FRACTION of the
+## launch range and past melee reach, in a gentle line of sight; no drop
+## correction, it flies straight.
+const BOOMERANG_RANGE_FRACTION: float = 0.8
+func _boomerang_aim_now() -> Vector2:
+	if not (_alive(_target) and _target.is_in_group("players")):
+		return Vector2.INF
+	if player.has_method("is_teammate") and player.is_teammate(_target):
+		return Vector2.INF
+	var me: Vector2 = player.global_position
+	var to: Vector2 = _target.global_position - me
+	var dist: float = to.length()
+	if dist > _stat("launch_range", 0.0) * BOOMERANG_RANGE_FRACTION or dist <= _reach() + ZIP_MELEE_MARGIN:
+		return Vector2.INF
+	if absf(to.y) > HOOK_MAX_SLOPE * absf(to.x) + 40.0 or _ray_hits(me, _target.global_position):
+		return Vector2.INF
+	return to.normalized()
 
 ## Where to flick, as a unit vector (aimed a little high for the hook's arc),
 ## or Vector2.INF when nothing is worth a cast now.

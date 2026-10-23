@@ -120,6 +120,9 @@ var ctf_captures: int = 2
 ## The host PC seat's saved look (#441): {"hat", "eyes", "color"} as
 ## `CosmeticsPicker.clean_pick` cleans it, put on whenever the seat is claimed.
 var cosmetic_pick: Dictionary = {"hat": "none", "eyes": "round", "color": -1}
+## The host PC seat's nickname (#937), as `ControllerServer.clean_name` left it;
+## "" shows the default "Host".
+var host_name: String = ""
 ## Every stage in the rotation, set by `StageRotation`. The last-one rule
 ## counts against it.
 var known_stages: PackedStringArray = []
@@ -475,6 +478,7 @@ func restore_defaults() -> void:
 	bot_difficulty = "normal"
 	ctf_captures = 2
 	cosmetic_pick = {"hat": "none", "eyes": "round", "color": -1}
+	host_name = ""
 	save_settings()
 func _set_enabled(disabled: PackedStringArray, known: PackedStringArray, item: String, enabled: bool) -> bool:
 	var index: int = disabled.find(item)
@@ -495,6 +499,11 @@ func _set_enabled(disabled: PackedStringArray, known: PackedStringArray, item: S
 ## Saves the host PC seat's pick (#441), cleaned.
 func set_cosmetic_pick(pick: Dictionary) -> void:
 	cosmetic_pick = (load("res://scripts/CosmeticsPicker.gd") as GDScript).clean_pick(pick)
+	save_settings()
+
+## Saves the host PC seat's nickname (#937); the caller cleans it.
+func set_host_name(text: String) -> void:
+	host_name = text
 	save_settings()
 
 ## A stored string list, or empty when it is any other type (#609).
@@ -580,6 +589,8 @@ func load_settings() -> void:
 		var limit: Variant = config.get_value(SECTION, "stock_time_limit", 480)
 		stock_time_limit = int(limit) if limit is int and STOCK_TIME_LIMITS.has(int(limit)) else 480
 		cosmetic_pick = (load("res://scripts/CosmeticsPicker.gd") as GDScript).read_pick(config, SECTION)
+		var saved_name: Variant = config.get_value(SECTION, "host_name", "")
+		host_name = saved_name if saved_name is String else ""
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("HostSettings: could not read %s (%s); using the defaults" % [path, error_string(err)])
 
@@ -615,6 +626,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "ctf_captures", ctf_captures)
 	config.set_value(SECTION, "stock_time_limit", stock_time_limit)
 	(load("res://scripts/CosmeticsPicker.gd") as GDScript).write_pick(config, SECTION, cosmetic_pick)
+	config.set_value(SECTION, "host_name", host_name)
 	err = config.save(path)
 	if err != OK:
 		push_warning("HostSettings: could not save to %s (%s)" % [path, error_string(err)])
