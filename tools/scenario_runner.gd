@@ -1160,6 +1160,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_keeps_same_podium_and_resets_title_colour_review_ui",
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
+	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -3910,6 +3911,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_settings_language_change_rewords_every_label_review_ui()
 		"credits_cover_the_settings_toggle_review_ui":
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
+		"ice_patches_overlapping_keep_grip_off_refactor_modes":
+			return await _scenario_ice_patches_overlapping_keep_grip_off_refactor_modes()
 		"controller_page_review_fixes_refactor_phone":
 			return _scenario_controller_page_review_fixes_refactor_phone()
 		_:
@@ -54217,6 +54220,43 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	await process_frame
 	PadMenuScript368.reset()
 	_scenario_completed = true
+	return failures
+## Two overlapping ice patches (refactor of IcePatch): a player standing where
+## both overlap is held on the ice by both, and taking either patch away
+## leaves the grip off while the other is still underfoot; only with both gone
+## is the player's own material back.
+func _scenario_ice_patches_overlapping_keep_grip_off_refactor_modes() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var left: StaticBody2D = IcePatchScene.instantiate() as StaticBody2D
+	left.size = Vector2(300, 8)
+	left.position = PART_POSITION + Vector2(-100, 0)
+	stage.add_child(left)
+	var right: StaticBody2D = IcePatchScene.instantiate() as StaticBody2D
+	right.size = Vector2(300, 8)
+	right.position = PART_POSITION + Vector2(100, 0)
+	stage.add_child(right)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -4.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	var before: PhysicsMaterial = player.physics_material_override
+	for _tick in ICE_SETTLE_TICKS:
+		await physics_frame
+	if not left.is_icing(player) or not right.is_icing(player):
+		failures.append("a player on both patches was held by left=%s right=%s, expected both" % [left.is_icing(player), right.is_icing(player)])
+	var ice: PhysicsMaterial = player.physics_material_override
+	if ice == before:
+		failures.append("a player on the ice did not get the ice material")
+	# The left patch goes first, then the right one.
+	for patch: StaticBody2D in [left, right]:
+		var still_on: bool = patch == left
+		stage.remove_child(patch)
+		patch.queue_free()
+		await physics_frame
+		if still_on and player.physics_material_override != ice:
+			failures.append("taking the left patch away gave the grip back while the right one is still underfoot")
+		if not still_on and player.physics_material_override != before:
+			failures.append("the player's own material was not back once both patches were gone")
+	await _teardown(stage)
 	return failures
 ## Phone page review fixes, read off controller/index.html as shipped: the input
 ## packet is reused but still sent every frame (ADR-0002), an idle pad skips its
