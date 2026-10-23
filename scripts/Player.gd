@@ -894,8 +894,14 @@ func _build_rig() -> void:
 	_rig.reset_physics_interpolation()
 	_haft_tip_before = Vector2(NAN, NAN)
 	_haft_tip_at_tick_end = Vector2(NAN, NAN)
-	# A fresh head is built solid.
+	# A fresh head is built solid, at rest, out of the terrain, and with no
+	# swing carried over from the rig it replaces.
 	_release_time = 0.0
+	_embedded_time = 0.0
+	_head_velocity = Vector2.ZERO
+	_head_terrain_ticks = 0
+	_swing_rate = 0.0
+	_swing_tracking = false
 
 func _clear_rig() -> void:
 	if _rig == null:
@@ -1652,24 +1658,38 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 	var amount: float = _strike_damage(speed)
 	if stomp:
 		# One stomp is one hit: the head, the body and the sweep all see the
-		# same landing within a few ticks.
+		# same landing within a few ticks. The lock is only taken once the stomp
+		# really lands below, so a too-slow touch or a teammate underfoot does
+		# not swallow the next real stomp.
 		if _stomp_lock > 0.0:
 			return
-		_stomp_lock = POGO_STOMP_LOCK
 		amount = _stomp_damage(speed)
 	if _stats.stab_multiplier != 1.0 and _is_stab():
 		amount = minf(amount * _stats.stab_multiplier, MAX_STRIKE_DAMAGE)
 	if amount <= 0.0 and speed <= knockback_threshold:
 		return
-	var point: Vector2 = _strike_point(victim)
 	if is_teammate(victim):
 		return
+	if stomp:
+		_stomp_lock = POGO_STOMP_LOCK
+	var bash: Callable = _shield_bash if _stats.special == &"shield" else Callable()
+	_deliver_hit(victim, amount, _strike_point(victim), true, bash)
+
+## Every hit ends here -- a strike, a bullet, a flail ball: nothing for a
+## teammate, nothing taken through spawn protection, the damage through the
+## victim's `take_damage()` (`recoil` false for a shot), then `before_report`
+## (the shield's bash) and the hit reported as `strike_landed`. Returns the
+## damage the victim took.
+func _deliver_hit(victim: Node, amount: float, point: Vector2, recoil: bool = true, before_report: Callable = Callable()) -> float:
+	if is_teammate(victim):
+		return 0.0
 	if victim.get("spawn_protected") == true:
 		amount = 0.0
-	amount = victim.take_damage(amount, point, self)
-	if _stats.special == &"shield":
-		_shield_bash(victim)
+	amount = victim.take_damage(amount, point, self, recoil)
+	if before_report.is_valid():
+		before_report.call(victim)
 	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
+	return amount
 
 ## Whether the head's motion relative to the body is a stab: pointed mostly
 ## straight out along the haft rather than across it. Read here, not off
@@ -1714,12 +1734,16 @@ func _strike_point(victim: Node2D) -> Vector2:
 ## sweep: three clean strikes to kill, and two if the head is carried in by a
 ## body already moving. Stick Fight's punch weight would be ten or more and
 ## rounds would drag, which ADR-0005 warns about by name.
-func _strike_damage(speed: float) -> float:
+## `base` is the full-speed damage, the weapon's `damage` unless given (the
+## flail's ball passes its `ball_damage`).
+func _strike_damage(speed: float, base: float = -1.0) -> float:
 	var over: float = speed - MIN_STRIKE_SPEED
 	if over <= 0.0:
 		return 0.0
+	if base < 0.0:
+		base = _stats.damage
 	var strike_scale: float = minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
-	return minf(_stats.damage * strike_scale, MAX_STRIKE_DAMAGE)
+	return minf(base * strike_scale, MAX_STRIKE_DAMAGE)
 
 # --- Firing (issue #55, ADR-0014) --------------------------------------------
 #
@@ -1774,14 +1798,10 @@ func _fire() -> void:
 func land_projectile_hit(victim: Node, amount: float, point: Vector2, weapon_id: String = "") -> void:
 	if victim == self or not victim.alive:
 		return
-	if is_teammate(victim):
-		return
-	if victim.get("spawn_protected") == true:
-		amount = 0.0
-	amount = victim.take_damage(amount, point, self, false)
 	# Issue #516: the weapon that fired the bullet, not the one held on arrival.
+	# Only `strike_landed`'s handlers read it.
 	hit_weapon_id = weapon_id
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
+	_deliver_hit(victim, amount, point, false)
 	hit_weapon_id = ""
 
 ## Issue #516: weapon id (file basename) credited with the hit being reported
@@ -2299,11 +2319,7 @@ func _on_ball_hit(body: Node) -> void:
 func _land_ball_strike(victim: Node, speed: float) -> void:
 	if not victim.alive:
 		return
-	var amount: float = 0.0
-	var over: float = speed - MIN_STRIKE_SPEED
-	if over > 0.0:
-		var strike_scale: float = minf(over / (FULL_STRIKE_SPEED - MIN_STRIKE_SPEED), MAX_STRIKE_SCALE)
-		amount = minf(_stats.ball_damage * strike_scale, MAX_STRIKE_DAMAGE)
+	var amount: float = _strike_damage(speed, _stats.ball_damage)
 	if amount <= 0.0 and speed <= knockback_threshold:
 		return
 	var ball: RigidBody2D = _flail.ball
@@ -2312,12 +2328,7 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 	if amount > 0.0 and victim is RigidBody2D:
 		var shove: float = minf(speed * ball.mass * float(_stats.ball_knockback), BALL_KNOCKBACK_MAX)
 		(victim as RigidBody2D).apply_central_impulse(toward * shove)
-	if is_teammate(victim):
-		return
-	if victim.get("spawn_protected") == true:
-		amount = 0.0
-	amount = victim.take_damage(amount, point, self)
-	strike_landed.emit(victim, amount, point, _strike_was_lethal(victim, amount, point))
+	_deliver_hit(victim, amount, point)
 
 # --- Umbrella (issue #269) ---------------------------------------------------
 #

@@ -1090,6 +1090,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"controller_page_review_fixes_review_net",
 	"stage_check_and_join_urls_cached_review_perf",
 	"bot_chops_wall_at_every_difficulty_review_bp",
+	"pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp",
+	"rebuilt_rig_resets_head_and_swing_state_review_bp",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3643,6 +3645,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_check_and_join_urls_cached_review_perf()
 		"bot_chops_wall_at_every_difficulty_review_bp":
 			return await _scenario_bot_chops_wall_at_every_difficulty_review_bp()
+		"pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp":
+			return await _scenario_pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp()
+		"rebuilt_rig_resets_head_and_swing_state_review_bp":
+			return await _scenario_rebuilt_rig_resets_head_and_swing_state_review_bp()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -51522,4 +51528,56 @@ func _scenario_bot_chops_wall_at_every_difficulty_review_bp() -> Array[String]:
 			failures.append("a bot on %s never broke Reactor's shield in 120 s" % level)
 		await _teardown(stage, false)
 	_scenario_completed = true
+	return failures
+## Review (player): a pogo stomp's 0.5 s lock is taken only by a stomp that
+## lands. Landing on a teammate, or a touch too slow to be a stomp, leaves the
+## next real stomp free; a real stomp still locks out the one straight after.
+func _scenario_pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var pogo: RigidBody2D = _spawn_player(stage, Vector2(-200, 274))
+	pogo.set_weapon_stats(load(POGO_PATH))
+	var mate: RigidBody2D = _spawn_player(stage, Vector2(0, 274))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(200, 274))
+	pogo.team = 0
+	mate.team = 0
+	rival.team = 1
+	await _await_ticks(2)
+	var fast: float = float(pogo.weapon_stats.pogo_launch_speed)
+	pogo._land_strike(mate, fast, true)
+	if mate.damage > 0.0:
+		failures.append("the stomp hurt a teammate")
+	pogo._land_strike(rival, fast, true)
+	var first: float = rival.damage
+	if first <= 0.0:
+		failures.append("a stomp on a teammate swallowed the real stomp after it")
+	pogo._land_strike(rival, fast, true)
+	if rival.damage != first:
+		failures.append("a second stomp straight after a real one landed (lock not taken)")
+	await _await_ticks(int(ceil(pogo.POGO_STOMP_LOCK * 60.0)) + 2)
+	pogo._land_strike(rival, 0.0, true)
+	pogo._land_strike(rival, fast, true)
+	if rival.damage <= first:
+		failures.append("a too-slow touch swallowed the real stomp after it")
+	print("      rival damage %.1f after two stomps (first %.1f)" % [rival.damage, first])
+	await _teardown(stage)
+	return failures
+## Review (player): a rebuilt rig starts clean -- no embedded time, head
+## velocity, terrain contact or swing carried over from the rig it replaced.
+func _scenario_rebuilt_rig_resets_head_and_swing_state_review_bp() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 274))
+	await _await_ticks(3)
+	player._embedded_time = 5.0
+	player._head_velocity = Vector2(900, 0)
+	player._head_terrain_ticks = 3
+	player._swing_rate = 10.0
+	player._swing_tracking = true
+	player._build_rig()
+	if player._embedded_time != 0.0 or player._head_velocity != Vector2.ZERO or player._head_terrain_ticks != 0 \
+			or player._swing_rate != 0.0 or player._swing_tracking:
+		failures.append("the new rig kept state: embedded %.1f, velocity %s, terrain %d, swing %.1f/%s" % [
+				player._embedded_time, player._head_velocity, player._head_terrain_ticks, player._swing_rate, player._swing_tracking])
+	await _teardown(stage)
 	return failures
