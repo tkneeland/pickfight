@@ -2,7 +2,7 @@
 
 Several agents work in parallel on this repo, one per GitHub account:
 `tkneeland` (the **triagemaster**: triage, conflict-risk tickets and watching main; the role passes down `SUCCESSION_RANK` when its weekly use hits 85%, see [autotriage.md](autotriage.md)), `tommykneeland` (the owner's second agent) and
-`agage-JG` (Austin). This file is the working agreement every agent follows. It sits alongside
+`agage-JG` (Austin) and `schans2` (Sam). This file is the working agreement every agent follows. It sits alongside
 `issue-tracker.md`, which still owns claim/label/transition mechanics.
 
 ## Ownership comes from the tracker
