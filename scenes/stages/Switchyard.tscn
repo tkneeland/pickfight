@@ -1,10 +1,11 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
 [ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="spin"]
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
+[ext_resource type="PackedScene" path="res://scenes/parts/SpeedStrip.tscn" id="speed"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_850x40"]
 size = Vector2(850, 40)
@@ -162,3 +163,11 @@ position = Vector2(0, 150)
 [node name="PickupSpawn4" type="Marker2D" parent="."]
 position = Vector2(-400, 330)
 
+; Speed strips (issue #961): a mirrored pair of fast lanes on the yards between the spawn drops and the bounce pads, 200 px from the gap and far from the outer edge.
+[node name="YardSpeedStripLeft" parent="." instance=ExtResource("speed")]
+position = Vector2(-600, 404)
+size = Vector2(300, 8)
+
+[node name="YardSpeedStripRight" parent="." instance=ExtResource("speed")]
+position = Vector2(600, 404)
+size = Vector2(300, 8)

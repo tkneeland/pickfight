@@ -1,10 +1,11 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="ledge315"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Spikes.tscn" id="spikes"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Conveyor.tscn" id="conveyor"]
+[ext_resource type="PackedScene" path="res://scenes/parts/SpeedStrip.tscn" id="speed"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
 size = Vector2(1440, 40)
@@ -126,3 +127,8 @@ size = Vector2(100, 24)
 position = Vector2(-335, 294)
 size = Vector2(300, 12)
 belt_speed = 140.0
+
+; Speed strip (issue #961): a fast lane on the floor between the middle spawns and the spikes, clear of every spawn drop line and 450 px from the open edge.
+[node name="FloorSpeedStrip" parent="." instance=ExtResource("speed")]
+position = Vector2(262, 304)
+size = Vector2(190, 8)
