@@ -7914,7 +7914,8 @@ func _scenario_stage_pickup_spawns_are_safe() -> Array[String]:
 					path, i, kill_zone.global_position.y - points[i].y, PICKUP_KILLZONE_CLEARANCE])
 			pickup.queue_free()
 			await _await_ticks(2)
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## How much of the world a circle of this size at this spot runs into: stage
 ## geometry and the kill zone both sit on the world layer, so one query
@@ -8550,7 +8551,7 @@ func _scenario_rising_kill_zone_eliminates_holdout() -> Array[String]:
 		var instance: Node2D = await _await_live_stage(loop)
 		if instance == null:
 			failures.append("round never started on %s" % path)
-			await _teardown(loop["stage"])
+			await _teardown(loop["stage"], false)
 			continue
 		var ticks: int = 0
 		while ticks <= deadline and players[0].alive and players[1].alive:
@@ -8563,7 +8564,8 @@ func _scenario_rising_kill_zone_eliminates_holdout() -> Array[String]:
 		elif ticks < earliest:
 			failures.append("%s: a holdout died %.2f s in, before the rise could have reached it (%.2f s)" % [
 				path, ticks / tps, earliest / tps])
-		await _teardown(loop["stage"])
+		await _teardown(loop["stage"], false)
+	_scenario_completed = true
 	return failures
 ## Ticks the hazard scenario lets the floor rise for: well past its short
 ## grace, far enough that a hazard carried along would be obvious, and short
@@ -8580,7 +8582,7 @@ func _scenario_hazard_never_rises() -> Array[String]:
 		var instance: Node2D = await _await_live_stage(loop)
 		if instance == null:
 			failures.append("round never started on %s" % path)
-			await _teardown(loop["stage"])
+			await _teardown(loop["stage"], false)
 			continue
 		var floor_zone: Node2D = instance.get_node("KillZone")
 		var hazards: Array[Node2D] = []
@@ -8599,7 +8601,8 @@ func _scenario_hazard_never_rises() -> Array[String]:
 			if hazards[i].global_position != authored[i]:
 				failures.append("%s: hazard %s moved from %s to %s" % [
 					path, hazards[i].name, authored[i], hazards[i].global_position])
-		await _teardown(loop["stage"])
+		await _teardown(loop["stage"], false)
+	_scenario_completed = true
 	return failures
 ## Each round's stage is instanced fresh, so its kill zone starts from the
 ## height its own scene authored and waits out a whole new grace period --
@@ -8988,7 +8991,7 @@ func _scenario_stage_four_spawns_settle_together() -> Array[String]:
 		var inside: Rect2 = view.grow(-PLAYER_RADIUS)
 		if spawns.size() < 4:
 			failures.append("%s: declared %d spawn point(s), four players need 4" % [path, spawns.size()])
-			await _teardown(stage)
+			await _teardown(stage, false)
 			continue
 		var players: Array[RigidBody2D] = []
 		for i in 4:
@@ -9014,7 +9017,8 @@ func _scenario_stage_four_spawns_settle_together() -> Array[String]:
 				var gap: float = player.global_position.distance_to(players[j].global_position)
 				if gap < 2.0 * PLAYER_RADIUS - FOUR_SPAWN_OVERLAP_ALLOWANCE:
 					failures.append("%s spawns %d and %d: bodies overlap, centres %.1f px apart" % [path, i, j, gap])
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## Issue #36 (amending ADR-0009): the stage holds at most one pickup fewer
 ## than the roster, and never fewer than two at once -- two for two or three
@@ -9030,7 +9034,7 @@ func _scenario_pickup_cap_scales_with_roster() -> Array[String]:
 		var players: Array[RigidBody2D] = loop["players"]
 		if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
 			failures.append("%d players: a round never started" % count)
-			await _teardown(loop["stage"])
+			await _teardown(loop["stage"], false)
 			continue
 		var deadline: int = _game_msec() + int(PICKUP_SHORT_INTERVAL_SEC * 1000.0) * PICKUP_INTERVAL_WINDOW
 		var peak: int = 0
@@ -9041,7 +9045,8 @@ func _scenario_pickup_cap_scales_with_roster() -> Array[String]:
 		if peak != expected:
 			failures.append("%d players: the stage held at most %d pickups at once, the cap should be %d" % [
 				count, peak, expected])
-		await _teardown(loop["stage"])
+		await _teardown(loop["stage"], false)
+	_scenario_completed = true
 	return failures
 # --- Issue #34: phone buzz feedback (ADR-0013) ------------------------------
 ## How long a phone waits for a buzz frame it should get, and how long the
@@ -11090,7 +11095,8 @@ func _scenario_ice_patch_two_more_stages_spawns_clear() -> Array[String]:
 					continue
 				if absf(marker.position.x - ice.position.x) <= half_x + PLAYER_RADIUS:
 					failures.append("%s %s at x=%.0f is over the ice" % [stage_name, child.name, marker.position.x])
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## Overpass (#910) carries exactly one mud patch on its street; no spawn,
 ## pickup spot, hill spot, bounce pad or drain edge sits on or within 40 px of it.
@@ -14336,7 +14342,7 @@ func _scenario_stage_backgrounds_draw_behind_everything() -> Array[String]:
 		var background: Node2D = instance.get_background() if instance.has_method("get_background") else null
 		if background == null:
 			failures.append("%s: no background" % path)
-			await _teardown(holder)
+			await _teardown(holder, false)
 			continue
 		var layers: int = background.get_layer_count()
 		if layers < BACKGROUND_MIN_LAYERS or layers > BACKGROUND_MAX_LAYERS:
@@ -14372,7 +14378,8 @@ func _scenario_stage_backgrounds_draw_behind_everything() -> Array[String]:
 		elif back_top >= lowest:
 			failures.append("%s: the backdrop draws at z %d, not below %s at z %d" % [
 				path, back_top, lowest_name, lowest])
-		await _teardown(holder)
+		await _teardown(holder, false)
+	_scenario_completed = true
 	return failures
 ## The stage paths RoundManager rotates through in scenes/Main.tscn, read
 ## from the packed scene's state without instancing it (which would start a
@@ -16166,7 +16173,7 @@ func _scenario_every_stage_has_eight_safe_spawns() -> Array[String]:
 		if spawns.size() < EIGHT_SPAWNS:
 			failures.append("%s: declared %d spawn point(s), eight players need %d" % [
 				path, spawns.size(), EIGHT_SPAWNS])
-			await _teardown(stage)
+			await _teardown(stage, false)
 			continue
 		var players: Array[RigidBody2D] = []
 		for i in EIGHT_SPAWNS:
@@ -16197,7 +16204,8 @@ func _scenario_every_stage_has_eight_safe_spawns() -> Array[String]:
 				if gap < 2.0 * PLAYER_RADIUS - FOUR_SPAWN_OVERLAP_ALLOWANCE:
 					failures.append("%s spawns %d and %d: bodies overlap, centres %.1f px apart" % [path, i, j, gap])
 		print("      %s: %d spawns, %d of 8 settled together" % [path.get_file(), spawns.size(), settled])
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## The share of the fixed camera's width a stage's terrain must span.
 const TERRAIN_MIN_VIEW_FRACTION: float = 0.8
@@ -16242,7 +16250,8 @@ func _scenario_every_stage_terrain_spans_the_view() -> Array[String]:
 		if width < need:
 			failures.append("%s: terrain spans %.0f px of the %.0f px view, needs %.0f" % [
 				path, width, view.size.x, need])
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## The on-screen x-extent of every enabled collision shape on a static body
 ## (AnimatableBody2D included) under `node`, clipped to `view`.
@@ -16387,7 +16396,8 @@ func _scenario_stage_platforms_leave_headroom_over_the_floor() -> Array[String]:
 					path.get_file(), p["node"], best_gap, PLATFORM_HEADROOM_MIN,
 					plat.position.x, plat.end.x, plat.position.y, plat.end.y])
 		print("      %s: %d floating platform(s) checked" % [path.get_file(), checked])
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 # --- Hats, colour choice and always-on name tags (issue #151) -----------------
 const HatScript := preload("res://scripts/Hat.gd")
@@ -17856,7 +17866,7 @@ func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String
 			return _all_alive(players) and _active_stage(container) != null, ROUND_LOOP_TIMEOUT_MSEC)
 		if not live:
 			failures.append("%s: the eight-player round never started" % path.get_file())
-			await _teardown(holder)
+			await _teardown(holder, false)
 			continue
 		await _await_ticks(FOUR_SPAWN_SETTLE_TICKS)
 		var instance: Node2D = _active_stage(container)
@@ -17919,7 +17929,7 @@ func _scenario_large_stage_camera_fits_view_with_eight_players() -> Array[String
 		if camera.zoom != Vector2.ONE or camera.global_position.distance_to(Vector2.ZERO) > LARGE_VIEW_TOLERANCE:
 			failures.append("%s: on a normal stage afterwards the camera stayed at zoom %s, %s" % [
 				path.get_file(), camera.zoom, camera.global_position])
-		await _teardown(holder)
+		await _teardown(holder, false)
 	_scenario_completed = true
 	return failures
 # --- Round flow fixes (issue #163) ---------------------------------------------
@@ -20706,7 +20716,7 @@ func _scenario_launcher_circle_swing_does_not_fire() -> Array[String]:
 			await _flick(player, Vector2.UP)
 			if player.launched_hook() == null and player.launched_boomerang() == null:
 				failures.append("a straight flick up did not fire the %s after the circle swing" % name)
-		await _teardown(stage)
+		await _teardown(stage, false)
 	_scenario_completed = true
 	return failures
 ## The grapple: a flick fires the hook, the hook sticks in terrain, holding
@@ -23111,7 +23121,7 @@ func _scenario_dagger_stab_bonus_applies_only_to_stabs() -> Array[String]:
 	print("      dagger stab (x%.2f): best hit %.1f" % [stats.stab_multiplier, best])
 	if best < 72.0:
 		failures.append("a dagger stab's best hit was %.1f, expected >= 72.0" % best)
-	await _teardown(stage)
+	await _teardown(stage, false)
 	# The same stab, the same weapon, with the bonus turned off: a duplicated
 	# copy of the dagger's stats (as `_scenario_pickaxe_wall_grip_lets_go_...`
 	# duplicates the pickaxe's) so nothing else about the head changes.
@@ -23133,7 +23143,7 @@ func _scenario_dagger_stab_bonus_applies_only_to_stabs() -> Array[String]:
 	for hit: Dictionary in strikes2:
 		best_flat = maxf(best_flat, float(hit["amount"]))
 	print("      dagger stab (x1.00): best hit %.1f" % best_flat)
-	await _teardown(stage2)
+	await _teardown(stage2, false)
 	if best_flat >= best:
 		failures.append("turning the stab multiplier off did not lower the best hit (%.1f boosted vs %.1f flat)" % [
 			best, best_flat])
@@ -25783,8 +25793,9 @@ func _scenario_host_screen_start_match_without_phone() -> Array[String]:
 		if screen.control_button(id) == null:
 			failures.append("the lobby screen has no '%s' control" % id)
 	if not failures.is_empty():
-		await _teardown(main)
+		await _teardown(main, false)
 		_relay_stop(relay, [])
+		_scenario_completed = true
 		return failures
 	screen.control_button("online").pressed.emit() # #435: Online claims the host-PC seat and opens the room
 	if not await _wait_for_239(func() -> bool: return server.is_online()):
@@ -27021,7 +27032,8 @@ func _scenario_moving_platform_uses_mood_color() -> Array[String]:
 		var mood: Dictionary = PaletteScript.mood_for_stage(i)
 		if not _color_close(platform.platform_color(), mood["platform"], 0.01):
 			failures.append("%s mood: moving platform %s, want %s" % [mood["name"], platform.platform_color(), mood["platform"]])
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 # --- Juice wiring: shake, the setting, hit-stop (issue #256) ---------------
 ## A stand-in attacker for Juice: it carries the two signals Juice recognises a
@@ -29203,7 +29215,8 @@ func _scenario_new_stages_hazards_clear_of_spawns() -> Array[String]:
 							path, node.name, HAZARD_SPAWN_MARGIN_315, i])
 		if hazards == 0 and NEW_STAGES_315.has(path):
 			failures.append("%s: found no damage hazards to check" % path)
-		await _teardown(holder)
+		await _teardown(holder, false)
+	_scenario_completed = true
 	return failures
 func _descendants_315(root: Node) -> Array[Node]:
 	var out: Array[Node] = []
@@ -29868,8 +29881,9 @@ func _scenario_final_ko_slowmo_only_on_match_win_and_restores() -> Array[String]
 		failures.append("the flash outlived the slow-mo")
 	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("the victory screen never followed the slow-mo")
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	Engine.time_scale = scale_was
+	_scenario_completed = true
 	return failures
 ## Issue #328 with #317: no zoom punch with screen shake off, no flash with
 ## reduce flashes on; the slow-mo itself still plays.
@@ -29894,7 +29908,7 @@ func _scenario_final_ko_slowmo_respects_comfort_settings() -> Array[String]:
 		roster.ready_slots = {0: true, 1: true}
 		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
 			failures.append("comfort=%s: the round never started" % comfort)
-			await _teardown(loop["stage"])
+			await _teardown(loop["stage"], false)
 			continue
 		var zoom_before: Vector2 = camera.zoom if camera != null else Vector2.ONE
 		players[1].eliminate()
@@ -29909,10 +29923,11 @@ func _scenario_final_ko_slowmo_respects_comfort_settings() -> Array[String]:
 		if flashing == comfort:
 			failures.append("comfort=%s: flash=%s, expected %s" % [comfort, flashing, not comfort])
 		await _await_condition(func() -> bool: return not rm.final_ko_active(), ROUND_LOOP_TIMEOUT_MSEC)
-		await _teardown(loop["stage"])
+		await _teardown(loop["stage"], false)
 		Engine.time_scale = scale_was
 	sfx.screen_shake = shake_was
 	sfx.reduce_flash = flash_was
+	_scenario_completed = true
 	return failures
 # --- Colour-blind distinguishability of the default slot colours (#330) -------
 # Machado et al. 2009, severity 1.0, applied to LINEAR sRGB. Distance is CIE76
@@ -30376,7 +30391,7 @@ func _scenario_pickups_skip_occupied_spots() -> Array[String]:
 		failures.append("the spot was not usable again after the player left")
 	rm.free()
 	player.queue_free()
-	await _teardown(stage)
+	await _teardown(stage, false)
 	await _teardown(stage2)
 	_scenario_completed = true
 	return failures
@@ -31326,14 +31341,14 @@ func _scenario_mode_rise_follows_the_mode() -> Array[String]:
 	await _await_ticks(5)
 	if (instance.get_node("KillZone") as Node2D).is_rising():
 		failures.append("the zone is rising in King of the Hill")
-	await _teardown(stage)
+	await _teardown(stage, false)
 	var classic: Dictionary = _new_rising_round(PackedStringArray([path]), 40.0, 60.0)
 	var classic_stage: Node2D = await _await_live_stage(classic)
 	if classic_stage == null:
 		failures.append("the Classic round never started")
 	elif not (classic_stage.get_node("KillZone") as Node2D).is_rising():
 		failures.append("the zone is not rising in Classic")
-	await _teardown(classic["stage"])
+	await _teardown(classic["stage"], false)
 	var sudden: Dictionary = _new_rising_round(PackedStringArray([path]), 40.0, 60.0)
 	var sd_stage: Node = sudden["stage"]
 	sd_stage.get_child(sd_stage.get_child_count() - 1).game_mode = "sudden_death"
@@ -31399,7 +31414,7 @@ func _scenario_mode_title_card_and_how_to_play_cards() -> Array[String]:
 		print("      title card mode line: '%s'" % rule.text)
 		if not rule.text.begins_with("Hot Potato") or rule.text.length() <= len("Hot Potato: "):
 			failures.append("the mode line is '%s'" % rule.text)
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var loop: Dictionary = _new_lobby_round(2)
 	var lobby_rm: Node = loop["round_manager"]
 	await _await_ticks(LOBBY_SETTLE_TICKS)
@@ -31434,9 +31449,9 @@ func _stock_started(rig: Dictionary) -> Node:
 	var mode: Node = rig["rm"].game_mode_node()
 	mode.respawn_sec = 0.3
 	return mode
-func _stock_finish(rig: Dictionary) -> void:
+func _stock_finish(rig: Dictionary, completes: bool = true) -> void:
 	_stock_settings(3, 480)
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], completes)
 ## Knocks `player` out and waits for it to come back (it must have a life left).
 func _stock_lose_life(player: RigidBody2D) -> bool:
 	player.eliminate()
@@ -31611,7 +31626,7 @@ func _scenario_stock_match_is_one_round_then_the_podium_644() -> Array[String]:
 		roster.ready_slots = {0: true, 1: true}
 		if not await _await_condition(func() -> bool: return rm.game_mode_node() != null and players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
 			failures.append("%s: the Stock round never started" % label)
-			await _stock_finish(loop)
+			await _stock_finish(loop, false)
 			continue
 		players[1].eliminate()
 		if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
@@ -31620,7 +31635,7 @@ func _scenario_stock_match_is_one_round_then_the_podium_644() -> Array[String]:
 			failures.append("%s: the podium team was %d, expected 0" % [label, rm.match_winner_team()])
 		elif not teams and rm.match_winner_slot() != 0:
 			failures.append("%s: the podium winner was slot %d, expected 0" % [label, rm.match_winner_slot()])
-		await _stock_finish(loop)
+		await _stock_finish(loop, false)
 	# Classic with the same target of 5 is not over after one round.
 	var classic: Dictionary = _new_lobby_round(5)
 	var cplayers: Array[RigidBody2D] = classic["players"]
@@ -31703,7 +31718,7 @@ func _scenario_stock_timeout_most_lives_wins_tie_overtime() -> Array[String]:
 	mode.time_left = 0.1
 	if not await _await_condition(func() -> bool: return rm.score_of(0) == 1, 3000):
 		failures.append("the player with most lives did not win at the timeout")
-	await _stock_finish(rig)
+	await _stock_finish(rig, false)
 	# A tie: 3 / 2 / 3 -- slots 0 and 2 play a one-hit overtime, slot 1 is out.
 	rig = _stock_rig(3, 3, 120)
 	rm = rig["rm"]
@@ -31728,7 +31743,7 @@ func _scenario_stock_timeout_most_lives_wins_tie_overtime() -> Array[String]:
 			failures.append("one hit in overtime did not decide the round")
 		if players[2].alive:
 			failures.append("the overtime victim came back (a respawn in a one-hit overtime)")
-	await _stock_finish(rig)
+	await _stock_finish(rig, false)
 	# Teams: a team's lives add up. Red 3 + 3 beats Blue 3 though slot 0 ties slot 2.
 	rig = _stock_rig(3, 3, 120, {0: 0, 1: 0, 2: 1})
 	rm = rig["rm"]
@@ -32592,7 +32607,7 @@ func _scenario_stock_random_pick_is_an_enabled_stage_held_all_match() -> Array[S
 			failures.append("Random changed stage inside one match: %s" % [names])
 		seen[names[0]] = true
 		_stock_stage_reset()
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
 	if seen.is_empty():
 		failures.append("Random never picked a stage")
 	_scenario_completed = true
@@ -32739,7 +32754,7 @@ func _scenario_stock_with_one_stage_on_always_plays_it_647() -> Array[String]:
 				failures.append("Stock played %s with only %s on: %s" % [n, stage_name, names])
 				break
 		_stock_stage_reset()
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
 	_scenario_completed = true
 	return failures
 ## Issue #647: Stock with several stages on plays one of them, held all match,
@@ -32761,7 +32776,7 @@ func _scenario_stock_with_several_stages_on_picks_one_of_them_647() -> Array[Str
 			failures.append("Stock changed stage inside one match: %s" % [names])
 		seen[names[0]] = true
 		_stock_stage_reset()
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
 	if seen.size() != 2:
 		failures.append("12 matches drew %s; expected both StageA and StageC" % [seen.keys()])
 	_scenario_completed = true
@@ -33036,9 +33051,10 @@ func _scenario_pseudo_locale_changes_lobby_and_mode_text() -> Array[String]:
 		print("      lobby labels in xx: %s" % ", ".join(texts))
 		if not texts.has("[xx] How to play"):
 			failures.append("the lobby's how-to-play title did not change: %s" % ", ".join(texts))
-	await _teardown(main)
+	await _teardown(main, false)
 	TranslationServer.set_locale(was_locale)
 	TranslationServer.remove_translation(pseudo)
+	_scenario_completed = true
 	return failures
 ## Issue #367: every key a source file asks for (`tr("KEY")`, the static
 ## `TranslationServer.translate("KEY")`) is in the catalogue, and so is every
@@ -33428,7 +33444,7 @@ func _scenario_koth_hill_starts_on_first_hill_spot() -> Array[String]:
 		var rig: Dictionary = _koth_stage_rig(path)
 		if not await _mode_started(rig):
 			failures.append("%s: the King of the Hill round never started" % path)
-			await _teardown(rig["stage"])
+			await _teardown(rig["stage"], false)
 			continue
 		await _await_ticks(5)
 		var rm: Node = rig["rm"]
@@ -33436,7 +33452,7 @@ func _scenario_koth_hill_starts_on_first_hill_spot() -> Array[String]:
 		var spots: Array[Vector2] = (load(path) as PackedScene).instantiate().get_hill_spots()
 		if spots.is_empty() or not hill.hill_position.is_equal_approx(spots[0]):
 			failures.append("%s: hill at %s, first spot is %s" % [path, hill.hill_position, spots])
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
 	_scenario_completed = true
 	return failures
 ## On Relay the hill sits still until the warning, warns for the last stretch
@@ -33472,7 +33488,7 @@ func _scenario_koth_moving_hill_warns_then_moves() -> Array[String]:
 		failures.append("the hill is at %s after the interval, wants spot 1 %s" % [hill.hill_position, relay_spots[1]])
 	if hill.hill_warning:
 		failures.append("the warning stayed on after the move")
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var fixed: Dictionary = _koth_stage_rig("res://scenes/stages/Summit.tscn")
 	if not await _mode_started(fixed):
 		failures.append("the Summit round never started")
@@ -33642,7 +33658,8 @@ func _scenario_announcer_calls_each_mode_at_round_start() -> Array[String]:
 			await _await_condition(func() -> bool: return announcer.said.has(want), 4000)
 			if not announcer.said.has(want):
 				failures.append("%s: the announcer said %s, expected '%s'" % [mode_id, announcer.said, want])
-		await _stock_finish(rig)
+		await _stock_finish(rig, false)
+	_scenario_completed = true
 	return failures
 ## "Hill taken!" when a different player takes the hill from the one who held
 ## it, but not for the first to hold it.
@@ -33713,7 +33730,7 @@ func _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock() -> Array
 		failures.append("steal_life was refused")
 	elif not await _await_condition(func() -> bool: return announcer.said.has("announce_stolen"), 4000):
 		failures.append("a stolen life was not called: %s" % [announcer.said])
-	await _stock_finish(rig)
+	await _stock_finish(rig, false)
 	rig = _stock_rig(3, 3, 120)
 	players = rig["players"]
 	mode = await _stock_started(rig)
@@ -35759,9 +35776,10 @@ func _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable() -> Array[S
 	else:
 		failures.append_array(await _lobby_worst_state_checks_425b(rig, join, blocked, code_label))
 	PadMenuScript368.reset()
-	await _teardown(rig["main"])
+	await _teardown(rig["main"], false)
 	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
 	_relay_stop(relay, [])
+	_scenario_completed = true
 	return failures
 func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Label, code_label: Label) -> Array[String]:
 	var failures: Array[String] = []
@@ -36432,11 +36450,12 @@ func _scenario_lobby_pad_menu_lets_go_when_the_lobby_leaves() -> Array[String]:
 	rig["screen"].set_pad_menu(true)
 	if not PadMenuScript368.is_open():
 		failures.append("the pad menu never opened; the check is void")
-	await _teardown(rig["main"])
+	await _teardown(rig["main"], false)
 	await process_frame
 	if PadMenuScript368.is_open():
 		failures.append("PadMenu still reports a menu open after the lobby left the tree")
 	PadMenuScript368.reset()
+	_scenario_completed = true
 	return failures
 ## Issue #436: ends the round in the host's favour of `winner` by eliminating
 ## every other player, so a scenario never waits for bots to finish by themselves.
@@ -36651,13 +36670,13 @@ func _kind_rig_435(failures: Array[String]) -> Dictionary:
 	rig["old"] = old
 	_phone_ws_port = rig["server"].ws_port
 	return rig
-func _kind_close_435(rig: Dictionary, phones: Array[WebSocketPeer] = []) -> void:
+func _kind_close_435(rig: Dictionary, phones: Array[WebSocketPeer] = [], completes: bool = true) -> void:
 	rig["server"].go_offline()
 	await _close_phones(phones)
 	_relay_stop(rig["relay"], [])
 	ProjectSettings.set_setting("pickfight/relay_url", rig["old"])
 	PadMenuScript368.reset()
-	await _teardown(rig["main"])
+	await _teardown(rig["main"], completes)
 ## Polls `peer` until the server closes it; returns the close reason, or "" on timeout.
 func _wait_closed_435(peer: WebSocketPeer, msec: int = 2000) -> String:
 	var deadline: int = Time.get_ticks_msec() + msec
@@ -37752,7 +37771,7 @@ func _telemetry_run_643(rounds: int, finish: String) -> Dictionary:
 	DirAccess.remove_absolute(rm.balance_log_path)
 	if server.bot_director != null:
 		server.bot_director.remove_bots()
-	await _teardown(main)
+	await _teardown(main, false)
 	host.share_stats = was_share
 	host.telemetry_notice_seen = was_notice
 	host.persist = was_persist
@@ -38267,7 +38286,7 @@ func _scenario_left_click_is_space_tap_binding_640() -> Array[String]:
 		failures.append("a right click acted as a Space tap")
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var rc: Dictionary = await _rc_rig_241(7, failures)
 	if rc.is_empty():
 		return failures
@@ -38286,6 +38305,7 @@ func _scenario_left_click_is_space_tap_binding_640() -> Array[String]:
 		if client.action_presses != 1:
 			failures.append("a held left click on the client counted as a tap")
 	await _rc_close_241(rc)
+	_scenario_completed = true
 	return failures
 ## A tap fires on key-up, not on key-down.
 func _scenario_host_pc_space_tap_throws_boomerang_on_key_up() -> Array[String]:
@@ -39301,7 +39321,7 @@ func _retoss_both_seats_513(failures: Array[String], quick: bool) -> void:
 	await _retoss_513("PC", failures, player, server, quick, func() -> void: await _tap_485(KEY_SPACE))
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	# The pad seat.
 	rig = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "PadRetoss513")
 	server = rig["server"]
@@ -39987,7 +40007,7 @@ func _scenario_boomerang_grazing_a_player_still_hits_them() -> Array[String]:
 		var boomerang: Node2D = thrower.launched_boomerang()
 		if boomerang == null:
 			failures.append("dy %.0f: a flick did not throw the boomerang" % dy)
-			await _teardown(stage)
+			await _teardown(stage, false)
 			continue
 		var turned_x: float = INF
 		for i in 240:
@@ -39999,7 +40019,8 @@ func _scenario_boomerang_grazing_a_player_still_hits_them() -> Array[String]:
 		print("      dy %.0f: victim took %.1f, turned at x %.0f (victim x %.0f)" % [dy, victim.damage, turned_x, victim.global_position.x])
 		if victim.damage <= 0.0 and turned_x < victim.global_position.x + 10.0:
 			failures.append("dy %.0f: the boomerang turned back at the player without hurting them" % dy)
-		await _teardown(stage)
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## Issue #517: pogo charge, rebound cooldown and stomp lock do not carry into
 ## the next round.
@@ -40310,8 +40331,9 @@ func _scenario_mode_targets_lobby_label_value_and_status_line_544() -> Array[Str
 		var row_value: Label = rm.get("_lobby_screen").lobby_panel().find_child("TargetValue", true, false) as Label
 		if row_label == null or row_value == null or row_label.text != case[3] or row_value.text != case[4]:
 			failures.append("%s Host panel row reads '%s' %s, wanted '%s' %s" % [case[0], row_label.text if row_label != null else "-", row_value.text if row_value != null else "-", case[3], case[4]])
-	await _teardown(main)
+	await _teardown(main, false)
 	_mode_targets_reset_544()
+	_scenario_completed = true
 	return failures
 ## A Soccer or CTF round plays to the saved count, the remote HUD sends it, and
 ## the remote client's host row labels the value by kind.
@@ -40329,7 +40351,7 @@ func _scenario_mode_targets_reach_the_round_and_the_remote_hud_544() -> Array[St
 			failures.append("Soccer plays to %d, remote HUD says %s; want 5" % [mode.goals_to_win, hud.get("win")])
 	else:
 		failures.append("the Soccer round never started")
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	rig = _ctf_rig(4)
 	if await _mode_started(rig):
 		var flag_mode: Node = rig["rm"].game_mode_node()
@@ -40338,7 +40360,7 @@ func _scenario_mode_targets_reach_the_round_and_the_remote_hud_544() -> Array[St
 			failures.append("CTF plays to %d, remote HUD says %s; want 1" % [flag_mode.captures_to_win, flag_hud.get("win")])
 	else:
 		failures.append("the Capture the Flag round never started")
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var client_rig: Dictionary = {"nodes": []}
 	var client: Node = await _rc_client_241(client_rig, "ws://127.0.0.1:1")
 	client.room_code = "ABCD"
@@ -40352,6 +40374,7 @@ func _scenario_mode_targets_reach_the_round_and_the_remote_hud_544() -> Array[St
 			failures.append("remote host row for %s reads '%s', wanted '%s'" % [case[0], client._target_label.text, case[1]])
 	await _rc_close_241(client_rig)
 	_mode_targets_reset_544()
+	_scenario_completed = true
 	return failures
 ## #460: the PC join screen pre-fills the last name used, joining saves it, and
 ## an empty or junk name falls back to the default. Runs on a temp settings
@@ -42178,7 +42201,7 @@ func _scenario_respawn_stays_on_own_half_605() -> Array[String]:
 		failures.append("a team-0 respawn left its own (left) half")
 	if respawn.farthest_spawn(1) != points[1]:
 		failures.append("a team-1 respawn left its own (right) half")
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	for mode_name: String in ["soccer", "ctf"]:
 		var mrig: Dictionary = _soccer_rig(2) if mode_name == "soccer" else _ctf_rig(2)
 		if not await _mode_started(mrig):
@@ -42187,7 +42210,8 @@ func _scenario_respawn_stays_on_own_half_605() -> Array[String]:
 			var r: Variant = mrig["rm"].game_mode_node()._respawner
 			if r == null or not r.team_of.is_valid() or not r.centre_x.is_valid():
 				failures.append("%s hands its Respawn no own-half filter" % mode_name)
-		await _teardown(mrig["stage"])
+		await _teardown(mrig["stage"], false)
+	_scenario_completed = true
 	return failures
 func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 	var failures: Array[String] = []
@@ -42298,7 +42322,7 @@ func _scenario_bot_holds_hill_and_flag_without_hopping_607() -> Array[String]:
 	print("      hill holder: farthest from the hill centre in 10 s %.0f px (radius 150)" % worst)
 	if worst > 150.0:
 		failures.append("the bot holding the hill left the zone (%.0f px out, radius 150)" % worst)
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var crig: Dictionary = _ctf_rig(4)
 	var mode: Node = await _ctf_start(crig, failures)
 	if mode == null:
@@ -42933,7 +42957,7 @@ func _scenario_grapple_lets_go_when_either_player_is_knocked_out() -> Array[Stri
 		var hook: Node2D = z["hook"]
 		if hook == null or not is_instance_valid(hook) or not hook.is_stuck():
 			failures.append("%s: the hook did not stick to the player it hit" % who)
-			await _teardown(z["stage"])
+			await _teardown(z["stage"], false)
 			continue
 		_zip_hold(shooter)
 		await _await_ticks(10)
@@ -42944,7 +42968,7 @@ func _scenario_grapple_lets_go_when_either_player_is_knocked_out() -> Array[Stri
 		await _await_ticks(3)
 		if is_instance_valid(hook) and hook.is_stuck():
 			failures.append("the hook stayed stuck after the %s player was knocked out" % who)
-		await _teardown(z["stage"])
+		await _teardown(z["stage"], false)
 	_scenario_completed = true
 	return failures
 func _scenario_grapple_zips_to_a_teammate_without_damage() -> Array[String]:
@@ -43622,7 +43646,7 @@ func _scenario_soccer_respawn_waits_four_seconds_648() -> Array[String]:
 	await _await_ticks(int(0.3 * 60.0))
 	if not blue.alive:
 		failures.append("the KO'd Soccer player was not back by 4.2 s")
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var srig: Dictionary = _mode_rig(2, GameModesType.STOCK)
 	if not await _mode_started(srig):
 		failures.append("the Stock round never started")
@@ -43642,7 +43666,7 @@ func _scenario_soccer_respawn_never_lands_in_a_goal_648() -> Array[String]:
 		var rig: Dictionary = _soccer_rig(4, path)
 		if not await _mode_started(rig):
 			failures.append("%s: the Soccer round never started" % path)
-			await _teardown(rig["stage"])
+			await _teardown(rig["stage"], false)
 			continue
 		var rm: Node = rig["rm"]
 		var respawner: RefCounted = rm.game_mode_node()._respawner
@@ -43664,7 +43688,8 @@ func _scenario_soccer_respawn_never_lands_in_a_goal_648() -> Array[String]:
 		respawner.avoid_rects = func() -> Array: return [Rect2(centre - 1000.0, -100.0, 2000.0, 200.0)]
 		if respawner.farthest_spawn(0) != all_in[1]:
 			failures.append("%s: with every spawn in a goal, Red did not get its own-half one nearest the centre" % path)
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
+	_scenario_completed = true
 	return failures
 ## A Capture the Flag KO waits 4 s too (#648): down at 3.9 s, back by 4.2 s.
 func _scenario_ctf_respawn_waits_four_seconds_648() -> Array[String]:
@@ -43713,7 +43738,7 @@ func _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649() -> Array
 		var rig: Dictionary = _soccer_rig(2, path) if is_soccer else _ctf_rig(2, path)
 		if not await _mode_started(rig):
 			failures.append("%s: the round never started" % path)
-			await _teardown(rig["stage"])
+			await _teardown(rig["stage"], false)
 			continue
 		var stage: Node2D = rig["rm"]._current_stage
 		var view: Rect2 = stage.get_view_rect()
@@ -43738,7 +43763,8 @@ func _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649() -> Array
 		for point: Vector2 in points:
 			if not view.has_point(point):
 				failures.append("%s: point %s is outside the view %s" % [path, point, view])
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
+	_scenario_completed = true
 	return failures
 ## Issue #674: the same upward strike lifts the ball at least 1.5x higher than
 ## at the old mass 0.35 and full gravity.
@@ -43921,7 +43947,7 @@ func _scenario_victory_left_click_tap_continues_640() -> Array[String]:
 	rm._victory_click(_click_640(false))
 	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "lobby", ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("a left click tap on the victory screen did not continue")
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	var stale: Dictionary = _new_lobby_round(1)
 	var players: Array[RigidBody2D] = stale["players"]
 	var rm2: Node = stale["round_manager"]
@@ -44025,7 +44051,7 @@ func _telemetry_soccer_abandon_643(played_sec: float) -> Array[String]:
 		elif not records.is_empty():
 			failures.append("a Soccer match abandoned after %d s sent %s" % [int(played_sec), records])
 	DirAccess.remove_absolute(rm.balance_log_path)
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	host.share_stats = was_share
 	host.telemetry_notice_seen = was_notice
 	host.persist = was_persist
@@ -44551,7 +44577,7 @@ func _scenario_koth_teams_time_out_and_win_without_eliminations_662() -> Array[S
 		failures.append("the time-out did not give the round to the team with the most hold time")
 	if rm.team_score(0) != 0 or kos[0] != 0:
 		failures.append("time-out scored red %d with %d KOs" % [rm.team_score(0), kos[0]])
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var rig2: Dictionary = await _koth_rig_662(3, true)
 	if not rig2["started"]:
 		await _teardown(rig2["stage"])
@@ -44608,7 +44634,7 @@ func _scenario_koth_hill_state_colour_ring_clock_and_holds_row_662() -> Array[St
 	hill.time_left = 25.0
 	if hill.clock_text() != "0:25":
 		failures.append("the clock reads '%s' with 25 s left" % hill.clock_text())
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var trig: Dictionary = await _koth_rig_662(3, true)
 	if trig["started"]:
 		var thill: Node = trig["hill"]
@@ -44687,7 +44713,7 @@ func _scenario_phone_modifier_chip_frame_sent_and_cleared() -> Array[String]:
 			rig["rm"]._end_round_modifier()
 			if forced != "" and (sent.size() != 2 or sent[1] != ""):
 				failures.append("round end sent %s, want a trailing empty title" % [sent])
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
 	var page: String = FileAccess.get_file_as_string("res://controller/index.html")
 	if not page.contains('id="modchip"') or not page.contains('msg.t === "mod"'):
 		failures.append("the controller page has no modifier chip handler")
@@ -44982,7 +45008,7 @@ func _scenario_join_help_hidden_online_and_streamer_680() -> Array[String]:
 	if _join_help_urls_shown_680(screen.join_help()).size() != server.join_urls().size():
 		failures.append("the list did not return with streamer mode off")
 	screen.set_popup("")
-	await _teardown(rig["main"])
+	await _teardown(rig["main"], false)
 	# Online: no LAN join, no button.
 	var online_rig: Dictionary = await _streamer_rig_369(false, failures)
 	if online_rig.is_empty():
@@ -45544,7 +45570,7 @@ func _scenario_no_english_693() -> Array[String]:
 		for bad: String in ENGLISH_DENYLIST_693:
 			if t.contains(bad):
 				failures.append("'%s' (%s) still shows English '%s' in Japanese" % [t.left(40), seen[t], bad])
-	await _teardown(rig["main"])
+	await _teardown(rig["main"], false)
 	TranslationServer.set_locale(was_locale)
 	_scenario_completed = true
 	return failures
@@ -45937,7 +45963,7 @@ func _scenario_ach_arsenal_689() -> Array[String]:
 	players[1].eliminate()
 	if not await _await_condition(func() -> bool: return int(ach.progress()["arsenal"]) == 1, 3000):
 		failures.append("winning a round with the sword did not count toward Arsenal (progress %s)" % [ach.progress()])
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	for weapon: String in ["pickaxe", "spear", "pogo"]:
 		ach.on_round_finished([0, 1], [0], {"weapons": {0: weapon}, "damage": {0: 5.0}})
 	if int(ach.progress()["arsenal"]) != 1:
@@ -45951,6 +45977,7 @@ func _scenario_ach_arsenal_689() -> Array[String]:
 		ach.on_round_finished([0, 1], [0], {"weapons": {0: weapon}, "damage": {0: 5.0}})
 	if not ach.is_unlocked("arsenal"):
 		failures.append("winning with all 12 pickup weapons did not unlock Arsenal (progress %s)" % [ach.progress()])
+	_scenario_completed = true
 	return failures
 func _scenario_ach_old_faithful_689() -> Array[String]:
 	var failures: Array[String] = []
@@ -45964,7 +45991,7 @@ func _scenario_ach_old_faithful_689() -> Array[String]:
 	await _await_condition(func() -> bool: return int(ach.progress()["arsenal"]) == 1, 3000)
 	if ach.is_unlocked("old_faithful"):
 		failures.append("winning with a sword unlocked Old Faithful")
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var again: Dictionary = await _ach_rig_689(2)
 	if _ach_missing_689(failures, again):
 		await _teardown(again["stage"])
@@ -46009,7 +46036,7 @@ func _scenario_ach_untouchable_689() -> Array[String]:
 	await _await_condition(func() -> bool: return ach.is_unlocked("first_swing"), 3000)
 	if ach.is_unlocked("untouchable"):
 		failures.append("a winner who took a hit unlocked Untouchable")
-	await _teardown(hurt["stage"])
+	await _teardown(hurt["stage"], false)
 	var clean: Dictionary = await _ach_rig_689(2)
 	if _ach_missing_689(failures, clean):
 		await _teardown(clean["stage"])
@@ -46103,7 +46130,7 @@ func _scenario_ach_last_life_689() -> Array[String]:
 	await _await_condition(func() -> bool: return ach.is_unlocked("first_swing"), 3000)
 	if ach.is_unlocked("last_life"):
 		failures.append("winning Stock with both lives left unlocked Last Life")
-	await _stock_finish(comfy)
+	await _stock_finish(comfy, false)
 	var edge: Dictionary = _stock_rig(2, 2, 480)
 	mode = await _stock_started(edge)
 	if mode == null:
@@ -46717,11 +46744,12 @@ func _close_298(rig: Dictionary) -> void:
 	rig["server"].go_offline()
 	_relay_stop(rig["relay"], [])
 	ProjectSettings.set_setting("pickfight/relay_url", rig["old"])
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	var steam: Node = get_root().get_node("SteamPlatform")
 	steam.fake_running_for_test = false
 	steam.calls_for_test.clear()
 	steam.pending_join_code = ""
+	_scenario_completed = true
 func _lobby_screen_298(rig: Dictionary) -> CanvasLayer:
 	var screen: CanvasLayer = LobbyScreenScript435.new()
 	rig["stage"].add_child(screen)
@@ -46885,60 +46913,68 @@ func _scenario_ko_adds_steam_timeline_event_703() -> Array[String]:
 	var steam: Node = _timeline_start_703(true)
 	var rig: Dictionary = await _ach_rig_689(3)
 	if _ach_missing_689(failures, rig):
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
 		_timeline_end_703(steam)
+		_scenario_completed = true
 		return failures
 	rig["players"][1].eliminate()
 	await _await_ticks(6)
 	if steam.calls_for_test.filter(func(c: Array) -> bool: return c[0] == "add_timeline_event" and c[1] == "ko" and c[2] == "KO: P2").size() != 1:
 		failures.append("KO of P2 recorded %s" % [steam.calls_for_test])
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	_timeline_end_703(steam)
+	_scenario_completed = true
 	return failures
 func _scenario_bot_ko_adds_steam_timeline_event_703() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = _timeline_start_703(true)
 	var loop: Dictionary = await _ach_lobby_689(3, [1], "local", 5)
 	if not loop["started"]:
-		await _teardown(loop["stage"])
+		await _teardown(loop["stage"], false)
 		_timeline_end_703(steam)
+		_scenario_completed = true
 		return ["the match with a bot never started"]
 	loop["players"][1].eliminate()
 	await _await_ticks(6)
 	if not _timeline_kinds_703(steam).has("ko"):
 		failures.append("a bot's KO recorded %s" % [steam.calls_for_test])
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	_timeline_end_703(steam)
+	_scenario_completed = true
 	return failures
 func _scenario_round_win_adds_steam_timeline_event_703() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = _timeline_start_703(true)
 	var rig: Dictionary = await _ach_rig_689(2)
 	if _ach_missing_689(failures, rig):
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
 		_timeline_end_703(steam)
+		_scenario_completed = true
 		return failures
 	rig["players"][1].eliminate()
 	await _await_condition(func() -> bool: return _timeline_kinds_703(steam).has("round_win"), 3000)
 	if not steam.calls_for_test.has(["add_timeline_event", "round_win", "P1 wins the round"]):
 		failures.append("round win recorded %s" % [steam.calls_for_test])
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	_timeline_end_703(steam)
+	_scenario_completed = true
 	return failures
 func _scenario_match_win_adds_steam_timeline_event_703() -> Array[String]:
 	var failures: Array[String] = []
 	var steam: Node = _timeline_start_703(true)
 	var loop: Dictionary = await _ach_lobby_689(2, [], "local", 1)
 	if not loop["started"]:
-		await _teardown(loop["stage"])
+		await _teardown(loop["stage"], false)
 		_timeline_end_703(steam)
+		_scenario_completed = true
 		return ["the lobby match never started"]
 	loop["players"][1].eliminate()
 	await _await_condition(func() -> bool: return _timeline_kinds_703(steam).has("match_win"), 3000)
 	if not steam.calls_for_test.has(["add_timeline_event", "match_win", "P1 wins the match"]):
 		failures.append("match win recorded %s" % [steam.calls_for_test])
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	_timeline_end_703(steam)
+	_scenario_completed = true
 	return failures
 func _scenario_no_steam_records_no_timeline_events_703() -> Array[String]:
 	var failures: Array[String] = []
@@ -46951,8 +46987,9 @@ func _scenario_no_steam_records_no_timeline_events_703() -> Array[String]:
 	await _await_condition(func() -> bool: return loop["rm"].lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC)
 	if not steam.calls_for_test.is_empty():
 		failures.append("Steam off still recorded %s" % [steam.calls_for_test])
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	_timeline_end_703(steam)
+	_scenario_completed = true
 	return failures
 ## #711: a LineEdit gaining focus raises Steam's floating keyboard only when Steam is
 ## running and the last input was a gamepad's.
@@ -47069,7 +47106,7 @@ func _scenario_name_filter_732() -> Array[String]:
 		failures.append("the name was masked with the setting off: '%s'" % server.slot_name(0))
 	settings.filter_names = was_on
 	peer.close(1000, "scenario done")
-	await _teardown(stage)
+	await _teardown(stage, false)
 	# Persistence, default on.
 	var tmp: String = OS.get_temp_dir().path_join("pf_732_%d.cfg" % OS.get_process_id())
 	var fresh: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
@@ -47646,14 +47683,15 @@ func _scenario_steam_timeline_teams_title_745() -> Array[String]:
 	# Free-for-all keeps naming the winning player.
 	var rig: Dictionary = await _ach_rig_689(2)
 	if _ach_missing_689(failures, rig):
-		await _teardown(rig["stage"])
+		await _teardown(rig["stage"], false)
 		_timeline_end_703(steam)
+		_scenario_completed = true
 		return failures
 	rig["players"][1].eliminate()
 	await _await_condition(func() -> bool: return _timeline_kinds_703(steam).has("round_win"), 3000)
 	if _timeline_titles_745(steam, "round_win") != ["P1 wins the round"]:
 		failures.append("Free-for-all round win recorded %s" % [steam.calls_for_test])
-	await _teardown(rig["stage"])
+	await _teardown(rig["stage"], false)
 	steam.calls_for_test.clear()
 	# Teams: Red is slot 0, Blue slot 1; two Blue round wins take the match.
 	var loop: Dictionary = _new_team_round_236(2, [0, 1], {})
@@ -47665,8 +47703,9 @@ func _scenario_steam_timeline_teams_title_745() -> Array[String]:
 	for round_number in 2:
 		if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
 			failures.append("Teams round %d never started" % (round_number + 1))
-			await _teardown(loop["stage"])
+			await _teardown(loop["stage"], false)
 			_timeline_end_703(steam)
+			_scenario_completed = true
 			return failures
 		players[0].eliminate()
 		await _await_ticks(LOBBY_SETTLE_TICKS)
@@ -47676,8 +47715,9 @@ func _scenario_steam_timeline_teams_title_745() -> Array[String]:
 	if _timeline_titles_745(steam, "match_win") != ["Blue team wins the match"]:
 		failures.append("Teams match win recorded %s" % [steam.calls_for_test])
 	roster.teams_on = false
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	_timeline_end_703(steam)
+	_scenario_completed = true
 	return failures
 ## Issue #752: every team marker also carries the team's letter (the first character of its translated
 ## name, in ink on the team colour), so Red and Blue are told apart by more than colour: name tags,
@@ -48559,9 +48599,10 @@ func _scenario_demo_title_wishlist_button_shown_only_in_demo_793() -> Array[Stri
 			if screen.title_visible() or title_button.is_visible_in_tree():
 				failures.append("the Wishlist button stays on screen outside the lobby (during a round)")
 		PadMenuScript368.reset()
-		await _teardown(rig["main"])
+		await _teardown(rig["main"], false)
 	DemoBuildScript361.forced = -1
 	DemoBuildScript361.store_app_id_for_test = -1
+	_scenario_completed = true
 	return failures
 ## Issue #793: the button opens the base game's store page. With Steam running that is the overlay
 ## (`open_store_page` recorded on the seam, the browser untouched); without it, the store URL goes to
@@ -48784,7 +48825,7 @@ func _run_autosave_795(switch_on: bool) -> Dictionary:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
 	replay.autosaved_dir = ""
 	host.auto_save_clips = was
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	Engine.time_scale = scale_was
 	return out
 func _scenario_paused_banner_hint_follows_active_input_810() -> Array[String]:
@@ -49348,7 +49389,7 @@ func _scenario_match_point_plate_stacks_for_two_leaders_and_skips_stock_825() ->
 		rm.lobby_enabled = true
 		if shown.size() != 2:
 			failures.append("leaders() found %d, expected 2" % shown.size())
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	var stock: Dictionary = await _start_match_point_825(2, [0, 1], false, "stock")
 	if stock["started"]:
 		await _await_ticks(30)
@@ -49529,7 +49570,7 @@ func _scenario_damage_numbers_switch_873() -> Array[String]:
 	await physics_frame
 	if log["numbers"].size() != 1:
 		failures.append("with Damage numbers on, %d were drawn, not 1" % log["numbers"].size())
-	await _teardown(stage)
+	await _teardown(stage, false)
 	var path: String = OS.get_temp_dir().path_join("pickfight_damage_numbers_873_%d.cfg" % OS.get_process_id())
 	sfx.settings_path = path
 	sfx.persist_settings = true
@@ -49581,7 +49622,7 @@ func _scenario_pickup_callout_switch_off_spawns_none() -> Array[String]:
 	await _grab_818(loop, players[1], "res://resources/axe.tres")
 	if _callouts_818(loop).size() != 1:
 		failures.append("with Pickup callouts on, %d callouts, expected 1" % _callouts_818(loop).size())
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	var path: String = OS.get_temp_dir().path_join("pickfight_pickup_callouts_882_%d.cfg" % OS.get_process_id())
 	sfx.settings_path = path
 	sfx.persist_settings = true
@@ -49633,7 +49674,7 @@ func _scenario_match_point_plate_switch_off_shows_none() -> Array[String]:
 			failures.append("no gold dot at match point with the plate switched off")
 		if not _match_point_plates_825().is_empty():
 			failures.append("a plate showed with Match point plate off")
-	await _teardown(loop["stage"])
+	await _teardown(loop["stage"], false)
 	var path: String = OS.get_temp_dir().path_join("pickfight_match_point_plate_892_%d.cfg" % OS.get_process_id())
 	sfx.settings_path = path
 	sfx.persist_settings = true
@@ -49693,7 +49734,7 @@ func _scenario_juice_hit_pause_switch_off_never_pauses() -> Array[String]:
 	await _await_ticks(JuiceScript.HITSTOP_FRAMES + 3)
 	if get_root().get_tree().paused:
 		failures.append("the freeze did not lift")
-	await _teardown(stage)
+	await _teardown(stage, false)
 	var path: String = OS.get_temp_dir().path_join("pickfight_hit_pause_916_%d.cfg" % OS.get_process_id())
 	sfx.settings_path = path
 	sfx.persist_settings = true
@@ -49764,7 +49805,8 @@ func _scenario_match_point_skipped_when_target_is_1_829() -> Array[String]:
 				failures.append("%s: leaders() named someone on match point at target 1" % mode)
 			if not _match_point_plates_825().is_empty():
 				failures.append("%s showed a plate at target 1" % mode)
-		await _teardown(loop["stage"])
+		await _teardown(loop["stage"], false)
+	_scenario_completed = true
 	return failures
 
 ## #751: Settings > More options > Text size (Normal / Large / Larger = 1.0 / 1.2 / 1.4x)
@@ -50648,11 +50690,12 @@ func _scenario_copy_code_refresh_after_lobby_closed_863() -> Array[String]:
 		return failures
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	screen.press_control("copy_code")
-	await _kind_close_435(rig)
+	await _kind_close_435(rig, [], false)
 	var until_msec: int = Time.get_ticks_msec() + 1700 # past the 1.5 s Copied timer
 	while Time.get_ticks_msec() < until_msec:
 		await process_frame
 	host.refresh()
+	_scenario_completed = true
 	return failures
 
 ## Pixel size [w, h] of a PNG or JPEG from its bytes, or [] when the bytes are neither (#864).
