@@ -953,6 +953,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_rod_casts_and_reels_rival_632",
 	"bot_grapple_zips_to_rival_out_of_reach_632",
 	"bot_opens_umbrella_while_falling",
+	"bot_throws_boomerang_at_rival_in_range",
+	"bot_does_not_throw_boomerang_at_teammate_or_through_wall",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -3384,6 +3386,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_grapple_zips_to_rival_out_of_reach_632()
 		"bot_opens_umbrella_while_falling":
 			return await _scenario_bot_opens_umbrella_while_falling()
+		"bot_throws_boomerang_at_rival_in_range":
+			return await _scenario_bot_throws_boomerang_at_rival_in_range()
+		"bot_does_not_throw_boomerang_at_teammate_or_through_wall":
+			return await _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -43516,6 +43522,71 @@ func _scenario_bot_opens_umbrella_while_falling() -> Array[String]:
 		failures.append("a bot with the pickaxe reported an open canopy")
 	if umbrella["fastest"] > pickaxe["fastest"] * 0.6:
 		failures.append("the umbrella bot fell at %.0f px/s, not clearly slower than the pickaxe bot's %.0f" % [umbrella["fastest"], pickaxe["fastest"]])
+	_scenario_completed = true
+	return failures
+## Issue #932: a bot holding the boomerang, a lone rival `gap` px away on flat
+## ground. `team_up` puts both on one team; `wall` stands a slab between them.
+## Returns the tick of the first throw (-1 for none) and how many throws began.
+func _bot_boomerang_run_932(gap: float, team_up: bool, wall: bool, ticks: int) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(-gap * 0.5, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(gap * 0.5, 274.0))
+	await _await_ticks(2)
+	await _equip(player, BOOMERANG_PATH)
+	if team_up:
+		player.team = 0
+		rival.team = 0
+	if wall:
+		var slab := StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(30.0, 800.0)
+		shape.shape = rect
+		slab.add_child(shape)
+		slab.collision_layer = 1
+		stage.add_child(slab)
+		slab.global_position = Vector2(0.0, 0.0)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var out: Dictionary = {"first": -1, "throws": 0}
+	var was_out: bool = false
+	for t in ticks:
+		await physics_frame
+		var now_out: bool = player.launched_boomerang() != null
+		# Only throws the driver began count: its cooldown is set at the start of
+		# a deliberate throw, while an ordinary swing can flick one off at 0.
+		if now_out and not was_out and bot._hook_cd > 0.0:
+			out["throws"] += 1
+			if out["first"] < 0:
+				out["first"] = t
+		was_out = now_out
+	await _teardown(stage, false)
+	return out
+## A bot with the boomerang and a rival 250 px off in the open throws within 1 s.
+func _scenario_bot_throws_boomerang_at_rival_in_range() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _bot_boomerang_run_932(250.0, false, false, 180)
+	print("      bot_throws_boomerang_at_rival_in_range: first=%d throws=%d" % [run["first"], run["throws"]])
+	if run["first"] < 0 or run["first"] > 60:
+		failures.append("the bot did not throw within 1 s (first throw tick %d)" % run["first"])
+	_scenario_completed = true
+	return failures
+## No throw at a teammate, at a rival out of range, or through a wall.
+func _scenario_bot_does_not_throw_boomerang_at_teammate_or_through_wall() -> Array[String]:
+	var failures: Array[String] = []
+	var mate: Dictionary = await _bot_boomerang_run_932(250.0, true, false, 150)
+	var far: Dictionary = await _bot_boomerang_run_932(900.0, false, false, 60)
+	var walled: Dictionary = await _bot_boomerang_run_932(250.0, false, true, 90)
+	print("      bot_does_not_throw_boomerang_at_teammate_or_through_wall: teammate=%d far=%d wall=%d" % [mate["throws"], far["throws"], walled["throws"]])
+	if mate["throws"] > 0:
+		failures.append("the bot threw at a teammate")
+	if far["throws"] > 0:
+		failures.append("the bot threw at a rival 900 px away")
+	if walled["throws"] > 0:
+		failures.append("the bot threw through a wall")
 	_scenario_completed = true
 	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
