@@ -41764,7 +41764,7 @@ func _scenario_controller_fonts_served_589() -> Array[String]:
 	if page.contains("data:font"):
 		failures.append("the page still embeds base64 fonts")
 	for font: String in ["/fonts/LilitaOne-Latin.woff2", "/fonts/Nunito-Latin.woff2"]:
-		if not page.contains("url(%s)" % font):
+		if not page.contains("url(%s)" % font.trim_prefix("/")): # relative, so it also resolves on GitHub Pages
 			failures.append("page does not link %s" % font)
 		var res: Dictionary = await _http_get_589(server.http_port, font)
 		if res["status"] != 200:
