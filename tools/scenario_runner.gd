@@ -5542,16 +5542,29 @@ func _game_msec() -> int:
 ## network can make true.
 func _await_condition(condition: Callable, timeout_msec: int, wall: bool = false) -> bool:
 	var start: int = Time.get_ticks_msec() if wall else _game_msec()
+	var ticks_left: int = _game_wait_tick_cap(timeout_msec)
 	while (Time.get_ticks_msec() if wall else _game_msec()) - start < timeout_msec:
 		await physics_frame
 		if condition.call():
 			return true
+		ticks_left -= 1
+		if not wall and ticks_left <= 0:
+			push_warning("_await_condition: the game clock stood still for %d ms of waiting (tree paused?)" % timeout_msec)
+			return false
 	return false
 ## Steps physics for `msec` of game time (#182).
 func _await_msec(msec: int) -> void:
 	var deadline: int = _game_msec() + msec
-	while _game_msec() < deadline:
+	var ticks_left: int = _game_wait_tick_cap(msec)
+	while _game_msec() < deadline and ticks_left > 0:
 		await physics_frame
+		ticks_left -= 1
+## A wait on the game clock gives up after this many physics ticks: the clock
+## stops while the tree is paused, so a regression that leaves it paused
+## would otherwise hang a CI shard instead of failing. Ten times the ticks the
+## wait needs at full speed (the final-KO slow-mo runs at 0.3x) plus 10 s.
+func _game_wait_tick_cap(msec: int) -> int:
+	return int(ceilf(msec / 1000.0 * Engine.physics_ticks_per_second * 10.0)) + Engine.physics_ticks_per_second * 10
 ## Issue #12: a claim whose controller dropped while no round was running is
 ## released right away, not held until a round that has not started yet ends.
 ## Before the fix it was held forever, counted towards min_players_to_start,
@@ -18326,6 +18339,19 @@ func _poll_until(joined: Array[WebSocketPeer], condition: Callable, timeout_msec
 	var deadline: int = Time.get_ticks_msec() + timeout_msec
 	while Time.get_ticks_msec() < deadline:
 		await _poll_phones(joined, 1)
+		if condition.call():
+			return true
+	return false
+## `_poll_until` timed on the game clock (#182), for a condition a game timer
+## makes true (a round-end wait): a loaded runner that renders slower than real
+## time no longer runs out of wall-clock time first. Capped in ticks like
+## `_await_condition`, so a clock left stopped fails instead of hanging.
+func _poll_until_game(joined: Array[WebSocketPeer], condition: Callable, timeout_msec: int) -> bool:
+	var start: int = _game_msec()
+	var ticks_left: int = _game_wait_tick_cap(timeout_msec)
+	while _game_msec() - start < timeout_msec and ticks_left > 0:
+		await _poll_phones(joined, 1)
+		ticks_left -= 1
 		if condition.call():
 			return true
 	return false
@@ -35773,7 +35799,7 @@ func _scenario_host_pad_start_and_host_phone_share_one_pause() -> Array[String]:
 	await _poll_phones(joined, 2)
 	if rm.is_paused() or paused:
 		failures.append("round end: the host pad's Start did not resume")
-	if not await _poll_until(joined, func() -> bool: return rm.lobby_phase() != "round_end", ROUND_LOOP_TIMEOUT_MSEC):
+	if not await _poll_until_game(joined, func() -> bool: return rm.lobby_phase() != "round_end", ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("round end: resumed, the round end never moved on")
 	paused = false
 	await _close_phones(joined)
