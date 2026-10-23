@@ -228,6 +228,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_spots_skip_player_spawns",
 	"every_stage_has_pickup_spot_clear_of_spawns",
 	"spawn_protection_blocks_damage_then_expires",
+	"bullet_does_not_knock_spawn_protected",
+	"boomerang_does_not_knock_spawn_protected",
 	"meteor_does_not_knock_spawn_protected",
 	"rock_does_not_shove_spawn_protected",
 	"roster_heads_do_not_clip_platform_in_play",
@@ -2043,6 +2045,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_every_stage_has_pickup_spot_clear_of_spawns()
 		"spawn_protection_blocks_damage_then_expires":
 			return await _scenario_spawn_protection_blocks_damage_then_expires()
+		"bullet_does_not_knock_spawn_protected":
+			return await _scenario_bullet_does_not_knock_spawn_protected()
+		"boomerang_does_not_knock_spawn_protected":
+			return await _scenario_boomerang_does_not_knock_spawn_protected()
 		"meteor_does_not_knock_spawn_protected":
 			return await _scenario_meteor_does_not_knock_spawn_protected()
 		"rock_does_not_shove_spawn_protected":
@@ -9794,6 +9800,92 @@ func _scenario_boomstick_bullet_damages_and_shoves() -> Array[String]:
 	if shove < BOOMSTICK_SHOVE_MIN:
 		failures.append("the victim was shoved %.1f px along the shot, under a body width (%.0f px)" % [shove, BOOMSTICK_SHOVE_MIN])
 	await _teardown(stage)
+	return failures
+## #1004: a boomstick bullet neither hurts nor knocks a spawn-protected fighter,
+## yet is still spent. The unprotected control is both hurt and knocked.
+func _scenario_bullet_does_not_knock_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var shoves: Array[float] = []
+	var damages: Array[float] = []
+	var left: Array[int] = []
+	for protected_flag: bool in [true, false]:
+		var stage: Node2D = _new_stage()
+		var centre: Vector2 = DEEP_PARK_POSITION
+		var shooter: RigidBody2D = _spawn_player(stage, centre)
+		var victim: RigidBody2D = _spawn_player(stage, centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+		shooter.set_weapon_stats(load(BOOMSTICK_PATH))
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		_brace(shooter)
+		_aim(shooter, 0.0)
+		var hold := func() -> void:
+			victim.spawn_protected = protected_flag
+			victim.teleport_to(centre + Vector2.RIGHT * BOOMSTICK_TARGET_OFFSET)
+		var shot: Dictionary = await _await_boomstick_shot(shooter, _boomstick_interval_ticks() + BOOMSTICK_FIRE_SLACK_TICKS, hold)
+		if shot["bullet"] == null:
+			failures.append("the boomstick never fired")
+			await _teardown(stage)
+			return failures
+		var start_x: float = victim.global_position.x
+		await _await_ticks(BOOMSTICK_SHOVE_TICKS * 2)
+		shoves.append(victim.global_position.x - start_x)
+		damages.append(victim.damage)
+		left.append(_projectiles_of(shooter).size())
+		await _teardown(stage)
+	print("      bullet: protected shove %.1f dmg %.1f; unprotected shove %.1f dmg %.1f" % [shoves[0], damages[0], shoves[1], damages[1]])
+	if damages[1] <= 0.0 or shoves[1] < BOOMSTICK_SHOVE_MIN:
+		failures.append("control: the unprotected fighter was not hurt and knocked (dmg %.1f, shove %.1f)" % [damages[1], shoves[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a bullet" % damages[0])
+	if absf(shoves[0]) > 4.0:
+		failures.append("the protected fighter was knocked %.1f px by a bullet" % shoves[0])
+	if left[0] != 0:
+		failures.append("the bullet was not consumed by the protected fighter")
+	return failures
+## #1004: the same for a boomerang, which also hits the protected fighter only
+## once per leg.
+func _scenario_boomerang_does_not_knock_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var peaks: Array[float] = []
+	var damages: Array[float] = []
+	var counts: Array[int] = []
+	for protected_flag: bool in [true, false]:
+		var stage: Node2D = _new_stage()
+		var thrower: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+		var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(200, -20))
+		await _await_ticks(2)
+		await _equip(thrower, BOOMERANG_PATH)
+		_brace(thrower)
+		victim.gravity_scale = 0.0
+		victim.linear_velocity = Vector2.ZERO
+		victim.spawn_protected = protected_flag
+		var strikes: Array = []
+		_record_strikes(thrower, strikes)
+		await _flick(thrower, Vector2.RIGHT)
+		var boomerang: Node2D = thrower.launched_boomerang()
+		if boomerang == null:
+			failures.append("a flick did not throw the boomerang")
+			await _teardown(stage)
+			return failures
+		var peak: float = 0.0
+		var start: Vector2 = victim.global_position
+		for _i in 240:
+			if not is_instance_valid(boomerang):
+				break
+			await physics_frame
+			peak = maxf(peak, absf(victim.global_position.x - start.x))
+		peaks.append(peak)
+		damages.append(victim.damage)
+		counts.append(strikes.size())
+		await _teardown(stage)
+	print("      boomerang: protected moved %.1f dmg %.1f; unprotected moved %.1f dmg %.1f" % [peaks[0], damages[0], peaks[1], damages[1]])
+	if damages[1] <= 0.0 or peaks[1] < 4.0:
+		failures.append("control: the unprotected fighter was not hurt and knocked (dmg %.1f, moved %.1f)" % [damages[1], peaks[1]])
+	if damages[0] != 0.0:
+		failures.append("the protected fighter took %.1f from a boomerang" % damages[0])
+	if peaks[0] > 1.0:
+		failures.append("the protected fighter was moved %.1f px by a boomerang" % peaks[0])
+	if counts[0] > 2:
+		failures.append("the boomerang hit the protected fighter %d times, at most once per leg (2)" % counts[0])
 	return failures
 ## Issue #55: a bullet disappears on terrain -- even terrain thinner than one
 ## tick of its flight, which only a swept bullet can see -- and nobody behind
