@@ -10,12 +10,14 @@ extends CanvasLayer
 ## Self-contained: `Announcer.gd`'s round-manager watch calls `show_for()` as
 ## each round starts; `RoundManager.gd` and `Player.gd` are not touched. It
 ## reads only `match_target()`, `score_of()`, `team_score()` and friends,
-## duck-typed. Host screen only: no remote-client banner path exists for it.
+## duck-typed. The Online joiner (#976) shows the same plates and dots: the host
+## records the lines (`EffectStream`) and the joiner calls `present()`.
 ## Preloaded by path (CLAUDE.md), never referenced by a `class_name`.
 
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 
 const GROUP: StringName = &"match_point_plates"
 const DOT_GROUP: StringName = &"match_point_dots"
@@ -69,26 +71,41 @@ static func show_for(rm: Node) -> Node:
 	var found: Array[Dictionary] = leaders(rm)
 	if found.is_empty() or not rm.is_inside_tree():
 		return null
-	for old: Node in rm.get_tree().get_nodes_in_group(GROUP):
-		old.remove_from_group(GROUP)
-		old.queue_free()
-	for old_dot: Node in rm.get_tree().get_nodes_in_group(DOT_GROUP):
-		old_dot.queue_free()
+	var sent: Array = []
+	for entry: Dictionary in found:
+		sent.append(entry.duplicate())
+	EffectStreamScript.record("match_point", {"lines": sent}) # #976
+	return present(rm, found, func(slot: int) -> Label: return rm.name_tag(slot), rm, int(rm.get("_round_number")))
+
+## The plates for `found` (as `leaders()` returns) under `parent`, and a dot on
+## each leader's name tag (`name_tag` maps a slot to its Label, or null) that
+## lasts while `round_manager` (anything with `lobby_phase()` and
+## `_round_number`) stays in round `round_number`. Shared by the host and the
+## Online joiner (#976). Returns the plate layer, or null.
+static func present(parent: Node, found: Array, name_tag: Callable, round_manager: Node, round_number: int) -> Node:
+	if found.is_empty() or not parent.is_inside_tree():
+		return null
+	for old: Node in parent.get_tree().get_nodes_in_group(GROUP):
+		if old.get_parent() == parent:
+			old.remove_from_group(GROUP)
+			old.queue_free()
+	for old_dot: Node in parent.get_tree().get_nodes_in_group(DOT_GROUP):
+		if old_dot.get("round_manager") == round_manager:
+			old_dot.queue_free()
 	# Settings > "Match point plate" (#892): off shows no plate; the dots stay.
 	var layer: CanvasLayer = null
 	if _setting_on():
 		layer = (load("res://scripts/MatchPointPlate.gd") as GDScript).new() as CanvasLayer
 		for entry: Dictionary in found.slice(0, MAX_PLATES):
 			layer.lines.append(entry)
-		rm.add_child(layer)
-	var round_number: int = int(rm.get("_round_number"))
+		parent.add_child(layer)
 	for entry: Dictionary in found:
-		var tag: Label = rm.name_tag(int(entry["slot"])) if int(entry["slot"]) >= 0 else null
+		var tag: Label = name_tag.call(int(entry["slot"])) if int(entry["slot"]) >= 0 and name_tag.is_valid() else null
 		if tag == null:
 			continue
 		var dot := Control.new()
 		dot.set_script(load("res://scripts/MatchPointDot.gd"))
-		dot.set("round_manager", rm)
+		dot.set("round_manager", round_manager)
 		dot.set("round_number", round_number)
 		tag.add_child(dot)
 	return layer
