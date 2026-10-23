@@ -8,6 +8,7 @@ extends Node2D
 
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 
 const GROUP: StringName = &"pickup_callouts"
 const FONT_SIZE: int = 20 # at least the 16 px Deck floor (D7/D10)
@@ -21,27 +22,48 @@ const SPAWN_WEAPON: String = "pickaxe"
 
 var fighter: Node = null
 var text: String = ""
+## The plate's colour: the fighter's identity colour.
+var colour: Color = Color.WHITE
+## Who the callout belongs to: a new one for the same key replaces it.
+var owner_key: int = 0
 
 ## Shows `weapon_id` (a resource basename such as "fishing_rod") over `fighter`.
 ## Returns the callout, or null when none is due (a ghost, the spawn weapon).
 static func show_for(fighter_body: Node2D, weapon_id: String, parent: Node) -> Node2D:
 	if weapon_id == SPAWN_WEAPON or not fighter_body.get("alive") or parent == null:
 		return null
+	var identity: Variant = fighter_body.get("identity_color")
+	var tint: Color = identity if identity is Color else Color.WHITE
+	# The Online joiner's copy (#976), before this machine's setting is asked.
+	EffectStreamScript.record("callout", {"p": fighter_body.global_position, "w": weapon_id, "c": tint,
+		"o": fighter_body.get_instance_id()}, fighter_body)
+	var callout: Node2D = show_at(parent, fighter_body.global_position, weapon_id, tint, fighter_body.get_instance_id())
+	if callout != null:
+		callout.fighter = fighter_body
+	return callout
+
+## The callout itself, for a fighter at `at` in `tint`; `key` names the fighter
+## so its next grab replaces this one. Shared by the host and the Online
+## joiner (#976). Null with Settings > Pickup callouts off on this machine.
+static func show_at(parent: Node, at: Vector2, weapon_id: String, tint: Color, key: int) -> Node2D:
+	if parent == null or not parent.is_inside_tree():
+		return null
 	# Settings > Pickup callouts (#882); on when there is no Sfx autoload.
-	var sfx: Node = fighter_body.get_node_or_null("/root/Sfx")
+	var sfx: Node = parent.get_node_or_null("/root/Sfx")
 	if sfx != null and not bool(sfx.get("pickup_callouts")):
 		return null
-	for old: Node in fighter_body.get_tree().get_nodes_in_group(GROUP):
-		if old.get("fighter") == fighter_body:
+	for old: Node in parent.get_tree().get_nodes_in_group(GROUP):
+		if int(old.get("owner_key")) == key:
 			old.remove_from_group(GROUP)
 			old.queue_free()
 	var callout: Node2D = (load("res://scripts/PickupCallout.gd") as GDScript).new() as Node2D
-	callout.fighter = fighter_body
-	var key: String = "WEAPON_" + weapon_id.to_upper()
-	var shown: String = TranslationServer.translate(key)
-	callout.text = weapon_id.replace("_", " ").capitalize() if shown == key else shown
+	callout.owner_key = key
+	callout.colour = tint
+	var name_key: String = "WEAPON_" + weapon_id.to_upper()
+	var shown: String = TranslationServer.translate(name_key)
+	callout.text = weapon_id.replace("_", " ").capitalize() if shown == name_key else shown
 	parent.add_child(callout)
-	callout.global_position = fighter_body.global_position + Vector2(0.0, -START_RISE)
+	callout.global_position = at + Vector2(0.0, -START_RISE)
 	return callout
 
 func _ready() -> void:
@@ -49,8 +71,6 @@ func _ready() -> void:
 	name = "PickupCallout"
 	z_index = CALLOUT_Z
 	z_as_relative = false
-	var identity: Variant = fighter.get("identity_color") if fighter != null else null
-	var colour: Color = identity if identity is Color else Color.WHITE
 	var label: Label = ScreenKitScript.ink_label(text, FONT_SIZE, colour)
 	var plate := PanelContainer.new()
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE

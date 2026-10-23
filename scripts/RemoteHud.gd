@@ -10,6 +10,8 @@ extends RefCounted
 
 const STATE_ROUND_END: int = 2
 const STATE_VICTORY: int = 5
+const UiMirrorScript: GDScript = preload("res://scripts/UiMirror.gd")
+const HostSettingsScript: GDScript = preload("res://scripts/HostSettings.gd")
 
 static func capture(rm: Node) -> Dictionary:
 	var state: int = int(rm.get("_state"))
@@ -32,7 +34,46 @@ static func capture(rm: Node) -> Dictionary:
 	var node: Variant = rm.get("_game_mode_node")
 	if node != null and (state == 1 or state == 2):
 		hud["m"] = _mode(str(rm.get("game_mode")), node, rm)
+	hud["ui"] = _pack(screen_state(rm))
+	if state == STATE_VICTORY and rm.has_method("victory_data"):
+		# Issue #976: everything the host's VictoryScreen is drawn from (every
+		# award included), so the joiner draws the same screen with its code.
+		hud["victory"] = _pack(rm.victory_data())
 	return hud
+
+## Issue #976: the host's screen-space HUDs as `UiMirror.capture()` sees them:
+## the shared `HostHud.tscn` ("main", its kill feed excluded: that plays from
+## recorded events) and the game mode's own HUD layer ("mode", with the mode
+## script's path in "mode_script" so the joiner builds it with the same
+## `_build_hud()`).
+static func screen_state(rm: Node) -> Dictionary:
+	var out: Dictionary = {"numbers": bool(HostSettingsScript.shared().player_numbers)}
+	var path: Variant = rm.get("score_label_path")
+	var score_label: Node = rm.get_node_or_null(path) if path is NodePath and not (path as NodePath).is_empty() else null
+	if score_label != null:
+		out["main"] = UiMirrorScript.capture(score_label.get_parent(), PackedStringArray(["KillFeed"]))
+	var node: Variant = rm.get("_game_mode_node")
+	if node is Node and is_instance_valid(node):
+		var layer: Variant = (node as Node).get("_hud")
+		if layer is CanvasLayer and is_instance_valid(layer) and (node as Node).has_method("_build_hud"):
+			out["mode_script"] = str(((node as Node).get_script() as Script).resource_path)
+			out["mode"] = UiMirrorScript.capture(layer)
+	return out
+
+## Plain values as text for the JSON `hud` frame: `var_to_bytes()` in base64,
+## so colours, vectors and typed arrays arrive as they left.
+static func _pack(value: Variant) -> String:
+	return Marshalls.raw_to_base64(var_to_bytes(value))
+
+## `_pack()`'s text back as its value; anything else gives `fallback`.
+static func unpack(text: Variant, fallback: Variant = {}) -> Variant:
+	if not text is String or (text as String).is_empty():
+		return fallback
+	var bytes: PackedByteArray = Marshalls.base64_to_raw(text)
+	if bytes.size() < 4:
+		return fallback
+	var value: Variant = bytes_to_var(bytes)
+	return value if typeof(value) == typeof(fallback) else fallback
 
 static func _mode(id: String, node: Object, rm: Node) -> Dictionary:
 	match id:
