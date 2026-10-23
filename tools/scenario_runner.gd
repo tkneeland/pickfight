@@ -1120,6 +1120,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_keeps_same_podium_and_resets_title_colour_review_ui",
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
+	"controller_page_review_fixes_refactor_phone",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3789,6 +3790,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_settings_language_change_rewords_every_label_review_ui()
 		"credits_cover_the_settings_toggle_review_ui":
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
+		"controller_page_review_fixes_refactor_phone":
+			return _scenario_controller_page_review_fixes_refactor_phone()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -53080,5 +53083,46 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	credits.queue_free()
 	await process_frame
 	PadMenuScript368.reset()
+	_scenario_completed = true
+	return failures
+## Phone page review fixes, read off controller/index.html as shipped: the input
+## packet is reused but still sent every frame (ADR-0002), an idle pad skips its
+## clear, the state timer runs only for the round_end countdown, the weak-link
+## chip sits clear of the Stock lives, the hill chip is translated, and the
+## launch site closes its <head>.
+func _scenario_controller_page_review_fixes_refactor_phone() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	var frame_body: String = _js_function_body(page, "frame")
+	if frame_body.contains("new ArrayBuffer") or frame_body.contains("new DataView") or frame_body.contains("new Uint8Array"):
+		failures.append("frame() allocates a new input packet every frame")
+	if not frame_body.contains("ws.send(inputBuf);") or not frame_body.contains("ws.send(relayInputBuf);"):
+		failures.append("frame() does not send the input on both transports every frame")
+	if not page.contains("relayInputView.setUint8(0, KIND_INPUT);"):
+		failures.append("the relay input packet does not carry the input kind byte")
+	var draw_body: String = _js_function_body(page, "draw")
+	if not draw_body.contains("if (drawing || drewLast) { ctx.clearRect("):
+		failures.append("draw() clears the canvas even when nothing was or will be drawn")
+	if _js_function_body(page, "showLobby").contains("setInterval"):
+		failures.append("a lobby frame still starts the state timer")
+	var state_body: String = _js_function_body(page, "showState")
+	if not state_body.contains('lobby.phase === "round_end"') or not state_body.contains("clearInterval(stateTimer)"):
+		failures.append("the state timer is not limited to the round_end countdown")
+	if state_body.contains("getElementById"):
+		failures.append("showState() looks elements up on every call")
+	var top_re := RegEx.create_from_string("(?:^|[;\\s])top:\\s*([^;]+);")
+	var lives_m: RegExMatch = top_re.search(_css_rule_231(page, "#lives"))
+	var weak_m: RegExMatch = top_re.search(_css_rule_231(page, "#weak-chip"))
+	if lives_m == null or weak_m == null or lives_m.get_string(1) == weak_m.get_string(1):
+		failures.append("the weak connection chip sits on top of the Stock lives count")
+	var hill_keys: int = page.count("\"HILL_LINE\":")
+	if hill_keys != 9:
+		failures.append("HILL_LINE is in %d language tables, wanted 9" % hill_keys)
+	if not _js_function_body(page, "showHill").contains("t(\"HILL_LINE\""):
+		failures.append("the King of the Hill chip is not translated")
+	var site: String = FileAccess.get_file_as_string("res://site/index.html")
+	var head_end: int = site.find("</head>")
+	if head_end < 0 or head_end > site.find("<body>"):
+		failures.append("site/index.html does not close its <head> before <body>")
 	_scenario_completed = true
 	return failures
