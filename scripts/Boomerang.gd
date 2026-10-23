@@ -158,6 +158,7 @@ func _move(motion: Vector2) -> void:
 	var blocker: Node = ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, _shape.radius)
 	if blocker != null and blocker != _shield_turned:
 		_shield_turned = blocker
+		ShotSweepScript.shield_blocked(self, blocker, global_position)
 		impacted.emit(blocker, global_position)
 		if leg == Leg.OUT:
 			velocity = Vector2.ZERO

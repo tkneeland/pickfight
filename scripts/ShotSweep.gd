@@ -9,6 +9,8 @@ extends RefCounted
 ## Static functions only. Preloaded by path, never named by `class_name`
 ## (CLAUDE.md).
 
+const ShieldSparkScript := preload("res://scripts/ShieldSpark.gd")
+
 ## Issue #631, ADR-0024: the player, other than `shooter`, whose shield's
 ## face turns a shot flying `from` -> `to` with radius `r`, or null.
 static func shield_holder(tree: SceneTree, shooter: Node, from: Vector2, to: Vector2, r: float) -> Node:
@@ -32,6 +34,25 @@ static func centred(art: PackedVector2Array) -> PackedVector2Array:
 	for p: Vector2 in art:
 		out.append(p - centre)
 	return out
+
+## Issue #969: feedback for a shot the shield of `holder` just stopped at
+## `point`: one `shield_block` sound and a spark burst in the holder's colour
+## (no burst with "Reduce flashes" on, #317; the sound stays). Call once per
+## block. Damage and the shot's own turn-back are the caller's business.
+static func shield_blocked(shot: Node, holder: Node, point: Vector2) -> void:
+	var sfx: Node = shot.get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(&"shield_block", point, 1.0)
+		if bool(sfx.get("reduce_flash")):
+			return
+	var spark: Node2D = ShieldSparkScript.new()
+	spark.colour = shooter_colour(holder)
+	var parent: Node = shot.get_parent()
+	if parent == null:
+		spark.free()
+		return
+	parent.add_child(spark)
+	spark.global_position = point
 
 ## The shooter's identity colour, or white for a shooter without one.
 static func shooter_colour(shooter: Node) -> Color:
