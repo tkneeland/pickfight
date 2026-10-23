@@ -411,7 +411,7 @@ const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 ## Issue #239: the remote-seat protocol version. A remote client's hello must
 ## carry `"proto": PROTOCOL_VERSION`; phones are exempt (the page comes from
 ## this host, so it always matches).
-const PROTOCOL_VERSION: int = 1
+const PROTOCOL_VERSION: int = 2 # 2: the effects block in the sound trailer (#976)
 
 ## One remote client's seat over the relay (#239): quacks like the
 ## WebSocketPeer a phone slot holds, so the claim, input and text paths are
@@ -3191,7 +3191,7 @@ func _stream_snapshots(delta: float) -> void:
 	_snapshot_previous = world
 	_snapshot_frame = 1 if full else _snapshot_frame + 1
 	var payload: PackedByteArray = SnapshotScript.encode(frame)
-	payload.append_array(SnapshotCaptureScript.encode_sound_trailer(_snapshot_sounds, _music_track()))
+	payload.append_array(SnapshotCaptureScript.encode_sound_trailer(_snapshot_sounds, _music_track(), EffectStreamScript.take()))
 	_snapshot_sounds.clear()
 	_ensure_relay_link().send_to(0, RelayLinkScript.KIND_SNAPSHOT, payload)
 	snapshot_frames_sent += 1
@@ -3207,9 +3207,13 @@ func _stream_snapshots(delta: float) -> void:
 
 var _snapshot_sounds: Array = [] # sounds played since the last frame (see SnapshotCapture's trailer)
 var _sound_source: Node = null
+const EffectStreamScript: GDScript = preload("res://scripts/EffectStream.gd")
 
-## Records the Sfx autoload's plays while a remote seat is bound, and only then.
+## Records the Sfx autoload's plays, and the host's one-shot effects (#976),
+## while a remote seat is bound, and only then.
 func _listen_for_sounds(on: bool) -> void:
+	if on != EffectStreamScript.recording:
+		EffectStreamScript.set_recording(on)
 	var sfx: Node = _sfx_autoload()
 	if sfx == null or on == (_sound_source != null):
 		return
