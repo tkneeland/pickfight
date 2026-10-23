@@ -15799,11 +15799,11 @@ func _scenario_controller_page_prompts_for_nickname_first() -> Array[String]:
 	if not open_body.contains("nameInput.value = myName"):
 		failures.append("the prompt is not prefilled with the default name: %s" % open_body)
 	var commit_body: String = _js_function_body(page, "commitName")
-	for needed: String in ["cleanName(nameInput.value)", "localStorage.setItem(NAME_KEY, name)",
-			"localStorage.setItem(NAME_CHOSEN_KEY, \"1\")", "classList.remove(\"show\")", "sendName()"]:
+	for needed: String in ["cleanName(nameInput.value)", "store(NAME_KEY, name)",
+			"store(NAME_CHOSEN_KEY, \"1\")", "classList.remove(\"show\")", "sendName()"]:
 		if not commit_body.contains(needed):
 			failures.append("picking a name does not do %s" % needed)
-	if not _js_function_body(page, "nameChosen").contains("localStorage.getItem(NAME_CHOSEN_KEY)"):
+	if not _js_function_body(page, "nameChosen").contains("stored(NAME_CHOSEN_KEY)"):
 		failures.append("whether a name was chosen is not read back from localStorage")
 	if not page.contains("nameEl.addEventListener(\"click\", openNamePrompt)"):
 		failures.append("tapping the name does not open the prompt to edit it")
@@ -17263,9 +17263,14 @@ func _scenario_controller_page_look_picker_after_name() -> Array[String]:
 		if not server_src.contains(arm):
 			failures.append("ControllerServer does not handle the page's %s frame" % arm.strip_edges())
 	var render: String = _js_function_body(page, "renderLookPrompt")
-	for needed: String in ["sw.disabled = holder >= 0", '"taken"', 't: "color", v: index', 't: "hat", v: id', "drawHat(preview"]:
+	for needed: String in ["sw.disabled = holder >= 0", '"taken"', 't: "color", v: index', 'drawHat, tint, HAT_KEY, "hat")']:
 		if not render.contains(needed):
 			failures.append("the picker does not do %s" % needed)
+	# The hat and eyes grids share buildPicker(): it draws each preview and sends the pick as a `kind` frame.
+	var picker: String = _js_function_body(page, "buildPicker")
+	for needed: String in ["t: kind, v: item.id", "draw(preview, item.id, tint)"]:
+		if not picker.contains(needed):
+			failures.append("the picker grid does not do %s" % needed)
 	if not _js_function_body(page, "colorOf").contains("looks.palette[look.color]"):
 		failures.append("the phone does not take its colour from the host")
 	for old: String in ["SLOT_COLORS[slot % SLOT_COLORS.length]", "SLOT_COLORS[p.slot % SLOT_COLORS.length]"]:
@@ -19204,7 +19209,7 @@ func _scenario_controller_page_stale_confirms_close() -> Array[String]:
 		failures.append("the kick does not name the target's claim")
 	if not kick_body.contains("return claimHolder(target, claim) !== null;"):
 		failures.append("the kick confirm does not check its target still holds that claim")
-	if not _js_function_body(page, "claimHolder").contains("lobby.players[i].claim === claim"):
+	if not _js_function_body(page, "claimHolder").contains("p.claim === claim"):
 		failures.append("claimHolder does not compare claims")
 	var end_at: int = page.find('menuEndBtn.addEventListener("click"')
 	var end_to: int = page.find("menuKickBtn.addEventListener", end_at)
@@ -31519,9 +31524,11 @@ func _scenario_controller_page_has_once_per_device_tip() -> Array[String]:
 			failures.append("the controller page has no '%s'" % needle)
 	var stores := 0
 	for line: String in page.split("\n"):
-		if line.contains("TIP_SEEN_KEY") and (line.contains("getItem") or line.contains("setItem")):
+		if line.contains("TIP_SEEN_KEY") and (line.contains("getItem") or line.contains("setItem")
+				or line.contains("stored(TIP_SEEN_KEY)") or line.contains("store(TIP_SEEN_KEY")):
 			stores += 1
-			if not line.contains("try {"):
+			# Direct access needs its own try/catch; stored()/store() are the page's try/catch helpers.
+			if (line.contains("getItem") or line.contains("setItem")) and not line.contains("try {"):
 				failures.append("a tip localStorage access is not inside try/catch: %s" % line.strip_edges())
 	if stores < 2:
 		failures.append("the tip is not both read and written in localStorage (%d accesses)" % stores)
@@ -50097,7 +50104,9 @@ func _scenario_phone_swing_reach_slider_817() -> Array[String]:
 		failures.append("computeDragRadius does not multiply by the reach")
 	if not page.contains("var reachScale = 1;"):
 		failures.append("the reach does not default to 1.0")
-	if not page.contains("setReach(stored(REACH_KEY));") or not page.contains("store(REACH_KEY, String(reachScale));"):
+	var slider: String = _js_function_body(page, "bindSlider")
+	if not page.contains("bindSlider(reachEl, reachValueEl, REACH_KEY, REACH_MIN, REACH_MAX, applyReach);") \
+			or not slider.contains("set(stored(key));") or not slider.contains("store(key, String(set(inputEl.value)));"):
 		failures.append("the reach is not read from and saved to the try/catch storage helpers")
 	if not page.contains("if (!isFinite(v) || v <= 0) { v = 1; }"):
 		failures.append("a zero or garbage stored reach does not fall back to 1.0")

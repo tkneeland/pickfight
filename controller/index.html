@@ -2334,11 +2334,10 @@
     }
   }
   function loadName() {
-    var name = "";
-    try { name = cleanName(localStorage.getItem(NAME_KEY)); } catch (err) { /* private mode */ }
+    var name = cleanName(stored(NAME_KEY));
     if (!name) {
       name = randomName();
-      try { localStorage.setItem(NAME_KEY, name); } catch (err) { /* kept for this load only */ }
+      store(NAME_KEY, name);
     }
     return name;
   }
@@ -2492,20 +2491,7 @@
   if (finePointer) {
     var sensEl = document.getElementById("mouse-sens");
     var sensValueEl = document.getElementById("mouse-sens-value");
-    var setSens = function (v) {
-      v = parseFloat(v);
-      if (!isFinite(v) || v <= 0) { v = 1; }
-      mouseSens = v;
-      sensEl.value = String(v);
-      sensValueEl.textContent = v.toFixed(2) + "x";
-    };
-    var savedSens = null;
-    try { savedSens = localStorage.getItem(MOUSE_SENS_KEY); } catch (err) { /* private mode */ }
-    setSens(savedSens);
-    sensEl.addEventListener("input", function () {
-      setSens(sensEl.value);
-      try { localStorage.setItem(MOUSE_SENS_KEY, String(mouseSens)); } catch (err) { /* this load only */ }
-    });
+    bindSlider(sensEl, sensValueEl, MOUSE_SENS_KEY, 0, Infinity, function (v) { mouseSens = v; });
     document.getElementById("mouse-capture").addEventListener("click", function () {
       if (!canvas.requestPointerLock) { return; }
       // Chrome refuses a re-lock for about a second after an Esc exit; newer
@@ -2575,17 +2561,20 @@
   // This phone's team in a Teams lobby or match, or -1 (free-for-all).
   function myTeam() {
     if (!lobby || !lobby.teams) { return -1; }
-    for (var i = 0; i < lobby.players.length; i++) {
-      if (lobby.players[i].slot === slot && typeof lobby.players[i].team === "number") { return lobby.players[i].team; }
-    }
-    return -1;
+    var me = playerBySlot(slot);
+    return me && typeof me.team === "number" ? me.team : -1;
   }
   // This phone's own pick: 0, 1, or -1 for auto.
   function myPick() {
+    var me = playerBySlot(slot);
+    return me && typeof me.pick === "number" ? me.pick : -1;
+  }
+  // The latest lobby state's entry for slot n, or null (no lobby, or no such player).
+  function playerBySlot(n) {
     for (var i = 0; lobby && i < lobby.players.length; i++) {
-      if (lobby.players[i].slot === slot && typeof lobby.players[i].pick === "number") { return lobby.players[i].pick; }
+      if (lobby.players[i].slot === n) { return lobby.players[i]; }
     }
-    return -1;
+    return null;
   }
   var teamRowEl = document.getElementById("team-row");
   var teamLineEl = document.getElementById("team-line");
@@ -2617,7 +2606,7 @@
   nameInput.maxLength = MAX_NAME_LENGTH;
 
   function nameChosen() {
-    try { return localStorage.getItem(NAME_CHOSEN_KEY) === "1"; } catch (err) { return false; }
+    return stored(NAME_CHOSEN_KEY) === "1";
   }
 
   // Up whenever the phone has joined but its player has never picked a name,
@@ -2653,7 +2642,7 @@
     var name = cleanName(v);
     if (!name || name === myName) { return; }
     myName = name;
-    try { localStorage.setItem(NAME_KEY, name); } catch (err) { /* this load only */ }
+    store(NAME_KEY, name);
     nameEl.textContent = name;
     if (!promptEl.classList.contains("show")) { nameInput.value = name; }
   }
@@ -2661,10 +2650,8 @@
   function commitName() {
     var name = cleanName(nameInput.value) || myName;
     myName = name;
-    try {
-      localStorage.setItem(NAME_KEY, name);
-      localStorage.setItem(NAME_CHOSEN_KEY, "1");
-    } catch (err) { /* kept for this load only */ }
+    store(NAME_KEY, name);
+    store(NAME_CHOSEN_KEY, "1");
     nameEl.textContent = name;
     promptEl.classList.remove("show");
     nameInput.blur();
@@ -2700,6 +2687,7 @@
   var stateTimer = null; // runs only while the round_end countdown is on screen (showState)
   var hintEl = document.getElementById("hint");
   var mousePanelEl = document.getElementById("mouse-panel");
+  function capitalise(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
   // Issue #194: why the host last closed this phone's socket, kept until it
   // is given a slot, so a refused phone keeps saying so while it retries.
   var closeReason = "";
@@ -2712,14 +2700,14 @@
     } else if (replacedOut) {
       text = t("STATE_REPLACED");
     } else if (refusedOut) {
-      text = t("STATE_REFUSED_WAIT", closeReason.charAt(0).toUpperCase() + closeReason.slice(1));
+      text = t("STATE_REFUSED_WAIT", capitalise(closeReason));
     } else if (slot >= 0 && lobby && lobby.paused) {
       text = t("STATE_PAUSED");
     } else if (slot < 0) {
       if (statusEl.textContent === t("STATUS_CONNECTED") || closeReason === NO_SLOT_REASON) {
         text = t("STATE_WAITING_SLOT");
       } else if (closeReason) {
-        text = t("STATE_REASON_RECONNECTING", closeReason.charAt(0).toUpperCase() + closeReason.slice(1));
+        text = t("STATE_REASON_RECONNECTING", capitalise(closeReason));
       }
     } else if (lobby && (lobby.phase === "playing" || lobby.phase === "round_end")) {
       var inRound = (lobby.in_round || []).indexOf(slot) !== -1;
@@ -2927,12 +2915,8 @@
   function announceLag() { sendText({ t: "lag" }); }
 
   function slotName(n) {
-    if (lobby) {
-      for (var i = 0; i < lobby.players.length; i++) {
-        if (lobby.players[i].slot === n) { return lobby.players[i].name; }
-      }
-    }
-    return "P" + (n + 1);
+    var p = playerBySlot(n);
+    return p ? p.name : "P" + (n + 1);
   }
 
   function showLobby(msg) {
@@ -2947,10 +2931,8 @@
     // A drag in progress would otherwise stay held under the overlay.
     release();
     lobbyEl.className = "show";
-    amReady = false;
-    for (var i = 0; i < msg.players.length; i++) {
-      if (msg.players[i].slot === slot) { amReady = !!msg.players[i].ready; }
-    }
+    var me = playerBySlot(slot); // lobby is msg by now
+    amReady = !!(me && me.ready);
     var ready = 0;
     for (var j = 0; j < msg.players.length; j++) { if (msg.players[j].ready) { ready++; } }
     var isHost = slot >= 0 && msg.host === slot;
@@ -3012,6 +2994,22 @@
 
   function stored(key) { try { return localStorage.getItem(key); } catch (err) { return null; } }
   function store(key, value) { try { localStorage.setItem(key, value); } catch (err) { /* this load only */ } }
+  // A settings slider kept under `key` (mouse sensitivity, swing reach): the
+  // value, 1 when missing or not positive, clamped to [min, max], shown as
+  // "N.NNx" and handed to apply(v); loaded once now and saved on every move.
+  function bindSlider(inputEl, valueEl, key, min, max, apply) {
+    function set(v) {
+      v = parseFloat(v);
+      if (!isFinite(v) || v <= 0) { v = 1; }
+      v = Math.min(max, Math.max(min, v));
+      inputEl.value = String(v);
+      valueEl.textContent = v.toFixed(2) + "x";
+      apply(v);
+      return v;
+    }
+    set(stored(key));
+    inputEl.addEventListener("input", function () { store(key, String(set(inputEl.value))); });
+  }
   function lookChosen() { return stored(LOOK_CHOSEN_KEY) === "1"; }
 
   function lookOf(n) {
@@ -3069,15 +3067,14 @@
   var tipEl = document.getElementById("tip");
   var tipShownThisLoad = false;
   function maybeShowTip() {
-    var seen = false;
-    try { seen = localStorage.getItem(TIP_SEEN_KEY) === "1"; } catch (err) { seen = false; }
+    var seen = stored(TIP_SEEN_KEY) === "1";
     if (seen || tipShownThisLoad || inPlay()) { return; }
     tipShownThisLoad = true;
     release();
     tipEl.classList.add("show");
   }
   function dismissTip() {
-    try { localStorage.setItem(TIP_SEEN_KEY, "1"); } catch (err) { /* this load only */ }
+    store(TIP_SEEN_KEY, "1");
     tipEl.classList.remove("show");
   }
   document.getElementById("tip-go").addEventListener("click", dismissTip);
@@ -3089,17 +3086,23 @@
     return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
   }
 
+  var PREVIEW_W = 72, PREVIEW_H = 56;
+  // A PREVIEW_W x PREVIEW_H preview canvas at the device's pixel ratio, its
+  // context scaled by `scale` about the origin (ox, oy) in CSS pixels.
+  function previewCtx(canvas, scale, ox, oy) {
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = PREVIEW_W * dpr;
+    canvas.height = PREVIEW_H * dpr;
+    var c = canvas.getContext("2d");
+    c.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+    return c;
+  }
+
   // A hat preview: the top of a body in `tint` wearing hat `id`, drawn from
   // the host's own description of it (Hat.gd parts(): origin on the body's
   // top edge, up is -y).
   function drawHat(canvas, id, tint) {
-    var dpr = window.devicePixelRatio || 1;
-    var w = 72, h = 56;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    var c = canvas.getContext("2d");
-    var scale = 0.95;
-    c.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * w / 2, dpr * (h - 12));
+    var c = previewCtx(canvas, 0.95, PREVIEW_W / 2, PREVIEW_H - 12);
     c.lineJoin = "round";
     c.fillStyle = tint;
     c.strokeStyle = HAT_OUTLINE;
@@ -3138,12 +3141,7 @@
   // An eye-style preview: a body in `tint` with eyes `id` looking right,
   // mirroring PlayerFace.gd (issue #297).
   function drawEyes(canvas, id, tint) {
-    var dpr = window.devicePixelRatio || 1;
-    var w = 72, h = 56;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    var c = canvas.getContext("2d");
-    c.setTransform(dpr * 1.1, 0, 0, dpr * 1.1, dpr * w / 2, dpr * h / 2);
+    var c = previewCtx(canvas, 1.1, PREVIEW_W / 2, PREVIEW_H / 2);
     c.fillStyle = tint;
     c.strokeStyle = HAT_OUTLINE;
     c.lineWidth = 2;
@@ -3169,65 +3167,55 @@
     });
   }
 
+  // One picker grid (hats, eyes): a button per item with its preview and
+  // label. A tap stores the pick under `key`, sends it as a `kind` frame
+  // ("hat" or "eyes", also the look's field) and redraws the card.
+  function buildPicker(gridEl, items, current, prefix, draw, tint, key, kind) {
+    gridEl.textContent = "";
+    items.forEach(function (item) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = item.id === current ? "on" : "";
+      var preview = document.createElement("canvas");
+      b.appendChild(preview);
+      var label = document.createElement("span");
+      label.textContent = tId(prefix, item.id, "", item.label);
+      b.appendChild(label);
+      draw(preview, item.id, tint);
+      b.addEventListener("click", function () {
+        store(key, item.id);
+        sendText({ t: kind, v: item.id });
+        var look = lookOf(slot);
+        if (look) { look[kind] = item.id; }
+        renderLookPrompt();
+      });
+      gridEl.appendChild(b);
+    });
+  }
+
+  // The slot of another player holding palette colour k, or -1 when it is free.
+  function colorHolder(k) {
+    var holder = -1;
+    for (var m = 0; looks && m < looks.looks.length; m++) {
+      if (looks.looks[m].color === k && looks.looks[m].slot !== slot) { holder = looks.looks[m].slot; }
+    }
+    return holder;
+  }
+
   function renderLookPrompt() {
     var mine = lookOf(slot) || { hat: stored(HAT_KEY) || "none", color: -1 };
     var tint = colorOf(slot);
     var hats = (looks && looks.hats) || [{ id: "none", label: "None" }];
-    hatGridEl.textContent = "";
-    for (var i = 0; i < hats.length; i++) {
-      var b = document.createElement("button");
-      b.type = "button";
-      b.className = hats[i].id === mine.hat ? "on" : "";
-      var preview = document.createElement("canvas");
-      b.appendChild(preview);
-      var label = document.createElement("span");
-      label.textContent = tId("HAT_", hats[i].id, "", hats[i].label);
-      b.appendChild(label);
-      drawHat(preview, hats[i].id, tint);
-      b.addEventListener("click", (function (id) {
-        return function () {
-          store(HAT_KEY, id);
-          sendText({ t: "hat", v: id });
-          var look = lookOf(slot);
-          if (look) { look.hat = id; }
-          renderLookPrompt();
-        };
-      })(hats[i].id));
-      hatGridEl.appendChild(b);
-    }
+    buildPicker(hatGridEl, hats, mine.hat, "HAT_", drawHat, tint, HAT_KEY, "hat");
     var myEyes = mine.eyes || stored(EYES_KEY) || "round";
     var styles = (looks && looks.eyes) || [{ id: "round", label: "Round" }];
-    eyesGridEl.textContent = "";
-    for (var e = 0; e < styles.length; e++) {
-      var eb = document.createElement("button");
-      eb.type = "button";
-      eb.className = styles[e].id === myEyes ? "on" : "";
-      var ep = document.createElement("canvas");
-      eb.appendChild(ep);
-      var el = document.createElement("span");
-      el.textContent = tId("EYES_", styles[e].id, "", styles[e].label);
-      eb.appendChild(el);
-      drawEyes(ep, styles[e].id, tint);
-      eb.addEventListener("click", (function (id) {
-        return function () {
-          store(EYES_KEY, id);
-          sendText({ t: "eyes", v: id });
-          var look = lookOf(slot);
-          if (look) { look.eyes = id; }
-          renderLookPrompt();
-        };
-      })(styles[e].id));
-      eyesGridEl.appendChild(eb);
-    }
+    buildPicker(eyesGridEl, styles, myEyes, "EYES_", drawEyes, tint, EYES_KEY, "eyes");
     colorRowEl.textContent = "";
     var palette = (looks && looks.palette) || [];
     document.getElementById("color-label").style.display = palette.length ? "" : "none";
     for (var k = 0; k < palette.length; k++) {
       if (!palette[k]) { continue; }
-      var holder = -1;
-      for (var m = 0; m < looks.looks.length; m++) {
-        if (looks.looks[m].color === k && looks.looks[m].slot !== slot) { holder = looks.looks[m].slot; }
-      }
+      var holder = colorHolder(k);
       var sw = document.createElement("button");
       sw.type = "button";
       sw.style.background = palette[k];
@@ -3257,12 +3245,7 @@
     var free = [];
     var palette = looks.palette || [];
     for (var k = 0; k < palette.length; k++) {
-      if (!palette[k]) { continue; }
-      var held = false;
-      for (var m = 0; m < looks.looks.length; m++) {
-        if (looks.looks[m].color === k && looks.looks[m].slot !== slot) { held = true; }
-      }
-      if (!held) { free.push(k); }
+      if (palette[k] && colorHolder(k) < 0) { free.push(k); }
     }
     store(HAT_KEY, hat);
     sendText({ t: "hat", v: hat });
@@ -3300,22 +3283,13 @@
   // Touch phones only: a fine pointer has the mouse sensitivity row instead.
   var reachEl = document.getElementById("reach");
   var reachValueEl = document.getElementById("reach-value");
-  function setReach(v) {
-    v = parseFloat(v);
-    if (!isFinite(v) || v <= 0) { v = 1; }
-    v = Math.min(REACH_MAX, Math.max(REACH_MIN, v));
+  function applyReach(v) {
     reachScale = v;
-    reachEl.value = String(v);
-    reachValueEl.textContent = v.toFixed(2) + "x";
     dragRadiusPx = computeDragRadius();
     recompute();
   }
   if (finePointer) { document.getElementById("reach-row").style.display = "none"; }
-  setReach(stored(REACH_KEY));
-  reachEl.addEventListener("input", function () {
-    setReach(reachEl.value);
-    store(REACH_KEY, String(reachScale));
-  });
+  bindSlider(reachEl, reachValueEl, REACH_KEY, REACH_MIN, REACH_MAX, applyReach);
 
   // ---- leave game (issue #775) ---------------------------------------------------
   // Two taps: the first arms the button for a few seconds, the second tells the host to free the seat.
@@ -3409,10 +3383,8 @@
   // The lobby entry for `target` under claim `claim`, or null once that
   // player has gone (a new player in the same slot has a new claim).
   function claimHolder(target, claim) {
-    for (var i = 0; lobby && i < lobby.players.length; i++) {
-      if (lobby.players[i].slot === target && lobby.players[i].claim === claim) { return lobby.players[i]; }
-    }
-    return null;
+    var p = playerBySlot(target);
+    return p && p.claim === claim ? p : null;
   }
   function rosterKey() {
     var key = "";
