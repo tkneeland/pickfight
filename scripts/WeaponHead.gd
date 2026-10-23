@@ -110,6 +110,8 @@ const BLOCK_ANGLE_COS: float = 0.5
 ## follows generates a real contact and the solver takes the clash from
 ## there, which is where a clash belongs.
 const PAIR_CONTACT_STEPS: int = 10
+## Poses tested through a step by `_first_rotating_contact` (#950).
+const ROTATION_SAMPLES: int = 8
 ## How far a step may carry one head past the moment it met another before
 ## the pair is corrected rather than left to the solver. Measured against
 ## what this rig actually produces: a settled clash holds at 0.3 px of give
@@ -293,6 +295,7 @@ var _step_frame: int = -1
 var _step_from: Vector2 = Vector2.ZERO
 var _step_to: Vector2 = Vector2.ZERO
 var _step_rotation: float = 0.0
+var _step_rotation_to: float = 0.0
 var _step_shape_xforms: Array[Transform2D] = []
 var _step_velocity: Vector2 = Vector2.ZERO
 var _step_usable: bool = false
@@ -1278,6 +1281,7 @@ func _snapshot_step(xform: Transform2D, velocity: Vector2) -> void:
 	_step_from = _previous_position
 	_step_to = xform.origin
 	_step_rotation = _previous_rotation
+	_step_rotation_to = xform.get_rotation()
 	_step_velocity = velocity
 	_step_shape_xforms = _previous_shape_xforms.duplicate()
 	# A weapon swapped mid-step leaves a snapshot that no longer describes the
@@ -1303,6 +1307,7 @@ func pair_step_snapshot() -> Dictionary:
 		"from": _step_from,
 		"to": _step_to,
 		"rotation": _step_rotation,
+		"rotation_to": _step_rotation_to,
 		"velocity": _step_velocity,
 		"shapes": _step_shape_xforms,
 	}
@@ -1457,6 +1462,10 @@ func _find_head_crossing(held_from: float = -1.0) -> Dictionary:
 		var met: Dictionary = _first_circle_contact(
 			mine, my_motion, _step_shape_xforms,
 			their_shapes, theirs_at_start, their_motion, theirs["shapes"])
+		if met.is_empty() and held_from < 0.0:
+			met = _first_rotating_contact(
+				my_from, my_motion, _step_rotation, _step_rotation_to, _step_shape_xforms,
+				their_shapes, their_from, their_motion, theirs["rotation"], theirs["rotation_to"], theirs["shapes"])
 		if met.is_empty():
 			continue
 		var fraction: float = met["fraction"]
@@ -1606,6 +1615,105 @@ func _first_circle_contact(
 	if soonest > 1.0:
 		return {}
 	return {"fraction": soonest, "normal": normal}
+
+## What `_first_circle_contact` cannot see: a pair of circles that meet only
+## because a head *turned* during the step (#950).
+##
+## The sweep carries each circle along its head's translation with the
+## rotation the step started with, so a sword whirling past a head at
+## 1800 px/s can end the step 2-3 px inside it without the straight-line sweep
+## ever touching, because the turn is what closed the last few pixels. Whether
+## that sliver lands just under or just over `PAIR_OVERLAP_ALLOWANCE` is decided
+## by float rounding, which is how one charge breached on ubuntu-26.04 and not
+## on 24.04 or macOS.
+##
+## Sampled rather than swept: both heads' poses are interpolated (translation
+## linearly, rotation along the short arc, circle offsets linearly) at
+## `ROTATION_SAMPLES` points through the step and every pair of circles that was
+## not already touching is tested statically; the first sample at which any
+## pair overlaps is then bisected. Run only when the sweep found nothing, so a
+## step that already has a contact keeps exactly the answer it had before.
+func _first_rotating_contact(
+		my_from: Vector2, my_motion: Vector2, my_rot0: float, my_rot1: float,
+		my_locals: Array[Transform2D],
+		their_shapes: Array[CollisionShape2D],
+		their_from: Vector2, their_motion: Vector2, their_rot0: float, their_rot1: float,
+		their_locals: Array[Transform2D]) -> Dictionary:
+	if my_locals.size() != sweep_shapes.size() or their_locals.size() != their_shapes.size():
+		return {}
+	# Nothing turned and no circle moved on its head, so the sweep already
+	# said everything there is to say.
+	var reposed: bool = not (is_equal_approx(my_rot0, my_rot1) and is_equal_approx(their_rot0, their_rot1))
+	for i: int in sweep_shapes.size():
+		if reposed:
+			break
+		reposed = sweep_shapes[i] != null and not sweep_shapes[i].transform.is_equal_approx(my_locals[i])
+	for i: int in their_shapes.size():
+		if reposed:
+			break
+		reposed = their_shapes[i] != null and not their_shapes[i].transform.is_equal_approx(their_locals[i])
+	if not reposed:
+		return {}
+	var touching_at_start: Dictionary = {}
+	for mi: int in sweep_shapes.size():
+		var mnode: CollisionShape2D = sweep_shapes[mi]
+		if mnode == null or mnode.shape == null:
+			continue
+		for ti: int in their_shapes.size():
+			var tnode: CollisionShape2D = their_shapes[ti]
+			if tnode == null or tnode.shape == null:
+				continue
+			var a0: Transform2D = Transform2D(my_rot0, my_from) * my_locals[mi]
+			var b0: Transform2D = Transform2D(their_rot0, their_from) * their_locals[ti]
+			if mnode.shape.collide(a0, tnode.shape, b0):
+				touching_at_start[mi * 1000 + ti] = true
+	var previous_t: float = 0.0
+	for sample: int in range(1, ROTATION_SAMPLES + 1):
+		var t: float = float(sample) / float(ROTATION_SAMPLES)
+		if not _rotating_pair_at(t, touching_at_start, my_from, my_motion, my_rot0, my_rot1, my_locals,
+				their_shapes, their_from, their_motion, their_rot0, their_rot1, their_locals).is_empty():
+			var clear: float = previous_t
+			var met: float = t
+			for _i in PAIR_CONTACT_STEPS:
+				var mid: float = (clear + met) * 0.5
+				if _rotating_pair_at(mid, touching_at_start, my_from, my_motion, my_rot0, my_rot1, my_locals,
+						their_shapes, their_from, their_motion, their_rot0, their_rot1, their_locals).is_empty():
+					clear = mid
+				else:
+					met = mid
+			var hit: Dictionary = _rotating_pair_at(met, touching_at_start, my_from, my_motion, my_rot0, my_rot1, my_locals,
+					their_shapes, their_from, their_motion, their_rot0, their_rot1, their_locals)
+			return {"fraction": met, "normal": hit["normal"]}
+		previous_t = t
+	return {}
+
+## The first not-already-touching pair of circles overlapping at fraction `t`
+## of the step, as `{normal}` (the line of centres), or empty.
+func _rotating_pair_at(
+		t: float, touching_at_start: Dictionary,
+		my_from: Vector2, my_motion: Vector2, my_rot0: float, my_rot1: float,
+		my_locals: Array[Transform2D],
+		their_shapes: Array[CollisionShape2D],
+		their_from: Vector2, their_motion: Vector2, their_rot0: float, their_rot1: float,
+		their_locals: Array[Transform2D]) -> Dictionary:
+	var mine := Transform2D(lerp_angle(my_rot0, my_rot1, t), my_from + my_motion * t)
+	var theirs := Transform2D(lerp_angle(their_rot0, their_rot1, t), their_from + their_motion * t)
+	for mi: int in sweep_shapes.size():
+		var mnode: CollisionShape2D = sweep_shapes[mi]
+		if mnode == null or mnode.shape == null:
+			continue
+		var a: Transform2D = mine * my_locals[mi].interpolate_with(mnode.transform, t)
+		for ti: int in their_shapes.size():
+			var tnode: CollisionShape2D = their_shapes[ti]
+			if tnode == null or tnode.shape == null or touching_at_start.has(mi * 1000 + ti):
+				continue
+			var b: Transform2D = theirs * their_locals[ti].interpolate_with(tnode.transform, t)
+			if mnode.shape.collide(a, tnode.shape, b):
+				var line: Vector2 = a.origin - b.origin
+				if line.length_squared() == 0.0:
+					continue
+				return {"normal": line.normalized()}
+	return {}
 
 ## How close two bodies got over one step, given where one started relative
 ## to the other and how their motions differed. Closed form: the relative

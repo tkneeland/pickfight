@@ -197,6 +197,8 @@ const EDGE_KEEP: float = 75.0
 const ATTACK_EDGE_ROOM: float = 200.0
 ## Hazard zones count as this much bigger than they are.
 const HAZARD_MARGIN: float = 50.0
+## Physics ticks of a saw's last-tick motion its danger zone is grown by (#950).
+const SAW_LOOKAHEAD_TICKS: float = 40.0
 ## Room either side of a falling rock's column, past the rock and a body.
 const ROCK_MARGIN: float = 45.0
 ## How far either way the bot looks for solid ground to leave unstable
@@ -353,6 +355,9 @@ var _pads: Array[Node2D] = []
 ## the blade is now) and stage gusts (found by duck typing, so a gust part that
 ## lands later is handled without Bot knowing its script).
 var _saws: Array[Node2D] = []
+## Each saw's position the last time its zone was built, by instance id, so
+## the zone can lead the blade (#950).
+var _saw_previous: Dictionary = {}
 var _gusts: Array[Node2D] = []
 ## Off, the bot ignores spikes and saws; for scenarios that compare.
 var avoid_damage_hazards: bool = true
@@ -1515,7 +1520,24 @@ func _danger_rects() -> Array[Rect2]:
 	for saw: Node2D in ([] as Array[Node2D]) if _soft_pass_left > 0.0 else _saws:
 		if is_instance_valid(saw) and saw.is_inside_tree():
 			var reach: float = float(saw.get("radius")) + BODY_RADIUS + HAZARD_MARGIN
-			_danger.append(Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0))
+			var zone := Rect2(saw.global_position.x - reach, saw.global_position.y - reach, reach * 2.0, reach * 2.0)
+			# A patrolling saw is where it is going as much as where it is
+			# (#950): a bot hopping about inside the margin of a saw's turn
+			# was hit as the blade came on, on one runner image and not
+			# another, because the zone only ever covered the blade's
+			# current spot and the bot's jerky hops (300 px/s bursts) cover
+			# more ground than the blade did in the tick it was shown. The
+			# zone is grown ahead of the blade's last tick's motion, so the
+			# flee starts a lookahead earlier.
+			var id: int = saw.get_instance_id()
+			if _saw_previous.has(id):
+				# Capped: the zone is not rebuilt while a soft pass is on, and
+				# a stale position would otherwise throw it across the stage.
+				var step: Vector2 = (saw.global_position - Vector2(_saw_previous[id])).limit_length(4.0)
+				var lead: Vector2 = step * SAW_LOOKAHEAD_TICKS
+				zone = zone.merge(Rect2(zone.position + lead, zone.size))
+			_saw_previous[id] = saw.global_position
+			_danger.append(zone)
 	# The stage's rocks first, then any not in the stage read: rocks spawned
 	# mid-round (the overtime rain, #611). Same order as before, no copy.
 	for rock: Node2D in _rocks:
