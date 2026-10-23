@@ -684,12 +684,16 @@ func receive_snapshot_packet(payload: PackedByteArray) -> void:
 	_play_sounds(split.get("events", []), str(split.get("track", "")))
 
 ## Applies a decoded snapshot: a full one becomes the new world (and snaps the
-## puppets), a delta is merged onto the last full one. A delta with no full
+## puppets only when a round starts or the stage changes; mid-round fulls, which
+## arrive about once a second and whenever something disappears, blend in like a
+## delta), a delta is merged onto the last full one. A delta with no full
 ## snapshot before it is dropped.
 func apply_snapshot(snap: Dictionary) -> void:
 	if snap.get("is_full_snapshot", false):
+		var restage: bool = _world.is_empty() or not _round_shown() or snap.get("stage_id") != _world.get("stage_id")
 		_world = snap.duplicate(true)
-		_samples.clear()
+		if restage:
+			_samples.clear()
 		full_frames_applied += 1
 		_sync_stage()
 	else:
