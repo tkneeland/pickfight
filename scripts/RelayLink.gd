@@ -241,9 +241,7 @@ func _handle_control(text: String) -> void:
 			else:
 				if _state == STATE_RECONNECTING:
 					# A fresh room: the old one is gone with everyone in it.
-					for id: int in _peers.keys():
-						peer_left.emit(id)
-					_peers.clear()
+					_drop_peers()
 				_room_code = code
 				room_code_changed.emit(_room_code)
 			_was_online = true
@@ -261,11 +259,7 @@ func _handle_control(text: String) -> void:
 			if _peers.erase(id):
 				peer_left.emit(id)
 		"error":
-			if _socket != null:
-				_socket.close()
-				_socket = null
-			_token = ""
-			_fail()
+			_give_up()
 
 func _handle_frame(pkt: PackedByteArray) -> void:
 	if pkt.size() < 2:
@@ -275,10 +269,13 @@ func _handle_frame(pkt: PackedByteArray) -> void:
 		return
 	frame_received.emit(id, pkt[1], pkt.slice(2))
 
-func _drop_room() -> void:
+func _drop_peers() -> void:
 	for id: int in _peers.keys():
 		peer_left.emit(id)
 	_peers.clear()
+
+func _drop_room() -> void:
+	_drop_peers()
 	if _room_code != "":
 		_room_code = ""
 		room_code_changed.emit("")

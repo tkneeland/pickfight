@@ -1018,10 +1018,7 @@ func _save_settings() -> void:
 	config.save(settings_path)
 
 static func _random_id() -> String:
-	var out: String = ""
-	for i in 8:
-		out += "%02x" % (randi() % 256)
-	return out
+	return Crypto.new().generate_random_bytes(8).hex_encode()
 
 # --- UI ---------------------------------------------------------------------------------------
 
