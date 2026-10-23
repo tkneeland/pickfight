@@ -32,6 +32,7 @@ const PickerScript := preload("res://scripts/CosmeticsPicker.gd")
 const PreviewScript := preload("res://scripts/CosmeticsPreview.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
+const ControllerServerScript := preload("res://scripts/ControllerServer.gd")
 
 const TITLE_SIZE: int = 24
 const FONT_SIZE: int = 18
@@ -64,6 +65,9 @@ var _preview_frame: PanelContainer
 var _preview_note: Label
 var _taken_note: Label
 var _done_row: HBoxContainer
+## The host seat's nickname box (#937), shown only once `bind_server` binds it.
+var _name_row: HBoxContainer
+var _name_edit: LineEdit
 
 func _init() -> void:
 	name = "CosmeticsPanel"
@@ -96,6 +100,22 @@ func _init() -> void:
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation", 8)
 	_root.add_child(right)
+	# #937: the host's own nickname, one row above Colour (the PC client names itself on its join screen).
+	_name_row = HBoxContainer.new()
+	_name_row.name = "NameRow"
+	_name_row.add_theme_constant_override("separation", 12)
+	_name_row.visible = false
+	right.add_child(_name_row)
+	_name_row.add_child(_heading(tr("PICKER_NAME")))
+	_name_edit = LineEdit.new()
+	_name_edit.name = "HostName"
+	_name_edit.max_length = ControllerServerScript.MAX_NAME_LENGTH
+	_name_edit.placeholder_text = ControllerServerScript.HOST_PC_NAME
+	_name_edit.focus_mode = Control.FOCUS_ALL
+	_name_edit.add_theme_font_size_override("font_size", 22)
+	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_name_edit.text_changed.connect(_on_name_changed)
+	_name_row.add_child(_name_edit)
 	right.add_child(_heading(tr("PICKER_COLOUR")))
 	_color_grid = _grid(8)
 	right.add_child(_color_grid)
@@ -246,6 +266,28 @@ func bind_server(server: Object, slot: int) -> void:
 	if not picked.is_connected(_apply_to_server):
 		picked.connect(_apply_to_server)
 	set_catalog(server.looks_message())
+	_name_row.visible = server.has_method("set_host_pc_name")
+	if _name_row.visible:
+		_name_edit.set_block_signals(true)
+		_name_edit.text = str(server.host_pc_nickname())
+		_name_edit.set_block_signals(false)
+		# A gamepad reaches the box from Done (D-pad up), and Steam's keyboard types into it.
+		var done: Button = done_button()
+		done.focus_neighbor_top = done.get_path_to(_name_edit)
+		_name_edit.focus_neighbor_bottom = _name_edit.get_path_to(done)
+		var tree := Engine.get_main_loop() as SceneTree
+		var steam: Node = tree.root.get_node_or_null(^"SteamPlatform") if tree != null else null
+		if steam != null and not _name_edit.has_meta("steam_text_input"):
+			_name_edit.set_meta("steam_text_input", true)
+			steam.call("attach_text_input", _name_edit)
+
+## The host seat's nickname box (#937), or null before it was built.
+func name_edit() -> LineEdit:
+	return _name_edit
+
+func _on_name_changed(text: String) -> void:
+	if _server != null and _server.has_method("set_host_pc_name"):
+		_server.set_host_pc_name(text)
 
 func _process(_delta: float) -> void:
 	if _server != null and is_visible_in_tree():
