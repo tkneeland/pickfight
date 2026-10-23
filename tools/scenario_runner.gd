@@ -1160,6 +1160,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_keeps_same_podium_and_resets_title_colour_review_ui",
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
+	"lobby_kick_needs_second_press",
 	"join_screen_remembers_last_room_code",
 	"join_screen_hints_when_a_code_letter_is_dropped",
 	"stage_platform_geometry_unchanged_refactor_platforms",
@@ -3914,6 +3915,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_settings_language_change_rewords_every_label_review_ui()
 		"credits_cover_the_settings_toggle_review_ui":
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
+		"lobby_kick_needs_second_press":
+			return await _scenario_lobby_kick_needs_second_press()
 		"join_screen_remembers_last_room_code":
 			return await _scenario_join_screen_remembers_last_room_code()
 		"join_screen_hints_when_a_code_letter_is_dropped":
@@ -38607,6 +38610,7 @@ func _scenario_online_host_kicks_remote_seat_from_lobby_row() -> Array[String]:
 	if screen.kick_button(own) != null:
 		failures.append("the host PC's own lobby row (slot %d) has a Kick" % own)
 	screen.kick_button(slot).pressed.emit()
+	screen.kick_button(slot).pressed.emit()  # #992: the second press confirms
 	if not await _wait_for_239(func() -> bool: return client.state == RcState241.JOIN, 4000):
 		failures.append("the kicked client stayed in the room")
 	_rc_expect_join_screen_241(client, failures, "kicked from the lobby row", "removed")
@@ -54230,6 +54234,60 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	PadMenuScript368.reset()
 	_scenario_completed = true
 	return failures
+
+## Issue #992: the lobby's Kick button is two-step. One press only arms it
+## ("Tap again to kick", 3 s); a second inside the window kicks; after 3 s a
+## press only re-arms; arming one card disarms any other armed card.
+func _scenario_lobby_kick_needs_second_press() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _online_host_rig_458(failures, 0)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var first: Node = rig["client"]
+	var second: Node = await _rc_client_241(rig)
+	var screen: CanvasLayer = rig["rm"].get_node("LobbyLayer")
+	if not await _rc_joined_241(rig, second, failures, "Second"):
+		await _rc_close_241(rig)
+		return failures
+	var a: int = first.slot
+	var b: int = second.slot
+	if not await _wait_for_239(func() -> bool: return screen.kick_button(a) != null and screen.kick_button(b) != null):
+		failures.append("the two remote seats' rows do not both have a Kick")
+		await _rc_close_241(rig)
+		return failures
+	var plain: String = TranslationServer.translate("HOST_KICK")
+	var armed: String = TranslationServer.translate("HOST_KICK_CONFIRM")
+	var card_a: Control = screen.player_card(a)
+	var card_b: Control = screen.player_card(b)
+	screen.kick_button(a).pressed.emit()
+	await process_frame
+	print("      one press on A: roster %s, text '%s'" % [server.claimed_slots(), screen.kick_button(a).text])
+	if not server.claimed_slots().has(a) or first.state == RcState241.JOIN:
+		failures.append("one press of Kick already removed the seat")
+	if screen.kick_button(a).text != armed or armed == plain:
+		failures.append("one press did not arm Kick ('%s', expected '%s')" % [screen.kick_button(a).text, armed])
+	screen.kick_button(b).pressed.emit()
+	if card_a.kick_is_armed() or screen.kick_button(a).text != plain:
+		failures.append("arming B left A's Kick armed")
+	if not card_b.kick_is_armed():
+		failures.append("the first press on B did not arm it")
+	# 3 s of game time later a press only re-arms.
+	card_b._process(3.1)
+	if card_b.kick_is_armed() or screen.kick_button(b).text != plain:
+		failures.append("Kick stayed armed after 3 s")
+	screen.kick_button(b).pressed.emit()
+	if not server.claimed_slots().has(b) or not card_b.kick_is_armed():
+		failures.append("a press after the window kicked instead of only re-arming")
+	# Two presses inside the window kick, once.
+	screen.kick_button(b).pressed.emit()
+	if not await _wait_for_239(func() -> bool: return second.state == RcState241.JOIN, 4000):
+		failures.append("two presses within 3 s did not kick the seat")
+	if not server.claimed_slots().has(a) or first.state == RcState241.JOIN:
+		failures.append("kicking B also removed A: roster %s" % [server.claimed_slots()])
+	await _rc_close_241(rig)
+	return failures
+
 ## Issue #907: the PC join screen remembers the last room it got a seat in and offers it as a one-tap "Last room: CODE" button; a dead room (bad_room, host_left) is forgotten.
 func _scenario_join_screen_remembers_last_room_code() -> Array[String]:
 	var failures: Array[String] = []

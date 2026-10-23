@@ -14,6 +14,8 @@ extends Control
 signal body_clicked(slot: int)
 signal badge_pressed(slot: int)
 signal kick_pressed(slot: int)
+## A first Kick press armed the button (#992); the lobby disarms every other card.
+signal kick_armed(slot: int)
 
 const PreviewScript := preload("res://scripts/CosmeticsPreview.gd")
 const PadPickerCardScript := preload("res://scripts/PadPickerCard.gd")
@@ -23,6 +25,9 @@ const TeamsScript := preload("res://scripts/Teams.gd")
 const TeamBadgeScript := preload("res://scripts/TeamBadge.gd")
 ## The team badge in a Teams match (#752): the team's letter in ink on its colour, top right of the card.
 const TEAM_CHIP_PX: float = 30.0
+
+## How long a first Kick press stays armed (#992), as the phone's Leave game button does (#775).
+const KICK_ARM_SECONDS: float = 3.0
 
 const BORDER_PX: float = 5.0
 const STRIP_PX: float = 18.0
@@ -42,6 +47,7 @@ var _meta: Label
 var _picker: Control = null
 var _badge: Button
 var _kick: Button
+var _kick_left: float = 0.0
 var _pill: StringName = &""
 var _strip_color: Color = Color.TRANSPARENT
 var _team_chip: Control
@@ -118,7 +124,7 @@ func _init(seat_slot: int = -1) -> void:
 	_kick = ScreenKitScript.themed_button(tr("HOST_KICK"), UiThemeScript.ACTION_BUTTON, "Kick")
 	_kick.add_theme_font_size_override("font_size", SMALL_FONT_SIZE + 2)
 	_kick.visible = false
-	_kick.pressed.connect(func() -> void: kick_pressed.emit(slot))
+	_kick.pressed.connect(_on_kick_button)
 	box.add_child(_kick)
 
 func _get_minimum_size() -> Vector2:
@@ -129,6 +135,32 @@ func _gui_input(event: InputEvent) -> void:
 	if clickable and click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
 		body_clicked.emit(slot)
 		accept_event()
+
+## First press arms Kick; a second inside KICK_ARM_SECONDS emits `kick_pressed` (#992).
+func _on_kick_button() -> void:
+	if _kick_left > 0.0:
+		disarm_kick()
+		kick_pressed.emit(slot)
+	else:
+		_kick_left = KICK_ARM_SECONDS
+		_kick.text = tr("HOST_KICK_CONFIRM")
+		set_process(true)
+		kick_armed.emit(slot)
+
+func _process(delta: float) -> void:
+	_kick_left -= delta
+	if _kick_left <= 0.0:
+		disarm_kick()
+
+## Puts Kick back to its first-press state.
+func disarm_kick() -> void:
+	_kick_left = 0.0
+	_kick.text = tr("HOST_KICK")
+	set_process(false)
+
+## True while a first Kick press waits for its second.
+func kick_is_armed() -> bool:
+	return _kick_left > 0.0
 
 ## The Kick button, or null.
 func kick_button() -> Button:
@@ -214,4 +246,6 @@ func apply(info: Dictionary) -> void:
 	clickable = bool(info.get("clickable", false))
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if clickable else Control.CURSOR_ARROW
 	_kick.visible = bool(info.get("kickable", false))
+	if not _kick.visible and kick_is_armed():
+		disarm_kick()
 	modulate.a = 0.82 if bool(info.get("dim", false)) else 1.0
