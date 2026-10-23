@@ -1089,6 +1089,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"structure_changed_on_new_entity_and_hud_change_review_net",
 	"controller_page_review_fixes_review_net",
 	"stage_check_and_join_urls_cached_review_perf",
+	"online_remote_seats_cannot_start_or_run_the_match_936",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3640,6 +3641,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_review_fixes_review_net()
 		"stage_check_and_join_urls_cached_review_perf":
 			return await _scenario_stage_check_and_join_urls_cached_review_perf()
+		"online_remote_seats_cannot_start_or_run_the_match_936":
+			return await _scenario_online_remote_seats_cannot_start_or_run_the_match_936()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -36760,7 +36763,8 @@ func _scenario_match_kind_couch_refuses_remote_seat() -> Array[String]:
 		failures.append("the host phone's Go online button does not hide in a Couch match")
 	await _online_close_239(rig)
 	return failures
-## Online claims the host PC seat itself, ready, and the old toggle is refused.
+## Online claims the host PC seat itself, and the old toggle is refused. Since
+## #936 the seat is not ready in the lobby until the host presses Start.
 func _scenario_match_kind_online_claims_host_pc_seat() -> Array[String]:
 	var failures: Array[String] = []
 	var relay: Node = _relay_start()
@@ -36773,7 +36777,7 @@ func _scenario_match_kind_online_claims_host_pc_seat() -> Array[String]:
 	server.apply_host_command("kind", "online")
 	if server.host_pc_slot() != 0 or server.claimed_slots() != [0]:
 		failures.append("Online gave pc slot %d, claims %s; expected the seat in 0" % [server.host_pc_slot(), server.claimed_slots()])
-	elif not server.slot_ready(0) or server.slot_name(0) != "Host":
+	elif server.slot_ready(0) or server.slot_name(0) != "Host":
 		failures.append("the host PC seat is ready %s, named '%s'" % [server.slot_ready(0), server.slot_name(0)])
 	if not await _wait_for_239(func() -> bool: return server.is_online()):
 		failures.append("Online never went online (%s)" % server.online_status())
@@ -51479,4 +51483,104 @@ func _scenario_stage_check_and_join_urls_cached_review_perf() -> Array[String]:
 	screen.set_popup("")
 	await _teardown(rig["main"])
 	_scenario_completed = true
+	return failures
+# --- Online: only the host starts the match (issue #936) ------------------------
+## Pumps `frames` frames, polling every fake remote client, and returns each lobby
+## phase seen on the way.
+func _pump_936(rig: Dictionary, frames: int) -> Dictionary:
+	var seen: Dictionary = {}
+	for i in frames:
+		for c: WebSocketPeer in rig["clients"]:
+			c.poll()
+		await process_frame
+		seen[rig["rm"].lobby_phase()] = true
+	return seen
+## #936: in an Online lobby a remote client's Ready only readies its own seat.
+## Every remote ready for longer than a countdown takes starts nothing; the host's
+## Start does. A remote seat's host commands (start, pause, end, kick, online,
+## pc_seat, mode, gamemode, target, stock) are refused, in the lobby and mid-match.
+func _scenario_online_remote_seats_cannot_start_or_run_the_match_936() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bots_rig_445("online", true, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var screen: CanvasLayer = rig["screen"]
+	var remotes: Array[WebSocketPeer] = []
+	var slots: Array[int] = []
+	for id: String in ["ready936-a", "ready936-b"]:
+		var peer: WebSocketPeer = await _online_remote_239(rig, id)
+		var seat: Dictionary = await _online_wait_239(rig, peer, "slot") if peer != null else {}
+		if seat.is_empty() or int(seat.get("slot", -1)) < 0:
+			failures.append("remote '%s' got no seat: %s" % [id, seat])
+		else:
+			remotes.append(peer)
+			slots.append(int(seat["slot"]))
+	if remotes.size() != 2:
+		await _bots_close_445(rig)
+		return failures
+	var emitted: Array = []
+	server.host_command.connect(func(cmd: String, slot: int) -> void: emitted.append([cmd, slot]))
+	var target: int = server.mode_target()
+	var game_mode: String = server.game_mode()
+	var host_seat: int = server.host_pc_slot()
+	# Host commands from a remote seat, in the lobby.
+	var sender: WebSocketPeer = remotes[0]
+	for frame: Dictionary in [{"t": "host", "cmd": "start"}, {"t": "start"}, {"t": "host", "cmd": "pause"},
+			{"t": "host", "cmd": "resume"}, {"t": "host", "cmd": "end"}, {"t": "host", "cmd": "kick", "slot": slots[1]},
+			{"t": "host", "cmd": "kick", "slot": host_seat}, {"t": "host", "cmd": "online", "v": false},
+			{"t": "host", "cmd": "pc_seat", "v": false}, {"t": "pc_seat", "v": false}, {"t": "mode", "v": "teams"},
+			{"t": "gamemode", "v": GameModesScript361.SUDDEN_DEATH}, {"t": "target", "n": target + 2}, {"t": "stock", "lives": 1}]:
+		_online_send_239(sender, 1, JSON.stringify(frame).to_utf8_buffer())
+	await _pump_936(rig, 30)
+	if not emitted.is_empty():
+		failures.append("a remote seat's host commands were taken in the lobby: %s" % [emitted])
+	if not server.claimed_slots().has(slots[1]) or not server.claimed_slots().has(host_seat):
+		failures.append("a remote seat's kick removed someone (seats %s)" % [server.claimed_slots()])
+	if not server.online_requested() or not server.is_online():
+		failures.append("a remote seat took the room offline")
+	if server.team_mode() or server.game_mode() != game_mode or server.mode_target() != target:
+		failures.append("a remote seat changed the match settings (teams %s, mode '%s', target %d)" % [server.team_mode(), server.game_mode(), server.mode_target()])
+	# Every remote readies: nothing starts, however long they wait.
+	for peer: WebSocketPeer in remotes:
+		_online_send_239(peer, 1, JSON.stringify({"t": "ready", "v": true}).to_utf8_buffer())
+	var seen: Dictionary = await _pump_936(rig, 360)
+	for slot: int in slots:
+		if not server.slot_pressed_ready(slot):
+			failures.append("remote slot %d's Ready never arrived" % slot)
+	if seen.size() != 1 or not seen.has("lobby"):
+		failures.append("remote clients' Ready alone moved the room through %s; only the host's Start may" % [seen.keys()])
+	if not emitted.is_empty():
+		failures.append("host commands emitted without the host: %s" % [emitted])
+	if rm.lobby_phase() != "lobby":
+		await _bots_close_445(rig)
+		return failures
+	# The host's Start runs the countdown; a remote un-ready cancels it, and its
+	# Ready back does not restart it: that takes the host's Start again.
+	screen.press_control("start")
+	if not await _wait_for_239(func() -> bool: return rm.lobby_phase() == "countdown", 5000):
+		failures.append("the host's Start never ran the countdown (phase %s)" % rm.lobby_phase())
+	_online_send_239(sender, 1, JSON.stringify({"t": "ready", "v": false}).to_utf8_buffer())
+	await _pump_936(rig, 20)
+	if rm.lobby_phase() != "lobby":
+		failures.append("a remote un-ready did not cancel the countdown (phase %s)" % rm.lobby_phase())
+	_online_send_239(sender, 1, JSON.stringify({"t": "ready", "v": true}).to_utf8_buffer())
+	seen = await _pump_936(rig, 360)
+	if seen.size() != 1 or not seen.has("lobby"):
+		failures.append("a remote's Ready after a cancelled countdown moved the room through %s" % [seen.keys()])
+	screen.press_control("start")
+	if not await _wait_for_239(func() -> bool: return int(rm.get("_state")) == 1, 30000):
+		failures.append("the host's Start never started the match (state %d)" % int(rm.get("_state")))
+		await _bots_close_445(rig)
+		return failures
+	emitted.clear()
+	for frame: Dictionary in [{"t": "host", "cmd": "pause"}, {"t": "host", "cmd": "end"}, {"t": "host", "cmd": "kick", "slot": slots[1]}]:
+		_online_send_239(sender, 1, JSON.stringify(frame).to_utf8_buffer())
+	await _pump_936(rig, 30)
+	if not emitted.is_empty() or rm.is_paused():
+		failures.append("a remote seat's pause/end/kick was taken mid-match: %s (paused %s)" % [emitted, rm.is_paused()])
+	if not server.claimed_slots().has(slots[1]):
+		failures.append("a remote seat kicked slot %d mid-match" % slots[1])
+	await _bots_close_445(rig)
 	return failures
