@@ -1161,6 +1161,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"settings_language_change_rewords_every_label_review_ui",
 	"credits_cover_the_settings_toggle_review_ui",
 	"join_screen_remembers_last_room_code",
+	"join_screen_hints_when_a_code_letter_is_dropped",
 	"stage_platform_geometry_unchanged_refactor_platforms",
 	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
@@ -3915,6 +3916,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_credits_cover_the_settings_toggle_review_ui()
 		"join_screen_remembers_last_room_code":
 			return await _scenario_join_screen_remembers_last_room_code()
+		"join_screen_hints_when_a_code_letter_is_dropped":
+			return await _scenario_join_screen_hints_when_a_code_letter_is_dropped()
 		"stage_platform_geometry_unchanged_refactor_platforms":
 			return await _scenario_stage_platform_geometry_unchanged_refactor_platforms()
 		"ice_patches_overlapping_keep_grip_off_refactor_modes":
@@ -54307,6 +54310,71 @@ func _scenario_join_screen_remembers_last_room_code() -> Array[String]:
 	await _await_ticks(2)
 	DirAccess.remove_absolute(path)
 	_scenario_completed = true
+	return failures
+## Issue #922: the PC join screen's room field says why a typed character vanished (I, O, digits, punctuation) without changing what it keeps.
+func _scenario_join_screen_hints_when_a_code_letter_is_dropped() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScript241.new()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await _await_ticks(4)
+	var hint: Label = client.find_child("CodeHint", true, false) as Label
+	var room: LineEdit = client.find_child("RoomCode", true, false) as LineEdit
+	if hint == null or room == null:
+		failures.append("the join screen has no CodeHint label under the room field")
+		client.queue_free()
+		await _await_ticks(2)
+		_scenario_completed = true
+		return failures
+	if hint.visible:
+		failures.append("the hint is shown before anything was typed")
+	var want_text: String = client.tr("JOIN_CODE_HINT")
+	if hint.text != want_text or want_text == "JOIN_CODE_HINT":
+		failures.append("the hint reads '%s', not the translated JOIN_CODE_HINT" % hint.text)
+	if room.get_global_rect().end.y > hint.get_global_rect().position.y + 1.0 and hint.visible:
+		failures.append("the hint is not under the room field")
+	# [typed text, whether a hint shows]. The kept text is always what normalize_code gives.
+	var cases: Array = [
+		["O", true], ["I", true], ["0", true], ["1", true], ["o", true], ["AB!", true], ["AI", true],
+		["ABCD", false], ["abcd", false], ["AB-CD", false], ["AB CD", false], ["ab-", false], ["", false],
+	]
+	for pair: Array in cases:
+		var typed: String = pair[0]
+		room.text = typed
+		room.text_changed.emit(typed)
+		var kept: String = client.normalize_code(typed)
+		if room.text != kept:
+			failures.append("typing '%s' left the field '%s', expected '%s'" % [typed, room.text, kept])
+		if hint.visible != pair[1]:
+			failures.append("typing '%s': hint visible is %s, expected %s" % [typed, hint.visible, pair[1]])
+	# It clears as soon as the field is edited again.
+	room.text = "O"
+	room.text_changed.emit("O")
+	room.text = "A"
+	room.text_changed.emit("A")
+	if hint.visible:
+		failures.append("the hint stayed after the field was edited to 'A'")
+	# ... and when a join starts (no real network: an empty relay URL fails at once).
+	room.text = "O"
+	room.text_changed.emit("O")
+	client.relay_url = ""
+	room.text = "ABCD"
+	client.join("ABCD", "Tester")
+	if hint.visible:
+		failures.append("the hint stayed after a join started")
+	# Paste and the pure rule.
+	room.text = "O"
+	room.text_changed.emit("O")
+	client.clipboard_getter = func() -> String: return "abcd"
+	(client.find_child("Paste", true, false) as Button).pressed.emit()
+	if hint.visible:
+		failures.append("the hint stayed after Paste filled the field")
+	if client.normalize_code("O0I1ab-c d") != "ABCD":
+		failures.append("normalize_code changed: 'O0I1ab-c d' gives '%s'" % client.normalize_code("O0I1ab-c d"))
+	client.queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
 	return failures
 # --- Stage platform parts (refactor_platforms) -----------------------------------
 ## The table every stage's static terrain must still match, one line per

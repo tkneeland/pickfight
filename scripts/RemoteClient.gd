@@ -143,6 +143,7 @@ var _join_panel: Control
 var _room_edit: LineEdit
 var _paste_button: Button
 var _last_room_button: Button
+var _code_hint: Label
 ## The clipboard read, a seam so the scenarios never touch the real clipboard (#906).
 var clipboard_getter: Callable = func() -> String: return DisplayServer.clipboard_get()
 var _name_edit: LineEdit
@@ -186,6 +187,17 @@ static func normalize_code(text: String) -> String:
 		if CODE_LETTERS.contains(ch) and out.length() < CODE_LENGTH:
 			out += ch
 	return out
+
+## #922: whether typing `text` into the room field dropped a character the
+## player meant as part of the code (I, O, a digit, punctuation). Case, spaces
+## and dashes are fine, and so is running past CODE_LENGTH letters.
+static func code_text_drops_a_letter(text: String) -> bool:
+	for ch: String in text.to_upper():
+		if ch == " " or ch == "-":
+			continue
+		if not CODE_LETTERS.contains(ch):
+			return true
+	return false
 
 ## #906: the room code inside pasted `text` ("" when there is none). Takes the
 ## first whole word that is exactly CODE_LENGTH letters of the relay alphabet
@@ -468,6 +480,7 @@ func _action_edge(id: int, pressed: bool) -> void:
 func join(code: String, display_name: String) -> bool:
 	if state != State.JOIN:
 		return false
+	_code_hint.visible = false # #922
 	code = normalize_code(code)
 	if not code_is_complete(code):
 		_set_status(tr("JOIN_ENTER_CODE") % CODE_LENGTH)
@@ -1246,6 +1259,11 @@ func _build_join_panel() -> void:
 	_last_room_button.name = "LastRoom"
 	_last_room_button.pressed.connect(_on_last_room_pressed)
 	box.add_child(_last_room_button)
+	_code_hint = _label(tr("JOIN_CODE_HINT"), 16, UiThemeScript.VERMILION, UiThemeScript.INK_LABEL) # #922
+	_code_hint.name = "CodeHint"
+	_code_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_code_hint.visible = false
+	box.add_child(_code_hint)
 	box.add_child(_label(tr("JOIN_YOUR_NAME"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_name_edit = LineEdit.new()
 	_name_edit.name = "PlayerName"
@@ -1280,6 +1298,7 @@ func _build_join_panel() -> void:
 	box.add_child(_update_link)
 
 func _on_room_text_changed(text: String) -> void:
+	_code_hint.visible = code_text_drops_a_letter(text) # #922: say why a typed letter did not stay; any edit re-decides
 	var cleaned: String = normalize_code(text)
 	if cleaned != text:
 		_room_edit.text = cleaned
@@ -1294,6 +1313,7 @@ func _on_paste_pressed() -> void:
 		return
 	_room_edit.text = code
 	_room_edit.caret_column = code.length()
+	_code_hint.visible = false
 	_set_status("")
 
 ## #907: a seat was granted in `code`: keep it for next time.
@@ -1323,6 +1343,7 @@ func _on_last_room_pressed() -> void:
 		return
 	_room_edit.text = last_room_code
 	_room_edit.caret_column = last_room_code.length()
+	_code_hint.visible = false
 	_set_status("")
 
 func _on_join_pressed() -> void:
