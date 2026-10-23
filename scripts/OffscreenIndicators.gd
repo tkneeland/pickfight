@@ -111,11 +111,12 @@ func update_targets() -> void:
 	var screen := Rect2(Vector2.ZERO, size)
 	var inner := Rect2(Vector2.ONE * EDGE_MARGIN, size - Vector2.ONE * EDGE_MARGIN * 2.0)
 	var numbers_on: bool = HostSettingsScript.shared().player_numbers
+	var arrows_on: bool = _settings_allow_arrows()
 	for slot in _players.size():
 		var player: Variant = _players[slot]
 		_wanted[slot] = false
 		var team: int = TeamsScript.NONE
-		if player != null and is_instance_valid(player) and player.alive and player.visible:
+		if arrows_on and player != null and is_instance_valid(player) and player.alive and player.visible:
 			var at: Vector2 = to_screen * player.global_position
 			if not screen.has_point(at):
 				_wanted[slot] = true
@@ -136,6 +137,11 @@ func update_targets() -> void:
 			num.set_number(slot + 1, _slot_color.call(slot))
 		else:
 			num.set_number(0)
+
+## Settings > "Edge arrows" (#940); on when there is no Sfx autoload.
+func _settings_allow_arrows() -> bool:
+	var sfx: Node = get_node_or_null("/root/Sfx")
+	return sfx == null or bool(sfx.get("edge_arrows"))
 
 ## The point where the ray from `centre` toward `at` leaves `box`.
 static func _clamp_to(box: Rect2, centre: Vector2, at: Vector2) -> Vector2:

@@ -75,7 +75,9 @@ var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _kill_feed_box: CheckBox
 var _damage_numbers_box: CheckBox
+var _edge_arrows_box: CheckBox
 var _match_point_plate_box: CheckBox
+var _stage_title_card_box: CheckBox
 var _hit_pause_box: CheckBox
 var _pickup_callouts_box: CheckBox
 var _scale_button: OptionButton
@@ -99,6 +101,8 @@ var _restore_confirm: VBoxContainer
 var _restore_label: Label
 var _restore_yes: Button
 var _restore_no: Button
+## What Restore defaults resizes the window with; unset, the real window. A scenario sets a recorder.
+var window_resizer: Callable = Callable()
 ## Whether a slider is being dragged. A drag applies every step live and
 ## saves once, when it ends (issue #167).
 var _dragging: bool = false
@@ -190,7 +194,9 @@ func _ready() -> void:
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
 	_kill_feed_box = _add_box(content, "KillFeed", tr("SETTINGS_KILL_FEED"))
 	_damage_numbers_box = _add_box(content, "DamageNumbers", tr("SETTINGS_DAMAGE_NUMBERS"))
+	_edge_arrows_box = _add_box(content, "EdgeArrows", tr("SETTINGS_EDGE_ARROWS"))
 	_match_point_plate_box = _add_box(content, "MatchPointPlate", tr("SETTINGS_MATCH_POINT_PLATE"))
+	_stage_title_card_box = _add_box(content, "StageTitleCard", tr("SETTINGS_STAGE_TITLE_CARD"))
 	_pickup_callouts_box = _add_box(content, "PickupCallouts", tr("SETTINGS_PICKUP_CALLOUTS"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
@@ -222,68 +228,25 @@ func _ready() -> void:
 	# Last in More options, kept quiet (issue #461).
 	_stats_box = _add_box(content, "ShareStats", tr("SETTINGS_SHARE_STATS"))
 	# Restore defaults (#750), above Credits: one press asks first, Yes resets.
-	_restore_button = Button.new()
-	_restore_button.name = "RestoreDefaults"
-	_restore_button.text = tr("SETTINGS_RESTORE_DEFAULTS")
-	_restore_button.focus_mode = Control.FOCUS_NONE
-	rows.add_child(_restore_button)
-	_restore_confirm = VBoxContainer.new()
-	_restore_confirm.name = "RestoreConfirm"
-	_restore_confirm.visible = false
-	rows.add_child(_restore_confirm)
-	_restore_label = Label.new()
-	_restore_label.text = tr("RESTORE_CONFIRM_TEXT")
-	_restore_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_restore_label.custom_minimum_size = Vector2(SLIDER_WIDTH + 24.0, 0.0)
-	_restore_confirm.add_child(_restore_label)
-	var restore_row := HBoxContainer.new()
-	_restore_confirm.add_child(restore_row)
-	_restore_yes = Button.new()
-	_restore_yes.name = "RestoreYes"
-	_restore_yes.text = tr("QUIT_YES")
-	_restore_yes.focus_mode = Control.FOCUS_NONE
-	_restore_yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	restore_row.add_child(_restore_yes)
-	_restore_no = Button.new()
-	_restore_no.name = "RestoreNo"
-	_restore_no.text = tr("QUIT_NO")
-	_restore_no.focus_mode = Control.FOCUS_NONE
-	_restore_no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	restore_row.add_child(_restore_no)	# Credits and licences (#721), above Quit.
+	var restore: Array = _add_confirm(rows, "RestoreDefaults", "Restore", "SETTINGS_RESTORE_DEFAULTS", "RESTORE_CONFIRM_TEXT")
+	_restore_button = restore[0]
+	_restore_confirm = restore[1]
+	_restore_label = restore[2]
+	_restore_yes = restore[3]
+	_restore_no = restore[4]
+	# Credits and licences (#721), above Quit.
 	_credits_button = Button.new()
 	_credits_button.name = "Credits"
 	_credits_button.text = tr("CREDITS_BUTTON")
 	_credits_button.focus_mode = Control.FOCUS_NONE
 	rows.add_child(_credits_button)
 	# Quit game (#718), last in the panel.
-	_quit_button = Button.new()
-	_quit_button.name = "QuitGame"
-	_quit_button.text = tr("SETTINGS_QUIT_GAME")
-	_quit_button.focus_mode = Control.FOCUS_NONE
-	rows.add_child(_quit_button)
-	_quit_confirm = VBoxContainer.new()
-	_quit_confirm.name = "QuitConfirm"
-	_quit_confirm.visible = false
-	rows.add_child(_quit_confirm)
-	_quit_label = Label.new()
-	_quit_label.text = tr("QUIT_CONFIRM_TEXT")
-	_quit_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_quit_label.custom_minimum_size = Vector2(SLIDER_WIDTH + 24.0, 0.0)
-	_quit_confirm.add_child(_quit_label)
-	var quit_row := HBoxContainer.new()
-	_quit_confirm.add_child(quit_row)
-	_quit_yes = Button.new()
-	_quit_yes.name = "QuitYes"
-	_quit_yes.text = tr("QUIT_YES")
-	_quit_yes.focus_mode = Control.FOCUS_NONE
-	_quit_yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	quit_row.add_child(_quit_yes)
-	_quit_no = Button.new()
-	_quit_no.name = "QuitNo"
-	_quit_no.text = tr("QUIT_NO")
-	_quit_no.focus_mode = Control.FOCUS_NONE
-	_quit_no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	quit_row.add_child(_quit_no)
+	var quit: Array = _add_confirm(rows, "QuitGame", "Quit", "SETTINGS_QUIT_GAME", "QUIT_CONFIRM_TEXT")
+	_quit_button = quit[0]
+	_quit_confirm = quit[1]
+	_quit_label = quit[2]
+	_quit_yes = quit[3]
+	_quit_no = quit[4]
 
 	_feedback_button = Button.new()
 	_feedback_button.name = "Feedback"
@@ -336,7 +299,9 @@ func _ready() -> void:
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
 	_kill_feed_box.toggled.connect(func(pressed: bool) -> void: sfx.set_kill_feed(pressed))
 	_damage_numbers_box.toggled.connect(func(pressed: bool) -> void: sfx.set_damage_numbers(pressed))
+	_edge_arrows_box.toggled.connect(func(pressed: bool) -> void: sfx.set_edge_arrows(pressed))
 	_match_point_plate_box.toggled.connect(func(pressed: bool) -> void: sfx.set_match_point_plate(pressed))
+	_stage_title_card_box.toggled.connect(func(pressed: bool) -> void: sfx.set_stage_title_card(pressed))
 	_pickup_callouts_box.toggled.connect(func(pressed: bool) -> void: sfx.set_pickup_callouts(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
@@ -377,6 +342,10 @@ func _input(event: InputEvent) -> void:
 ## lands on the visible toggle.
 func toggle_hit(point: Vector2) -> bool:
 	if not visible or not _toggle.is_visible_in_tree():
+		return false
+	# The credits screen (a higher layer) covers the corner: a click there is the credits' own.
+	var credits: Node = get_tree().root.get_node_or_null(CreditsScreenScript.NODE_NAME) if is_inside_tree() else null
+	if credits != null and credits.is_open():
 		return false
 	return _toggle.get_global_rect().has_point(point)
 
@@ -428,7 +397,7 @@ func refresh() -> void:
 		_music_slider.set_value_no_signal(music.volume)
 	_mute.set_pressed_no_signal(sfx.muted)
 	_fullscreen.set_pressed_no_signal(sfx.fullscreen)
-	_toggle.text = tr("SETTINGS_MUTED") if sfx.muted else tr("SETTINGS")
+	_refresh_toggle_text()
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
 	_hit_pause_box.set_pressed_no_signal(sfx.hit_pause)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
@@ -443,7 +412,9 @@ func refresh() -> void:
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_kill_feed_box.set_pressed_no_signal(sfx.kill_feed)
 	_damage_numbers_box.set_pressed_no_signal(sfx.damage_numbers)
+	_edge_arrows_box.set_pressed_no_signal(sfx.edge_arrows)
 	_match_point_plate_box.set_pressed_no_signal(sfx.match_point_plate)
+	_stage_title_card_box.set_pressed_no_signal(sfx.stage_title_card)
 	_pickup_callouts_box.set_pressed_no_signal(sfx.pickup_callouts)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_text_size_button.select(maxi(sfx.TEXT_SCALES.find(sfx.text_scale), 0))
@@ -455,6 +426,10 @@ func refresh() -> void:
 	_host_match.refresh()
 	if PadMenuScript.is_open():
 		_chain_pad_focus()
+
+## The corner toggle's caption: all a volume slider's step changes, so a drag does not redo the whole panel.
+func _refresh_toggle_text() -> void:
+	_toggle.text = tr("SETTINGS_MUTED") if sfx.muted else tr("SETTINGS")
 
 ## The host PC's match controls at the top of the panel (issue #458).
 func host_match_menu() -> VBoxContainer:
@@ -566,7 +541,22 @@ func confirm_restore() -> void:
 	if music != null:
 		music.restore_defaults()
 	host.restore_defaults()
+	_restore_window_size()
 	refresh()
+
+## Restore defaults puts a windowed host back to the project's own window size (owner decision):
+## the Default size is ZERO, which `apply_resolution()` leaves alone. A headless run never resizes.
+func _restore_window_size() -> void:
+	if host.resolution != Vector2i.ZERO or sfx.fullscreen:
+		return
+	var size := Vector2i(int(ProjectSettings.get_setting("display/window/size/viewport_width", 1600)),
+		int(ProjectSettings.get_setting("display/window/size/viewport_height", 900)))
+	if window_resizer.is_valid():
+		window_resizer.call(size) # a scenario's recorder
+		return
+	if DisplayServer.get_name() == "headless" or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+		return
+	DisplayServer.window_set_size(fit_resolution(size, DisplayServer.screen_get_size()))
 
 func cancel_restore() -> void:
 	_restore_confirm.visible = false
@@ -721,8 +711,14 @@ func kill_feed_box() -> CheckBox:
 func damage_numbers_box() -> CheckBox:
 	return _damage_numbers_box
 
+func edge_arrows_box() -> CheckBox:
+	return _edge_arrows_box
+
 func match_point_plate_box() -> CheckBox:
 	return _match_point_plate_box
+
+func stage_title_card_box() -> CheckBox:
+	return _stage_title_card_box
 
 func hit_pause_box() -> CheckBox:
 	return _hit_pause_box
@@ -926,18 +922,23 @@ func _retranslate() -> void:
 	_hide_code_box.text = tr("SETTINGS_HIDE_ROOM_CODE")
 	_kill_feed_box.text = tr("SETTINGS_KILL_FEED")
 	_damage_numbers_box.text = tr("SETTINGS_DAMAGE_NUMBERS")
+	_edge_arrows_box.text = tr("SETTINGS_EDGE_ARROWS")
 	_match_point_plate_box.text = tr("SETTINGS_MATCH_POINT_PLATE")
+	_stage_title_card_box.text = tr("SETTINGS_STAGE_TITLE_CARD")
 	_pickup_callouts_box.text = tr("SETTINGS_PICKUP_CALLOUTS")
 	_stats_box.text = tr("SETTINGS_SHARE_STATS")
 	_crash_box.text = tr("SETTINGS_SEND_CRASH_REPORTS")
 	_replay_box.text = tr("SETTINGS_PLAY_OF_ROUND")
 	_autosave_box.text = tr("SETTINGS_AUTO_SAVE_CLIPS")
 	_filter_box.text = tr("SETTINGS_FILTER_NAMES")
+	_focus_box.text = tr("SETTINGS_PAUSE_ON_FOCUS_LOSS")
+	_vsync_box.text = tr("SETTINGS_VSYNC")
 	_feedback_button.text = tr("SETTINGS_FEEDBACK")
 	_credits_button.text = tr("CREDITS_BUTTON")
 	_quit_button.text = tr("SETTINGS_QUIT_GAME")
 	_quit_label.text = tr("QUIT_CONFIRM_TEXT")
 	_quit_yes.text = tr("QUIT_YES")
+	_quit_no.text = tr("QUIT_NO")
 	_restore_button.text = tr("SETTINGS_RESTORE_DEFAULTS")
 	_restore_label.text = tr("RESTORE_CONFIRM_TEXT")
 	_restore_yes.text = tr("QUIT_YES")
@@ -980,6 +981,36 @@ func _add_slider(rows: VBoxContainer, node_name: String, title: String) -> HSlid
 	group.add_child(slider)
 	return slider
 
+## A settings button and the Yes / No confirm that replaces it while it asks (#718, #750), added
+## to `rows`: the button `button_name`, then "<prefix>Confirm" (hidden) holding the question and
+## "<prefix>Yes" / "<prefix>No". Returns [button, confirm, question label, yes, no].
+func _add_confirm(rows: VBoxContainer, button_name: String, prefix: String, button_key: String, text_key: String) -> Array:
+	var button := Button.new()
+	button.name = button_name
+	button.text = tr(button_key)
+	button.focus_mode = Control.FOCUS_NONE
+	rows.add_child(button)
+	var confirm := VBoxContainer.new()
+	confirm.name = prefix + "Confirm"
+	confirm.visible = false
+	rows.add_child(confirm)
+	var label := Label.new()
+	label.text = tr(text_key)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size = Vector2(SLIDER_WIDTH + 24.0, 0.0)
+	confirm.add_child(label)
+	var row := HBoxContainer.new()
+	confirm.add_child(row)
+	var out: Array = [button, confirm, label]
+	for answer: String in ["Yes", "No"]:
+		var choice := Button.new()
+		choice.name = prefix + answer
+		choice.text = tr("QUIT_YES" if answer == "Yes" else "QUIT_NO")
+		choice.focus_mode = Control.FOCUS_NONE
+		choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(choice)
+		out.append(choice)
+	return out
 func _add_box(rows: Container, node_name: String, title: String) -> CheckBox:
 	var box := CheckBox.new()
 	box.name = node_name
@@ -990,20 +1021,20 @@ func _add_box(rows: Container, node_name: String, title: String) -> CheckBox:
 
 func _on_volume_changed(value: float) -> void:
 	sfx.set_master_volume(value, not _dragging)
-	refresh()
+	_refresh_toggle_text()
 
 func _on_sfx_volume_changed(value: float) -> void:
 	sfx.set_sfx_volume(value, not _dragging)
-	refresh()
+	_refresh_toggle_text()
 
 func _on_voice_volume_changed(value: float) -> void:
 	sfx.set_voice_volume(value, not _dragging)
-	refresh()
+	_refresh_toggle_text()
 
 func _on_music_volume_changed(value: float) -> void:
 	if music != null:
 		music.set_volume(value, not _dragging)
-	refresh()
+	_refresh_toggle_text()
 
 func _on_drag_started() -> void:
 	_dragging = true
