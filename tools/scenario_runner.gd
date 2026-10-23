@@ -43494,7 +43494,7 @@ func _scenario_career_phone_page_shows_compact_line_and_expands_503() -> Array[S
 	return failures
 func _scenario_career_remote_client_keeps_totals_and_validates_503() -> Array[String]:
 	var failures: Array[String] = []
-	var path: String = OS.get_temp_dir().path_join("pf503_career_test.cfg") # never the owner's user://career.cfg
+	var path: String = OS.get_temp_dir().path_join("pf503_career_test_%d.cfg" % OS.get_process_id()) # never the owner's user://career.cfg
 	DirAccess.remove_absolute(path)
 	var client: Node = RemoteClientScript241.new()
 	client.settings_path = ""
@@ -49043,6 +49043,9 @@ func _scenario_doc_paths_point_at_real_files_803() -> Array[String]:
 			var ok: bool = f.ends_with(".md") and (dir != "res://docs" or f.begins_with("steam-"))
 			if ok:
 				files.append(dir + "/" + f)
+	# 41 docs when this was written: an empty listing must not pass vacuously.
+	if files.size() < 20:
+		failures.append("only %d docs found to check; the doc listing came back empty?" % files.size())
 	for path: String in files:
 		failures.append_array(_doc_missing_paths_803(path.trim_prefix("res://"), FileAccess.get_file_as_string(path)))
 	_scenario_completed = true
