@@ -48,9 +48,6 @@ const LEAVE_BUTTON_FONT_SIZE: int = 18
 ## #545: Start pressed with the lobby's conditions unmet used to do nothing and
 ## say nothing. The reason shows in the status line for a few seconds.
 const START_NOTICE_MSEC: int = 4000
-## How often the open lobby re-reads the server for the controls' captions, in msec (like
-## HostMatchMenu). A press still refreshes at once.
-const REFRESH_MSEC: int = 250
 const PAD_ORDER: Array[String] = ["online", "local", "solo", "mode", "bots", "bot_skill", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
 
 var _screen # the LobbyScreen
@@ -82,7 +79,6 @@ var _leave_armed_until_msec: int = 0
 
 var _pad_active: bool = false
 var _pad_menu_open: bool = false
-var _refreshed_msec: int = -REFRESH_MSEC
 
 func _init(screen) -> void:
 	_screen = screen
@@ -450,7 +446,6 @@ func refresh() -> void:
 	var server: Object = _screen._server
 	if server == null:
 		return
-	_refreshed_msec = Time.get_ticks_msec()
 	var status: String = server.online_status()
 	var code: String = server.online_room_code()
 	var kind: String = _kind_of(server)
@@ -494,8 +489,7 @@ func refresh() -> void:
 func process() -> void:
 	var lobby_panel: Control = _screen._lobby_panel
 	if _screen._server != null and lobby_panel != null and lobby_panel.visible:
-		if Time.get_ticks_msec() - _refreshed_msec >= REFRESH_MSEC:
-			refresh()
+		refresh()
 	elif _pad_menu_open:
 		set_pad_menu(false) # the lobby went away under the open menu
 
