@@ -303,6 +303,8 @@ const ATTENUATION: float = 0.5
 const FADE_SEC: float = 0.15
 ## How long `release()` waits for the audio server to free stopped playbacks.
 const RELEASE_SEC: float = 1.0
+## The floor a 0..1 bus volume is clamped to before it becomes dB.
+const SILENT_LINEAR: float = 0.0001
 ## Longest file decoded to PCM (see `_start_decoding`); anything longer stays
 ## compressed. Every file in the table is well under it.
 const MAX_DECODE_SEC: float = 10.0
@@ -488,15 +490,20 @@ func release() -> void:
 			voice.stream = null
 	_streams.clear()
 	_last_variant.clear()
+	await wait_for_release(self, RELEASE_SEC)
+
+## Wait `wait_sec` of wall-clock time on `node`'s tree, so the audio server can
+## free stopped playbacks. `release()` here and in `Music` both await it.
+static func wait_for_release(node: Node, wait_sec: float) -> void:
 	# Out of the tree there is no SceneTree to wait on (issue #167).
-	if not is_inside_tree():
+	if not node.is_inside_tree():
 		return
 	# Wall clock, not a SceneTreeTimer (#182): the mix thread lets go in real
 	# time, and under `--fixed-fps` a timer counts frames, which can run far
 	# faster than that.
-	var until: int = Time.get_ticks_msec() + int(RELEASE_SEC * 1000.0)
+	var until: int = Time.get_ticks_msec() + int(wait_sec * 1000.0)
 	while Time.get_ticks_msec() < until:
-		await get_tree().process_frame
+		await node.get_tree().process_frame
 
 # --- Playing ----------------------------------------------------------------
 
@@ -882,14 +889,11 @@ func _apply_master() -> void:
 	AudioServer.set_bus_mute(0, muted)
 
 func _apply_sfx_volume() -> void:
-	var index: int = AudioServer.get_bus_index(BUS_NAME)
-	if index != -1:
-		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(sfx_volume, 0.0001)))
+	set_bus_linear(BUS_NAME, sfx_volume)
 
 func _apply_voice_volume() -> void:
-	var index: int = AudioServer.get_bus_index(VOICE_BUS_NAME)
+	var index: int = set_bus_linear(VOICE_BUS_NAME, voice_volume)
 	if index != -1:
-		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(voice_volume, 0.0001)))
 		AudioServer.set_bus_mute(index, voice_volume <= 0.0)
 
 func _apply_window_mode() -> void:
@@ -955,10 +959,8 @@ func load_settings() -> void:
 func _save_settings() -> void:
 	if not persist_settings:
 		return
-	var config := ConfigFile.new()
-	var err: Error = config.load(settings_path)
-	if err != OK and err != ERR_FILE_NOT_FOUND:
-		push_warning("Sfx: not saving settings: %s would not load (%s)" % [settings_path, error_string(err)])
+	var config: ConfigFile = config_for_save(settings_path, "Sfx")
+	if config == null:
 		return
 	config.set_value("audio", "master_volume", master_volume)
 	config.set_value("audio", "muted", muted)
@@ -977,7 +979,7 @@ func _save_settings() -> void:
 	config.set_value("display", "ui_scale", ui_scale)
 	config.set_value("display", "hide_room_code", hide_room_code)
 	config.set_value("display", "text_scale", text_scale)
-	err = config.save(settings_path)
+	var err: Error = config.save(settings_path)
 	if err != OK:
 		push_warning("Sfx: could not save settings to %s (%s)" % [settings_path, error_string(err)])
 
@@ -1094,16 +1096,37 @@ static func _decode_to_pcm(source: AudioStream, rate: int) -> AudioStreamWAV:
 	return AudioStreamWAV.load_from_buffer(wav, PCM_OPTIONS)
 
 func _ensure_bus() -> void:
-	if AudioServer.get_bus_index(BUS_NAME) == -1:
-		AudioServer.add_bus()
-		var index: int = AudioServer.bus_count - 1
-		AudioServer.set_bus_name(index, BUS_NAME)
-		AudioServer.set_bus_send(index, &"Master")
-	if AudioServer.get_bus_index(VOICE_BUS_NAME) == -1:
-		AudioServer.add_bus()
-		var voice_index: int = AudioServer.bus_count - 1
-		AudioServer.set_bus_name(voice_index, VOICE_BUS_NAME)
-		AudioServer.set_bus_send(voice_index, BUS_NAME)
+	ensure_bus(BUS_NAME, &"Master")
+	ensure_bus(VOICE_BUS_NAME, BUS_NAME)
+
+## Add a bus named `bus_name` that sends to `send`, unless the project already
+## has one by that name. `Music` makes its bus through this too.
+static func ensure_bus(bus_name: StringName, send: StringName) -> void:
+	if AudioServer.get_bus_index(bus_name) != -1:
+		return
+	AudioServer.add_bus()
+	var index: int = AudioServer.bus_count - 1
+	AudioServer.set_bus_name(index, bus_name)
+	AudioServer.set_bus_send(index, send)
+
+## Set bus `bus_name` to `linear` (0..1, floored at `SILENT_LINEAR` for the dB
+## maths). Returns the bus index, or -1 when there is no such bus.
+static func set_bus_linear(bus_name: StringName, linear: float) -> int:
+	var index: int = AudioServer.get_bus_index(bus_name)
+	if index != -1:
+		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(linear, SILENT_LINEAR)))
+	return index
+
+## The settings file at `path`, loaded so a save keeps the sections it does not
+## own; empty when the file is missing. Null, with a warning naming `who`, when
+## the file exists but will not load: it is then left alone (#195).
+static func config_for_save(path: String, who: String) -> ConfigFile:
+	var config := ConfigFile.new()
+	var err: Error = config.load(path)
+	if err != OK and err != ERR_FILE_NOT_FOUND:
+		push_warning("%s: not saving settings: %s would not load (%s)" % [who, path, error_string(err)])
+		return null
+	return config
 
 func _pick_stream(key: String) -> AudioStream:
 	if not _streams_decoded:
