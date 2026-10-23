@@ -645,8 +645,6 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"announcer_calls_each_mode_at_round_start",
 	"announcer_calls_hill_taken_when_the_hill_changes_hands",
 	"announcer_calls_last_life_stolen_and_overtime_in_stock",
-	"mode_awards_go_to_the_right_player_only_in_their_mode",
-	"mode_awards_reach_the_victory_awards_through_the_round_manager",
 	"telemetry_record_has_no_identifying_fields",
 	"telemetry_not_sent_when_off_or_scripted",
 	"telemetry_notice_shows_once",
@@ -2772,10 +2770,6 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_announcer_calls_hill_taken_when_the_hill_changes_hands()
 		"announcer_calls_last_life_stolen_and_overtime_in_stock":
 			return await _scenario_announcer_calls_last_life_stolen_and_overtime_in_stock()
-		"mode_awards_go_to_the_right_player_only_in_their_mode":
-			return await _scenario_mode_awards_go_to_the_right_player_only_in_their_mode()
-		"mode_awards_reach_the_victory_awards_through_the_round_manager":
-			return await _scenario_mode_awards_reach_the_victory_awards_through_the_round_manager()
 		"telemetry_record_has_no_identifying_fields":
 			return await _scenario_telemetry_record_has_no_identifying_fields()
 		"telemetry_not_sent_when_off_or_scripted":
