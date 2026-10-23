@@ -280,6 +280,7 @@ MODE_CAPTURE_THE_FLAG_RULE,Reach the capture target to win.,"Erreich das Capture
 AWARD_CATEGORY_CAPTURER,CAPTURER,FLAGGENRÄUBER,CAPTUREUR,CAPTURADOR,CAPTURADOR,夺旗手,奪取王,탈취,ЗАХВАТЧИК
 STAGE_BASTION,Bastion,Bastion,Bastion,Bastión,Bastião,堡垒,バスティオン,요새,Бастион
 STAGE_STRONGHOLD,Stronghold,Festung,Forteresse,Fortaleza,Fortaleza,据点,ストロングホールド,거점,Цитадель
+STAGE_TREADMILL,Treadmill,Laufband,Tapis roulant,Cinta de correr,Esteira,跑步机,トレッドミル,러닝머신,Беговая дорожка
 AWARD_CATEGORY_HILL,HILL,HÜGEL,COLLINE,COLINA,COLINA,山丘,ヒル,언덕,ГОРА
 AWARD_CATEGORY_TAGGER,TAGGER,FÄNGER,PORTEUR,MARCADO,MARCADO,标记者,タッガー,술래,ВОДЯЩИЙ
 AWARD_CATEGORY_LIVES,LIVES,LEBEN,VIES,VIDAS,VIDAS,命数,ライフ,목숨,ЖИЗНИ
