@@ -104,14 +104,14 @@ func _send(body: RigidBody2D, destination: Node2D) -> void:
 		part.global_position += offset
 	_ignored[body] = _clock + COOLDOWN_SEC
 	_flash()
-	_sfx(&"wind_gust", body.global_position - offset)
+	_sfx(&"teleport", body.global_position - offset)
 	destination.receive(body)
 
 ## Called by the portal a body arrived from: start ignoring it here too.
 func receive(body: Node2D) -> void:
 	_ignored[body] = _clock + COOLDOWN_SEC
 	_flash()
-	_sfx(&"wind_gust", global_position)
+	_sfx(&"teleport", global_position)
 
 func _flash() -> void:
 	_pulse_remaining = _PULSE_SEC

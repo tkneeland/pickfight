@@ -110,11 +110,10 @@ func attach(server: Object) -> void:
 	_screen.join_help_button().pressed.connect(press_control.bind("join_help"))
 	_controls["join_help"] = _screen.join_help_button()
 	_controls["relay_nudge"] = _screen.relay_nudge_button() # #727, beside it in the pad chain
+	_controls["invite"] = _screen.invite_button() # Invite Steam friends (#298): pressed already calls the server; in the pad chain so a Steam Deck host reaches it
 	# The way into someone else's room code (Online only), with why it is off when it is.
 	lobby_right.add_child(_action_button("join", _screen.tr("HOST_JOIN_ONLINE"), UiThemeScript.ACTION_BUTTON))
-	_join_blocked = ScreenKitScript.themed_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_join_blocked.name = "JoinBlocked"
-	_join_blocked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_join_blocked = ScreenKitScript.themed_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "JoinBlocked", TextServer.AUTOWRAP_WORD_SMART)
 	_join_blocked.visible = false
 	lobby_right.add_child(_join_blocked)
 	var spacer := Control.new()
@@ -127,8 +126,7 @@ func attach(server: Object) -> void:
 	_controls["start"] = start_button
 	lobby_right.add_child(start_button)
 	lobby_right.move_child(_screen._lobby_status, lobby_right.get_child_count() - 1) # the hint under START
-	var pad_hint := ScreenKitScript.themed_label(_screen.tr("HOST_GAMEPAD_HINT"), ScreenKitScript.DECK_MIN_FONT_SIZE, &"", HORIZONTAL_ALIGNMENT_CENTER)
-	pad_hint.name = "GamepadHint"
+	var pad_hint := ScreenKitScript.themed_label(_screen.tr("HOST_GAMEPAD_HINT"), ScreenKitScript.DECK_MIN_FONT_SIZE, &"", HORIZONTAL_ALIGNMENT_CENTER, "GamepadHint")
 	pad_hint.add_theme_color_override("font_color", Color("8F96BD"))
 	pad_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	pad_hint.offset_top = -30.0
@@ -142,42 +140,26 @@ func attach(server: Object) -> void:
 ## The top-left Couch / Online / Solo switch (#435): one cream frame, three cells
 ## split by ink rules, the picked one yellow. C, O and S press them too.
 func _build_kind_switch() -> void:
-	var frame := PanelContainer.new()
-	frame.name = "KindSwitch"
-	frame.theme_type_variation = UiThemeScript.SWITCH_FRAME
-	frame.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
-	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_screen._top_left.add_child(frame)
-	var cells := HBoxContainer.new()
-	cells.add_theme_constant_override("separation", 0)
-	frame.add_child(cells)
 	var labels: Dictionary = {"local": "MATCH_COUCH", "online": "MATCH_ONLINE", "solo": "MATCH_SOLO"}
-	for i in KIND_IDS.size():
+	var frame: PanelContainer = ScreenKitScript.segmented_switch(_screen._top_left, "KindSwitch", KIND_IDS.size(), func(i: int) -> Button:
 		var id: String = KIND_IDS[i]
-		if i > 0:
-			var rule := ColorRect.new()
-			rule.color = UiThemeScript.INK
-			rule.custom_minimum_size = Vector2(4, 0)
-			rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			cells.add_child(rule)
 		var cell: Button = ScreenKitScript.themed_button(_screen.tr(labels[id]), UiThemeScript.SEG_BUTTON, id)
 		cell.pressed.connect(press_control.bind(id))
 		_controls[id] = cell
 		_kind_cells[id] = cell
-		cells.add_child(cell)
+		return cell)
+	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 ## The big room code and its link status, on the join card (Online).
 func _build_room_widgets() -> void:
 	var box: VBoxContainer = _screen._join_box
-	_room_label = ScreenKitScript.themed_label("", ROOM_CODE_FONT_SIZE, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_room_label.name = "RoomCode"
+	_room_label = ScreenKitScript.themed_label("", ROOM_CODE_FONT_SIZE, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "RoomCode")
 	_room_label.add_theme_color_override("font_color", UiThemeScript.BLUE)
 	_room_label.add_theme_color_override("font_outline_color", UiThemeScript.INK)
 	_room_label.add_theme_constant_override("outline_size", 12)
 	_room_label.visible = false
 	box.add_child(_room_label)
-	_online_status = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_online_status.name = "OnlineStatus"
+	_online_status = ScreenKitScript.themed_label("", 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "OnlineStatus")
 	box.add_child(_online_status)
 	box.move_child(_room_label, _screen._join_note.get_index())
 	box.move_child(_online_status, _screen._join_note.get_index())
@@ -201,10 +183,8 @@ func _build_host_panel(parent: Control) -> void:
 	box.add_theme_constant_override("separation", 14)
 	card.add_child(box)
 	box.add_child(ScreenKitScript.themed_label(_screen.tr("LOBBY_HOST_TITLE"), 28, UiThemeScript.INK_HEADING_LABEL))
-	_target_label = ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_FIRST_TO"), 22, UiThemeScript.INK_BOLD_LABEL)
-	_target_label.name = "TargetLabel"
-	_target_value = ScreenKitScript.themed_label("5", 34, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_target_value.name = "TargetValue"
+	_target_label = ScreenKitScript.themed_label(_screen.tr("LOBBY_ROW_FIRST_TO"), 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "TargetLabel")
+	_target_value = ScreenKitScript.themed_label("5", 34, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "TargetValue")
 	_target_value.custom_minimum_size.x = 40.0
 	box.add_child(_stepper_row(_target_label, _step_button("target_down", "-"), _target_value, _step_button("target_up", "+")))
 	var bots_count: Button = ScreenKitScript.themed_button("0", UiThemeScript.VALUE_BUTTON, "bots")
@@ -543,8 +523,9 @@ func input(event: InputEvent) -> void:
 		return
 	var popup: String = _screen.popup_open()
 	var key := event as InputEventKey
-	if (popup == "stages" or popup == "join_help") and key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
-		# Esc closes just this screen, never the Settings panel behind it; it stays up with a mode on no stage (#647)
+	if popup != "" and key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
+		# Esc closes just the open popup, never opens the Settings panel behind it (owner decision);
+		# Stages & Rules stays up with a mode on no stage (#647)
 		if _screen.request_close_popup():
 			_restore_focus_after_popup()
 		_screen.get_viewport().set_input_as_handled()
@@ -568,7 +549,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["join_help", "relay_nudge"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["invite"], ["join_help", "relay_nudge"], ["join"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]

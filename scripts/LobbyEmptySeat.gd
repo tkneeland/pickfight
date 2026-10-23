@@ -29,13 +29,10 @@ func _init() -> void:
 	box.add_theme_constant_override("separation", 6)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center.add_child(box)
-	_title = ScreenKitScript.themed_label(tr("LOBBY_OPEN_SEAT"), 28, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER)
-	_title.name = "Title"
+	_title = ScreenKitScript.themed_label(tr("LOBBY_OPEN_SEAT"), 28, UiThemeScript.HEADING_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "Title")
 	_title.add_theme_color_override("font_color", TEXT_COLOR)
 	box.add_child(_title)
-	_hint = ScreenKitScript.themed_label("", 16, &"", HORIZONTAL_ALIGNMENT_CENTER)
-	_hint.name = "Hint"
-	_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_hint = ScreenKitScript.themed_label("", 16, &"", HORIZONTAL_ALIGNMENT_CENTER, "Hint", TextServer.AUTOWRAP_OFF)
 	_hint.add_theme_color_override("font_color", TEXT_COLOR)
 	box.add_child(_hint)
 
