@@ -772,7 +772,8 @@ func _push_sample() -> void:
 			var body: Dictionary = p.get("body", {})
 			var weapon: Dictionary = p.get("weapon", {})
 			sample["players"][int(p.get("player_id", 0))] = [body.get("position", Vector2.ZERO),
-				body.get("rotation", 0.0), weapon.get("head_position", Vector2.ZERO)]
+				body.get("rotation", 0.0), weapon.get("head_position", Vector2.ZERO),
+				weapon.get("head_rotation", 0.0)]
 	for p: Variant in _world.get("projectiles", []):
 		if p is Dictionary:
 			sample["things"]["proj%d" % int(p.get("projectile_id", 0))] = p.get("position", Vector2.ZERO)
@@ -935,12 +936,18 @@ func _render() -> void:
 		if from_pose.is_empty():
 			continue
 		puppet.color = PaletteScript.PLAYERS[int(p.get("color", id)) % PaletteScript.PLAYERS.size()]
+		var look: Dictionary = _look_of(id)
+		if look.has("color"):
+			puppet.color = look["color"]
+		puppet.weapon_index = int((p.get("weapon", {}) as Dictionary).get("head_shape_index", 0))
+		puppet.set_look(str(look.get("hat", "none")), str(look.get("eyes", "round")), puppet.color)
 		puppet.label = str(p.get("name", ""))
 		puppet.damage = int(p.get("damage", 0))
 		puppet.phase = int(p.get("state", 1))
 		puppet.set_pose((from_pose[0] as Vector2).lerp(to_pose[0], alpha),
 			lerp_angle(from_pose[1], to_pose[1], alpha),
-			(from_pose[2] as Vector2).lerp(to_pose[2], alpha))
+			(from_pose[2] as Vector2).lerp(to_pose[2], alpha),
+			lerp_angle(from_pose[3] if from_pose.size() > 3 else 0.0, to_pose[3] if to_pose.size() > 3 else 0.0, alpha))
 	for p: Variant in _world.get("projectiles", []):
 		if p is Dictionary:
 			var id: int = int(p.get("projectile_id", 0))
@@ -948,14 +955,14 @@ func _render() -> void:
 	for p: Variant in _world.get("pickups", []):
 		if p is Dictionary:
 			var id: int = int(p.get("pickup_id", 0))
-			_place_thing("pick%d" % id, PuppetScript.Kind.PICKUP, a, b, alpha, Color(0.4, 0.9, 1.0), _weapon_name(int(p.get("weapon_type", 0))), live)
+			_place_thing("pick%d" % id, PuppetScript.Kind.PICKUP, a, b, alpha, Color(0.4, 0.9, 1.0), "", live, int(p.get("weapon_type", 0)))
 	if not _world.get("flail", {}).is_empty():
 		_place_thing("flail", PuppetScript.Kind.PROJECTILE, a, b, alpha, Color(0.8, 0.8, 0.8), "", live)
 	if not _world.get("grapple", {}).is_empty():
 		_place_thing("hook", PuppetScript.Kind.PROJECTILE, a, b, alpha, Color(0.6, 1.0, 0.6), "", live)
 	_hide_puppets_except(live)
 
-func _place_thing(key: String, kind: int, a: Dictionary, b: Dictionary, alpha: float, color: Color, label: String, live: Dictionary) -> void:
+func _place_thing(key: String, kind: int, a: Dictionary, b: Dictionary, alpha: float, color: Color, label: String, live: Dictionary, weapon_index: int = 0) -> void:
 	var to_pos: Variant = b["things"].get(key)
 	# Issue #429: a thing the newest snapshot no longer holds is gone now, not
 	# when the interpolation window moves past its last sample.
@@ -966,6 +973,7 @@ func _place_thing(key: String, kind: int, a: Dictionary, b: Dictionary, alpha: f
 	var puppet: Node2D = _puppet(key, kind)
 	puppet.color = color
 	puppet.label = label
+	puppet.weapon_index = weapon_index
 	puppet.position = (from_pos as Vector2).lerp(to_pos, alpha)
 	puppet.queue_redraw()
 
@@ -975,10 +983,18 @@ func _hide_puppets_except(live: Dictionary) -> void:
 			_puppets[key].queue_free()
 			_puppets.erase(key)
 
-static func _weapon_name(index: int) -> String:
-	if index <= 0 or index > PickupWeaponsScript.WEAPON_PATHS.size():
-		return ""
-	return PickupWeaponsScript.WEAPON_PATHS[index - 1].get_file().get_basename()
+## The hat, eyes and colour the host's `looks` frame gives seat `slot`, as
+## {"hat", "eyes", "color"}; empty before the frame arrives (issue #930).
+func _look_of(slot: int) -> Dictionary:
+	var palette: Array = looks.get("palette", [])
+	for entry: Variant in looks.get("looks", []):
+		if entry is Dictionary and int(entry.get("slot", -1)) == slot:
+			var out: Dictionary = {"hat": str(entry.get("hat", "none")), "eyes": str(entry.get("eyes", "round"))}
+			var at: int = int(entry.get("color", -1))
+			if at >= 0 and at < palette.size() and str(palette[at]).begins_with("#"):
+				out["color"] = Color.html(str(palette[at]))
+			return out
+	return {}
 
 # --- Settings -----------------------------------------------------------------------------
 
