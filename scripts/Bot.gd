@@ -174,7 +174,8 @@ const WALL_BLOCKED_SEC: float = 1.0
 ## against it a swing has no room to build speed.
 const WALL_STAND_OFF: float = 0.6
 ## The chop at a wall: wound up behind and above the line to it, short, then
-## swept through to just past its face. Measured on Reactor's shield walls.
+## swept through to just past its face. Measured on Reactor's shield walls at
+## Normal; `wall_chop_sec` scales both with the level like every bot timer.
 const WALL_SWEEP_SEC: float = 0.2
 const WALL_WIND_UP_SEC: float = 0.3
 const WALL_SWEEP_BACK: float = 1.6
@@ -388,6 +389,10 @@ func skill() -> Dictionary:
 ## Seconds a think or swing/aim timer really lasts: `seconds` on Normal.
 func react_sec(seconds: float) -> float:
 	return seconds * float(skill()["react"])
+
+## Seconds of the wall chop's sweep (`sweep`) or wind-up on this bot's level.
+func wall_chop_sec(sweep: bool) -> float:
+	return react_sec(WALL_SWEEP_SEC if sweep else WALL_WIND_UP_SEC)
 var _last_head: Vector2 = Vector2.ZERO
 var _unhook_left: float = 0.0
 var _unhook_side: float = 1.0
@@ -946,8 +951,12 @@ func _hook_drive(delta: float) -> Vector2:
 	_hook_phase = 1
 	_hook_ticks = 0
 	var reels: bool = bool((stats as Resource).get("hook_reels_players"))
-	_hook_cd = ROD_COOLDOWN_SEC if reels else GRAPPLE_COOLDOWN_SEC
+	_hook_cd = hook_cooldown_sec(reels)
 	return Vector2.ZERO
+
+## Seconds between hook casts on this bot's level: the rod's or the grapple's.
+func hook_cooldown_sec(reels: bool) -> float:
+	return react_sec(ROD_COOLDOWN_SEC if reels else GRAPPLE_COOLDOWN_SEC)
 
 ## Issue #932: the boomerang's flick aim at the current target, or Vector2.INF.
 ## A living rival (never a teammate) within BOOMERANG_RANGE_FRACTION of the
@@ -1012,7 +1021,7 @@ func _swing(delta: float) -> Vector2:
 		_phase_left -= delta
 		if _phase_left <= 0.0:
 			_phase = 1 - _phase
-			_phase_left = WALL_SWEEP_SEC if _phase == 1 else WALL_WIND_UP_SEC
+			_phase_left = wall_chop_sec(_phase == 1)
 		var sweep: float = WALL_SWEEP_BACK if _phase == 0 else WALL_SWEEP_FRONT
 		var face_reach: float = absf(to_target.x) - (_target.get("size") as Vector2).x * 0.5 + WALL_SWEEP_PAST
 		return Vector2.RIGHT.rotated(to_target.angle() + wall_up * sweep) * (_length_for(face_reach) if _phase == 1 else WALL_SWEEP_WIND_UP)

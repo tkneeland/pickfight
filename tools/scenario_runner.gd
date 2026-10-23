@@ -1100,6 +1100,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"structure_changed_on_new_entity_and_hud_change_review_net",
 	"controller_page_review_fixes_review_net",
 	"stage_check_and_join_urls_cached_review_perf",
+	"bot_chops_wall_at_every_difficulty_review_bp",
+	"pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp",
+	"rebuilt_rig_resets_head_and_swing_state_review_bp",
 	"relay_throttles_bad_room_guesses_review_relay",
 	"relay_rate_limits_client_frames_review_relay",
 	"relay_caps_rooms_and_pending_per_ip_review_relay",
@@ -3742,6 +3745,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_review_fixes_review_net()
 		"stage_check_and_join_urls_cached_review_perf":
 			return await _scenario_stage_check_and_join_urls_cached_review_perf()
+		"bot_chops_wall_at_every_difficulty_review_bp":
+			return await _scenario_bot_chops_wall_at_every_difficulty_review_bp()
+		"pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp":
+			return await _scenario_pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp()
+		"rebuilt_rig_resets_head_and_swing_state_review_bp":
+			return await _scenario_rebuilt_rig_resets_head_and_swing_state_review_bp()
 		"relay_throttles_bad_room_guesses_review_relay":
 			return await _scenario_relay_throttles_bad_room_guesses_review_relay()
 		"relay_rate_limits_client_frames_review_relay":
@@ -52181,6 +52190,104 @@ func _scenario_stage_check_and_join_urls_cached_review_perf() -> Array[String]:
 	screen.set_popup("")
 	await _teardown(rig["main"])
 	_scenario_completed = true
+	return failures
+## Review (bots): the wall chop's sweep and wind-up and the hook cooldown scale
+## with the difficulty's reaction time like every other bot timer, and a bot on
+## Easy (the slowest chop), cut off from its rival by Reactor's shield wall,
+## still chops the shield down in good time (about 67-88 s over three seeds;
+## Normal takes 62 s).
+func _scenario_bot_chops_wall_at_every_difficulty_review_bp() -> Array[String]:
+	var failures: Array[String] = []
+	var sweeps: Dictionary = {}
+	var cooldowns: Dictionary = {}
+	for level: String in ["easy", "normal", "hard"]:
+		var probe: Node = BotScript.new()
+		probe.difficulty = level
+		sweeps[level] = probe.wall_chop_sec(true) + probe.wall_chop_sec(false)
+		cooldowns[level] = probe.hook_cooldown_sec(true) + probe.hook_cooldown_sec(false)
+		if level == "normal" and (probe.wall_chop_sec(true) != BotScript.WALL_SWEEP_SEC \
+				or probe.wall_chop_sec(false) != BotScript.WALL_WIND_UP_SEC \
+				or probe.hook_cooldown_sec(true) != BotScript.ROD_COOLDOWN_SEC \
+				or probe.hook_cooldown_sec(false) != BotScript.GRAPPLE_COOLDOWN_SEC):
+			failures.append("Normal changed the tuned wall chop or hook cooldown")
+		probe.free()
+	if not (sweeps["hard"] < sweeps["normal"] and sweeps["normal"] < sweeps["easy"]):
+		failures.append("wall chop times not hard < normal < easy: %s" % str(sweeps))
+	if not (cooldowns["hard"] < cooldowns["normal"] and cooldowns["normal"] < cooldowns["easy"]):
+		failures.append("hook cooldowns not hard < normal < easy: %s" % str(cooldowns))
+	for level: String in ["easy"]:
+		var stage: Node2D = Node2D.new()
+		get_root().add_child(stage)
+		var reactor: Node2D = load("res://scenes/stages/Reactor.tscn").instantiate()
+		stage.add_child(reactor)
+		var shield: Node = reactor.get_node("ShieldLeft")
+		var me: RigidBody2D = _spawn_player(stage, Vector2(-400, 270))
+		_spawn_player(stage, Vector2(400, 270))
+		var bot: Node = BotScript.new()
+		bot.difficulty = level
+		bot.rng.seed = BOT_SEED
+		bot.player = me
+		bot.output = me.set_input_vector
+		stage.add_child(bot)
+		var began: int = _game_msec()
+		var broke: bool = await _await_condition(func() -> bool: return shield.is_broken(), 120000)
+		var took: float = float(_game_msec() - began) / 1000.0
+		print("      %s bot broke Reactor's shield: %s after %.1f s (hp left %.0f)" % [level, broke, took, shield.hp_left()])
+		# Reported, not asserted: how long a bot takes to chop the wall differs between Windows and Linux runners.
+		await _teardown(stage, false)
+	_scenario_completed = true
+	return failures
+## Review (player): a pogo stomp's 0.5 s lock is taken only by a stomp that
+## lands. Landing on a teammate, or a touch too slow to be a stomp, leaves the
+## next real stomp free; a real stomp still locks out the one straight after.
+func _scenario_pogo_stomp_lock_not_spent_on_teammate_or_slow_touch_review_bp() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var pogo: RigidBody2D = _spawn_player(stage, Vector2(-200, 274))
+	pogo.set_weapon_stats(load(POGO_PATH))
+	var mate: RigidBody2D = _spawn_player(stage, Vector2(0, 274))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(200, 274))
+	pogo.team = 0
+	mate.team = 0
+	rival.team = 1
+	await _await_ticks(2)
+	var fast: float = float(pogo.weapon_stats.pogo_launch_speed)
+	pogo._land_strike(mate, fast, true)
+	if mate.damage > 0.0:
+		failures.append("the stomp hurt a teammate")
+	pogo._land_strike(rival, fast, true)
+	var first: float = rival.damage
+	if first <= 0.0:
+		failures.append("a stomp on a teammate swallowed the real stomp after it")
+	pogo._land_strike(rival, fast, true)
+	if rival.damage != first:
+		failures.append("a second stomp straight after a real one landed (lock not taken)")
+	await _await_ticks(int(ceil(pogo.POGO_STOMP_LOCK * 60.0)) + 2)
+	pogo._land_strike(rival, 0.0, true)
+	pogo._land_strike(rival, fast, true)
+	if rival.damage <= first:
+		failures.append("a too-slow touch swallowed the real stomp after it")
+	print("      rival damage %.1f after two stomps (first %.1f)" % [rival.damage, first])
+	await _teardown(stage)
+	return failures
+## Review (player): a rebuilt rig starts clean -- no embedded time, head
+## velocity, terrain contact or swing carried over from the rig it replaced.
+func _scenario_rebuilt_rig_resets_head_and_swing_state_review_bp() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 274))
+	await _await_ticks(3)
+	player._embedded_time = 5.0
+	player._head_velocity = Vector2(900, 0)
+	player._head_terrain_ticks = 3
+	player._swing_rate = 10.0
+	player._swing_tracking = true
+	player._build_rig()
+	if player._embedded_time != 0.0 or player._head_velocity != Vector2.ZERO or player._head_terrain_ticks != 0 \
+			or player._swing_rate != 0.0 or player._swing_tracking:
+		failures.append("the new rig kept state: embedded %.1f, velocity %s, terrain %d, swing %.1f/%s" % [
+				player._embedded_time, player._head_velocity, player._head_terrain_ticks, player._swing_rate, player._swing_tracking])
+	await _teardown(stage)
 	return failures
 ## Review (relay hardening): once an IP has earned BAD_ROOM_LIMIT "bad_room"
 ## refusals in a minute, its joins are refused unread, even for a real code; with

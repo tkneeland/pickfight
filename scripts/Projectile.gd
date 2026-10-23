@@ -41,6 +41,9 @@ extends Node2D
 ## with nothing.
 const LAYER_WORLD: int = 1
 const LAYER_HEAD: int = 2
+## The shield, colour and swept-cast helpers every shot shares, preloaded by
+## path (CLAUDE.md: never by `class_name`).
+const ShotSweepScript := preload("res://scripts/ShotSweep.gd")
 ## How far a bullet flies before it gives up, in pixels. Wider than any stage,
 ## so it only ends a bullet that has already left the stage behind.
 const MAX_TRAVEL: float = 4000.0
@@ -88,8 +91,7 @@ func setup(from_shooter: Node2D, origin: Vector2, flight: Vector2, stats: Resour
 	radius = maxf(0.5, stats.projectile_radius)
 	if from_shooter is CollisionObject2D:
 		_exclude = [(from_shooter as CollisionObject2D).get_rid()]
-	var identity: Variant = from_shooter.get("identity_color") if from_shooter != null else null
-	_colour = identity if identity is Color else Color.WHITE
+	_colour = ShotSweepScript.shooter_colour(from_shooter)
 
 func _ready() -> void:
 	add_to_group(GROUP)
@@ -105,48 +107,30 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 	var motion: Vector2 = direction * speed * delta
-	var blocker: Node = _shield_holder_blocking(global_position, global_position + motion, radius)
+	var blocker: Node = ShotSweepScript.shield_holder(get_tree(), shooter, global_position, global_position + motion, radius)
 	if blocker != null:
 		impacted.emit(blocker, global_position)
 		queue_free()
 		return
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var query := PhysicsShapeQueryParameters2D.new()
-	query.shape = _shape
-	query.transform = Transform2D(0.0, global_position)
-	query.motion = motion
 	# One cast against everything that can stop a bullet, so whichever of
 	# terrain or a player is nearest along the path is what it meets. Weapon
 	# heads are left out: bullets fly through them (#92, reversing #61).
-	query.collision_mask = LAYER_WORLD
-	query.exclude = _exclusions()
-	query.collide_with_bodies = true
-	query.collide_with_areas = false
-	var fractions: PackedFloat32Array = space.cast_motion(query)
-	var unsafe: float = fractions[1] if fractions.size() >= 2 else 1.0
+	var met: Dictionary = ShotSweepScript.cast_first(space, _shape, global_position, motion, LAYER_WORLD, _exclusions())
+	var unsafe: float = met["unsafe"]
 	if unsafe >= 1.0:
 		global_position += motion
 		travelled += motion.length()
 		if travelled >= MAX_TRAVEL:
 			queue_free()
 		return
-	# Something is in the way. Move to the first touching position and ask
-	# what it is -- the cast only says when, not what.
+	# Something is in the way: move to the first touching position.
 	global_position += motion * unsafe
 	travelled += motion.length() * unsafe
-	query.transform = Transform2D(0.0, global_position)
-	query.motion = Vector2.ZERO
-	var collider: Object = null
-	var point: Vector2 = global_position + direction * radius
-	var rest: Dictionary = space.get_rest_info(query)
-	if not rest.is_empty():
-		collider = instance_from_id(rest["collider_id"])
-		point = rest["point"]
-	else:
-		var overlaps: Array[Dictionary] = space.intersect_shape(query, 1)
-		if not overlaps.is_empty():
-			collider = overlaps[0]["collider"]
-	_hit(collider, point)
+	var point: Vector2 = met["point"]
+	if point == Vector2.INF:
+		point = global_position + direction * radius
+	_hit(met["collider"], point)
 
 ## The bullet's one hit. A live player other than the shooter is shoved and
 ## takes the bullet's damage -- through the shooter, so it is reported as the
@@ -179,18 +163,6 @@ func _exclusions() -> Array[RID]:
 		if head.is_valid():
 			rids.append(head)
 	return rids
-
-## Issue #631, ADR-0024: the player, other than the shooter, whose shield's
-## face turns a shot flying `from` -> `to`, or null.
-func _shield_holder_blocking(from: Vector2, to: Vector2, radius: float) -> Node:
-	for node: Node in get_tree().get_nodes_in_group("players"):
-		if node != shooter and node.has_method("shield_face_blocks") \
-				and node.shield_face_blocks(from, to, radius):
-			return node
-	return null
-
-func _shooter_in_play() -> bool:
-	return is_instance_valid(shooter) and bool(shooter.get("alive"))
 
 func _draw() -> void:
 	var tail: Vector2 = -direction * radius * TRAIL_RADII
