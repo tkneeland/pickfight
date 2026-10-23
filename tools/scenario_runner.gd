@@ -19632,7 +19632,9 @@ func _scenario_hazards_report_only_damage_dealt() -> Array[String]:
 				if tick > 20:
 					break
 		# Gone and the player knocked aside: it met the player, not the floor.
-		var hit: bool = meteor_ref.get_ref() == null and knock >= METEOR_MIN_KNOCK_SPEED
+		# A protected player is no longer knocked (#991), so the knock only
+		# proves the hit for an unprotected one.
+		var hit: bool = meteor_ref.get_ref() == null and (protected or knock >= METEOR_MIN_KNOCK_SPEED)
 		var taken: float = player.damage - before
 		print("      meteor on a %s player: hit %s (knock %.0f px/s), took %.1f, reported %s" % [label, hit, knock, taken, reports])
 		if not hit:
