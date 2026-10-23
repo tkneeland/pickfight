@@ -468,6 +468,12 @@ func think(delta: float) -> Vector2:
 		_think_left = react_sec(lerpf(THINK_SEC, THINK_SEC_AGGRESSIVE, _aggression))
 		_choose_goal()
 	_track_progress(delta)
+	var dodge: Vector2 = _meteor_drive(delta)
+	if dodge != Vector2.INF:
+		return dodge
+	var sidestep: Vector2 = _bullet_drive(delta)
+	if sidestep != Vector2.INF:
+		return sidestep
 	var hook_input: Vector2 = _hook_drive(delta)
 	if hook_input != Vector2.INF:
 		return hook_input
@@ -868,6 +874,10 @@ func _alive(node: Variant) -> bool:
 		return n.is_inside_tree() and bool(n.call("is_solid"))
 	return n.is_inside_tree() and bool(n.get("alive"))
 
+func _holds_shield() -> bool:
+	var stats: Variant = player.get("weapon_stats")
+	return stats is Resource and (stats as Resource).get("special") == &"shield"
+
 func _holds_pickaxe() -> bool:
 	var stats: Variant = player.get("weapon_stats")
 	return not (stats is Resource) or (stats as Resource).resource_path == PICKAXE_PATH
@@ -1174,6 +1184,157 @@ func _strip_drive() -> Vector2:
 	var dir := Vector2(side * 0.5, 0.87).normalized()
 	return dir * (PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0)
 
+## Issue #985: a Meteor shower meteor flies a straight line at a fixed
+## velocity, so the bot can tell from where it is whether it will pass
+## within the meteor's radius plus its own body within METEOR_LOOKAHEAD_SEC.
+## If so it runs sideways, away from where the meteor will cross its height,
+## at full input, never off an edge (the same `_safe_side` check the rock
+## dodge uses); with no safe side it stays. Vector2.INF when it has no say:
+## Easy, or no meteor on a line to it. Host-side only: it is ordinary input,
+## so online joiners see it through normal player state.
+const METEOR_LOOKAHEAD_SEC: float = 0.8
+const METEOR_MARGIN: float = 14.0
+## The side the bot is dodging to, and for how much longer (0 = not dodging).
+var _dodge_side: float = 0.0
+var _dodge_left: float = 0.0
+func _meteor_drive(delta: float) -> Vector2:
+	if difficulty_level() == "easy" or not player.is_inside_tree():
+		return Vector2.INF
+	_dodge_left = maxf(_dodge_left - delta, 0.0)
+	if _dodge_left > 0.0:
+		# Keep running the same way until the meteor has gone by.
+		return _vault(delta)
+	var me: Vector2 = player.global_position
+	var threat_x: float = NAN
+	var soonest: float = INF
+	for node: Node in player.get_tree().get_nodes_in_group(&"meteors"):
+		var meteor := node as Node2D
+		if meteor == null or not is_instance_valid(meteor) or meteor.is_queued_for_deletion():
+			continue
+		var vel: Vector2 = meteor.get("velocity")
+		var rad: float = float(meteor.get("radius"))
+		if vel.y <= 1.0:
+			continue
+		var t: float = (me.y - meteor.global_position.y) / vel.y
+		if t < -0.05 or t > METEOR_LOOKAHEAD_SEC:
+			continue
+		var cross_x: float = meteor.global_position.x + vel.x * t
+		if absf(cross_x - me.x) > rad + BODY_RADIUS + METEOR_MARGIN:
+			continue
+		# Stage between them: the meteor is gone before it arrives.
+		if _ray_hits(meteor.global_position, Vector2(cross_x, me.y - BODY_RADIUS)):
+			continue
+		if t < soonest:
+			soonest = t
+			threat_x = cross_x
+	if is_nan(threat_x):
+		return Vector2.INF
+	var away: float = signf(me.x - threat_x)
+	if away == 0.0:
+		away = 1.0 if _edge_room(1.0, EDGE_KEEP) >= _edge_room(-1.0, EDGE_KEEP) else -1.0
+	var side: float = _safe_side(away)
+	if side == 0.0:
+		side = _safe_side(-away)
+		if side == 0.0:
+			return Vector2.ZERO
+	# The run throws the head out behind and the body can recoil that way: with
+	# an edge close behind, the bot carries on as usual (which keeps it on the
+	# floor) rather than risk the ledge.
+	if _edge_room(-side, EDGE_KEEP) < EDGE_KEEP:
+		return Vector2.INF
+	# Start running at once: plant the head and push, skipping the aim phase.
+	_dodge_side = side
+	_dodge_left = METEOR_LOOKAHEAD_SEC
+	_phase = 0
+	_pick_anchor()
+	_phase = 1
+	_phase_left = react_sec(PUSH_SEC)
+	return _vault(delta)
+
+## Issue #997: every hostile (not the bot's own, not a teammate's) shot in
+## `groups` whose straight line will pass within SHIELD_SHOT_MISS of the bot
+## within `max_ahead` px and is closing on it. Each entry is {node, ahead, along,
+## to_me}: how far along its line the bot is, the unit direction, and the
+## vector from the shot to the bot. Shared by the shield (#977) and the
+## bullet sidestep.
+func _incoming_shots(groups: Array, max_ahead: float) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	var me: Vector2 = player.global_position
+	for group: StringName in groups:
+		for shot: Node in get_tree().get_nodes_in_group(group):
+			if not (shot is Node2D) or shot.get("shooter") == player:
+				continue
+			var owner_node: Variant = shot.get("shooter")
+			if owner_node is Node and player.has_method("is_teammate") and player.is_teammate(owner_node):
+				continue
+			var vel_dir: Variant = shot.get("velocity") if group == &"boomerangs" else shot.get("direction")
+			if not (vel_dir is Vector2) or (vel_dir as Vector2).length() < 0.1:
+				continue
+			var to_me: Vector2 = me - (shot as Node2D).global_position
+			var along: Vector2 = (vel_dir as Vector2).normalized()
+			var ahead: float = to_me.dot(along)
+			if ahead <= 0.0 or ahead > max_ahead or absf(to_me.cross(along)) > SHIELD_SHOT_MISS:
+				continue
+			found.append({"node": shot, "ahead": ahead, "along": along, "to_me": to_me})
+	return found
+
+## Issue #997: a bot not holding a shield sidesteps a hostile bullet closing
+## on it: Hard from BULLET_DODGE_RANGE_HARD px, Normal from
+## BULLET_DODGE_RANGE_NORMAL, Easy never (#682). It leaves the bullet's line
+## perpendicular to it at full input and keeps going until the bullet is no
+## longer on a collision course. A bullet along the floor has only up and down
+## as perpendicular, so the bot hops (head planted straight down). Never off a
+## ledge (the meteor dodge's `_safe_side` and edge-room checks); a bot that is
+## hooked or mid-leap does not dodge. Vector2.INF when it has no say. Host-side
+## input only, so online joiners see it through normal player state.
+const BULLET_DODGE_RANGE_HARD: float = 600.0
+const BULLET_DODGE_RANGE_NORMAL: float = 400.0
+const BULLET_DODGE_HOLD_SEC: float = 0.35
+var _bullet_dodge_left: float = 0.0
+func _bullet_drive(delta: float) -> Vector2:
+	var level: String = difficulty_level()
+	if level == "easy" or not player.is_inside_tree() or _holds_shield():
+		return Vector2.INF
+	_bullet_dodge_left = maxf(_bullet_dodge_left - delta, 0.0)
+	var range_px: float = BULLET_DODGE_RANGE_HARD if level == "hard" else BULLET_DODGE_RANGE_NORMAL
+	var shots: Array[Dictionary] = _incoming_shots([&"projectiles"], range_px)
+	if shots.is_empty():
+		_bullet_dodge_left = 0.0
+		return Vector2.INF
+	if _hooked_for > 0.0 or _leap_left > 0.0:
+		return Vector2.INF
+	var nearest: Dictionary = shots[0]
+	for shot: Dictionary in shots:
+		if float(shot["ahead"]) < float(nearest["ahead"]):
+			nearest = shot
+	var along: Vector2 = nearest["along"]
+	var perp := Vector2(-along.y, along.x)
+	var off: float = (nearest["to_me"] as Vector2).dot(perp)
+	if off < 0.0:
+		perp = -perp
+	elif off == 0.0 and _edge_room(1.0, EDGE_KEEP) < _edge_room(-1.0, EDGE_KEEP):
+		perp = -perp
+	var hop: bool = absf(perp.x) < 0.5
+	if hop:
+		_dodge_left = 0.0
+		_bullet_dodge_left = BULLET_DODGE_HOLD_SEC
+		return Vector2.DOWN * (PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0)
+	var side: float = _safe_side(signf(perp.x))
+	if side == 0.0:
+		side = _safe_side(-signf(perp.x))
+		if side == 0.0:
+			return Vector2.INF
+	if _edge_room(-side, EDGE_KEEP) < EDGE_KEEP:
+		return Vector2.INF
+	_dodge_side = side
+	_dodge_left = BULLET_DODGE_HOLD_SEC
+	_bullet_dodge_left = BULLET_DODGE_HOLD_SEC
+	_phase = 0
+	_pick_anchor()
+	_phase = 1
+	_phase_left = react_sec(PUSH_SEC)
+	return _vault(delta)
+
 ## Issue #977: a bot holding the shield turns its face to the nearest incoming
 ## threat instead of its melee target: a rival within SHIELD_RIVAL_RANGE whose
 ## weapon head is moving at it, or a hostile bullet, hook or boomerang heading
@@ -1210,25 +1371,10 @@ func _shield_drive(delta: float) -> Vector2:
 			threat = (head - me).normalized()
 	if difficulty_level() == "easy":
 		return Vector2.INF
-	for group: StringName in [&"projectiles", &"grapple_hooks", &"boomerangs"]:
-		for shot: Node in get_tree().get_nodes_in_group(group):
-			if not (shot is Node2D) or shot.get("shooter") == player:
-				continue
-			var owner_node: Variant = shot.get("shooter")
-			if owner_node is Node and player.has_method("is_teammate") and player.is_teammate(owner_node):
-				continue
-			var vel_dir: Variant = shot.get("velocity") if group == &"boomerangs" else shot.get("direction")
-			if not (vel_dir is Vector2) or (vel_dir as Vector2).length() < 0.1:
-				continue
-			var at: Vector2 = (shot as Node2D).global_position
-			var to_me: Vector2 = me - at
-			var along: Vector2 = (vel_dir as Vector2).normalized()
-			var ahead: float = to_me.dot(along)
-			if ahead <= 0.0 or ahead > SHIELD_SHOT_RANGE or absf(to_me.cross(along)) > SHIELD_SHOT_MISS:
-				continue
-			if ahead < best:
-				best = ahead
-				threat = (at - me).normalized()
+	for shot: Dictionary in _incoming_shots([&"projectiles", &"grapple_hooks", &"boomerangs"], SHIELD_SHOT_RANGE):
+		if float(shot["ahead"]) < best:
+			best = float(shot["ahead"])
+			threat = ((shot["node"] as Node2D).global_position - me).normalized()
 	if threat == Vector2.INF:
 		return Vector2.INF
 	return threat * _length_for(_min_reach() + (_reach() - _min_reach()) * SHIELD_REACH_FRACTION)
@@ -1367,6 +1513,8 @@ func _plan_anchor() -> void:
 ## with nothing to land on, or the goal is up on something directly overhead,
 ## in which case it heads for the nearer way round it.
 func _travel_side() -> float:
+	if _dodge_left > 0.0:
+		return _dodge_side
 	var me: Vector2 = player.global_position
 	var to_goal: Vector2 = goal - me
 	var side: float = 0.0
