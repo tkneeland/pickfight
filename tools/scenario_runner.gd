@@ -528,6 +528,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"haymaker_award_861",
 	"victory_streaker_award_needs_three_unbroken_kos",
 	"victory_combo_award_needs_two_kos_inside_three_seconds",
+	"award_sharpshooter_counts_ranged_kos",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -2613,6 +2614,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_victory_streaker_award_needs_three_unbroken_kos()
 		"victory_combo_award_needs_two_kos_inside_three_seconds":
 			return await _scenario_victory_combo_award_needs_two_kos_inside_three_seconds()
+		"award_sharpshooter_counts_ranged_kos":
+			return await _scenario_award_sharpshooter_counts_ranged_kos()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -30543,6 +30546,53 @@ func _scenario_victory_combo_award_needs_two_kos_inside_three_seconds() -> Array
 	if not stats.best_multi_ko.is_empty():
 		failures.append("begin_match left multi-KOs behind")
 	stats.forget_slot(0)
+	_scenario_completed = true
+	return failures
+
+## Issue #953: Sharpshooter goes to the most boomstick/boomerang KOs, at least 2, no ties.
+func _scenario_award_sharpshooter_counts_ranged_kos() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Sharpshooter")
+	var ko := func(stats: RefCounted, killer: int, victim: int, weapon: String, t: int) -> void:
+		stats.record_hit(killer, victim, 10.0, t, weapon)
+		stats.record_elimination(victim, t + 1)
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	ko.call(stats, 0, 1, "boomstick", 1000)
+	ko.call(stats, 0, 2, "boomerang", 9000)
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "2 ranged KOs":
+		failures.append("expected Sharpshooter for slot 0 with 2 ranged KOs, got %s" % [found])
+	var one: RefCounted = MatchStatsScript.new()
+	one.begin_match()
+	ko.call(one, 0, 1, "boomstick", 1000)
+	if not find.call(one).is_empty():
+		failures.append("Sharpshooter given for a single ranged KO")
+	var melee: RefCounted = MatchStatsScript.new()
+	melee.begin_match()
+	for i: int in 3:
+		ko.call(melee, 0, 1 + i, "pickaxe", 1000 + i * 5000)
+	if not find.call(melee).is_empty():
+		failures.append("melee KOs counted toward Sharpshooter")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	for who: int in [0, 1]:
+		ko.call(tied, who, 2, "boomstick", 1000 + who * 5000)
+		ko.call(tied, who, 3, "boomerang", 2000 + who * 5000)
+	if not find.call(tied).is_empty():
+		failures.append("Sharpshooter given for a tie")
+	var bot: RefCounted = MatchStatsScript.new()
+	bot.begin_match()
+	bot.record_hit(0, 1, 10.0, 1000, "boomstick", false)
+	bot.record_elimination(1, 1001)
+	bot.record_hit(0, 2, 10.0, 9000, "boomstick", false)
+	bot.record_elimination(2, 9001)
+	if find.call(bot).size() != 1:
+		failures.append("a bot's ranged KOs did not earn Sharpshooter")
+	stats.begin_match()
+	if not stats.ranged_kos.is_empty():
+		failures.append("begin_match left ranged KOs behind")
 	_scenario_completed = true
 	return failures
 
