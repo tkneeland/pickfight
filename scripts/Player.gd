@@ -1081,10 +1081,33 @@ var _head_terrain_ticks: int = 0
 
 func _track_head_terrain_contact() -> void:
 	_head_terrain_ticks = maxi(_head_terrain_ticks - 1, 0)
+	_scan_head_contacts()
+	if _head_on_terrain:
+		_head_terrain_ticks = SWING_PLANTED_TICKS
+
+## What the head is touching this tick, read once: `_head_on_terrain` (anything
+## but a player or a weapon head) and `_head_on_rival` (a player or a weapon
+## head). The grip, the swing's planting and the pogo all ask; the head's
+## contacts do not change within a tick, so one scan of them answers all three.
+var _head_on_terrain: bool = false
+var _head_on_rival: bool = false
+var _contacts_frame: int = -1
+var _contacts_head_id: int = 0
+
+func _scan_head_contacts() -> void:
+	var frame: int = Engine.get_physics_frames()
+	var head_id: int = _head.get_instance_id()
+	if frame == _contacts_frame and head_id == _contacts_head_id:
+		return
+	_contacts_frame = frame
+	_contacts_head_id = head_id
+	_head_on_terrain = false
+	_head_on_rival = false
 	for body: Node2D in _head.get_colliding_bodies():
-		if not body.is_in_group("players") and not body is WeaponHeadType:
-			_head_terrain_ticks = SWING_PLANTED_TICKS
-			return
+		if body.is_in_group("players") or body is WeaponHeadType:
+			_head_on_rival = true
+		else:
+			_head_on_terrain = true
 
 ## How much of `force` along `axis` to keep, so that the reaction on the body
 ## never runs against the circling. 1.0 when it does not.
@@ -1275,7 +1298,10 @@ func _style_haft() -> void:
 ## directly, which is how this suite's own scenarios read and drive it.
 func _update_damage_visual() -> void:
 	var t: float = clampf(damage / DEATH_DAMAGE, 0.0, 1.0)
-	body_visual.color = identity_color.lerp(DAMAGE_FILL_COLOR, t)
+	var fill: Color = identity_color.lerp(DAMAGE_FILL_COLOR, t)
+	# Written only when it moved: setting it redraws the polygon every tick.
+	if body_visual.color != fill:
+		body_visual.color = fill
 
 ## Draws the weapon head as the art it was fitted to (ADR-0010): the weapon's
 ## own `art_outline`, in `identity_color`.
@@ -1894,13 +1920,8 @@ func _update_head_grip() -> void:
 	if _head_material == null:
 		return
 	_track_head_terrain_contact()
-	var grip: float = 0.0
-	var bodies: Array[Node2D] = _head.get_colliding_bodies()
-	for body: Node2D in bodies:
-		if body.is_in_group("players") or body is WeaponHeadType:
-			grip = 0.0
-			break
-		grip = 1.0
+	# Terrain only: any player or weapon head in the contacts lets go.
+	var grip: float = 1.0 if _head_on_terrain and not _head_on_rival else 0.0
 	var floor_friction: float = HEAD_BASE_FRICTION
 	if grip > 0.0:
 		floor_friction = HEAD_YIELD_FRICTION
@@ -2405,10 +2426,8 @@ func pogo_charge() -> float:
 	return clampf(_pogo_charge / _stats.pogo_charge_time, 0.0, 1.0)
 
 func _pogo_grounded() -> bool:
-	for body: Node2D in _head.get_colliding_bodies():
-		if not body.is_in_group("players") and not (body is WeaponHeadType):
-			return true
-	return false
+	_scan_head_contacts()
+	return _head_on_terrain
 
 func _tick_pogo(delta: float) -> void:
 	_pogo_cooldown = maxf(0.0, _pogo_cooldown - delta)

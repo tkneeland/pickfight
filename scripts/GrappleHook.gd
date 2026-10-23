@@ -140,8 +140,8 @@ func _physics_process(delta: float) -> void:
 			_reel(delta)
 		State.HOME:
 			_go_home(delta)
-	queue_redraw()
 
+## Redrawn once a frame here, not again each physics tick.
 func _process(_delta: float) -> void:
 	queue_redraw()
 

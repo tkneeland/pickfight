@@ -130,8 +130,8 @@ func _physics_process(delta: float) -> void:
 	if leg == Leg.BACK and (shooter.global_position - global_position).length() <= CATCH_RADIUS:
 		_catch()
 		return
-	queue_redraw()
 
+## Redrawn once a frame here, not again each physics tick.
 func _process(_delta: float) -> void:
 	queue_redraw()
 
