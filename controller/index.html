@@ -131,12 +131,7 @@
   #mouse-capture {
     font: inherit;
     font-size: 20px;
-    font-weight: 800;
     padding: 14px 26px;
-    border: 0;
-    border-radius: 14px;
-    color: var(--ink);
-    background: var(--yellow);
   }
   #reach-row { font-size: 16px; display: flex; align-items: center; gap: 10px; }
   #mouse-sens-row { font-size: 14px; opacity: 0.85; display: flex; align-items: center; gap: 10px; }
@@ -194,7 +189,6 @@
   #rules-switches { display: flex; flex-direction: column; gap: 8px; }
   #rules-all { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   #host-menu #menu-rules button { padding: 10px 6px; font-size: 16px; }
-  #host-menu #menu-rules button.on { color: var(--ink); background: var(--yellow); }
   #host-menu #menu-rules button.locked { opacity: 0.35; }
   .rules-heading { font-size: 18px; font-weight: 800; text-align: left; margin-top: 6px; }
   #rules-footer, #rules-summary { font-size: 16px; font-weight: 700; }
@@ -291,20 +285,13 @@
   }
   #lobby-title { font-size: 28px; font-weight: 800; }
   #lobby-info { font-size: 16px; opacity: 0.75; }
-  #lobby-count { font-size: 30vmin; font-weight: 800; line-height: 1; display: none; }
+  #lobby-count { font-size: 30vmin; line-height: 1; display: none; }
   #ready-btn {
     font: inherit;
     font-size: 26px;
-    font-weight: 800;
     min-width: 60vw;
     padding: 22px 28px;
-    border: 0;
-    border-radius: 16px;
-    color: var(--ink);
-    /* Playtest 2026-09-27: yellow is the call to action, grey once pressed. */
-    background: var(--yellow);
   }
-  #ready-btn.on { background: #59606e; }
   #target-row { font-size: 20px; display: flex; align-items: center; gap: 12px; }
   /* Issue #236: the team picker, shown only in a Teams lobby, and the line
      that says which team this phone is on. */
@@ -313,26 +300,15 @@
   #team-row button {
     font: inherit;
     font-size: 20px;
-    font-weight: 700;
     padding: 10px 16px;
-    border-radius: 12px;
-    border: 2px solid #59606e;
-    background: #1b1f29;
-    color: #e8ecf4;
   }
-  #team-row button.on { border-color: #e8ecf4; background: #2c3342; }
-  #team-red { color: #f24545 !important; }
-  #team-blue { color: #4d8cff !important; }
+  #team-row button.on { border-color: #e8ecf4; }
   #team-line { font-size: 22px; font-weight: 800; display: none; }
   #target-row button, #target-input {
     font: inherit;
     font-size: 24px;
     width: 64px;
     height: 52px;
-    border-radius: 12px;
-    border: 1px solid #59606e;
-    background: #1b1f29;
-    color: #e8ecf4;
     text-align: center;
   }
   /* Nickname prompt (issue #139): the first time a phone joins, before the
@@ -358,27 +334,18 @@
   #name-input {
     font: inherit;
     font-size: 30px;
-    font-weight: 700;
     width: 80vw;
     max-width: 420px;
     padding: 14px 16px;
-    border-radius: 14px;
-    border: 2px solid #59606e;
-    background: #1b1f29;
-    color: #e8ecf4;
     text-align: center;
   }
   #name-row { display: flex; gap: 12px; }
   #name-shuffle, #name-go {
     font: inherit;
     font-size: 22px;
-    font-weight: 800;
     padding: 18px 22px;
-    border: 0;
-    border-radius: 16px;
   }
-  #name-shuffle { color: #e8ecf4; background: #2a303d; }
-  #name-go { color: var(--ink); background: var(--yellow); min-width: 40vw; }
+  #name-go { min-width: 40vw; }
   /* Host controls (issue #149): a small gear, on the host's phone only, that
      opens a hidden menu. Tucked under the status line (HUD padding 12px +
      its 18px line = 30px, so 44px leaves a gap), clear of the lobby's
@@ -393,17 +360,12 @@
     width: 44px;
     height: 44px;
     padding: 0;
-    border: 2px solid #59606e;
     border-radius: 50%;
-    background: #1b1f29;
-    color: #e8ecf4;
     display: none;
     align-items: center;
     justify-content: center;
-    opacity: 0.8;
   }
   #gear.show { display: flex; }
-  #gear.pressed { border-color: var(--yellow); box-shadow: 0 0 0 4px rgba(245, 226, 74, 0.45); }
   #gear svg { width: 24px; height: 24px; pointer-events: none; }
   #host-menu {
     position: fixed;
@@ -425,20 +387,11 @@
   #host-menu button {
     font: inherit;
     font-size: 22px;
-    font-weight: 800;
     min-width: 64vw;
     padding: 16px 22px;
-    border: 0;
-    border-radius: 14px;
-    color: #e8ecf4;
-    background: #2a303d;
   }
-  #host-menu button:disabled { opacity: 0.35; }
   /* Issue #352: the game-mode picker, one button per mode, the chosen one lit. */
   #menu-gamemodes { display: flex; flex-direction: column; gap: 8px; }
-  #host-menu #menu-gamemodes button.on { color: var(--ink); background: var(--yellow); }
-  #host-menu button.primary { color: var(--ink); background: var(--yellow); }
-  #host-menu button.danger { color: #fff; background: #c62f3a; }
   #confirm-text { font-size: 22px; font-weight: 700; max-width: 80vw; }
   /* Hat and colour (issue #151): the second step of joining, straight after
      the nickname, and opened again from the lobby's "Hat & colour" button or
@@ -464,36 +417,22 @@
   #hat-grid button, #eyes-grid button {
     font: inherit;
     font-size: 14px;
-    font-weight: 700;
     padding: 6px 4px 8px;
-    border: 2px solid #2a303d;
-    border-radius: 14px;
-    background: #1b1f29;
-    color: #e8ecf4;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
   }
-  #hat-grid button.on, #eyes-grid button.on { border-color: var(--yellow); background: #2a303d; }
   #hat-grid canvas, #eyes-grid canvas { width: 72px; height: 56px; pointer-events: none; }
   #color-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; width: min(92vw, 420px); }
   #color-row button {
     position: relative;
     height: 52px;
-    border: 3px solid transparent;
-    border-radius: 14px;
     font: inherit;
     font-size: 13px;
-    font-weight: 800;
-    color: var(--ink);
   }
-  #color-row button.on { border-color: #ffffff; box-shadow: 0 0 0 3px #0d0f14 inset; }
-  /* A colour another player holds: dimmed, crossed out and not tappable. */
-  #color-row button.taken {
-    opacity: 0.3;
-    background-image: linear-gradient(135deg, transparent 46%, #0d0f14 46%, #0d0f14 54%, transparent 54%) !important;
-  }
+  /* A colour another player holds: dimmed, crossed out (see the #507 layer) and not tappable. */
+  #color-row button.taken { opacity: 0.3; }
   /* First-join tip (issue #291): a looping drag-to-swing animation over a
      full-screen card, shown once per device. Dismissed by the one button;
      the card takes touches only while it is up. */
@@ -537,37 +476,16 @@
     55%, 75% { transform: translate(40px, -10px); opacity: 1; }
     100% { transform: translate(-30px, 20px); opacity: 0.2; }
   }
-  #tip-go {
+  #tip-go, #look-go {
     font: inherit;
     font-size: 22px;
-    font-weight: 800;
     padding: 18px 22px;
     min-width: 50vw;
-    border: 0;
-    border-radius: 16px;
-    color: var(--ink);
-    background: var(--yellow);
-  }
-  #look-go {
-    font: inherit;
-    font-size: 22px;
-    font-weight: 800;
-    padding: 18px 22px;
-    min-width: 50vw;
-    border: 0;
-    border-radius: 16px;
-    color: var(--ink);
-    background: var(--yellow);
   }
   #look-btn, #surprise-btn, #vibration-btn, #leave-btn {
     font: inherit;
     font-size: 18px;
-    font-weight: 700;
     padding: 12px 20px;
-    border: 0;
-    border-radius: 14px;
-    color: #e8ecf4;
-    background: #2a303d;
   }
 
   /* ---- #507 look (issue #576) ------------------------------------------------
@@ -612,6 +530,7 @@
     transform: translate(3px, 3px);
     box-shadow: 1px 1px 0 var(--ink);
   }
+  /* Playtest 2026-09-27: yellow is the call to action, grey once pressed. */
   #ready-btn { font-size: 32px; border-width: 5px; border-radius: 22px; box-shadow: 6px 6px 0 var(--ink); background: var(--yellow); }
   #ready-btn:active { box-shadow: 2px 2px 0 var(--ink); transform: translate(4px, 4px); }
   #ready-btn.on { background: var(--muted); }
