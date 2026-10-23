@@ -65,10 +65,16 @@ static func big_label(text: String, font_size: int, color: Color) -> Label:
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const UiGroundScript := preload("res://scripts/UiGround.gd")
 
-## A label in a `UiTheme` variation (the theme gives font and colour), `font_size` px.
-static func themed_label(text: String, font_size: int, variation: StringName = &"", align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+## A label in a `UiTheme` variation (the theme gives font and colour), `font_size` px,
+## named `node_name` when given, wrapping as `wrap` says.
+static func themed_label(text: String, font_size: int, variation: StringName = &"", align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT,
+		node_name: String = "", wrap: TextServer.AutowrapMode = TextServer.AUTOWRAP_OFF) -> Label:
 	var label := Label.new()
 	label.text = text
+	if not node_name.is_empty():
+		label.name = node_name
+	if wrap != TextServer.AUTOWRAP_OFF:
+		label.autowrap_mode = wrap
 	label.horizontal_alignment = align
 	if variation != &"":
 		label.theme_type_variation = variation
@@ -76,17 +82,58 @@ static func themed_label(text: String, font_size: int, variation: StringName = &
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return label
 
-## A button in a `UiTheme` variation. No focus until a gamepad menu asks for it.
-static func themed_button(text: String, variation: StringName, node_name: String = "") -> Button:
+## A button in a `UiTheme` variation. No focus until a gamepad menu asks for it,
+## unless `focusable` (a popup's or screen's own button that a pad must always reach).
+static func themed_button(text: String, variation: StringName, node_name: String = "", focusable: bool = false) -> Button:
 	var button := Button.new()
 	button.text = text
 	button.theme_type_variation = variation
-	button.focus_mode = Control.FOCUS_NONE
+	button.focus_mode = Control.FOCUS_ALL if focusable else Control.FOCUS_NONE
 	button.pivot_offset_ratio = Vector2(0.5, 0.5)
 	if not node_name.is_empty():
 		button.name = node_name
 	hover_pop(button)
 	return button
+
+## A popup card's header row, added to `parent`: "Head" holding the "Title" (ink heading,
+## `title_size` px, filling the width) and, with a valid `on_close`, the focusable yellow
+## "Close" X that calls it. Callers add anything else (Stages & Rules' Done) to the row.
+static func popup_head(parent: Node, title_text: String, title_size: int, on_close: Callable = Callable()) -> HBoxContainer:
+	var head := HBoxContainer.new()
+	head.name = "Head"
+	parent.add_child(head)
+	var title: Label = themed_label(title_text, title_size, UiThemeScript.INK_HEADING_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "Title")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	if on_close.is_valid():
+		var close: Button = themed_button("X", UiThemeScript.YELLOW_BUTTON, "Close", true)
+		close.custom_minimum_size = Vector2(56, 56)
+		close.pressed.connect(on_close)
+		head.add_child(close)
+	return head
+
+## A segmented switch (#435, #647): a cream "SWITCH_FRAME" frame added to `parent`, holding its
+## cells side by side split by 4 px ink rules. `make_cell(i)` builds cell `i` of `count` (the
+## caller keeps its own references); the frame is returned.
+static func segmented_switch(parent: Node, frame_name: String, count: int, make_cell: Callable) -> PanelContainer:
+	var frame := PanelContainer.new()
+	if not frame_name.is_empty():
+		frame.name = frame_name
+	frame.theme_type_variation = UiThemeScript.SWITCH_FRAME
+	frame.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+	parent.add_child(frame)
+	var cells := HBoxContainer.new()
+	cells.add_theme_constant_override("separation", 0)
+	frame.add_child(cells)
+	for i in count:
+		if i > 0:
+			var rule := ColorRect.new()
+			rule.color = UiThemeScript.INK
+			rule.custom_minimum_size = Vector2(4, 0)
+			rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cells.add_child(rule)
+		cells.add_child(make_cell.call(i))
+	return frame
 
 ## An opaque full-screen panel on the striped indigo ground, hidden. The lobby's.
 static func striped_panel(parent: Node, node_name: String) -> Control:
