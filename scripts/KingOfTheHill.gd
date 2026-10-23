@@ -15,7 +15,7 @@ extends Node2D
 signal callout(sound: StringName)
 
 const RespawnScript := preload("res://scripts/Respawn.gd")
-const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
+const ModeKitScript := preload("res://scripts/ModeKit.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
 
 ## Seconds a knocked-out player waits before coming back (#662).
@@ -113,26 +113,11 @@ func _watch_players() -> void:
 		return
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
 	_respawner.far_from = func() -> Vector2: return hill_position
-	for slot: int in _slots:
-		var player: Variant = _player(slot)
-		if player == null or not player.has_signal("eliminated"):
-			continue
-		var handler: Callable = _on_eliminated.bind(slot)
-		_watched[slot] = player
-		_handlers[slot] = handler
-		player.eliminated.connect(handler)
+	ModeKitScript.watch(round_manager, _slots, &"eliminated", func(slot: int) -> Callable: return _on_eliminated.bind(slot),
+			_watched, _handlers)
 
 func _unwatch_players() -> void:
-	for slot: int in _handlers.keys():
-		var player: Variant = _watched.get(slot)
-		var handler: Callable = _handlers[slot]
-		if player != null and is_instance_valid(player):
-			if player.eliminated.is_connected(handler):
-				player.eliminated.disconnect(handler)
-			player.spawn_protected = false
-			player.modulate.a = 1.0
-	_handlers.clear()
-	_watched.clear()
+	ModeKitScript.unwatch(_watched, _handlers, &"eliminated")
 	if _respawner != null:
 		_respawner.clear()
 
@@ -143,12 +128,11 @@ func _on_eliminated(slot: int) -> void:
 
 ## Whether `slot` is waiting to respawn: still standing for the round manager.
 func is_pending(slot: int) -> bool:
-	return _respawner != null and _respawner.is_pending(slot)
+	return ModeKitScript.is_pending(_respawner, slot)
 
 ## A kicked player must not come back.
 func cancel_respawn(slot: int) -> void:
-	if _respawner != null:
-		_respawner.cancel(slot)
+	ModeKitScript.cancel_respawn(_respawner, slot)
 
 ## Spawns hang in the air above the floor, so their centre can sit a couple of
 ## hundred pixels over where anyone stands (#409): a hill there is out of reach
@@ -402,20 +386,10 @@ func _build_hud() -> void:
 		_hud.queue_free()
 	_hud = CanvasLayer.new()
 	_hud.name = "HillHud"
-	_holds_label = Label.new()
-	_holds_label.name = "HillHolds"
-	_holds_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
-	_holds_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_holds_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ScreenKitScript.style_hud_pill(_holds_label, 32)
+	_holds_label = ModeKitScript.hud_pill("HillHolds", 12, 32)
 	_holds_label.visible = false
 	_hud.add_child(_holds_label)
-	_clock_label = Label.new()
-	_clock_label.name = "HillClock"
-	_clock_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 72)
-	_clock_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ScreenKitScript.style_hud_pill(_clock_label)
+	_clock_label = ModeKitScript.hud_pill("HillClock", 72)
 	_clock_label.visible = false
 	_hud.add_child(_clock_label)
 	add_child(_hud)
