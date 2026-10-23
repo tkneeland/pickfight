@@ -50,6 +50,8 @@ func pause_hint_label() -> Label:
 
 ## Sweeps `text` across the screen over `duration` seconds.
 func show_stage_title(text: String, duration: float, rule: String = "") -> void:
+	if not _setting_on():
+		return
 	if _title_label == null:
 		_title_layer = CanvasLayer.new()
 		_title_layer.name = "StageTitleLayer"
@@ -86,6 +88,11 @@ func show_stage_title(text: String, duration: float, rule: String = "") -> void:
 	_title_tween.tween_property(_title_label, "position:x", -width - 20.0, duration * 0.3) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	_title_tween.tween_callback(func() -> void: _title_label.visible = false)
+
+## Settings > "Stage title card" (#942); on when there is no Sfx autoload.
+func _setting_on() -> bool:
+	var sfx: Node = (Engine.get_main_loop() as SceneTree).root.get_node_or_null("Sfx")
+	return sfx == null or bool(sfx.get("stage_title_card"))
 
 # --- Pause banner (issue #149) -----------------------------------------------
 
