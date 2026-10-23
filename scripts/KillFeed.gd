@@ -40,6 +40,7 @@ const ACCENT: Color = Color(1.0, 0.85, 0.2, 1.0)
 ## player's colour.
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const HookUtilScript := preload("res://scripts/HookUtil.gd")
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 const PLATE_FILL: Color = UiThemeScript.INDIGO_PANEL
 ## Victory cards and the stats table hold small coloured text, so they take a
 ## darker plate than the ticker for contrast against every player colour.
@@ -55,6 +56,10 @@ var _banner_queue: Array[Dictionary] = []
 ## The banners asked for, as "HEADLINE|name", oldest first, for the
 ## scenarios: the last MAX_BANNER_LOG of them.
 var banner_log: PackedStringArray = PackedStringArray()
+## Issue #976: the Online joiner's copy, fed the host's recorded lines and
+## banners; it records nothing itself. The host's records every push, banner
+## and clear (before its own Kill feed setting is asked).
+var mirror: bool = false
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -106,6 +111,8 @@ func _process(delta: float) -> void:
 ## A KO on the ticker (nothing with Settings > "Kill feed" off, #833): "killer KO victim", or "victim self-KO" when
 ## `killer_name` is empty.
 func push_ko(killer_name: String, killer_color: Color, victim_name: String, victim_color: Color) -> void:
+	if not mirror:
+		EffectStreamScript.record("feed_ko", {"kn": killer_name, "kc": killer_color, "vn": victim_name, "vc": victim_color})
 	if not HookUtilScript.sfx_flag(self, &"kill_feed", true):
 		return
 	var panel := PanelContainer.new()
@@ -132,6 +139,8 @@ func push_ko(killer_name: String, killer_color: Color, victim_name: String, vict
 ## A big moment across the middle: `headline` in the accent colour over
 ## `who` in their colour. Queued behind any banner already up.
 func show_banner(headline: String, who: String, color: Color) -> void:
+	if not mirror:
+		EffectStreamScript.record("banner", {"h": headline, "w": who, "c": color})
 	_banner_queue.append({"headline": headline, "who": who, "color": color})
 	banner_log.append("%s|%s" % [headline, who])
 	if banner_log.size() > MAX_BANNER_LOG:
@@ -143,6 +152,8 @@ func show_banner(headline: String, who: String, color: Color) -> void:
 
 ## Empties the ticker and the banner (a new match).
 func clear() -> void:
+	if not mirror:
+		EffectStreamScript.record("feed_clear")
 	for entry: Node in _feed.get_children():
 		_feed.remove_child(entry)
 		entry.queue_free()
@@ -151,6 +162,8 @@ func clear() -> void:
 
 ## Drops the banner up and any waiting (a new round, the victory screen).
 func clear_banners() -> void:
+	if not mirror:
+		EffectStreamScript.record("banner_clear")
 	_banner_queue.clear()
 	_banner.visible = false
 

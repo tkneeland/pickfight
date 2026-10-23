@@ -12,6 +12,8 @@ const RING_WIDTH: float = 5.0
 ## The second ring trails the first by this share of the lifetime.
 const SECOND_DELAY: float = 0.25
 
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
+
 func _init() -> void:
 	name = "RoundWinRing"
 	z_index = -1
@@ -46,8 +48,15 @@ static func spawn_for(round_manager: Node, slot: int) -> Node2D:
 	var parent: Node = player.get_parent()
 	if parent == null:
 		return null
+	var tint: Color = round_manager.call("_slot_color", slot)
+	EffectStreamScript.record("win_ring", {"p": player.global_position, "c": tint}, player) # #976
+	return spawn_at(parent, player.global_position, tint)
+
+## The rings in `tint` at `at` under `parent`. Shared by the host and the
+## Online joiner (#976).
+static func spawn_at(parent: Node, at: Vector2, tint: Color) -> Node2D:
 	var ring: Node2D = (load("res://scripts/RoundWinRing.gd") as GDScript).new()
-	ring.color = round_manager.call("_slot_color", slot)
+	ring.color = tint
 	parent.add_child(ring)
-	ring.global_position = player.global_position
+	ring.global_position = at
 	return ring

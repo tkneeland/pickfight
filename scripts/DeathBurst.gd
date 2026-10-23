@@ -16,6 +16,14 @@ const SHARD_LENGTH: float = 14.0
 
 var colour: Color = Color.WHITE
 var _age: float = 0.0
+
+## A burst in `colour` at `at` under `parent` (the Online joiner's KO, #976).
+static func spawn_at(parent: Node, at: Vector2, colour_of: Color) -> Node2D:
+	var burst: Node2D = (load("res://scripts/DeathBurst.gd") as GDScript).new()
+	burst.colour = colour_of
+	parent.add_child(burst)
+	burst.global_position = at
+	return burst
 var _shards: Array[Vector2] = []
 
 func _ready() -> void:

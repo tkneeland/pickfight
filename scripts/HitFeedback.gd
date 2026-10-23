@@ -32,6 +32,7 @@ const MARKER_DIAGONALS: Array[Vector2] = [Vector2(0.70710678, 0.70710678), Vecto
 const MARKER_OUTLINE: Color = Color(0, 0, 0, 0.8)
 ## `_last_zero_frame` is swept of expired pairs once it holds this many.
 const ZERO_PRUNE_AT: int = 64
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 
 ## The debug switch. Damage numbers are a testing aid, not part of the game;
 ## flip this to hide them. Hitmarkers are always on.
@@ -61,6 +62,10 @@ const ZERO_COOLDOWN_FRAMES: int = 12
 ## without editing the file.
 var show_damage_numbers: bool = SHOW_DAMAGE_NUMBERS
 
+## Issue #976: the Online joiner's copy watches no fighters; the host's strikes
+## reach it as recorded events, drawn through `show_strike()`.
+var mirror: bool = false
+
 ## An attacker/victim pair key (`_pair_key`) -> the physics frame its last `0`
 ## was shown on.
 var _last_zero_frame: Dictionary = {}
@@ -81,6 +86,8 @@ func _ready() -> void:
 	# marker and number under it.
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_warm_number_sizes()
+	if mirror:
+		return
 	get_tree().node_added.connect(_on_node_added)
 	for player in get_tree().get_nodes_in_group("players"):
 		_watch(player)
@@ -113,15 +120,22 @@ func _watch(node: Node) -> void:
 
 ## `attacker` comes last because that is where the signal's bind puts it.
 func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool, attacker: Node) -> void:
+	if amount <= 0.0 and not _zero_allowed(attacker, victim):
+		return
+	var colour: Color = LETHAL_COLOR if lethal else _identity_colour(attacker)
+	EffectStreamScript.record("hit", {"p": point, "a": amount, "l": lethal, "c": colour}, victim) # #976
+	show_strike(point, amount, lethal, colour)
+
+## Draws one strike: the hitmarker in `colour` (when it dealt damage) and the
+## damage number. The host's own strikes and the Online joiner's recorded
+## ones (#976) both come through here.
+func show_strike(point: Vector2, amount: float, lethal: bool, colour: Color) -> void:
 	var world_scale: float = _world_scale()
 	if amount > 0.0:
-		var colour: Color = LETHAL_COLOR if lethal else _identity_colour(attacker)
 		var marker: HitMarker = _free_markers.pop_back() if not _free_markers.is_empty() else HitMarker.new()
 		marker.done = _retire
 		marker.setup(point, colour, _marker_arm(amount, lethal), lethal, amount, world_scale)
 		add_child(marker)
-	elif not _zero_allowed(attacker, victim):
-		return
 	if show_damage_numbers and _settings_allow_numbers():
 		var font_size: int = _number_font(amount)
 		var number: DamageNumber = _free_numbers.pop_back() if not _free_numbers.is_empty() else DamageNumber.new()
