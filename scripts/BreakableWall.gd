@@ -53,6 +53,7 @@ extends StaticBody2D
 
 const PlayerType := preload("res://scripts/Player.gd")
 const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
+const PartKitScript := preload("res://scripts/PartKit.gd")
 
 enum _WallState { STANDING, BREAKING, BROKEN }
 
@@ -235,13 +236,13 @@ func _absorb(amount: float, speed: float) -> void:
 	_hp_left = maxf(_hp_left - amount, 0.0)
 	_show_wear()
 	if _hp_left > 0.0:
-		_sfx(&"wall_hit", global_position, amount / WALL_HIT_FULL_DAMAGE)
+		PartKitScript.sfx(self, &"wall_hit", global_position, amount / WALL_HIT_FULL_DAMAGE)
 	elif _state == _WallState.STANDING:
-		_sfx(&"wall_break", global_position)
+		PartKitScript.sfx(self, &"wall_break", global_position)
 	if _hp_left <= 0.0:
 		_state = _WallState.BREAKING
 		_flash_remaining = BREAK_FLASH_SEC
-		if not _reduce_flash():
+		if not PartKitScript.reduce_flash(self):
 			_visual.color = FLASH_COLOR
 		for crack: Line2D in _cracks:
 			crack.visible = false
@@ -294,16 +295,3 @@ func _crack_points(index: int, half: Vector2) -> PackedVector2Array:
 		var along: float = centre + zig[j] * long * (1.0 if index % 2 == 0 else -1.0)
 		points.append(Vector2(across, along) if along_y else Vector2(along, across))
 	return points
-
-## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
-## name, so this part still works in a tree without the autoload.
-func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
-	if sfx != null:
-		sfx.play(sound, at, strength)
-
-## Comfort option (#317): the saved "Reduce flashes" setting, off when there is
-## no `Sfx` autoload to ask.
-func _reduce_flash() -> bool:
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	return sfx != null and bool(sfx.get("reduce_flash"))

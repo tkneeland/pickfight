@@ -15,7 +15,7 @@ extends Node2D
 signal callout(sound: StringName)
 
 const RespawnScript := preload("res://scripts/Respawn.gd")
-const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
+const ModeKitScript := preload("res://scripts/ModeKit.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
 
 ## Seconds a knocked-out player waits before coming back (#662).
@@ -75,6 +75,11 @@ var _active: bool = false
 ## Last slot (or team in Teams) that held the hill alone, -1 for none: a
 ## different one taking it over is "Hill taken!" (#370).
 var _last_holder: int = -1
+## Who the physics tick numbered `_tick_frame` found on the hill, and who held
+## it alone, so `_draw()` need not count them again.
+var _tick_inside: Array[int] = []
+var _tick_holder: int = -1
+var _tick_frame: int = -1
 
 func setup(manager: Node) -> void:
 	round_manager = manager
@@ -113,26 +118,11 @@ func _watch_players() -> void:
 		return
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
 	_respawner.far_from = func() -> Vector2: return hill_position
-	for slot: int in _slots:
-		var player: Variant = _player(slot)
-		if player == null or not player.has_signal("eliminated"):
-			continue
-		var handler: Callable = _on_eliminated.bind(slot)
-		_watched[slot] = player
-		_handlers[slot] = handler
-		player.eliminated.connect(handler)
+	ModeKitScript.watch(round_manager, _slots, &"eliminated", func(slot: int) -> Callable: return _on_eliminated.bind(slot),
+			_watched, _handlers)
 
 func _unwatch_players() -> void:
-	for slot: int in _handlers.keys():
-		var player: Variant = _watched.get(slot)
-		var handler: Callable = _handlers[slot]
-		if player != null and is_instance_valid(player):
-			if player.eliminated.is_connected(handler):
-				player.eliminated.disconnect(handler)
-			player.spawn_protected = false
-			player.modulate.a = 1.0
-	_handlers.clear()
-	_watched.clear()
+	ModeKitScript.unwatch(_watched, _handlers, &"eliminated")
 	if _respawner != null:
 		_respawner.clear()
 
@@ -143,12 +133,11 @@ func _on_eliminated(slot: int) -> void:
 
 ## Whether `slot` is waiting to respawn: still standing for the round manager.
 func is_pending(slot: int) -> bool:
-	return _respawner != null and _respawner.is_pending(slot)
+	return ModeKitScript.is_pending(_respawner, slot)
 
 ## A kicked player must not come back.
 func cancel_respawn(slot: int) -> void:
-	if _respawner != null:
-		_respawner.cancel(slot)
+	ModeKitScript.cancel_respawn(_respawner, slot)
 
 ## Spawns hang in the air above the floor, so their centre can sit a couple of
 ## hundred pixels over where anyone stands (#409): a hill there is out of reach
@@ -257,6 +246,9 @@ func _physics_process(delta: float) -> void:
 	var inside: Array[int] = occupants()
 	var teams: bool = _teams_round()
 	var holder: int = _solo_holder(inside, teams)
+	_tick_inside = inside
+	_tick_holder = holder
+	_tick_frame = Engine.get_physics_frames()
 	if holder != -1:
 		_note_holder(holder)
 		if teams:
@@ -347,16 +339,21 @@ func _timeout(teams: bool) -> void:
 ## &"contested" (rivals inside together).
 func hill_state() -> StringName:
 	var inside: Array[int] = occupants()
+	return _state_of(inside, _solo_holder(inside, _teams_round()))
+
+func _state_of(inside: Array[int], holder: int) -> StringName:
 	if inside.is_empty():
 		return &"empty"
-	return &"held" if _solo_holder(inside, _teams_round()) != -1 else &"contested"
+	return &"held" if holder != -1 else &"contested"
 
 ## Who holds the hill alone right now (a slot, or a team in Teams), or -1.
 func holder_unit() -> int:
 	return _solo_holder(occupants(), _teams_round())
 
 func holder_colour() -> Color:
-	var unit: int = holder_unit()
+	return _colour_of(holder_unit())
+
+func _colour_of(unit: int) -> Color:
 	if unit == -1:
 		return Color(1.0, 0.85, 0.2)
 	if _teams_round():
@@ -365,7 +362,9 @@ func holder_colour() -> Color:
 
 ## How full the holder's ring is: their hold time over the target, 0-1.
 func fill_fraction() -> float:
-	var unit: int = holder_unit()
+	return _fraction_of(holder_unit())
+
+func _fraction_of(unit: int) -> float:
 	if unit == -1 or seconds_to_win <= 0.0:
 		return 0.0
 	var held: float = team_hold_of(unit) if _teams_round() else hold_of(unit)
@@ -402,20 +401,10 @@ func _build_hud() -> void:
 		_hud.queue_free()
 	_hud = CanvasLayer.new()
 	_hud.name = "HillHud"
-	_holds_label = Label.new()
-	_holds_label.name = "HillHolds"
-	_holds_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
-	_holds_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_holds_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ScreenKitScript.style_hud_pill(_holds_label, 32)
+	_holds_label = ModeKitScript.hud_pill("HillHolds", 12, 32)
 	_holds_label.visible = false
 	_hud.add_child(_holds_label)
-	_clock_label = Label.new()
-	_clock_label.name = "HillClock"
-	_clock_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 72)
-	_clock_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ScreenKitScript.style_hud_pill(_clock_label)
+	_clock_label = ModeKitScript.hud_pill("HillClock", 72)
 	_clock_label.visible = false
 	_hud.add_child(_clock_label)
 	add_child(_hud)
@@ -444,13 +433,23 @@ func _send_hill(slot: int, seconds: int) -> void:
 func _draw() -> void:
 	var gold := Color(1.0, 0.85, 0.2)
 	var centre: Vector2 = to_local(hill_position)
-	var state: StringName = hill_state() if _active and round_manager != null else &"empty"
+	var state: StringName = &"empty"
+	var holder: int = -1
+	if _active and round_manager != null:
+		# What this tick's physics already found on the hill, rather than
+		# counting the occupants again; counted afresh when no tick ran yet.
+		var inside: Array[int] = _tick_inside
+		holder = _tick_holder
+		if _tick_frame != Engine.get_physics_frames():
+			inside = occupants()
+			holder = _solo_holder(inside, _teams_round())
+		state = _state_of(inside, holder)
 	match state:
 		&"held":
-			var colour: Color = holder_colour()
+			var colour: Color = _colour_of(holder)
 			draw_circle(centre, hill_radius, Color(colour, 0.4))
 			draw_arc(centre, hill_radius, 0.0, TAU, 48, Color(colour, 0.5), 3.0)
-			var fraction: float = fill_fraction()
+			var fraction: float = _fraction_of(holder)
 			if fraction > 0.0:
 				draw_arc(centre, hill_radius - 7.0, -PI * 0.5, -PI * 0.5 + TAU * fraction, 64, colour, 12.0)
 			_draw_crown(centre + Vector2(0.0, -hill_radius - 50.0 + 6.0 * sin(float(Time.get_ticks_msec()) * 0.005)), colour)

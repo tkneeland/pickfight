@@ -3,22 +3,22 @@
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_1440x40"]
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_2016x40"]
 size = Vector2(2016, 40)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_40x740"]
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_56x740"]
 size = Vector2(56, 740)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_1520x40"]
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_2128x40"]
 size = Vector2(2128, 40)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_130x170"]
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_182x170"]
 size = Vector2(182, 170)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_130x20"]
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_182x20"]
 size = Vector2(182, 20)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_200x20"]
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_280x20"]
 size = Vector2(280, 20)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_8000x40"]
@@ -41,7 +41,7 @@ mode_weights = {"soccer": 4.0, "_other": 0.3}
 position = Vector2(0, 300)
 
 [node name="FloorShape" type="CollisionShape2D" parent="Floor"]
-shape = SubResource("RectangleShape2D_1440x40")
+shape = SubResource("RectangleShape2D_2016x40")
 
 [node name="FloorVisual" type="Polygon2D" parent="Floor"]
 color = Color(0.35, 0.35, 0.4, 1)
@@ -52,7 +52,7 @@ polygon = PackedVector2Array(-1008.0, -20.0, 1008.0, -20.0, 1008.0, 20.0, -1008.
 position = Vector2(-1036, -50.0)
 
 [node name="WallLeftShape" type="CollisionShape2D" parent="WallLeft"]
-shape = SubResource("RectangleShape2D_40x740")
+shape = SubResource("RectangleShape2D_56x740")
 
 [node name="WallLeftVisual" type="Polygon2D" parent="WallLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
@@ -62,7 +62,7 @@ polygon = PackedVector2Array(-28.0, -370.0, 28.0, -370.0, 28.0, 370.0, -28.0, 37
 position = Vector2(1036, -50.0)
 
 [node name="WallRightShape" type="CollisionShape2D" parent="WallRight"]
-shape = SubResource("RectangleShape2D_40x740")
+shape = SubResource("RectangleShape2D_56x740")
 
 [node name="WallRightVisual" type="Polygon2D" parent="WallRight"]
 color = Color(0.35, 0.35, 0.4, 1)
@@ -72,7 +72,7 @@ polygon = PackedVector2Array(-28.0, -370.0, 28.0, -370.0, 28.0, 370.0, -28.0, 37
 position = Vector2(0, -400)
 
 [node name="RoofShape" type="CollisionShape2D" parent="Roof"]
-shape = SubResource("RectangleShape2D_1520x40")
+shape = SubResource("RectangleShape2D_2128x40")
 
 [node name="RoofVisual" type="Polygon2D" parent="Roof"]
 color = Color(0.35, 0.35, 0.4, 1)
@@ -87,7 +87,7 @@ monitoring = false
 monitorable = false
 
 [node name="Goal0Shape" type="CollisionShape2D" parent="Goal0"]
-shape = SubResource("RectangleShape2D_130x170")
+shape = SubResource("RectangleShape2D_182x170")
 
 [node name="Goal0Net" type="Polygon2D" parent="Goal0"]
 color = Color(1, 0.3, 0.3, 0.28)
@@ -101,7 +101,7 @@ monitoring = false
 monitorable = false
 
 [node name="Goal1Shape" type="CollisionShape2D" parent="Goal1"]
-shape = SubResource("RectangleShape2D_130x170")
+shape = SubResource("RectangleShape2D_182x170")
 
 [node name="Goal1Net" type="Polygon2D" parent="Goal1"]
 color = Color(0.35, 0.55, 1, 0.28)
@@ -112,7 +112,7 @@ polygon = PackedVector2Array(-91.0, -85.0, 91.0, -85.0, 91.0, 85.0, -91.0, 85.0)
 position = Vector2(-917, 100)
 
 [node name="BarLeftShape" type="CollisionShape2D" parent="BarLeft"]
-shape = SubResource("RectangleShape2D_130x20")
+shape = SubResource("RectangleShape2D_182x20")
 
 [node name="BarLeftVisual" type="Polygon2D" parent="BarLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
@@ -122,7 +122,7 @@ polygon = PackedVector2Array(-91.0, -10.0, 91.0, -10.0, 91.0, 10.0, -91.0, 10.0)
 position = Vector2(917, 100)
 
 [node name="BarRightShape" type="CollisionShape2D" parent="BarRight"]
-shape = SubResource("RectangleShape2D_130x20")
+shape = SubResource("RectangleShape2D_182x20")
 
 [node name="BarRightVisual" type="Polygon2D" parent="BarRight"]
 color = Color(0.35, 0.35, 0.4, 1)
@@ -133,7 +133,7 @@ polygon = PackedVector2Array(-91.0, -10.0, 91.0, -10.0, 91.0, 10.0, -91.0, 10.0)
 position = Vector2(-392, 142)
 
 [node name="LedgeLeftShape" type="CollisionShape2D" parent="LedgeLeft"]
-shape = SubResource("RectangleShape2D_200x20")
+shape = SubResource("RectangleShape2D_280x20")
 
 [node name="LedgeLeftVisual" type="Polygon2D" parent="LedgeLeft"]
 color = Color(0.35, 0.35, 0.4, 1)
@@ -143,7 +143,7 @@ polygon = PackedVector2Array(-140.0, -10.0, 140.0, -10.0, 140.0, 10.0, -140.0, 1
 position = Vector2(392, 142)
 
 [node name="LedgeRightShape" type="CollisionShape2D" parent="LedgeRight"]
-shape = SubResource("RectangleShape2D_200x20")
+shape = SubResource("RectangleShape2D_280x20")
 
 [node name="LedgeRightVisual" type="Polygon2D" parent="LedgeRight"]
 color = Color(0.35, 0.35, 0.4, 1)

@@ -24,8 +24,8 @@ extends StaticBody2D
 ##
 ## `_ready()` builds collision, visual and detector from the exports.
 
-## Preloaded by path, never by `class_name` (CLAUDE.md), for `HEAD_GROUP`.
-const WeaponHeadType := preload("res://scripts/WeaponHead.gd")
+## Preloaded by path, never by `class_name` (CLAUDE.md).
+const PartKitScript := preload("res://scripts/PartKit.gd")
 
 ## The strip's collision and visual box, centred on the node.
 @export var size: Vector2 = Vector2(160, 10)
@@ -54,20 +54,12 @@ var _squelch_wait: Dictionary = {}
 
 func _ready() -> void:
 	var half: Vector2 = size / 2.0
-	var rect := RectangleShape2D.new()
-	rect.size = size
-	var collision_shape := CollisionShape2D.new()
-	collision_shape.name = "CollisionShape2D"
-	collision_shape.shape = rect
-	add_child(collision_shape)
+	PartKitScript.add_rect_shape(self, size)
 
 	var mud := Polygon2D.new()
 	mud.name = "Mud"
 	mud.color = MUD_COLOR
-	mud.polygon = PackedVector2Array([
-		Vector2(-half.x, -half.y), Vector2(half.x, -half.y),
-		Vector2(half.x, half.y), Vector2(-half.x, half.y),
-	])
+	mud.polygon = PartKitScript.rect_polygon(size)
 	add_child(mud)
 
 	var specks := Node2D.new()
@@ -85,18 +77,8 @@ func _ready() -> void:
 		])
 		specks.add_child(speck)
 
-	_detector = Area2D.new()
-	_detector.name = "Detector"
-	_detector.collision_layer = 0
-	_detector.collision_mask = 1  # world layer only: player bodies, not heads
-	_detector.position = Vector2(0, -half.y - _DETECTOR_ABOVE / 2.0 + _DETECTOR_BELOW / 2.0)
-	var detector_rect := RectangleShape2D.new()
-	detector_rect.size = Vector2(size.x, _DETECTOR_ABOVE + _DETECTOR_BELOW)
-	var detector_shape := CollisionShape2D.new()
-	detector_shape.name = "DetectorShape"
-	detector_shape.shape = detector_rect
-	_detector.add_child(detector_shape)
-	add_child(_detector)
+	# World layer only: player bodies, not heads.
+	_detector = PartKitScript.add_top_detector(self, size, _DETECTOR_ABOVE, _DETECTOR_BELOW)
 
 func _physics_process(delta: float) -> void:
 	for id: int in _squelch_wait.keys():
@@ -107,40 +89,24 @@ func _physics_process(delta: float) -> void:
 			_squelch_wait[id] = left
 	var now: Dictionary = {}
 	for body: Node2D in _detector.get_overlapping_bodies():
-		if body is RigidBody2D and body.is_in_group("players") and _touching(body):
+		if body is RigidBody2D and body.is_in_group("players") and PartKitScript.touching(self, body):
 			_bog(body as RigidBody2D, delta)
 			if bool(body.get("alive")):
 				var id: int = body.get_instance_id()
 				now[id] = true
 				if not _bogging_last.has(id) and not _squelch_wait.has(id):
 					_squelch_wait[id] = SQUELCH_INTERVAL_SEC
-					var sfx: Node = get_node_or_null(^"/root/Sfx")
-					if sfx != null:
-						sfx.play(&"mud_squelch", body.global_position, 1.0)
+					PartKitScript.sfx(self, &"mud_squelch", body.global_position)
 	_bogging_last = now
-
-func _touching(body: RigidBody2D) -> bool:
-	return body.contact_monitor and body.get_colliding_bodies().has(self)
 
 ## True while `body` is standing in the mud.
 func is_bogging(body: RigidBody2D) -> bool:
-	return _detector != null and _detector.get_overlapping_bodies().has(body) and _touching(body)
+	return _detector != null and _detector.get_overlapping_bodies().has(body) and PartKitScript.touching(self, body)
 
+## The body and its weapon (head and haft) are damped together; see `Conveyor`.
 func _bog(body: RigidBody2D, delta: float) -> void:
 	var axis: Vector2 = global_transform.x.normalized()
 	var keep: float = exp(-MUD_DAMP * delta)
-	for part: RigidBody2D in [body] + _weapon_bodies_of(body):
+	for part: RigidBody2D in [body] + PartKitScript.weapon_bodies_of(get_tree(), body):
 		var along: float = part.linear_velocity.dot(axis)
 		part.linear_velocity -= axis * along * (1.0 - keep)
-
-## The rigid bodies of `body`'s weapon (head and haft); see `Conveyor`.
-func _weapon_bodies_of(body: RigidBody2D) -> Array[RigidBody2D]:
-	var parts: Array[RigidBody2D] = []
-	var rid: RID = body.get_rid()
-	for head: Node in get_tree().get_nodes_in_group(WeaponHeadType.HEAD_GROUP):
-		if head.is_queued_for_deletion() or not (head is RigidBody2D) or not rid in head.sweep_exclude:
-			continue
-		for child: Node in head.get_parent().get_children():
-			if child is RigidBody2D and child != body and not parts.has(child):
-				parts.append(child as RigidBody2D)
-	return parts
