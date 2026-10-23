@@ -508,6 +508,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_stops_before_spikes",
 	"bot_dodges_moving_saw",
 	"bot_dodges_meteor",
+	"bot_sidesteps_incoming_bullet",
+	"bot_sidestep_bullet_keeps_footing_997",
 	"bot_braces_for_gust_warning",
 	"hazard_death_credits_last_hitter_within_window",
 	"hazard_death_after_window_gives_no_credit",
@@ -943,6 +945,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pogo_uncharged_ground_contact_bounces_at_least_this_high",
 	"pogo_chained_hops_keep_their_height",
 	"grapple_hit_on_player_anchors_and_thrower_zips_to_them",
+	"hook_latch_plays_once_per_latch",
 	"grapple_anchored_player_feels_no_force_from_the_rope",
 	"grapple_release_lets_go_of_an_anchored_player",
 	"grapple_lets_go_when_either_player_is_knocked_out",
@@ -2605,6 +2608,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_dodges_moving_saw()
 		"bot_dodges_meteor":
 			return await _scenario_bot_dodges_meteor()
+		"bot_sidesteps_incoming_bullet":
+			return await _scenario_bot_sidesteps_incoming_bullet()
+		"bot_sidestep_bullet_keeps_footing_997":
+			return await _scenario_bot_sidestep_bullet_keeps_footing_997()
 		"bot_braces_for_gust_warning":
 			return await _scenario_bot_braces_for_gust_warning()
 		"hazard_death_credits_last_hitter_within_window":
@@ -3465,6 +3472,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pogo_uncharged_ground_contact_bounces_at_least_this_high()
 		"pogo_chained_hops_keep_their_height":
 			return await _scenario_pogo_chained_hops_keep_their_height()
+		"hook_latch_plays_once_per_latch":
+			return await _scenario_hook_latch_plays_once_per_latch()
 		"grapple_hit_on_player_anchors_and_thrower_zips_to_them":
 			return await _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them()
 		"grapple_anchored_player_feels_no_force_from_the_rope":
@@ -30265,6 +30274,68 @@ func _scenario_bot_dodges_meteor() -> Array[String]:
 	await _teardown(ledge[0], false)
 	_scenario_completed = true
 	return failures
+## Issue #997: a bot at (x, 274) with a rival 600 px to its left and a boomstick
+## bullet from `from` (relative to the bot) flying at it. Returns the damage the
+## bot took and where it ended.
+func _bot_bullet_run_997(level: String, bot_x: float, from: Vector2, weapon: String = "") -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(bot_x, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(bot_x - 600.0, 274.0))
+	await _await_ticks(2)
+	if weapon != "":
+		await _equip(player, weapon)
+	var gun: Resource = load(BOOMSTICK_PATH)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	player.spawn_protected = false
+	await _await_ticks(30)
+	var bullet: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+	# Aimed where the bot will be when it arrives, as a human leads a mover.
+	var target: Vector2 = player.global_position + Vector2(player.linear_velocity.x * from.length() / 900.0, 0.0)
+	bullet.setup(rival, target + from, -from.normalized(), gun)
+	stage.add_child(bullet)
+	var before: float = player.damage
+	await _await_ticks(80)
+	var out: Dictionary = {"taken": player.damage - before, "x": player.global_position.x, "y": player.global_position.y}
+	await _teardown(stage, false)
+	return out
+## A Normal and a Hard bot with a bullet coming flat at them from 350 px leave
+## the line and take nothing.
+func _scenario_bot_sidesteps_incoming_bullet() -> Array[String]:
+	var failures: Array[String] = []
+	var easy: Dictionary = await _bot_bullet_run_997("easy", 0.0, Vector2(350.0, 0.0))
+	var normal: Dictionary = await _bot_bullet_run_997("normal", 0.0, Vector2(350.0, 0.0))
+	var hard: Dictionary = await _bot_bullet_run_997("hard", 0.0, Vector2(350.0, 0.0))
+	print("      bot_sidesteps_incoming_bullet: taken easy %.1f normal %.1f hard %.1f" % [easy["taken"], normal["taken"], hard["taken"]])
+	if easy["taken"] <= 0.0:
+		failures.append("the control is empty: the Easy bot was not hit")
+	if normal["taken"] > 0.0:
+		failures.append("the Normal bot took %.1f from the bullet" % normal["taken"])
+	if hard["taken"] > 0.0:
+		failures.append("the Hard bot took %.1f from the bullet" % hard["taken"])
+	_scenario_completed = true
+	return failures
+## A bullet coming down at a slant is dodged sideways, and at the floor's edge
+## the bot does not leave the floor to do it; a bot holding the shield still
+## blocks it (#977), not dodges.
+func _scenario_bot_sidestep_bullet_keeps_footing_997() -> Array[String]:
+	var failures: Array[String] = []
+	var slant: Dictionary = await _bot_bullet_run_997("normal", 0.0, Vector2(60.0, -160.0))
+	var easy: Dictionary = await _bot_bullet_run_997("easy", 0.0, Vector2(60.0, -160.0))
+	var edge: Dictionary = await _bot_bullet_run_997("normal", 570.0, Vector2(-60.0, -160.0))
+	print("      bot_sidestep_bullet_keeps_footing_997: slant taken %.1f (easy %.1f), edge x=%.0f y=%.0f" % [slant["taken"], easy["taken"], edge["x"], edge["y"]])
+	if easy["taken"] <= 0.0:
+		failures.append("the control is empty: the Easy bot was not hit by the slanted bullet")
+	if slant["taken"] > 0.0:
+		failures.append("the Normal bot took %.1f from the slanted bullet" % slant["taken"])
+	if edge["x"] > 600.0 or edge["y"] > 330.0:
+		failures.append("the bot left the floor to dodge, ending at x=%.0f y=%.0f" % [edge["x"], edge["y"]])
+	_scenario_completed = true
+	return failures
 ## A saw patrolling the floor between a bot and its rival: the bot is hit with
 ## avoidance off and not at all with it on, over ten seconds.
 func _scenario_bot_dodges_moving_saw() -> Array[String]:
@@ -43925,6 +43996,98 @@ func _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them() -> Array
 	if absf(victim.damage - 8.0) > 0.01:
 		failures.append("the hit dealt %.1f, not 8" % victim.damage)
 	await _teardown(z["stage"])
+	_scenario_completed = true
+	return failures
+## Issue #1001: a hook latching plays one `hook_latch` at the hook; a miss and
+## a shield-turned hook play none. The wall, player-anchor and rod-catch
+## counts are the control: they are 0 without the sound.
+func _hook_latch_wall(sfx: Node) -> int:
+	var stage: Node2D = _new_stage()
+	_add_bar(stage, Vector2(0, 0), Vector2(240, 24))
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	sfx.start_recording()
+	await _flick(player, Vector2.UP)
+	var hook: Node2D = player.launched_hook()
+	await _await_condition(func() -> bool: return not is_instance_valid(hook) or not hook.is_flying(), 1000)
+	await _await_ticks(60)
+	sfx.stop_recording()
+	var n: int = _sfx_count(sfx, "hook_latch")
+	var last: Dictionary = _sfx_last(sfx, "hook_latch")
+	if n == 1 and not (last["position"] is Vector2):
+		n = -1
+	await _teardown(stage)
+	return n
+func _hook_latch_player(sfx: Node, path: String) -> int:
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(260, 0))
+	await _await_ticks(2)
+	await _equip(shooter, path)
+	_brace(shooter)
+	victim.freeze = true
+	sfx.start_recording()
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	victim.freeze = false
+	await _await_condition(func() -> bool: return not is_instance_valid(hook) or not hook.is_flying(), 1000)
+	await _await_ticks(60)
+	sfx.stop_recording()
+	var n: int = _sfx_count(sfx, "hook_latch")
+	await _teardown(stage)
+	return n
+func _hook_latch_miss(sfx: Node) -> int:
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	sfx.start_recording()
+	await _flick(shooter, Vector2.RIGHT)
+	await _await_ticks(240)
+	sfx.stop_recording()
+	var n: int = _sfx_count(sfx, "hook_latch")
+	await _teardown(stage)
+	return n
+func _scenario_hook_latch_plays_once_per_latch() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"hook_latch"):
+		return ["hook_latch is not in the sound table"]
+	var wall: int = await _hook_latch_wall(sfx)
+	var anchor: int = await _hook_latch_player(sfx, GRAPPLE_PATH)
+	var rod: int = await _hook_latch_player(sfx, FISHING_ROD_PATH)
+	var miss: int = await _hook_latch_miss(sfx)
+	var shielded: int = 0
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(300, 0))
+	await _await_ticks(2)
+	await _equip(holder, SHIELD_PATH)
+	await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	_brace(holder)
+	_aim(holder, PI)
+	await _await_ticks(SETTLE_TICKS)
+	sfx.start_recording()
+	await _flick(shooter, Vector2.RIGHT)
+	await _await_ticks(240)
+	sfx.stop_recording()
+	shielded = _sfx_count(sfx, "hook_latch")
+	await _teardown(stage)
+	print("      hook_latch: wall %d, anchor %d, rod %d, miss %d, shielded %d" % [wall, anchor, rod, miss, shielded])
+	if wall != 1:
+		failures.append("a grapple hooking a wall played hook_latch %d times, want 1 (-1 = not positional)" % wall)
+	if anchor != 1:
+		failures.append("a grapple anchoring to a player played hook_latch %d times, want 1" % anchor)
+	if rod != 1:
+		failures.append("a fishing rod catching a player played hook_latch %d times, want 1" % rod)
+	if miss != 0:
+		failures.append("a missed hook played hook_latch %d times" % miss)
+	if shielded != 0:
+		failures.append("a hook turned back by a shield played hook_latch %d times" % shielded)
 	_scenario_completed = true
 	return failures
 func _scenario_grapple_anchored_player_feels_no_force_from_the_rope() -> Array[String]:
