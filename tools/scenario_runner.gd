@@ -985,6 +985,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_boomstick_no_aim_through_wall_or_easy_or_other_weapon_952",
 	"bot_faces_shield_at_incoming_shot",
 	"bot_shield_ignores_shot_on_easy_or_other_weapon_977",
+	"bot_faces_umbrella_at_incoming_shot",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -3556,6 +3557,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_faces_shield_at_incoming_shot()
 		"bot_shield_ignores_shot_on_easy_or_other_weapon_977":
 			return await _scenario_bot_shield_ignores_shot_977()
+		"bot_faces_umbrella_at_incoming_shot":
+			return await _scenario_bot_faces_umbrella_at_incoming_shot()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -45042,6 +45045,55 @@ func _scenario_bot_shield_ignores_shot_977() -> Array[String]:
 	print("      bot_shield_ignores_shot_977: easy best=%.1f taken=%.1f pickaxe best=%.1f" % [easy["best"], easy["taken"], pick["best"]])
 	if easy["best"] <= 30.0:
 		failures.append("the Easy control faced the bullet (%.1f degrees), so the fixture does not show the old behaviour" % easy["best"])
+	_scenario_completed = true
+	return failures
+## Issue #1014: a bot holding `weapon` with a rival 600 px to its left (its
+## target) and a boomstick bullet flying left at it from 400 px on the right.
+## Returns whether the canopy faced the bullet when it was last 60 px or more
+## away, and the damage the bot took.
+func _bot_umbrella_shot_run_1014(weapon: String, level: String) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(-600.0, 274.0))
+	await _await_ticks(2)
+	await _equip(player, weapon)
+	var gun: Resource = load(BOOMSTICK_PATH)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	await _await_ticks(30)
+	var bullet: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+	bullet.setup(rival, player.global_position + Vector2(400.0, 0.0), Vector2.LEFT, gun)
+	stage.add_child(bullet)
+	var before: float = player.damage
+	var faced: bool = false
+	for t in 60:
+		await physics_frame
+		if not is_instance_valid(bullet) or bullet.is_queued_for_deletion():
+			break
+		if bullet.global_position.x - player.global_position.x >= 60.0:
+			faced = player.canopy_open() and player.canopy_faces(bullet.global_position)
+	await _await_ticks(20)
+	var out: Dictionary = {"faced": faced, "taken": player.damage - before, "damage": float(gun.projectile_damage)}
+	await _teardown(stage, false)
+	return out
+## A Normal bot holding the umbrella, a bullet coming from 400 px: the open
+## canopy faces it as it arrives and the bullet is turned aside. Control: an
+## Easy bot keeps its canopy pointing at nothing.
+func _scenario_bot_faces_umbrella_at_incoming_shot() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _bot_umbrella_shot_run_1014(UMBRELLA_PATH, "normal")
+	var easy: Dictionary = await _bot_umbrella_shot_run_1014(UMBRELLA_PATH, "easy")
+	print("      bot_faces_umbrella_at_incoming_shot: normal faced=%s taken=%.1f of %.1f, easy faced=%s taken=%.1f" % [run["faced"], run["taken"], run["damage"], easy["faced"], easy["taken"]])
+	if not run["faced"]:
+		failures.append("the canopy did not face the bullet as it arrived")
+	if run["taken"] > run["damage"] * 0.3:
+		failures.append("the bullet was not turned aside (took %.1f of %.1f)" % [run["taken"], run["damage"]])
+	if easy["faced"]:
+		failures.append("the Easy control faced the bullet, so it does not show the old behaviour")
 	_scenario_completed = true
 	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
