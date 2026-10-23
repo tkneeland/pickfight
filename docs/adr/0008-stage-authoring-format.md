@@ -36,6 +36,19 @@ CLAUDE.md). It carries:
 - A `KillZone` child (`Area2D` + `CollisionShape2D`, `scripts/KillZone.gd`
   reused unmodified) declaring the death boundary, sized to that stage.
 
+> **Amended (stage platform parts)**: a plain rectangular platform is now an
+> instance of `scenes/parts/Platform.tscn` (still a `StaticBody2D` with
+> `<Name>Shape` and `<Name>Visual` children, built from one `size` export so the
+> collision box and the drawn box cannot disagree; `color`, `one_way` and the
+> body's own layers, position and z are set on the instance), and the floor kill
+> zone is an instance of `scenes/parts/KillFloor.tscn` named `KillZone` (the
+> 8000x40 box every stage used; only its position is set). Hand-written
+> `StaticBody2D` geometry is still fine for anything else: polygon terrain, and the
+> competitive stages, which must carry no scripted or instanced bodies (#376).
+> `stage_platform_geometry_unchanged_refactor_platforms` locks every stage's
+> terrain to `tools/stage_platform_geometry.txt`; a deliberate geometry change
+> updates that table (the scenario writes the measured one to copy over it).
+
 `RoundManager` holds an exported `Array[PackedScene]` of stages and rotates
 through them **sequentially**, wrapping around, swapping the active stage
 into a container node once per round (right before players are placed).
