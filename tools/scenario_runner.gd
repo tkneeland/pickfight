@@ -52086,6 +52086,9 @@ func _scenario_credits_cover_the_settings_toggle_review_ui() -> Array[String]:
 	credits.close()
 	if toggle != null and not ui.toggle_hit(point):
 		failures.append("the Settings toggle stayed unclickable after the credits closed")
+	# close() only hides the screen; free it so the runner's leak check passes.
+	credits.queue_free()
+	await process_frame
 	PadMenuScript368.reset()
 	_scenario_completed = true
 	return failures
