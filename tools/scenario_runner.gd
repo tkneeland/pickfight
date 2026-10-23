@@ -133,6 +133,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_four_spawns_settle_together",
 	"pickup_cap_scales_with_roster",
 	"round_win_buzzes_only_winner",
+	"round_win_ring_spawns_for_winner_only",
 	"damaging_strike_buzzes_victim_and_attacker",
 	"zero_damage_strike_buzzes_no_one",
 	"elimination_buzzes_eliminated_player",
@@ -157,9 +158,16 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"world_stopped_head_blocks_arriving_head",
 	"conveyor_carries_player",
 	"conveyor_flatlands_spawns_clear",
+	"conveyor_two_more_stages",
+	"teleporter_moves_player_to_twin",
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
+	"ice_patch_two_more_stages_spawns_clear",
+	"treadmill_belts_oppose_and_mud_sits_between",
+	"mud_patch_overpass_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
+	"speed_strip_boosts_run_distance",
+	"mud_patch_slows_player",
 	"bounce_pad_launches_body",
 	"bounce_pad_rotated_launches_diagonally",
 	"bounce_pad_head_plant_is_plain_ground",
@@ -195,6 +203,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pad_launch_keeps_head_ahead_of_body",
 	"sfx_stage_parts_sound",
 	"sfx_hazard_hit_plays_once_per_hit",
+	"sfx_pickup_grab_plays_once_per_grab",
 	"arm_draws_over_identity_outline",
 	"axe_swing_deals_damage",
 	"sfx_mix_victory_quieter_rest_louder",
@@ -514,6 +523,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"match_stats_rows_favourite_weapon_and_magpie",
 	"untouchable_award_832",
 	"haymaker_award_861",
+	"victory_streaker_award_needs_three_unbroken_kos",
+	"victory_combo_award_needs_two_kos_inside_three_seconds",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -679,6 +690,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_ctf_attackers_defenders_and_carrier_chase",
 	"announcer_calls_capture_the_flag",
 	"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel",
+	"bot_four_bots_finish_a_classic_round_on_treadmill",
 	"character_polish_hit_flash_respects_reduce_flash",
 	"character_polish_takeoff_stretches_within_cap",
 	"character_polish_weapon_head_has_ink_outline",
@@ -875,10 +887,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"koth_teams_time_out_and_win_without_eliminations_662",
 	"koth_hill_state_colour_ring_clock_and_holds_row_662",
 	"koth_phone_receives_its_own_hold_662",
+	"phone_modifier_chip_frame_sent_and_cleared",
 	"soccer_and_ctf_stages_are_bigger_649",
 	"soccer_and_ctf_points_sit_inside_the_view_on_floor_649",
 	"soccer_ball_flies_farther_than_at_mass_one_649",
 	"soccer_ball_lifts_higher_than_before_674",
+	"sfx_soccer_ball_thump_on_hard_impacts_only",
 	"settings_hygiene_609",
 	"play_of_round_best_moment_scoring_order_704",
 	"play_of_round_trims_to_the_pause_or_plays_nothing_704",
@@ -940,6 +954,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"career_remote_client_keeps_totals_and_validates_503",
 	"bot_rod_casts_and_reels_rival_632",
 	"bot_grapple_zips_to_rival_out_of_reach_632",
+	"bot_opens_umbrella_while_falling",
 	"join_help_opens_lists_urls_and_closes_680",
 	"join_help_hidden_online_and_streamer_680",
 	"internet_join_button_opens_room_and_stops_683",
@@ -1011,6 +1026,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_volume_scales_announcer_and_grunts_only_824",
 	"voice_slider_reset_by_restore_defaults_824",
 	"kill_feed_switch_833",
+	"damage_numbers_switch_873",
+	"match_point_plate_switch_off_shows_none",
+	"juice_hit_pause_switch_off_never_pauses",
+	"pickup_callout_switch_off_spawns_none",
 	"match_win_ko_autosaves_clip_795",
 	"autosave_clip_switch_off_saves_nothing_795",
 	"offscreen_fighter_gets_edge_arrow_779",
@@ -1047,6 +1066,31 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"site_link_check_catches_a_missing_file_and_a_missing_alt_799",
 	"idle_fighter_gets_drag_hint_after_six_seconds_826",
 	"idle_hint_skips_bots_ghosts_and_later_rounds_826",
+	"online_lobby_copy_code_button_863",
+	"copy_code_button_hidden_couch_solo_streamer_863",
+	"copy_code_refresh_after_lobby_closed_863",
+	"site_social_preview_images_match_declared_size_864",
+	"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864",
+	"surprise_me_random_pick_is_clean_free_and_repeatable_865",
+	"controller_page_has_surprise_me_button_with_existing_messages_865",
+	"pickup_drop_falls_through_players_to_terrain_review_gp",
+	"sudden_death_chip_cleared_without_modifier_review_gp",
+	"round_start_clears_stale_round_flags_review_gp",
+	"end_match_disarms_focus_resume_review_gp",
+	"night_glows_removed_with_stage_review_gp",
+	"replay_capture_keeps_twelve_fps_review_gp",
+	"ctf_carried_flag_follows_carrier_in_capture_pause_review_gp",
+	"soccer_last_touch_is_nearest_player_review_gp",
+	"bot_death_and_stage_read_reset_brain_review_gp",
+	"relay_phone_seat_is_buzzed_pc_remote_is_not_review_net",
+	"network_client_cannot_claim_a_reserved_id_review_net",
+	"drain_stops_at_a_leave_frame_review_net",
+	"online_to_solo_tells_dropped_seats_why_review_net",
+	"taken_over_slot_drops_weak_link_state_review_net",
+	"pad_rumble_log_is_capped_review_net",
+	"structure_changed_on_new_entity_and_hud_change_review_net",
+	"controller_page_review_fixes_review_net",
+	"stage_check_and_join_urls_cached_review_perf",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1710,6 +1754,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_cap_scales_with_roster()
 		"round_win_buzzes_only_winner":
 			return await _scenario_round_win_buzzes_only_winner()
+		"round_win_ring_spawns_for_winner_only":
+			return await _scenario_round_win_ring_spawns_for_winner_only()
 		"damaging_strike_buzzes_victim_and_attacker":
 			return await _scenario_damaging_strike_buzzes_victim_and_attacker()
 		"zero_damage_strike_buzzes_no_one":
@@ -1758,12 +1804,26 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_conveyor_carries_player()
 		"conveyor_flatlands_spawns_clear":
 			return await _scenario_conveyor_flatlands_spawns_clear()
+		"conveyor_two_more_stages":
+			return await _scenario_conveyor_two_more_stages()
+		"teleporter_moves_player_to_twin":
+			return await _scenario_teleporter_moves_player_to_twin()
 		"ice_patch_slides_player_and_restores":
 			return await _scenario_ice_patch_slides_player_and_restores()
 		"ice_patch_summit_spawns_clear":
 			return await _scenario_ice_patch_summit_spawns_clear()
+		"ice_patch_two_more_stages_spawns_clear":
+			return await _scenario_ice_patch_two_more_stages_spawns_clear()
+		"treadmill_belts_oppose_and_mud_sits_between":
+			return await _scenario_treadmill_belts_oppose_and_mud_sits_between()
+		"mud_patch_overpass_spawns_clear":
+			return await _scenario_mud_patch_overpass_spawns_clear()
 		"ice_patch_restores_when_stage_freed":
 			return await _scenario_ice_patch_restores_when_stage_freed()
+		"speed_strip_boosts_run_distance":
+			return await _scenario_speed_strip_boosts_run_distance()
+		"mud_patch_slows_player":
+			return await _scenario_mud_patch_slows_player()
 		"bounce_pad_launches_body":
 			return await _scenario_bounce_pad_launches_body()
 		"bounce_pad_rotated_launches_diagonally":
@@ -1834,6 +1894,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_sfx_stage_parts_sound()
 		"sfx_hazard_hit_plays_once_per_hit":
 			return await _scenario_sfx_hazard_hit_plays_once_per_hit()
+		"sfx_pickup_grab_plays_once_per_grab":
+			return await _scenario_sfx_pickup_grab_plays_once_per_grab()
 		"arm_draws_over_identity_outline":
 			return await _scenario_arm_draws_over_identity_outline()
 		"axe_swing_deals_damage":
@@ -2472,6 +2534,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_untouchable_award_832()
 		"haymaker_award_861":
 			return await _scenario_haymaker_award_861()
+		"victory_streaker_award_needs_three_unbroken_kos":
+			return await _scenario_victory_streaker_award_needs_three_unbroken_kos()
+		"victory_combo_award_needs_two_kos_inside_three_seconds":
+			return await _scenario_victory_combo_award_needs_two_kos_inside_three_seconds()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -2798,6 +2864,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_announcer_calls_capture_the_flag()
 		"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel":
 			return await _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel()
+		"bot_four_bots_finish_a_classic_round_on_treadmill":
+			return await _scenario_bot_four_bots_finish_a_classic_round_on_treadmill()
 		"character_polish_hit_flash_respects_reduce_flash":
 			return await _scenario_character_polish_hit_flash_respects_reduce_flash()
 		"character_polish_takeoff_stretches_within_cap":
@@ -3190,10 +3258,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_hill_state_colour_ring_clock_and_holds_row_662()
 		"koth_phone_receives_its_own_hold_662":
 			return await _scenario_koth_phone_receives_its_own_hold_662()
+		"phone_modifier_chip_frame_sent_and_cleared":
+			return await _scenario_phone_modifier_chip_frame_sent_and_cleared()
 		"soccer_and_ctf_stages_are_bigger_649":
 			return _scenario_soccer_and_ctf_stages_are_bigger_649()
 		"soccer_and_ctf_points_sit_inside_the_view_on_floor_649":
 			return await _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649()
+		"sfx_soccer_ball_thump_on_hard_impacts_only":
+			return await _scenario_sfx_soccer_ball_thump_on_hard_impacts_only()
 		"soccer_ball_lifts_higher_than_before_674":
 			return await _scenario_soccer_ball_lifts_higher_than_before_674()
 		"soccer_ball_flies_farther_than_at_mass_one_649":
@@ -3316,6 +3388,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_rod_casts_and_reels_rival_632()
 		"bot_grapple_zips_to_rival_out_of_reach_632":
 			return await _scenario_bot_grapple_zips_to_rival_out_of_reach_632()
+		"bot_opens_umbrella_while_falling":
+			return await _scenario_bot_opens_umbrella_while_falling()
 		"join_help_opens_lists_urls_and_closes_680":
 			return await _scenario_join_help_opens_lists_urls_and_closes_680()
 		"join_help_hidden_online_and_streamer_680":
@@ -3452,6 +3526,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_voice_slider_reset_by_restore_defaults_824()
 		"kill_feed_switch_833":
 			return await _scenario_kill_feed_switch_833()
+		"damage_numbers_switch_873":
+			return await _scenario_damage_numbers_switch_873()
+		"match_point_plate_switch_off_shows_none":
+			return await _scenario_match_point_plate_switch_off_shows_none()
+		"juice_hit_pause_switch_off_never_pauses":
+			return await _scenario_juice_hit_pause_switch_off_never_pauses()
+		"pickup_callout_switch_off_spawns_none":
+			return await _scenario_pickup_callout_switch_off_spawns_none()
 		"restore_defaults_750":
 			return await _scenario_restore_defaults_750()
 		"player_numbers_badge_on_name_tags_809":
@@ -3514,6 +3596,56 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_idle_fighter_gets_drag_hint_after_six_seconds_826()
 		"idle_hint_skips_bots_ghosts_and_later_rounds_826":
 			return await _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826()
+		"online_lobby_copy_code_button_863":
+			return await _scenario_online_lobby_copy_code_button_863()
+		"copy_code_button_hidden_couch_solo_streamer_863":
+			return await _scenario_copy_code_button_hidden_couch_solo_streamer_863()
+		"copy_code_refresh_after_lobby_closed_863":
+			return await _scenario_copy_code_refresh_after_lobby_closed_863()
+		"site_social_preview_images_match_declared_size_864":
+			return _scenario_site_social_preview_images_match_declared_size_864()
+		"site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864":
+			return _scenario_site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864()
+		"surprise_me_random_pick_is_clean_free_and_repeatable_865":
+			return _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865()
+		"controller_page_has_surprise_me_button_with_existing_messages_865":
+			return _scenario_controller_page_has_surprise_me_button_with_existing_messages_865()
+		"pickup_drop_falls_through_players_to_terrain_review_gp":
+			return await _scenario_pickup_drop_falls_through_players_to_terrain_review_gp()
+		"sudden_death_chip_cleared_without_modifier_review_gp":
+			return await _scenario_sudden_death_chip_cleared_without_modifier_review_gp()
+		"round_start_clears_stale_round_flags_review_gp":
+			return await _scenario_round_start_clears_stale_round_flags_review_gp()
+		"end_match_disarms_focus_resume_review_gp":
+			return await _scenario_end_match_disarms_focus_resume_review_gp()
+		"night_glows_removed_with_stage_review_gp":
+			return await _scenario_night_glows_removed_with_stage_review_gp()
+		"replay_capture_keeps_twelve_fps_review_gp":
+			return await _scenario_replay_capture_keeps_twelve_fps_review_gp()
+		"ctf_carried_flag_follows_carrier_in_capture_pause_review_gp":
+			return await _scenario_ctf_carried_flag_follows_carrier_in_capture_pause_review_gp()
+		"soccer_last_touch_is_nearest_player_review_gp":
+			return await _scenario_soccer_last_touch_is_nearest_player_review_gp()
+		"bot_death_and_stage_read_reset_brain_review_gp":
+			return await _scenario_bot_death_and_stage_read_reset_brain_review_gp()
+		"relay_phone_seat_is_buzzed_pc_remote_is_not_review_net":
+			return await _scenario_relay_phone_seat_is_buzzed_pc_remote_is_not_review_net()
+		"network_client_cannot_claim_a_reserved_id_review_net":
+			return await _scenario_network_client_cannot_claim_a_reserved_id_review_net()
+		"drain_stops_at_a_leave_frame_review_net":
+			return await _scenario_drain_stops_at_a_leave_frame_review_net()
+		"online_to_solo_tells_dropped_seats_why_review_net":
+			return await _scenario_online_to_solo_tells_dropped_seats_why_review_net()
+		"taken_over_slot_drops_weak_link_state_review_net":
+			return await _scenario_taken_over_slot_drops_weak_link_state_review_net()
+		"pad_rumble_log_is_capped_review_net":
+			return await _scenario_pad_rumble_log_is_capped_review_net()
+		"structure_changed_on_new_entity_and_hud_change_review_net":
+			return _scenario_structure_changed_on_new_entity_and_hud_change_review_net()
+		"controller_page_review_fixes_review_net":
+			return _scenario_controller_page_review_fixes_review_net()
+		"stage_check_and_join_urls_cached_review_perf":
+			return await _scenario_stage_check_and_join_urls_cached_review_perf()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -5269,6 +5401,7 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Dunes.tscn",
 	"res://scenes/stages/Bastion.tscn",
 	"res://scenes/stages/Stronghold.tscn",
+	"res://scenes/stages/Treadmill.tscn",
 ]
 func _scenario_every_stage_has_a_preview_647() -> Array[String]:
 	var previews: GDScript = load("res://scripts/StagePreviews.gd")
@@ -8928,6 +9061,55 @@ func _buzzed_slots(buzzes: Array, kind: String) -> Array[int]:
 		if b[1] == kind:
 			slots.append(int(b[0]))
 	return slots
+## Issue #909: a round won by one fighter spawns one ring in their colour at
+## their position, freed within 1 s; the match-winning round spawns none.
+func _round_win_rings_909(stage: Node) -> Array[Node]:
+	var found: Array[Node] = []
+	for node: Node in stage.get_children():
+		if node.name.begins_with("RoundWinRing") and not node.is_queued_for_deletion():
+			found.append(node)
+	return found
+func _scenario_round_win_ring_spawns_for_winner_only() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _start_match_point_825(3, [0, 1])
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var stage: Node = loop["stage"]
+	if not loop["started"]:
+		failures.append("the match never started")
+		await _teardown(stage)
+		return failures
+	await _await_ticks(10)
+	if not _round_win_rings_909(stage).is_empty():
+		failures.append("a ring existed before any round was won")
+	var winner_at: Vector2 = players[0].global_position
+	players[1].eliminate() # slot 0 wins round 1 of a first-to-3
+	if not await _await_condition(func() -> bool: return not _round_win_rings_909(stage).is_empty(), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("no ring after slot 0 won a round")
+	else:
+		var rings: Array[Node] = _round_win_rings_909(stage)
+		if rings.size() != 1:
+			failures.append("expected one ring, got %d" % rings.size())
+		else:
+			if not rings[0].color.is_equal_approx(rm._slot_color(0)):
+				failures.append("the ring is not in the winner's colour")
+			if rings[0].global_position.distance_to(winner_at) > 200.0:
+				failures.append("the ring is not at the winner's position")
+		await _await_ticks(66) # 1.1 s
+		if not _round_win_rings_909(stage).is_empty():
+			failures.append("the ring was still up after 1 s")
+	# Wait for the next round, then let slot 0 take the match.
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round 2 never started")
+	else:
+		await _await_ticks(10)
+		rm._scores[0] = 2
+		players[1].eliminate() # slot 0 reaches 3 of 3: the match
+		await _await_ticks(30)
+		if not _round_win_rings_909(stage).is_empty():
+			failures.append("a ring spawned for the match-winning round")
+	await _teardown(stage)
+	return failures
 ## Issue #34: the round winner's phone, and only theirs, gets `win`. The two
 ## losers get `eliminated`; the winner, put through leave_round() when the
 ## round ends, does not. Three players, winner in the middle slot, so a buzz
@@ -10618,6 +10800,74 @@ func _new_empty_stage() -> Node2D:
 	var stage := Node2D.new()
 	get_root().add_child(stage)
 	return stage
+## Teleporter (#881): a falling player entering portal A appears within 8 px
+## of B keeping its velocity, is ignored for 1 s on re-entry at either end,
+## and a dead player does not travel.
+const TeleporterScene: PackedScene = preload("res://scenes/parts/Teleporter.tscn")
+const TELEPORTER_A: Vector2 = Vector2(0, 400)
+const TELEPORTER_B: Vector2 = Vector2(900, 200)
+const TELEPORTER_SNAP: float = 8.0
+func _teleporter_pair(stage: Node2D) -> Array[Node2D]:
+	var a: Node2D = TeleporterScene.instantiate() as Node2D
+	var b: Node2D = TeleporterScene.instantiate() as Node2D
+	a.position = TELEPORTER_A
+	b.position = TELEPORTER_B
+	stage.add_child(a)
+	stage.add_child(b)
+	a.twin = a.get_path_to(b)
+	b.twin = b.get_path_to(a)
+	return [a, b]
+func _scenario_teleporter_moves_player_to_twin() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	_teleporter_pair(stage)
+	var player: RigidBody2D = _spawn_player(stage, TELEPORTER_A)
+	player.linear_velocity = Vector2(120, 0)
+	var arrived: bool = false
+	var prev_v: Vector2 = player.linear_velocity
+	for _tick in 30:
+		await physics_frame
+		if player.global_position.x > 400.0:
+			arrived = true
+			break
+		prev_v = player.linear_velocity
+	if not arrived:
+		failures.append("player never left portal A")
+	else:
+		var gap: float = player.global_position.distance_to(TELEPORTER_B)
+		if gap > TELEPORTER_SNAP:
+			failures.append("player landed %.1f px from portal B, expected within %.1f" % [gap, TELEPORTER_SNAP])
+		if absf(player.linear_velocity.x - prev_v.x) > 5.0:
+			failures.append("velocity x went from %.1f to %.1f across the portal" % [prev_v.x, player.linear_velocity.x])
+		# Put the body back on A each tick: ignored for 1 s, then sent again.
+		var ticks_ignored: int = 0
+		var sent_again: bool = false
+		for tick in 120:
+			player.global_position = TELEPORTER_A
+			player.linear_velocity = Vector2.ZERO
+			await physics_frame
+			if player.global_position.x > 400.0:
+				sent_again = true
+				ticks_ignored = tick
+				break
+		if not sent_again:
+			failures.append("portal never accepted the player again after the cooldown")
+		elif ticks_ignored < 50 or ticks_ignored > 75:
+			failures.append("re-entry accepted after %d ticks, expected about 60 (1 s)" % ticks_ignored)
+	await _teardown(stage, false)
+	# A dead player stays put.
+	stage = _new_empty_stage()
+	_teleporter_pair(stage)
+	var ghost: RigidBody2D = _spawn_player(stage, TELEPORTER_A)
+	ghost.alive = false
+	for _tick in 20:
+		ghost.global_position = TELEPORTER_A
+		ghost.linear_velocity = Vector2.ZERO
+		await physics_frame
+	if ghost.global_position.distance_to(TELEPORTER_A) > 40.0:
+		failures.append("a dead player was teleported")
+	await _teardown(stage)
+	return failures
 ## Conveyor drift (#842): drops a player onto a belt (or plain ground), lets
 ## them settle, then returns how far they travelled along x in 90 ticks. The
 ## weapon is held straight up so only the body touches the belt.
@@ -10688,6 +10938,47 @@ func _scenario_conveyor_flatlands_spawns_clear() -> Array[String]:
 			if absf(spawn.position.x - belt.position.x) <= belt.size.x / 2.0 + PLAYER_RADIUS:
 				failures.append("Spawn%d at x=%.0f is over the belt" % [i, spawn.position.x])
 	await _teardown(stage)
+	return failures
+## Mesa and Cascade (#848) each carry a conveyor: it has a belt speed within
+## 100..180 px/s, no spawn drop line and no floor-level pickup spot lies over
+## it, and a player standing on it drifts the way it carries. Reuses #842's
+## drift thresholds.
+func _scenario_conveyor_two_more_stages() -> Array[String]:
+	var failures: Array[String] = []
+	for stage_name in ["Mesa", "Cascade"]:
+		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
+		get_root().add_child(stage)
+		var belt: StaticBody2D = stage.get_node_or_null("FloorConveyor") as StaticBody2D
+		if belt == null:
+			failures.append("%s has no FloorConveyor" % stage_name)
+			await _teardown(stage, false)
+			continue
+		var speed_abs: float = absf(belt.belt_speed)
+		if speed_abs < 100.0 or speed_abs > 180.0:
+			failures.append("%s belt speed %.0f is outside 100..180" % [stage_name, belt.belt_speed])
+		var half: float = belt.size.x / 2.0
+		for i in 8:
+			var spawn: Node2D = stage.get_node("Spawn%d" % i) as Node2D
+			if absf(spawn.position.x - belt.position.x) <= half + PLAYER_RADIUS:
+				failures.append("%s Spawn%d at x=%.0f is over the belt" % [stage_name, i, spawn.position.x])
+		for child in stage.get_children():
+			if String(child.name).begins_with("PickupSpawn"):
+				var pickup: Node2D = child as Node2D
+				if absf(pickup.position.x - belt.position.x) <= half and absf(pickup.position.y - belt.position.y) < 80.0:
+					failures.append("%s %s at x=%.0f sits on the belt" % [stage_name, pickup.name, pickup.position.x])
+		var player: RigidBody2D = _spawn_player(stage, belt.position + Vector2(0, -belt.size.y / 2.0 - PLAYER_RADIUS - 4.0))
+		player.set_input_vector(Vector2.ZERO)
+		for _tick in CONVEYOR_SETTLE_TICKS:
+			await physics_frame
+		var start_x: float = player.global_position.x
+		for _tick in CONVEYOR_WATCH_TICKS:
+			await physics_frame
+		var drift: float = (player.global_position.x - start_x) * signf(belt.belt_speed)
+		print("      %s belt carried a player %.1f px" % [stage_name, drift])
+		if drift < CONVEYOR_MIN_DRIFT:
+			failures.append("%s belt carried a standing player %.1f px its way, expected at least %.1f" % [stage_name, drift, CONVEYOR_MIN_DRIFT])
+		await _teardown(stage, false)
+	_scenario_completed = true
 	return failures
 ## Ice patch (#860): a body is dropped onto a strip of ice (or plain ground),
 ## settles, is shot along it at ICE_PUSH_SPEED with no input held, and the
@@ -10785,6 +11076,104 @@ func _scenario_ice_patch_summit_spawns_clear() -> Array[String]:
 				failures.append("%s at x=%.0f is over the ice" % [child.name, marker.position.x])
 	await _teardown(stage)
 	return failures
+## Relay and Roundabout (#900) each carry one ice patch on their floor; no
+## spawn, pickup or hill spot on the floor lies over it. Spots up on a
+## platform (more than 120 px above the ice) sit over it only in x.
+func _scenario_ice_patch_two_more_stages_spawns_clear() -> Array[String]:
+	var failures: Array[String] = []
+	for stage_name: String in ["Relay", "Roundabout"]:
+		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
+		get_root().add_child(stage)
+		var ice: StaticBody2D = stage.get_node_or_null("FloorIce") as StaticBody2D
+		if ice == null:
+			failures.append("%s has no FloorIce" % stage_name)
+		else:
+			var half_x: float = ice.size.x / 2.0
+			for child: Node in stage.get_children():
+				if not (child is Marker2D) or not (child.name.begins_with("Spawn") or child.name.begins_with("PickupSpawn") or child.name.begins_with("HillSpot")):
+					continue
+				var marker: Node2D = child as Node2D
+				if marker.position.y < ice.position.y - 120.0:
+					continue
+				if absf(marker.position.x - ice.position.x) <= half_x + PLAYER_RADIUS:
+					failures.append("%s %s at x=%.0f is over the ice" % [stage_name, child.name, marker.position.x])
+		await _teardown(stage)
+	return failures
+## Treadmill (#934): its two belts oppose each other (a standing player on the
+## left strip drifts right, on the right strip left), and the mud patch lies
+## exactly where the strips meet. The belts are mirrored, and the stage is
+## not a competitive one.
+func _scenario_treadmill_belts_oppose_and_mud_sits_between() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = (load("res://scenes/stages/Treadmill.tscn") as PackedScene).instantiate() as Node2D
+	get_root().add_child(stage)
+	var left: StaticBody2D = stage.get_node_or_null("BeltLeft") as StaticBody2D
+	var right: StaticBody2D = stage.get_node_or_null("BeltRight") as StaticBody2D
+	var mud: StaticBody2D = stage.get_node_or_null("CentreMud") as StaticBody2D
+	if left == null or right == null or mud == null:
+		failures.append("Treadmill is missing BeltLeft, BeltRight or CentreMud")
+		await _teardown(stage, false)
+		return failures
+	if left.belt_speed <= 0.0 or right.belt_speed >= 0.0 or not is_equal_approx(left.belt_speed, -right.belt_speed):
+		failures.append("belts do not oppose: left %.0f, right %.0f" % [left.belt_speed, right.belt_speed])
+	var left_edge: float = left.position.x + left.size.x / 2.0
+	var right_edge: float = right.position.x - right.size.x / 2.0
+	if absf(left_edge - (mud.position.x - mud.size.x / 2.0)) > 1.0 or absf(right_edge - (mud.position.x + mud.size.x / 2.0)) > 1.0:
+		failures.append("mud (x %.0f..%.0f) does not sit where the belts meet (%.0f, %.0f)" % [mud.position.x - mud.size.x / 2.0, mud.position.x + mud.size.x / 2.0, left_edge, right_edge])
+	if stage.get("competitive") != false:
+		failures.append("Treadmill must not be competitive")
+	var on_left: RigidBody2D = _spawn_player(stage, left.position + Vector2(0, -left.size.y / 2.0 - PLAYER_RADIUS - 4.0))
+	var on_right: RigidBody2D = _spawn_player(stage, right.position + Vector2(0, -right.size.y / 2.0 - PLAYER_RADIUS - 4.0))
+	on_left.set_input_vector(Vector2.UP)
+	on_right.set_input_vector(Vector2.UP)
+	for _tick in CONVEYOR_SETTLE_TICKS:
+		await physics_frame
+	var left_start: float = on_left.global_position.x
+	var right_start: float = on_right.global_position.x
+	for _tick in CONVEYOR_WATCH_TICKS:
+		await physics_frame
+	var left_drift: float = on_left.global_position.x - left_start
+	var right_drift: float = on_right.global_position.x - right_start
+	print("      Treadmill drift left strip %.1f px, right strip %.1f px" % [left_drift, right_drift])
+	if left_drift < CONVEYOR_MIN_DRIFT:
+		failures.append("left strip drifted %.1f px, expected at least %.1f" % [left_drift, CONVEYOR_MIN_DRIFT])
+	if right_drift > -CONVEYOR_MIN_DRIFT:
+		failures.append("right strip drifted %.1f px, expected at most %.1f" % [right_drift, -CONVEYOR_MIN_DRIFT])
+	await _teardown(stage)
+	return failures
+## Overpass (#910) carries exactly one mud patch on its street; no spawn,
+## pickup spot, hill spot, bounce pad or drain edge sits on or within 40 px of it.
+func _scenario_mud_patch_overpass_spawns_clear() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = (load("res://scenes/stages/Overpass.tscn") as PackedScene).instantiate() as Node2D
+	get_root().add_child(stage)
+	var muds: Array[Node] = []
+	for child: Node in stage.get_children():
+		if child.get_script() != null and str(child.get_script().resource_path).ends_with("MudPatch.gd"):
+			muds.append(child)
+	if muds.size() != 1:
+		failures.append("Overpass has %d MudPatch, want 1" % muds.size())
+	else:
+		var mud: StaticBody2D = muds[0] as StaticBody2D
+		var half_x: float = mud.size.x / 2.0 + 40.0
+		for child: Node in stage.get_children():
+			var is_marker: bool = child is Marker2D and (child.name.begins_with("Spawn") or child.name.begins_with("PickupSpawn") or child.name.begins_with("HillSpot"))
+			var is_pad: bool = child.name.begins_with("Pad")
+			if not (is_marker or is_pad):
+				continue
+			var node: Node2D = child as Node2D
+			var reach: float = half_x
+			if is_pad:
+				reach += (child.get("size") as Vector2).x / 2.0
+			if node.position.y < mud.position.y - 120.0:
+				continue
+			if absf(node.position.x - mud.position.x) <= reach:
+				failures.append("%s at x=%.0f is on or near the mud" % [child.name, node.position.x])
+		var kz: Node2D = stage.get_node_or_null("KillZone") as Node2D
+		if kz != null and absf(kz.position.y - mud.position.y) <= 40.0:
+			failures.append("drain within 40 px of the mud")
+	await _teardown(stage)
+	return failures
 ## Friction is put back when the stage goes away with a body still on the ice
 ## (round end), so nothing leaks into the next round.
 func _scenario_ice_patch_restores_when_stage_freed() -> Array[String]:
@@ -10809,6 +11198,182 @@ func _scenario_ice_patch_restores_when_stage_freed() -> Array[String]:
 	if player.physics_material_override != before:
 		failures.append("the ice material leaked after the stage was freed mid-contact")
 	await _teardown(holder)
+	return failures
+## Speed strip (#891): a body is pushed along a strip (or plain ground) by a
+## steady force, standing in for running, and the ground it covers in a fixed
+## time is returned. The weapon is held straight up so only the body touches.
+const SpeedStripScene: PackedScene = preload("res://scenes/parts/SpeedStrip.tscn")
+const SPEED_SIZE: Vector2 = Vector2(2400, 8)
+const SPEED_SETTLE_TICKS: int = 60
+const SPEED_RUN_FORCE: float = 2400.0
+const SPEED_RUN_TICKS: int = 150
+## The strip has to cover at least this multiple of the plain-floor distance.
+const SPEED_MIN_RATIO: float = 1.2
+func _speed_ground(stage: Node2D, size: Vector2, at: Vector2, strip: bool) -> StaticBody2D:
+	var ground: StaticBody2D
+	if strip:
+		ground = SpeedStripScene.instantiate() as StaticBody2D
+		ground.size = size
+	else:
+		ground = StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = size
+		shape.shape = rect
+		ground.add_child(shape)
+	ground.position = at
+	stage.add_child(ground)
+	return ground
+func _speed_run(on_strip: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_speed_ground(stage, SPEED_SIZE, PART_POSITION, on_strip)
+	var start: Vector2 = PART_POSITION + Vector2(-1100, -SPEED_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0)
+	var player: RigidBody2D = _spawn_player(stage, start)
+	player.set_input_vector(Vector2.UP)
+	for _tick in SPEED_SETTLE_TICKS:
+		await physics_frame
+	var from_x: float = player.global_position.x
+	for _tick in SPEED_RUN_TICKS:
+		player.apply_central_force(Vector2(SPEED_RUN_FORCE, 0))
+		await physics_frame
+	var covered: float = player.global_position.x - from_x
+	await _teardown(stage, false)
+	return covered
+## Running on the strip covers clearly more ground in the same time than on
+## plain ground, and the boost stops after stepping off.
+func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
+	var failures: Array[String] = []
+	var on_strip: float = await _speed_run(true)
+	var on_ground: float = await _speed_run(false)
+	print("      covered %.1f px on the strip, %.1f px on plain ground" % [on_strip, on_ground])
+	if on_ground < 50.0:
+		failures.append("the control run barely moved (%.1f px)" % on_ground)
+	elif on_strip < on_ground * SPEED_MIN_RATIO:
+		failures.append("covered %.1f px on the strip vs %.1f on ground, expected at least %.2fx" % [on_strip, on_ground, SPEED_MIN_RATIO])
+	# Step off: a short strip with plain ground beside it.
+	var stage: Node2D = _new_empty_stage()
+	var strip: StaticBody2D = _speed_ground(stage, Vector2(300, 8), PART_POSITION + Vector2(-500, 0), true)
+	_speed_ground(stage, Vector2(1400, 8), PART_POSITION + Vector2(350, 0), false)
+	var runner: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-600, -8.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	runner.set_input_vector(Vector2.UP)
+	for _tick in SPEED_SETTLE_TICKS:
+		await physics_frame
+	var was_boosted: bool = false
+	var left: bool = false
+	for _tick in 400:
+		runner.apply_central_force(Vector2(SPEED_RUN_FORCE, 0))
+		await physics_frame
+		if strip.is_boosting(runner):
+			was_boosted = true
+		elif was_boosted:
+			left = true
+			break
+	if not was_boosted or not left:
+		failures.append("the runner was never boosted or never left the strip (boosted=%s)" % was_boosted)
+	await _teardown(stage)
+	return failures
+## Mud patch (#880): a body is pushed along a strip of mud (or plain ground)
+## by a steady force, standing in for running, and the fastest it gets is
+## returned. The weapon is held straight up so only the body touches the strip.
+const MudPatchScene: PackedScene = preload("res://scenes/parts/MudPatch.tscn")
+const MUD_SIZE: Vector2 = Vector2(1600, 10)
+const MUD_SETTLE_TICKS: int = 60
+const MUD_RUN_FORCE: float = 2400.0
+const MUD_RUN_TICKS: int = 120
+## Mud has to hold the run to at most this share of the flat-floor speed.
+const MUD_MAX_RATIO: float = 0.55
+## Speed has to be back to this share of the flat-floor speed 0.3 s after leaving.
+const MUD_RECOVER_RATIO: float = 0.8
+func _mud_ground(stage: Node2D, size: Vector2, at: Vector2, mud: bool) -> StaticBody2D:
+	var ground: StaticBody2D
+	if mud:
+		ground = MudPatchScene.instantiate() as StaticBody2D
+		ground.size = size
+	else:
+		ground = StaticBody2D.new()
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = size
+		shape.shape = rect
+		ground.add_child(shape)
+	ground.position = at
+	stage.add_child(ground)
+	return ground
+func _mud_run(on_mud: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_mud_ground(stage, MUD_SIZE, PART_POSITION, on_mud)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-700, -MUD_SIZE.y / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	for _tick in MUD_SETTLE_TICKS:
+		await physics_frame
+	var top: float = 0.0
+	for _tick in MUD_RUN_TICKS:
+		player.apply_central_force(Vector2(MUD_RUN_FORCE, 0))
+		await physics_frame
+		top = maxf(top, player.linear_velocity.x)
+	await _teardown(stage, false)
+	return top
+func _mud_coast(on_mud: bool) -> float:
+	var stage: Node2D = _new_empty_stage()
+	_mud_ground(stage, MUD_SIZE, PART_POSITION, on_mud)
+	var flier: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-700, -300))
+	flier.set_input_vector(Vector2.UP)
+	await physics_frame
+	flier.gravity_scale = 0.0
+	flier.linear_velocity = Vector2(300, 0)
+	var speed: float = 0.0
+	for _tick in 6:
+		await physics_frame
+		speed = flier.linear_velocity.x
+	await _teardown(stage, false)
+	return speed
+## Running on mud tops out well below the flat-floor pace, a body in the air
+## above the strip keeps its horizontal speed, and speed returns after
+## stepping off.
+func _scenario_mud_patch_slows_player() -> Array[String]:
+	var failures: Array[String] = []
+	var on_mud: float = await _mud_run(true)
+	var on_ground: float = await _mud_run(false)
+	print("      top speed %.1f px/s on mud, %.1f px/s on plain ground" % [on_mud, on_ground])
+	if on_ground < 50.0:
+		failures.append("the control run barely moved (%.1f px/s)" % on_ground)
+	elif on_mud > on_ground * MUD_MAX_RATIO:
+		failures.append("ran at %.1f px/s on mud vs %.1f on ground, expected at most %.0f%%" % [on_mud, on_ground, MUD_MAX_RATIO * 100.0])
+	# Airborne: well above the strip, no ground contact, so it must coast as
+	# far as the same flight over plain ground.
+	var flown_mud: float = await _mud_coast(true)
+	var flown_plain: float = await _mud_coast(false)
+	print("      coasted at %.1f px/s over mud, %.1f px/s over plain ground" % [flown_mud, flown_plain])
+	if absf(flown_mud - flown_plain) > 1.0:
+		failures.append("airborne body at %.1f px/s over mud vs %.1f over ground" % [flown_mud, flown_plain])
+	var stage: Node2D
+	# Step off: a short mud strip with ground beside it, run along both.
+	stage = _new_empty_stage()
+	var mud: StaticBody2D = _mud_ground(stage, Vector2(300, 10), PART_POSITION + Vector2(-500, 0), true)
+	_mud_ground(stage, Vector2(1400, 10), PART_POSITION + Vector2(350, 0), false)
+	var runner: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(-600, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	runner.set_input_vector(Vector2.UP)
+	for _tick in MUD_SETTLE_TICKS:
+		await physics_frame
+	var was_bogged: bool = false
+	var left_tick: int = -1
+	for tick in 400:
+		runner.apply_central_force(Vector2(MUD_RUN_FORCE, 0))
+		await physics_frame
+		if mud.is_bogging(runner):
+			was_bogged = true
+		elif was_bogged and left_tick < 0:
+			left_tick = tick
+		if left_tick >= 0 and tick >= left_tick + 18:
+			break
+	if not was_bogged or left_tick < 0:
+		failures.append("the runner was never bogged or never left the mud (bogged=%s)" % was_bogged)
+	elif runner.linear_velocity.x < on_ground * MUD_RECOVER_RATIO:
+		# The flat-floor top speed is a ceiling reached over 2 s; 0.3 s after
+		# leaving, the runner need only be clearly above the mud pace.
+		if runner.linear_velocity.x <= on_mud * 1.3:
+			failures.append("speed %.1f px/s 0.3 s after leaving the mud, still near the mud pace %.1f" % [runner.linear_velocity.x, on_mud])
+	await _teardown(stage)
 	return failures
 ## A bounce pad launches a body that lands on it well past the height it was
 ## dropped from, and shows it did (the flash). The weapon is held straight
@@ -12687,6 +13252,37 @@ func _head_anchor_reach_along_circles(player: RigidBody2D, circles: Array[Dictio
 ## the wall's break sounds once, not again for a hit during its break flash.
 ## The parts' own event functions are driven directly, so this checks the
 ## wiring, not the parts' timing, which their own scenarios already hold.
+## Issue #898: a body touching a pickup plays `pickup_grab` once; a dead
+## player's touch is refused and plays nothing.
+func _scenario_sfx_pickup_grab_plays_once_per_grab() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"pickup_grab"):
+		return ["pickup_grab is not in the sound table"]
+	var stage: Node2D = _new_stage()
+	var dead: RigidBody2D = _spawn_player(stage, PARK_POSITION)
+	var live: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(300.0, 0.0))
+	await _await_ticks(5)
+	var dead_pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(0.0, 60.0), _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	var live_pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(300.0, 60.0), _make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH))
+	dead.eliminate()
+	await _await_ticks(2)
+	sfx.start_recording()
+	dead.teleport_to(dead_pickup.global_position)
+	live.teleport_to(live_pickup.global_position)
+	await _await_ticks(SETTLE_TICKS)
+	var played: int = _sfx_count(sfx, "pickup_grab")
+	if played != 1:
+		failures.append("one grab played pickup_grab %d times, expected 1" % played)
+	else:
+		var last: Dictionary = _sfx_last(sfx, "pickup_grab")
+		if last.has("position") and (last["position"] as Vector2).distance_to(live.global_position) > 150.0:
+			failures.append("pickup_grab did not play at the grabber")
+	sfx.stop_recording()
+	await _teardown(stage)
+	return failures
 ## Issue #874: spikes and saws play `hazard_hit` once per landed hit; the
 ## cooldown suppresses repeats and spawn protection makes no sound.
 func _scenario_sfx_hazard_hit_plays_once_per_hit() -> Array[String]:
@@ -15517,7 +16113,7 @@ func _scenario_kill_feed_credits_hits_and_awards_at_match_end() -> Array[String]
 			texts.append(" / ".join(words))
 		print("      awards: %s" % [texts])
 		var want := PackedStringArray(["COMBAT / Top Brawler / Alice  -  3 KOs", "CLUMSY / Butterfingers / Carl  -  1 self-KO"])
-		if texts.size() != 5 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
+		if texts.size() != 7 or texts[0] != want[0] or texts[1] != want[1] or not texts[2].begins_with("SURVIVOR / Hard to Kill / Alice"):
 			failures.append("awards read %s" % [texts])
 		if row.get_index() != rm._lobby_screen._podium.get_index() + 1:
 			failures.append("the awards are not directly under the podium")
@@ -15589,8 +16185,8 @@ func _scenario_kill_feed_and_awards_fit_eight_long_names() -> Array[String]:
 	var podium_size: Vector2 = _content_size(rm.victory_panel())
 	var row_size: Vector2 = row.get_combined_minimum_size() if row != null else Vector2.ZERO
 	print("      victory with 8 and awards needs %.0f x %.0f px; awards %.0f x %.0f" % [podium_size.x, podium_size.y, row_size.x, row_size.y])
-	if row == null or row.get_child_count() != 5:
-		failures.append("the victory screen shows %s awards, expected 5" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 7:
+		failures.append("the victory screen shows %s awards, expected 7" % (row.get_child_count() if row != null else 0))
 	if podium_size.x > SCREEN_SIZE.x or podium_size.y > SCREEN_SIZE.y:
 		failures.append("podium plus awards need %s, more than the %s screen" % [podium_size, SCREEN_SIZE])
 	await _teardown(main)
@@ -28316,10 +28912,17 @@ func _scenario_remote_client_interpolates_100ms_behind() -> Array[String]:
 			failures.append("rendered x %.1f, expected %.1f from the 100 ms-late blend" % [got, want])
 	if between == 0:
 		failures.append("no render fell between the two samples, so interpolation was not exercised")
+	# A mid-round full snapshot blends in like a delta (no hitch every second) ...
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1, Vector2(900, 0))))
+	client._render()
+	if client.player_puppet(0).position.x > 890.0:
+		failures.append("a mid-round full snapshot snapped the puppet instead of blending it in (x %.1f)" % client.player_puppet(0).position.x)
+	# ... but a new round (the last world was not on screen) or a new stage snaps it.
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 0, Vector2(900, 0))))
 	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1, Vector2(900, 0))))
 	client._render()
 	if client.player_puppet(0).position != Vector2(900, 0):
-		failures.append("a full snapshot must snap the puppet, not glide it (x %.1f)" % client.player_puppet(0).position.x)
+		failures.append("the first full snapshot of a round must snap the puppet, not glide it (x %.1f)" % client.player_puppet(0).position.x)
 	await _rc_close_241(rig)
 	return failures
 func _scenario_remote_client_esc_menu_resume_and_leave() -> Array[String]:
@@ -29567,6 +30170,109 @@ func _scenario_match_stats_rows_favourite_weapon_and_magpie() -> Array[String]:
 		failures.append("begin_match left pickups behind")
 	_scenario_completed = true
 	return failures
+## Issue #890: Streaker goes to the longest unbroken KO run, at least 3, no ties.
+func _scenario_victory_streaker_award_needs_three_unbroken_kos() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Streaker")
+	var ko := func(stats: RefCounted, killer: int, victim: int, t: int) -> void:
+		stats.record_hit(killer, victim, 10.0, t)
+		stats.record_elimination(victim, t + 1)
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.begin_round([0, 1, 2, 3], 0)
+	for i: int in 3:
+		ko.call(stats, 0, 1 + i, 100 + i * 10)
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "3 in a row":
+		failures.append("expected Streaker for slot 0 with 3 in a row, got %s" % [found])
+	var reset: RefCounted = MatchStatsScript.new()
+	reset.begin_match()
+	ko.call(reset, 0, 1, 10)
+	ko.call(reset, 0, 2, 20)
+	ko.call(reset, 3, 0, 30)
+	ko.call(reset, 0, 1, 40)
+	if not find.call(reset).is_empty():
+		failures.append("a death did not reset the run: %s" % [reset.best_ko_run])
+	var two: RefCounted = MatchStatsScript.new()
+	two.begin_match()
+	ko.call(two, 0, 1, 10)
+	ko.call(two, 0, 2, 20)
+	if not find.call(two).is_empty():
+		failures.append("Streaker given for a best under 3")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	for i: int in 3:
+		ko.call(tied, 0, 2, 10 + i * 10)
+		ko.call(tied, 1, 3, 15 + i * 10)
+	if not find.call(tied).is_empty():
+		failures.append("Streaker given for a tie")
+	var hazard: RefCounted = MatchStatsScript.new()
+	hazard.begin_match()
+	ko.call(hazard, 0, 1, 10)
+	hazard.record_elimination(2, 20)
+	hazard.record_elimination(3, 30)
+	ko.call(hazard, 0, 2, 40)
+	if not find.call(hazard).is_empty() or int(hazard.best_ko_run.get(0, 0)) != 2:
+		failures.append("hazard or self KOs extended a run: %s" % [hazard.best_ko_run])
+	stats.begin_match()
+	if not stats.best_ko_run.is_empty() or not stats.ko_run.is_empty():
+		failures.append("begin_match left KO runs behind")
+	_scenario_completed = true
+	return failures
+
+## Issue #921: Combo goes to the longest multi-KO chain inside 3 s, at least 2, no ties.
+func _scenario_victory_combo_award_needs_two_kos_inside_three_seconds() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Combo")
+	var ko := func(stats: RefCounted, killer: int, victim: int, t: int) -> void:
+		stats.record_hit(killer, victim, 10.0, t)
+		stats.record_elimination(victim, t + 1)
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	ko.call(stats, 0, 1, 1000)
+	ko.call(stats, 0, 2, 3500)
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "2 KOs in 3s":
+		failures.append("expected Combo for slot 0 with 2 KOs in 3s, got %s" % [found])
+	var slow: RefCounted = MatchStatsScript.new()
+	slow.begin_match()
+	ko.call(slow, 0, 1, 1000)
+	ko.call(slow, 0, 2, 4100)
+	if not find.call(slow).is_empty():
+		failures.append("Combo given for KOs 3.1 s apart")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	ko.call(tied, 0, 2, 1000)
+	ko.call(tied, 0, 3, 1500)
+	ko.call(tied, 1, 2, 1000)
+	ko.call(tied, 1, 3, 1500)
+	if not find.call(tied).is_empty():
+		failures.append("Combo given for a tie")
+	var hazard: RefCounted = MatchStatsScript.new()
+	hazard.begin_match()
+	ko.call(hazard, 0, 1, 1000)
+	hazard.record_elimination(2, 1500)
+	hazard.record_elimination(0, 1800)
+	if not find.call(hazard).is_empty():
+		failures.append("hazard or self KO built a Combo: %s" % [hazard.best_multi_ko])
+	var triple: RefCounted = MatchStatsScript.new()
+	triple.begin_match()
+	for i: int in 3:
+		ko.call(triple, 0, 1 + i, 1000 + i * 500)
+	ko.call(triple, 1, 2, 9000)
+	ko.call(triple, 1, 3, 9500)
+	found = find.call(triple)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "3 KOs in 3s":
+		failures.append("expected the triple to win Combo, got %s" % [found])
+	stats.begin_match()
+	if not stats.best_multi_ko.is_empty():
+		failures.append("begin_match left multi-KOs behind")
+	stats.forget_slot(0)
+	_scenario_completed = true
+	return failures
+
 ## Issue #861: Haymaker goes to the single hardest hit, at least 40, no ties.
 func _scenario_haymaker_award_861() -> Array[String]:
 	var failures: Array[String] = []
@@ -29680,8 +30386,8 @@ func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
 	if lines != 8:
 		failures.append("the stats table has %d lines, expected 8" % lines)
 	var row: Control = rm.awards_row()
-	if row == null or row.get_child_count() != 6:
-		failures.append("expected 6 award cards (3 core + Magpie + Untouchable + Haymaker), got %s" % (row.get_child_count() if row != null else 0))
+	if row == null or row.get_child_count() != 8:
+		failures.append("expected 8 award cards (3 core + Magpie + Untouchable + Haymaker + Streaker + Combo), got %s" % (row.get_child_count() if row != null else 0))
 	if content.x > SCREEN_SIZE.x or content.y > SCREEN_SIZE.y:
 		failures.append("victory screen with stats needs %s, more than the %s screen" % [content, SCREEN_SIZE])
 	await _teardown(main)
@@ -34335,7 +35041,9 @@ func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failure
 	rm.match_seed = 7
 	stage.add_child(rm)
 	var rig: Dictionary = {"stage": stage, "rm": rm, "players": players, "roster": roster}
-	if not await _mode_started(rig):
+	# Classic has no mode node, so its round has started once the manager is active.
+	var started: bool = await _mode_started(rig) if mode != GameModesType.CLASSIC else await _await_condition(func() -> bool: return rm._state == RoundManagerType.State.ROUND_ACTIVE, 3000)
+	if not started:
 		failures.append("the %s round never started on %s" % [mode, stage_name])
 		await _teardown(stage)
 		return -1.0
@@ -34353,6 +35061,15 @@ func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failure
 ## Carousel: every route between the shoulders and the hub tips or turns. A bot
 ## that would only step on still ground waited on its shoulder for the whole
 ## round; waiting at an edge it now steps onto the see-saws.
+## Treadmill (#934): four bots in a Classic round on the belts-and-mud floor
+## finish it, no stall, before the cap.
+func _scenario_bot_four_bots_finish_a_classic_round_on_treadmill() -> Array[String]:
+	var failures: Array[String] = []
+	var took: float = await _bot_round_409_on("Treadmill", GameModesType.CLASSIC, 200.0, failures)
+	print("      Classic round with four bots on Treadmill took %.1f s" % took)
+	if took < 0.0 and failures.is_empty():
+		failures.append("four bots did not finish a Classic round on Treadmill in 200 s")
+	return failures
 func _scenario_bot_four_bots_finish_a_king_of_the_hill_round_on_carousel() -> Array[String]:
 	var failures: Array[String] = []
 	var took: float = await _bot_round_409_on("Carousel", GameModesType.KING_OF_THE_HILL, 200.0, failures)
@@ -40282,7 +40999,7 @@ func _scenario_controller_page_wears_theme_and_labels_target_per_mode_576() -> A
 	for family: String in ["Lilita One", "Nunito"]:
 		if not page.contains('font-family: "%s";\n    font-weight' % family):
 			failures.append("no @font-face for %s" % family)
-	if page.count("src: url(/fonts/") != 2:
+	if page.count("src: url(fonts/") != 2:
 		failures.append("the two theme fonts are not linked as served WOFF2 files (#589)")
 	for external: String in ["fonts.googleapis", "fonts.gstatic", "src: url(http", "@import"]:
 		if page.contains(external):
@@ -41134,7 +41851,7 @@ func _scenario_controller_fonts_served_589() -> Array[String]:
 	if page.contains("data:font"):
 		failures.append("the page still embeds base64 fonts")
 	for font: String in ["/fonts/LilitaOne-Latin.woff2", "/fonts/Nunito-Latin.woff2"]:
-		if not page.contains("url(%s)" % font):
+		if not page.contains("url(%s)" % font.trim_prefix("/")): # relative, so it also resolves on GitHub Pages
 			failures.append("page does not link %s" % font)
 		var res: Dictionary = await _http_get_589(server.http_port, font)
 		if res["status"] != 200:
@@ -42824,6 +43541,43 @@ func _scenario_bot_grapple_zips_to_rival_out_of_reach_632() -> Array[String]:
 		failures.append("zipping (%d ticks) was no faster than walking (%d ticks)" % [zip["close_at"], walk["close_at"]])
 	_scenario_completed = true
 	return failures
+## Issue #915: a lone bot dropped from height. Returns whether the canopy was
+## ever open and the fastest fall speed seen.
+func _bot_drop_915(weapon_path: String) -> Dictionary:
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _await_ticks(2)
+	await _equip(player, weapon_path)
+	player.global_position = DEEP_PARK_POSITION
+	player.linear_velocity = Vector2.ZERO
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	var out: Dictionary = {"open": false, "fastest": 0.0}
+	for t in 200:
+		await physics_frame
+		out["open"] = out["open"] or player.canopy_open()
+		if t >= 90: # after the head has had time to swing overhead
+			out["fastest"] = maxf(out["fastest"], player.linear_velocity.y)
+	await _teardown(stage, false)
+	return out
+## A bot holding the umbrella opens the canopy in a long fall and lands slower
+## than a bot holding the pickaxe dropped the same way.
+func _scenario_bot_opens_umbrella_while_falling() -> Array[String]:
+	var failures: Array[String] = []
+	var umbrella: Dictionary = await _bot_drop_915(UMBRELLA_PATH)
+	var pickaxe: Dictionary = await _bot_drop_915(PICKAXE_STARTER_PATH)
+	print("      bot_opens_umbrella_while_falling: open=%s umbrella_fastest=%.0f pickaxe_fastest=%.0f" % [umbrella["open"], umbrella["fastest"], pickaxe["fastest"]])
+	if not umbrella["open"]:
+		failures.append("the bot never opened the canopy while falling")
+	if pickaxe["open"]:
+		failures.append("a bot with the pickaxe reported an open canopy")
+	if umbrella["fastest"] > pickaxe["fastest"] * 0.6:
+		failures.append("the umbrella bot fell at %.0f px/s, not clearly slower than the pickaxe bot's %.0f" % [umbrella["fastest"], pickaxe["fastest"]])
+	_scenario_completed = true
+	return failures
 ## Soccer and Capture the Flag (#646): the mode's target is the whole match.
 const SOCCER_PITCH_PATHS: Array[String] = [
 	"res://scenes/stages/Pitch.tscn", "res://scenes/stages/Dunes.tscn", "res://scenes/stages/Cage.tscn"]
@@ -43055,6 +43809,47 @@ func _scenario_soccer_and_ctf_points_sit_inside_the_view_on_floor_649() -> Array
 	return failures
 ## Issue #674: the same upward strike lifts the ball at least 1.5x higher than
 ## at the old mass 0.35 and full gravity.
+## Issue #899: a strike over the threshold plays `ball_thump` once at the ball,
+## a slow roll plays nothing, and two impacts within 0.15 s play one.
+func _scenario_sfx_soccer_ball_thump_on_hard_impacts_only() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"ball_thump"):
+		return ["ball_thump is not in the sound table"]
+	var rig: Dictionary = _soccer_rig(2)
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	var ball: RigidBody2D = rig["rm"].game_mode_node().ball
+	ball.global_position = Vector2(-300.0, -150.0)
+	ball.linear_velocity = Vector2.ZERO
+	await _await_ticks(20)
+	sfx.start_recording()
+	ball.linear_velocity = Vector2(30.0, 0.0)
+	await _await_ticks(6)
+	if _sfx_count(sfx, "ball_thump") != 0:
+		failures.append("a slow roll played ball_thump")
+	ball.linear_velocity = Vector2(900.0, -300.0)
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ball_thump") != 1:
+		failures.append("a hard strike played ball_thump %d times, expected 1" % _sfx_count(sfx, "ball_thump"))
+	else:
+		var hit: Dictionary = _sfx_last(sfx, "ball_thump")
+		if hit.get("position") == null or Vector2(hit["position"]).distance_to(ball.global_position) > 200.0:
+			failures.append("ball_thump did not play at the ball: %s" % [hit.get("position")])
+	# A second strike 2 ticks later (0.03 s) falls inside the 0.15 s gap.
+	ball.linear_velocity = Vector2(-900.0, -300.0)
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ball_thump") != 1:
+		failures.append("two impacts within 0.15 s played %d thumps, expected 1" % _sfx_count(sfx, "ball_thump"))
+	await _await_ticks(15)
+	ball.linear_velocity = Vector2(900.0, -300.0)
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ball_thump") != 2:
+		failures.append("a strike after the gap played %d thumps in all, expected 2" % _sfx_count(sfx, "ball_thump"))
+	sfx.stop_recording()
+	await _teardown(rig["stage"])
+	return failures
 func _scenario_soccer_ball_lifts_higher_than_before_674() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = _soccer_rig(2)
@@ -43916,6 +44711,54 @@ func _scenario_koth_phone_receives_its_own_hold_662() -> Array[String]:
 	if told.size() != 3 or int(told[1]) != -1:
 		failures.append("at round end slot 1's phone was told %s, want the counter hidden" % [told])
 	await _teardown(rig["stage"])
+	return failures
+## Issue #908: the round modifier's banner title reaches every phone seat as one
+## `mod` frame (a repeat is a no-op), an empty frame clears it at round end, and
+## the controller page draws and hides the chip from it.
+func _scenario_phone_modifier_chip_frame_sent_and_cleared() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var seat: Variant = fx[2]
+	seat.last_text = ""
+	server.send_modifier("Low Gravity")
+	var msg: Variant = JSON.parse_string(seat.last_text)
+	if not msg is Dictionary or msg.get("t") != "mod" or msg.get("v") != "Low Gravity":
+		failures.append("expected a mod frame for Low Gravity, got '%s'" % seat.last_text)
+	seat.last_text = ""
+	server.send_modifier("Low Gravity")
+	if seat.last_text != "":
+		failures.append("the same title was sent again: '%s'" % seat.last_text)
+	server.send_modifier("")
+	var cleared: Variant = JSON.parse_string(seat.last_text)
+	if not cleared is Dictionary or cleared.get("t") != "mod" or cleared.get("v") != "":
+		failures.append("expected an empty mod frame at round end, got '%s'" % seat.last_text)
+	fx[0].queue_free()
+	await _await_ticks(2)
+	# The round loop: one title per modifier round, an empty one at its end, none without a modifier.
+	for forced: String in ["low_gravity", ""]:
+		var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+		rig["rm"].forced_modifier = forced
+		rig["rm"].modifier_rolls_enabled = forced != ""
+		var roster_sent: Array = rig["roster"].modifier_sent
+		await _await_condition(func() -> bool: return rig["players"][0].alive and not roster_sent.is_empty(), 1500)
+		await _await_ticks(20)
+		if not rig["players"][0].alive:
+			failures.append("the round never started (modifier '%s')" % forced)
+		else:
+			var sent: Array = rig["roster"].modifier_sent
+			if forced != "" and (sent.size() != 1 or sent[0] == ""):
+				failures.append("a modifier round sent %s, want one title" % [sent])
+			if forced == "" and not sent.is_empty():
+				failures.append("a round with no modifier sent %s" % [sent])
+			rig["rm"]._end_round_modifier()
+			if forced != "" and (sent.size() != 2 or sent[1] != ""):
+				failures.append("round end sent %s, want a trailing empty title" % [sent])
+		await _teardown(rig["stage"])
+	var page: String = FileAccess.get_file_as_string("res://controller/index.html")
+	if not page.contains('id="modchip"') or not page.contains('msg.t === "mod"'):
+		failures.append("the controller page has no modifier chip handler")
+	_scenario_completed = true
 	return failures
 # --- Issue #667: a steady circle swing propels the player with the swing -----
 ## Revolutions per trial, ticks per revolution (a slow and a quick thumb), and
@@ -48727,6 +49570,227 @@ func _scenario_kill_feed_switch_833() -> Array[String]:
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
+## Issue #873: Settings > Damage numbers feeds HitFeedback; saved; reset by Restore defaults.
+func _scenario_damage_numbers_switch_873() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.damage_numbers, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	if not sfx.damage_numbers:
+		sfx.set_damage_numbers(true)
+	var stage: Node2D = _new_stage()
+	var pair: Array[RigidBody2D] = await _hit_pair(stage)
+	var attacker: RigidBody2D = pair[0]
+	var victim: RigidBody2D = pair[1]
+	var log: Dictionary = _hit_feedback_fixture(stage, attacker)
+	sfx.set_damage_numbers(false)
+	attacker._land_strike(victim, HIT_CLEAN_SPEED)
+	await physics_frame
+	if not log["numbers"].is_empty():
+		failures.append("with Damage numbers off, %d were drawn" % log["numbers"].size())
+	if log["markers"].size() != 1:
+		failures.append("with Damage numbers off the hitmarker count is %d, not 1" % log["markers"].size())
+	sfx.set_damage_numbers(true)
+	await _await_ticks(HitFeedbackType.ZERO_COOLDOWN_FRAMES)
+	attacker._land_strike(victim, HIT_CLEAN_SPEED)
+	await physics_frame
+	if log["numbers"].size() != 1:
+		failures.append("with Damage numbers on, %d were drawn, not 1" % log["numbers"].size())
+	await _teardown(stage)
+	var path: String = OS.get_temp_dir().path_join("pickfight_damage_numbers_873_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_damage_numbers(false)
+	sfx.damage_numbers = true
+	sfx.load_settings()
+	if sfx.damage_numbers:
+		failures.append("Damage numbers off was not remembered in the settings file")
+	sfx.set_damage_numbers(true)
+	sfx.damage_numbers = false
+	sfx.load_settings()
+	if not sfx.damage_numbers:
+		failures.append("Damage numbers on was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.damage_numbers_box()
+	if box == null:
+		failures.append("Settings has no Damage numbers box")
+	else:
+		box.button_pressed = false
+		if sfx.damage_numbers:
+			failures.append("unticking the Damage numbers box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.damage_numbers:
+			failures.append("Restore defaults did not put Damage numbers back on")
+	sfx.damage_numbers = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+## Issue #882: Settings > Pickup callouts gates PickupCallout; saved; reset by Restore defaults.
+func _scenario_pickup_callout_switch_off_spawns_none() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.pickup_callouts, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	sfx.set_pickup_callouts(false)
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	await _grab_818(loop, players[1], "res://resources/fishing_rod.tres")
+	if not _callouts_818(loop).is_empty():
+		failures.append("with Pickup callouts off, a grab made a callout")
+	sfx.set_pickup_callouts(true)
+	await _grab_818(loop, players[1], "res://resources/axe.tres")
+	if _callouts_818(loop).size() != 1:
+		failures.append("with Pickup callouts on, %d callouts, expected 1" % _callouts_818(loop).size())
+	await _teardown(loop["stage"])
+	var path: String = OS.get_temp_dir().path_join("pickfight_pickup_callouts_882_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_pickup_callouts(false)
+	sfx.pickup_callouts = true
+	sfx.load_settings()
+	if sfx.pickup_callouts:
+		failures.append("Pickup callouts off was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.pickup_callouts_box()
+	if box == null:
+		failures.append("Settings has no Pickup callouts box")
+	else:
+		box.button_pressed = false
+		if sfx.pickup_callouts:
+			failures.append("unticking the Pickup callouts box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.pickup_callouts:
+			failures.append("Restore defaults did not put Pickup callouts back on")
+	sfx.pickup_callouts = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+## Issue #892: Settings > Match point plate off shows no plate (dots stay); saved; reset by Restore defaults.
+func _scenario_match_point_plate_switch_off_shows_none() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.match_point_plate, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	sfx.set_match_point_plate(false)
+	var loop: Dictionary = await _start_match_point_825(3, [0, 1])
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	if not loop["started"]:
+		failures.append("the match never started")
+	else:
+		rm._scores[0] = 1
+		players[1].eliminate()
+		var tag: Label = rm.name_tag(0)
+		var dotted: Callable = func() -> bool: return tag != null and tag.get_node_or_null("MatchPointDot") != null
+		if not await _await_condition(dotted, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("no gold dot at match point with the plate switched off")
+		if not _match_point_plates_825().is_empty():
+			failures.append("a plate showed with Match point plate off")
+	await _teardown(loop["stage"])
+	var path: String = OS.get_temp_dir().path_join("pickfight_match_point_plate_892_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_match_point_plate(false)
+	sfx.match_point_plate = true
+	sfx.load_settings()
+	if sfx.match_point_plate:
+		failures.append("Match point plate off was not remembered in the settings file")
+	sfx.set_match_point_plate(true)
+	sfx.match_point_plate = false
+	sfx.load_settings()
+	if not sfx.match_point_plate:
+		failures.append("Match point plate on was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.match_point_plate_box()
+	if box == null:
+		failures.append("Settings has no Match point plate box")
+	else:
+		box.button_pressed = false
+		if sfx.match_point_plate:
+			failures.append("unticking the Match point plate box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.match_point_plate:
+			failures.append("Restore defaults did not put Match point plate back on")
+	sfx.match_point_plate = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
+## Issue #916: Settings > Hit pause off never pauses the tree on a heavy hit; on freezes 3 ticks; saved; reset.
+func _scenario_juice_hit_pause_switch_off_never_pauses() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var was: Dictionary = {"flag": sfx.hit_pause, "path": sfx.settings_path, "persist": sfx.persist_settings}
+	sfx.persist_settings = false
+	var stage: Node2D = _new_stage()
+	var juice: Node2D = _juice(stage)
+	var emitter: Node2D = _juice_emitter(stage)
+	await _await_ticks(2)
+	sfx.set_hit_pause(false)
+	emitter.strike_landed.emit(emitter, 90.0, Vector2.ZERO, false)
+	for i in 8:
+		if get_root().get_tree().paused or juice.is_frozen():
+			failures.append("the tree paused on tick %d with Hit pause off" % i)
+			break
+		await get_root().get_tree().physics_frame
+	sfx.set_hit_pause(true)
+	emitter.strike_landed.emit(emitter, 90.0, Vector2.ZERO, false)
+	if not get_root().get_tree().paused or not juice.is_frozen():
+		failures.append("a 90-damage strike did not freeze with Hit pause on")
+	await _await_ticks(JuiceScript.HITSTOP_FRAMES + 3)
+	if get_root().get_tree().paused:
+		failures.append("the freeze did not lift")
+	await _teardown(stage)
+	var path: String = OS.get_temp_dir().path_join("pickfight_hit_pause_916_%d.cfg" % OS.get_process_id())
+	sfx.settings_path = path
+	sfx.persist_settings = true
+	sfx.set_hit_pause(false)
+	sfx.hit_pause = true
+	sfx.load_settings()
+	if sfx.hit_pause:
+		failures.append("Hit pause off was not remembered in the settings file")
+	sfx.persist_settings = false
+	sfx.settings_path = was["path"]
+	DirAccess.remove_absolute(path)
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	ui.host.persist = false
+	if not ui.is_open():
+		ui.toggle_panel()
+	await _await_ticks(2)
+	var box: CheckBox = ui.hit_pause_box()
+	if box == null:
+		failures.append("Settings has no Hit pause box")
+	else:
+		box.button_pressed = false
+		if sfx.hit_pause:
+			failures.append("unticking the Hit pause box did not turn the flag off")
+		sfx.restore_defaults()
+		if not sfx.hit_pause:
+			failures.append("Restore defaults did not put Hit pause back on")
+	sfx.hit_pause = was["flag"]
+	sfx.persist_settings = was["persist"]
+	_scenario_completed = true
+	return failures
 func _scenario_voice_slider_reset_by_restore_defaults_824() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
@@ -49547,4 +50611,932 @@ func _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826() -> Array[Strin
 	if not hint.has_hint(4):
 		failures.append("slot 4 got no hint in round 1 of a new match")
 	await _teardown(fx["stage"])
+	return failures
+## Issue #863: Online lobby Copy code button copies the room code (clipboard seam), reads Copied, then reverts.
+func _scenario_online_lobby_copy_code_button_863() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var copied: Array[String] = []
+	screen._host.clipboard_setter = func(text: String) -> void: copied.append(text)
+	screen.press_control("online")
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the Online room never opened")
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var button: Button = screen.control_button("copy_code")
+	if button == null or not button.is_visible_in_tree():
+		failures.append("the Online lobby shows no Copy code button")
+		await _kind_close_435(rig)
+		return failures
+	if button.get_global_rect().position.y < screen._host.room_label().get_global_rect().end.y - 1.0:
+		failures.append("Copy code sits above the room code")
+	var code: String = server.online_room_code()
+	screen.press_control("copy_code")
+	if copied != [code]:
+		failures.append("pressing Copy code wrote %s to the clipboard, expected [%s]" % [copied, code])
+	if button.text != screen.tr("LOBBY_COPIED"):
+		failures.append("after a press the button reads '%s', not Copied" % button.text)
+	var until_msec: int = Time.get_ticks_msec() + 1700 # the label runs on wall-clock msec
+	while Time.get_ticks_msec() < until_msec:
+		await process_frame
+	screen.refresh_controls()
+	if button.text == screen.tr("LOBBY_COPIED") or button.text == "":
+		failures.append("the button still reads '%s' after the 1.5 s" % button.text)
+	copied.clear()
+	var keys: Dictionary = screen._host.CONTROL_KEYS
+	if keys.get("copy_code") != KEY_K:
+		failures.append("Copy code is not on the K key")
+	for id: String in keys:
+		if id != "copy_code" and keys[id] == keys["copy_code"]:
+			failures.append("the K key is also bound to %s" % id)
+	await _kind_close_435(rig)
+	return failures
+## Issue #863: no Copy code button in Couch, in Solo, or with Hide room code on; K does nothing there.
+func _scenario_copy_code_button_hidden_couch_solo_streamer_863() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var copied: Array[String] = []
+	screen._host.clipboard_setter = func(text: String) -> void: copied.append(text)
+	var button: Button = screen.control_button("copy_code")
+	if button == null:
+		failures.append("no copy_code control exists")
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows in the Couch lobby")
+	screen.press_control("copy_code")
+	screen.press_control("solo")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows in the Solo lobby")
+	screen.press_control("online")
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the Online room never opened")
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if not button.is_visible_in_tree():
+		failures.append("Copy code is missing in Online before streamer mode")
+	_sfx().set_hide_room_code(true)
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows with Hide room code on")
+	screen.press_control("copy_code")
+	_sfx().set_hide_room_code(false)
+	if not copied.is_empty():
+		failures.append("a hidden Copy code still wrote %s to the clipboard" % [copied])
+	await _kind_close_435(rig)
+	return failures
+
+## Issue #863 review fix: the Copied timer fires refresh() on the controls after the lobby scene was left;
+## refresh() must not read the freed screen (an invalid-access script error in the log before the guard).
+func _scenario_copy_code_refresh_after_lobby_closed_863() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var host: RefCounted = screen._host
+	host.clipboard_setter = func(_text: String) -> void: pass
+	screen.press_control("online")
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != ""):
+		failures.append("the Online room never opened")
+		await _kind_close_435(rig)
+		return failures
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	screen.press_control("copy_code")
+	await _kind_close_435(rig)
+	var until_msec: int = Time.get_ticks_msec() + 1700 # past the 1.5 s Copied timer
+	while Time.get_ticks_msec() < until_msec:
+		await process_frame
+	host.refresh()
+	return failures
+
+## Pixel size [w, h] of a PNG or JPEG from its bytes, or [] when the bytes are neither (#864).
+func _image_size_864(b: PackedByteArray) -> Array:
+	if b.size() >= 24 and b[0] == 0x89 and b[1] == 0x50 and b[2] == 0x4E and b[3] == 0x47:
+		var pw: int = (b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19]
+		var ph: int = (b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23]
+		return [pw, ph]
+	if b.size() >= 4 and b[0] == 0xFF and b[1] == 0xD8:
+		var i: int = 2
+		while i + 9 < b.size():
+			if b[i] != 0xFF:
+				i += 1
+				continue
+			var marker: int = b[i + 1]
+			if marker == 0xFF:
+				i += 1
+				continue
+			if marker == 0xD8 or marker == 0x01 or (marker >= 0xD0 and marker <= 0xD7):
+				i += 2
+				continue
+			var seg_len: int = (b[i + 2] << 8) | b[i + 3]
+			# SOF0..SOF15 carry the frame size, except DHT (C4), JPG (C8) and DAC (CC).
+			if marker >= 0xC0 and marker <= 0xCF and marker != 0xC4 and marker != 0xC8 and marker != 0xCC:
+				return [(b[i + 7] << 8) | b[i + 8], (b[i + 5] << 8) | b[i + 6]]
+			i += 2 + seg_len
+	return []
+
+## Static check of one site page's social-preview meta tags (#864): og:title/og:description present, og:image and
+## twitter:image equal, the image resolves onto a site/ file by path suffix, is a PNG or JPEG, and its real pixel size
+## equals og:image:width/height. `root` is the folder the "site/..." suffix is resolved against. Names file:line.
+func _social_preview_problems_864(label: String, text: String, root: String) -> Array[String]:
+	var found: Array[String] = []
+	var comments: RegEx = RegEx.new()
+	comments.compile("(?s)<!--.*?-->")
+	var clean: String = text
+	var spans: Array[RegExMatch] = comments.search_all(text)
+	spans.reverse()
+	for c: RegExMatch in spans:
+		clean = clean.substr(0, c.get_start()) + "\n".repeat(c.get_string().count("\n")) + clean.substr(c.get_end())
+	var meta_re: RegEx = RegEx.new()
+	meta_re.compile("(?is)<meta\\b[^>]*>")
+	var key_re: RegEx = RegEx.new()
+	key_re.compile("(?is)(?<![\\w-])(?:property|name)\\s*=\\s*(?:\\x22([^\\x22]*)\\x22|\\x27([^\\x27]*)\\x27)")
+	var content_re: RegEx = RegEx.new()
+	content_re.compile("(?is)(?<![\\w-])content\\s*=\\s*(?:\\x22([^\\x22]*)\\x22|\\x27([^\\x27]*)\\x27)")
+	var metas: Dictionary = {}
+	for m: RegExMatch in meta_re.search_all(clean):
+		var tag: String = m.get_string()
+		var k: RegExMatch = key_re.search(tag)
+		var v: RegExMatch = content_re.search(tag)
+		if k == null or v == null:
+			continue
+		var key: String = (k.get_string(1) if k.get_string(1) != "" else k.get_string(2)).strip_edges().to_lower()
+		var value: String = (v.get_string(1) if v.get_string(1) != "" else v.get_string(2)).strip_edges()
+		if not metas.has(key):
+			metas[key] = [value, clean.substr(0, m.get_start()).count("\n") + 1]
+	for need: String in ["og:title", "og:description", "og:image", "twitter:image", "og:image:width", "og:image:height"]:
+		if not metas.has(need) or str(metas[need][0]) == "":
+			found.append("%s: <meta %s> is missing or empty" % [label, need])
+	if metas.has("og:image") and metas.has("twitter:image") and str(metas["og:image"][0]) != str(metas["twitter:image"][0]):
+		found.append("%s:%d: twitter:image \"%s\" differs from og:image \"%s\"" % [label, metas["twitter:image"][1], metas["twitter:image"][0], metas["og:image"][0]])
+	if not metas.has("og:image") or str(metas["og:image"][0]) == "":
+		return found
+	var url: String = str(metas["og:image"][0])
+	var line_no: int = int(metas["og:image"][1])
+	var url_path: String = url.split("#")[0].split("?")[0]
+	var at: int = url_path.rfind("/site/")
+	if at < 0:
+		found.append("%s:%d: og:image \"%s\" has no /site/ path to map onto a file" % [label, line_no, url])
+		return found
+	var rel: String = url_path.substr(at + 1)
+	var target: String = root.path_join(rel)
+	if not FileAccess.file_exists(target):
+		found.append("%s:%d: og:image \"%s\" maps to %s, which does not exist" % [label, line_no, url, rel])
+		return found
+	var size: Array = _image_size_864(FileAccess.get_file_as_bytes(target))
+	if size.is_empty():
+		found.append("%s:%d: og:image file %s is not a PNG or JPEG" % [label, line_no, rel])
+		return found
+	for pair: Array in [["og:image:width", 0, "width"], ["og:image:height", 1, "height"]]:
+		var tag_name: String = str(pair[0])
+		if not metas.has(tag_name):
+			continue
+		var declared: String = str(metas[tag_name][0])
+		if not declared.is_valid_int() or int(declared) != int(size[int(pair[1])]):
+			found.append("%s:%d: %s declares %s but %s is really %d px %s" % [label, int(metas[tag_name][1]), tag_name, declared, rel, int(size[int(pair[1])]), str(pair[2])])
+	return found
+
+func _scenario_site_social_preview_images_match_declared_size_864() -> Array[String]:
+	var failures: Array[String] = []
+	for page: String in ["index.html", "press.html"]:
+		var text: String = FileAccess.get_file_as_string("res://site/" + page)
+		if text.length() < 1000 or not text.contains("og:image"):
+			failures.append("site/%s did not read as a site page with social meta (%d chars)" % [page, text.length()])
+			continue
+		failures.append_array(_social_preview_problems_864("site/" + page, text, "res://"))
+	_scenario_completed = true
+	return failures
+
+func _scenario_site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864() -> Array[String]:
+	var failures: Array[String] = []
+	var base: String = "https://example.github.io/pickfight/site/img/"
+	var make: Callable = func(og_img: String, tw_img: String, w: String, h: String, title: bool) -> String:
+		var lines: Array[String] = ["<head>", "<title>x</title>"]
+		if title:
+			lines.append("<meta property=\"og:title\" content=\"T\">")
+		lines.append_array([
+			"<meta property=\"og:description\" content=\"D\">",
+			"<meta property=\"og:image\" content=\"%s\">" % og_img,
+			"<meta property=\"og:image:width\" content=\"%s\">" % w,
+			"<meta property=\"og:image:height\" content=\"%s\">" % h,
+			"<meta name=\"twitter:image\" content=\"%s\">" % tw_img,
+			"</head>"])
+		return "\n".join(lines)
+	var good_url: String = base + "02-brawl.png"
+	var found: Array[String] = _social_preview_problems_864("fixture.html", make.call(good_url, good_url, "1200", "675", true), "res://")
+	if found.size() != 0:
+		failures.append("a clean fixture was flagged: %s" % [found])
+	# [html, expected substring, expected problem count]
+	var cases: Array = [
+		[make.call(base + "gone.png", base + "gone.png", "1200", "675", true), "does not exist", 1],
+		[make.call(good_url, good_url, "1200", "630", true), "og:image:height declares 630 but site/img/02-brawl.png is really 675 px height", 1],
+		[make.call(good_url, good_url, "1280", "675", true), "og:image:width declares 1280", 1],
+		[make.call(good_url, good_url, "wide", "675", true), "og:image:width declares wide", 1],
+		[make.call(base + "logo.svg", base + "logo.svg", "1200", "675", true), "is not a PNG or JPEG", 1],
+		[make.call(good_url, base + "03-lobby.png", "1200", "675", true), "differs from og:image", 1],
+		[make.call(good_url, good_url, "1200", "675", false), "og:title", 1],
+		[make.call("https://example.com/elsewhere.png", "https://example.com/elsewhere.png", "1200", "675", true), "no /site/ path", 1],
+	]
+	for case: Array in cases:
+		found = _social_preview_problems_864("fixture.html", str(case[0]), "res://")
+		if found.size() != int(case[2]):
+			failures.append("case '%s' gave %d problems, wanted %d: %s" % [str(case[1]), found.size(), int(case[2]), found])
+		elif not found[0].begins_with("fixture.html:") or not found[0].contains(str(case[1])):
+			failures.append("case '%s' was flagged wrongly: %s" % [str(case[1]), found[0]])
+	# The og:image problem names the line of the tag (line 5 in the fixture: head, title, og:title, og:description, og:image).
+	found = _social_preview_problems_864("fixture.html", make.call(base + "gone.png", base + "gone.png", "1200", "675", true), "res://")
+	if found.size() != 1 or not found[0].begins_with("fixture.html:5:"):
+		failures.append("a missing image was not flagged on its meta line: %s" % [found])
+	# The real home page with its og:image pointed at a missing file must be flagged.
+	var real: String = FileAccess.get_file_as_string("res://site/index.html")
+	found = _social_preview_problems_864("site/index.html", real.replace("site/img/02-brawl.png", "site/img/renamed.png"), "res://")
+	if found.size() < 1:
+		failures.append("the real page with a renamed og:image was not flagged")
+	# JPEG header parsing: SOI, an APP0 segment, then SOF0 with height 0x0123 and width 0x0245.
+	var jpg: PackedByteArray = PackedByteArray([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x01, 0x23, 0x02, 0x45, 0x01, 0x01, 0x11, 0x00])
+	if _image_size_864(jpg) != [0x0245, 0x0123]:
+		failures.append("a synthetic JPEG header read as %s, wanted [581, 291]" % [_image_size_864(jpg)])
+	if not _image_size_864(PackedByteArray([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])).is_empty():
+		failures.append("a GIF header read as a PNG or JPEG")
+	_scenario_completed = true
+	return failures
+
+const CosmeticsPickerScript865 := preload("res://scripts/CosmeticsPicker.gd")
+
+## #865: CosmeticsPicker.random_pick is a clean pick, never wears a colour another
+## seat holds, and is repeatable for a seed.
+func _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865() -> Array[String]:
+	var picker: Script = CosmeticsPickerScript865
+	var failures: Array[String] = []
+	var names: Array[String] = []
+	for entry: Dictionary in picker.get_script_method_list():
+		names.append(str(entry["name"]))
+	if not names.has("random_pick"):
+		failures.append("CosmeticsPicker has no random_pick")
+		_scenario_completed = true
+		return failures
+	var hats_seen: Dictionary = {}
+	var eyes_seen: Dictionary = {}
+	var colors_seen: Dictionary = {}
+	for seed_value in range(300):
+		var setup := RandomNumberGenerator.new()
+		setup.seed = seed_value * 7919 + 13
+		var palette_size: int = 1 + setup.randi() % 12
+		var own_slot: int = setup.randi() % 8
+		var looks: Array = []
+		var taken: Array[int] = []
+		for slot in range(8):
+			var color: int = -1 if setup.randf() < 0.3 else setup.randi() % palette_size
+			looks.append({"slot": slot, "color": color, "hat": "none", "eyes": "round"})
+			if slot != own_slot and color >= 0:
+				taken.append(color)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed_value
+		var pick: Dictionary = picker.call("random_pick", looks, own_slot, rng, palette_size)
+		if CosmeticsPickerScript865.clean_pick(pick) != pick or pick.size() != 3:
+			failures.append("seed %d: the pick %s does not pass clean_pick" % [seed_value, pick])
+			continue
+		var picked: int = int(pick["color"])
+		var free_count: int = 0
+		for index in range(palette_size):
+			if not taken.has(index):
+				free_count += 1
+		if taken.has(picked):
+			failures.append("seed %d: colour %d is held by another seat (taken %s)" % [seed_value, picked, taken])
+		if picked >= palette_size or (picked < 0 and free_count > 0) or (picked >= 0 and free_count == 0):
+			failures.append("seed %d: colour %d does not fit palette %d with %d free" % [seed_value, picked, palette_size, free_count])
+		var again := RandomNumberGenerator.new()
+		again.seed = seed_value
+		if picker.call("random_pick", looks, own_slot, again, palette_size) != pick:
+			failures.append("seed %d: the same seed gave a different pick" % seed_value)
+		hats_seen[pick["hat"]] = true
+		eyes_seen[pick["eyes"]] = true
+		colors_seen[picked] = true
+	if hats_seen.size() < 4 or eyes_seen.size() < 3 or colors_seen.size() < 4:
+		failures.append("300 seeds gave too little variety: %d hats, %d eyes, %d colours" % [hats_seen.size(), eyes_seen.size(), colors_seen.size()])
+	# Only the seat's own colour is free: it is the one drawn. Every colour held: automatic.
+	var own_only: Array = [{"slot": 0, "color": 2, "hat": "none", "eyes": "round"}, {"slot": 1, "color": 0, "hat": "none", "eyes": "round"}, {"slot": 2, "color": 1, "hat": "none", "eyes": "round"}]
+	var rng2 := RandomNumberGenerator.new()
+	rng2.seed = 5
+	var only: Dictionary = picker.call("random_pick", own_only, 0, rng2, 3)
+	if int(only["color"]) != 2:
+		failures.append("with only its own colour free the pick took colour %s, wanted 2" % [only["color"]])
+	var all_taken: Array = [{"slot": 1, "color": 0}, {"slot": 2, "color": 1}]
+	var none_free: Dictionary = picker.call("random_pick", all_taken, 0, rng2, 2)
+	if int(none_free["color"]) != -1:
+		failures.append("with every colour held the pick took colour %s, wanted -1" % [none_free["color"]])
+	var no_palette: Dictionary = picker.call("random_pick", [], 0, rng2)
+	if int(no_palette["color"]) != -1:
+		failures.append("with no palette the colour was %s, wanted -1" % [no_palette["color"]])
+	_scenario_completed = true
+	return failures
+
+## #865: the phone page has the Surprise me button in its lobby panel, labelled in
+## all nine languages, and its handler sends only the existing hat, eyes and color
+## frames; the page still loads nothing from the internet (#798).
+func _scenario_controller_page_has_surprise_me_button_with_existing_messages_865() -> Array[String]:
+	var failures: Array[String] = []
+	var text: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	var lobby_start: int = text.find("<div id=\"lobby\"")
+	var lobby_end: int = text.find("<div id=\"name-prompt\"")
+	var button_at: int = text.find("<button id=\"surprise-btn\"")
+	var look_at: int = text.find("<button id=\"look-btn\"")
+	if button_at < 0 or lobby_start < 0 or button_at < lobby_start or button_at > lobby_end:
+		failures.append("the Surprise me button is not in the lobby panel")
+	elif look_at < 0 or button_at - look_at > 200 or button_at < look_at:
+		failures.append("the Surprise me button does not sit right after Hat & colour")
+	var key_count: int = text.count("\"PHONE_SURPRISE_ME\":")
+	if key_count != 10:
+		failures.append("PHONE_SURPRISE_ME is in %d places, wanted 10 (nine language tables and MARKUP_TEXT)" % key_count)
+	if not text.contains("\"PHONE_SURPRISE_ME\": \"#surprise-btn\""):
+		failures.append("the button is not in MARKUP_TEXT, so it would stay English")
+	var start: int = text.find("function surpriseMe()")
+	var end: int = text.find("document.getElementById(\"look-go\")", start)
+	if start < 0 or end < start:
+		failures.append("no surpriseMe handler found")
+	else:
+		var body: String = text.substr(start, end - start)
+		var types: Dictionary = {}
+		var matcher := RegEx.new()
+		matcher.compile("\\bt:\\s*\"([a-z_]+)\"")
+		for found in matcher.search_all(body):
+			types[found.get_string(1)] = true
+		for kind: String in types:
+			if not ["hat", "eyes", "color"].has(kind):
+				failures.append("surpriseMe sends a '%s' message, not an existing pick message" % kind)
+		for kind: String in ["hat", "eyes", "color"]:
+			if not types.has(kind):
+				failures.append("surpriseMe never sends a '%s' message" % kind)
+		if not text.contains("getElementById(\"surprise-btn\").addEventListener(\"click\", surpriseMe)"):
+			failures.append("the button is not wired to surpriseMe")
+	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
+	_scenario_completed = true
+	return failures
+# --- Review fixes: gameplay (review_gp) -----------------------------------------
+const NightLightingScript_review_gp := preload("res://scripts/NightLighting.gd")
+const ReplayBufferScript_review_gp := preload("res://scripts/ReplayBuffer.gd")
+const SoccerScript_review_gp := preload("res://scripts/Soccer.gd")
+## A pickup a ghost drops onto a player's head falls past the body to the
+## terrain below: the ray that finds its landing ignores every player body.
+func _scenario_pickup_drop_falls_through_players_to_terrain_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	_add_bar(stage, Vector2(0.0, 300.0), Vector2(800.0, 20.0))
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0.0, 200.0))
+	await _await_ticks(60)
+	var pickup: Node2D = _place_pickup(stage, player.global_position + Vector2(0.0, -300.0), _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	# No weapon, so touching the body does not collect it: only where it lands is measured.
+	pickup.weapon_stats = null
+	pickup.drop()
+	await _await_condition(func() -> bool: return not is_instance_valid(pickup) or not pickup.is_falling(), 3000)
+	if not is_instance_valid(pickup):
+		failures.append("the dropped pickup was freed instead of landing")
+	elif pickup.is_falling():
+		failures.append("the dropped pickup never landed")
+	elif pickup.global_position.y < player.global_position.y:
+		failures.append("the pickup came to rest at y %.1f on the player's body (centre y %.1f), not on the floor below" % [
+			pickup.global_position.y, player.global_position.y])
+	await _teardown(stage)
+	return failures
+## A Sudden Death in a round with no modifier sends its chip title to the
+## phones; the round's end clears it like any modifier's.
+func _scenario_sudden_death_chip_cleared_without_modifier_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	rm.forced_modifier = ""
+	rm.modifier_rolls_enabled = false
+	if not await _await_condition(func() -> bool: return int(rm._round_number) >= 1, 3000):
+		await _teardown(rig["stage"])
+		return ["the round never started"]
+	await _await_ticks(5)
+	var sent: Array = rig["roster"].modifier_sent
+	var tied: Array[int] = [0, 1]
+	if not rm._start_tiebreaker(tied):
+		failures.append("the tiebreaker did not start")
+	elif sent.is_empty() or str(sent[-1]) == "":
+		failures.append("Sudden Death sent no chip title: %s" % [sent])
+	rm._end_round_modifier()
+	if sent.is_empty() or str(sent[-1]) != "":
+		failures.append("round end left the phones' chip at %s, want it cleared" % [sent])
+	await _teardown(rig["stage"])
+	return failures
+## Flags a round leaves behind (a lethal hit's point, a kick, a mode's win)
+## are cleared when the next round starts, so none of them decides it.
+func _scenario_round_start_clears_stale_round_flags_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _mode_rig(2, GameModesType.CLASSIC)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	rm.modifier_rolls_enabled = false
+	if not await _await_condition(func() -> bool: return int(rm._round_number) >= 1, 3000):
+		await _teardown(rig["stage"])
+		return ["the round never started"]
+	await _await_ticks(5)
+	players[1].eliminate()
+	if not await _await_condition(func() -> bool: return not players[0].alive, 3000):
+		await _teardown(rig["stage"])
+		return ["the round did not end when one player was left"]
+	rm._has_lethal_point = true
+	rm._kicked_this_round_check = true
+	rm._mode_win_slot = 1
+	rm._mode_win_team = 0
+	rm._try_start_round()
+	if rm._has_lethal_point:
+		failures.append("a lethal hit's point from the last round survived into the new one")
+	if rm._kicked_this_round_check:
+		failures.append("a kick from the last round survived into the new one")
+	if int(rm._mode_win_slot) != -1 or int(rm._mode_win_team) != -1:
+		failures.append("a mode win from the last round survived into the new one (%s, %s)" % [rm._mode_win_slot, rm._mode_win_team])
+	await _teardown(rig["stage"])
+	return failures
+## Ending the match from a focus pause unpauses through the one resume path,
+## so the focus-resume watcher is disarmed rather than left waiting in the lobby.
+func _scenario_end_match_disarms_focus_resume_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_lobby_round(3)
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	loop["roster"].ready_slots = {0: true, 1: true}
+	if not await _await_condition(func() -> bool: return players[0].alive and players[1].alive, 3000):
+		await _teardown(loop["stage"])
+		return ["two ready players never started a round"]
+	var host: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).shared()
+	var was: bool = host.pause_on_focus_loss
+	var persisted: bool = host.persist
+	host.persist = false
+	host.pause_on_focus_loss = true
+	rm.focus_lost()
+	rm.focus_regained()
+	if not rm.is_focus_paused():
+		failures.append("focus loss did not pause the round")
+	rm._on_host_command("end", 0)
+	if rm.is_paused() or paused:
+		failures.append("ending the match left the game paused")
+	if rm._focus_resume != null and rm._focus_resume.armed:
+		failures.append("ending the match left the focus-resume watcher armed")
+	host.pause_on_focus_loss = was
+	host.persist = persisted
+	paused = false
+	await _teardown(loop["stage"])
+	return failures
+## A night stage's glows on players go with the stage, and a player out of
+## the round has no weapon-head glow floating where it was.
+func _scenario_night_glows_removed_with_stage_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var holder: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(holder, Vector2(0.0, -2000.0))
+	var night_stage := Node2D.new()
+	get_root().add_child(night_stage)
+	var night: Node2D = NightLightingScript_review_gp.new()
+	night_stage.add_child(night)
+	var lamps: Array[Vector2] = []
+	night.setup(lamps)
+	await _await_ticks(3)
+	if player.get_node_or_null("NightGlow") == null:
+		failures.append("the night never lit the player")
+	var head: PointLight2D = night.head_glows.get(player.get_instance_id())
+	player.leave_round()
+	await _await_ticks(2)
+	if head == null or head.visible:
+		failures.append("the weapon-head glow still shows for a player out of the round")
+	night_stage.queue_free()
+	await _await_ticks(3)
+	if player.get_node_or_null("NightGlow") != null:
+		failures.append("the player kept its night glow after the night stage left")
+	await _teardown(holder)
+	return failures
+## Instant replay captures 12 frames a second on a host running at 50 fps:
+## the time past each capture carries over instead of being dropped.
+func _scenario_replay_capture_keeps_twelve_fps_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var buffer: Node = ReplayBufferScript_review_gp.new()
+	var captures: int = 0
+	for i in 500:
+		if buffer.capture_due(0.02):
+			captures += 1
+	if captures < 119 or captures > 121:
+		failures.append("10 s at 50 fps captured %d frames, want 120" % captures)
+	var img := Image.create(512, 288, false, Image.FORMAT_RGBA8)
+	buffer.push_frame(img)
+	var kept: Array[Image] = buffer.frames_slice(0, 1)
+	if kept.size() != 1 or kept[0].get_size() != Vector2i(256, 144) or kept[0].get_format() != Image.FORMAT_RGB8:
+		failures.append("a pushed frame was not shrunk to 256x144 RGB8")
+	if img.get_size() != Vector2i(512, 288) or img.get_format() != Image.FORMAT_RGBA8:
+		failures.append("push_frame changed the caller's image")
+	buffer.free()
+	_scenario_completed = true
+	return failures
+## During the pause after a capture short of the target, a flag still carried
+## by the other side stays on its carrier's back.
+func _scenario_ctf_carried_flag_follows_carrier_in_capture_pause_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var players: Array[RigidBody2D] = rig["players"]
+	mode.captures_to_win = 3
+	mode.capture_pause_sec = 5.0
+	mode.take_flag(1, 0)
+	mode.take_flag(0, 1)
+	mode.capture(0, 0)
+	if not mode._pausing:
+		failures.append("no pause after a capture short of the target")
+	players[1].teleport_to(Vector2(-250.0, 100.0))
+	await _await_ticks(5)
+	var flag: Node2D = mode._flag_nodes.get(0)
+	if int(mode.carrier[0]) != 1:
+		failures.append("Blue's carrier lost Red's flag in the pause")
+	elif flag == null or flag.global_position.distance_to(players[1].global_position + Vector2(0.0, 20.0)) > 30.0:
+		failures.append("Red's flag is at %s, not on its carrier at %s" % [flag.global_position if flag != null else null, players[1].global_position])
+	await _teardown(rig["stage"])
+	return failures
+## The player the ball last touched is the nearest one in reach, not the last
+## of them in the roster.
+func _scenario_soccer_last_touch_is_nearest_player_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var holder: Node2D = _new_empty_stage()
+	var stub := GDScript.new()
+	stub.source_code = "extends Node2D\nvar alive: bool = true\n"
+	stub.reload()
+	var ball := RigidBody2D.new()
+	ball.freeze = true
+	holder.add_child(ball)
+	ball.global_position = Vector2.ZERO
+	var near := Node2D.new()
+	near.set_script(stub)
+	holder.add_child(near)
+	near.global_position = Vector2(10.0, 0.0)
+	var far := Node2D.new()
+	far.set_script(stub)
+	holder.add_child(far)
+	far.global_position = Vector2(40.0, 0.0)
+	var soccer: Node = SoccerScript_review_gp.new()
+	soccer.ball = ball
+	soccer._watched = {0: near, 1: far}
+	soccer._track_touch()
+	if int(soccer._last_touch) != 0:
+		failures.append("the last touch went to slot %s, want the nearest player, slot 0" % soccer._last_touch)
+	soccer.free()
+	await _teardown(holder)
+	return failures
+## A bot that dies forgets its hook, wiggle, flight and pickup chase, and a
+## fresh stage read drops shuns and ignored pickups that have run out.
+func _scenario_bot_death_and_stage_read_reset_brain_review_gp() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, -400.0, 400.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	await _await_ticks(30)
+	bot._unhook_left = 1.0
+	bot._wiggle_left = 1.0
+	bot._hooked_for = 1.0
+	bot._hook_phase = 1
+	bot._flee_side = 1.0
+	bot._holdoff_since = 3.0
+	bot._chasing = stage
+	player.leave_round()
+	bot.think(1.0 / 60.0)
+	if bot._unhook_left != 0.0 or bot._wiggle_left != 0.0 or bot._hooked_for != 0.0:
+		failures.append("death kept unhook %s / wiggle %s / hooked %s" % [bot._unhook_left, bot._wiggle_left, bot._hooked_for])
+	if int(bot._hook_phase) != 0 or bot._flee_side != 0.0 or bot._holdoff_since != -1.0 or bot._chasing != null:
+		failures.append("death kept hook phase %s / flee side %s / holdoff %s / chase %s" % [bot._hook_phase, bot._flee_side, bot._holdoff_since, bot._chasing])
+	bot._clock = 10.0
+	bot._shunned = {111: 5.0, 222: 20.0}
+	bot._ignored_pickups = {333: 10.0, 444: 11.0}
+	bot._read_stage()
+	if bot._shunned.keys() != [222]:
+		failures.append("after a stage read the shunned ids are %s, want [222]" % [bot._shunned.keys()])
+	if bot._ignored_pickups.keys() != [444]:
+		failures.append("after a stage read the ignored pickups are %s, want [444]" % [bot._ignored_pickups.keys()])
+	await _teardown(stage)
+	return failures
+## Review fixes (net server): a fake network controller -- a socket the
+## harness feeds and reads -- and a relay link that records what it sends.
+class _NetPeerReviewNet extends RefCounted:
+	var open: bool = true
+	var inbox: Array = [] # [is_text, PackedByteArray]
+	var texts: Array[String] = []
+	var close_reason: String = ""
+	var _last_text: bool = false
+	func poll() -> void:
+		pass
+	func get_ready_state() -> int:
+		return WebSocketPeer.STATE_OPEN if open else WebSocketPeer.STATE_CLOSED
+	func get_available_packet_count() -> int:
+		return inbox.size()
+	func get_packet() -> PackedByteArray:
+		var item: Array = inbox.pop_front()
+		_last_text = item[0]
+		return item[1]
+	func was_string_packet() -> bool:
+		return _last_text
+	func send_text(text: String) -> void:
+		texts.append(text)
+	func close(_code: int = 1000, reason: String = "") -> void:
+		if open:
+			close_reason = reason
+			open = false
+	func push_text(text: String) -> void:
+		inbox.append([true, text.to_utf8_buffer()])
+class _LinkReviewNet extends Node:
+	var sent: Array = [] # [peer, text]
+	func send_text_to(peer: int, text: String) -> void:
+		sent.append([peer, text])
+	func drop_peer(_peer: int) -> void:
+		pass
+	func texts_to(peer: int) -> Array[String]:
+		var out: Array[String] = []
+		for item: Array in sent:
+			if int(item[0]) == peer:
+				out.append(str(item[1]))
+		return out
+func _remote_seat_review_net(link: Node, peer: int, phone: bool) -> Variant:
+	var seat: Variant = ControllerServerScript.RemoteSeat.new()
+	seat.peer = peer
+	seat.link = link
+	seat.is_phone = phone
+	return seat
+## Fix 1: a phone over the Couch relay fallback (#683) feels hit buzzes like a
+## LAN phone; a PC remote client and the host PC's own seat are sent none.
+func _scenario_relay_phone_seat_is_buzzed_pc_remote_is_not_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var host_seat: Variant = fx[2]
+	var host_slot: int = fx[3]
+	var free: Array[int] = []
+	for slot in 3:
+		if slot != host_slot:
+			free.append(slot)
+	var link := _LinkReviewNet.new()
+	fx[0].add_child(link)
+	server._slot_peers[free[0]] = _remote_seat_review_net(link, 7, false)
+	server._slot_peers[free[1]] = _remote_seat_review_net(link, 8, true)
+	server.send_buzz(free[1], "hit")
+	var to_phone: Array[String] = link.texts_to(8)
+	var buzzed: bool = false
+	for text: String in to_phone:
+		var msg: Variant = JSON.parse_string(text)
+		if msg is Dictionary and msg.get("t") == "buzz" and msg.get("kind") == "hit":
+			buzzed = true
+	if not buzzed:
+		failures.append("the relay phone got no buzz frame (sent %s)" % [to_phone])
+	server.send_buzz(free[0], "hit")
+	if not link.texts_to(7).is_empty():
+		failures.append("the PC remote client was sent %s" % [link.texts_to(7)])
+	host_seat.last_text = ""
+	server.send_buzz(host_slot, "hit")
+	if host_seat.last_text != "":
+		failures.append("the host PC's own seat was sent '%s'" % host_seat.last_text)
+	server._slot_peers[free[0]] = null
+	server._slot_peers[free[1]] = null
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 2: a network client sending the host PC's id or a pad's id gets a fresh
+## seat under a made-up id instead of taking the reserved seat over.
+func _scenario_network_client_cannot_claim_a_reserved_id_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var host_seat: Variant = fx[2]
+	var host_slot: int = fx[3]
+	if host_slot < 0:
+		failures.append("the host PC seat was not granted a slot")
+		fx[0].queue_free()
+		_scenario_completed = true
+		return failures
+	var spoof := _NetPeerReviewNet.new()
+	server._bind_with_id(spoof, ControllerServerScript.HOST_PC_ID)
+	if server._slot_peers[host_slot] != host_seat or not host_seat.open:
+		failures.append("a client sending '%s' took the host PC's seat over" % ControllerServerScript.HOST_PC_ID)
+	var spoof_slot: int = server._slot_peers.find(spoof)
+	if spoof_slot == -1 or spoof_slot == host_slot:
+		failures.append("the spoofing client was not given a fresh seat (slot %d)" % spoof_slot)
+	elif server._slot_client_id[spoof_slot] == ControllerServerScript.HOST_PC_ID:
+		failures.append("the spoofing client's claim carries the host PC's id")
+	var pad := _NetPeerReviewNet.new()
+	server._bind_with_id(pad, ControllerServerScript.PAD_ID_PREFIX + "0")
+	var pad_slot: int = server._slot_peers.find(pad)
+	if pad_slot == -1:
+		failures.append("a client sending a pad id got no seat")
+	elif str(server._slot_client_id[pad_slot]).begins_with(ControllerServerScript.PAD_ID_PREFIX):
+		failures.append("a network client's claim is labelled as a pad: '%s'" % server._slot_client_id[pad_slot])
+	for peer: Variant in [spoof, pad]:
+		var slot: int = server._slot_peers.find(peer)
+		if slot != -1:
+			server._unbind(slot)
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 3: once a "leave" frame lets the slot go, the frames queued behind it in
+## the same drain are not applied to the released slot.
+func _scenario_drain_stops_at_a_leave_frame_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var peer := _NetPeerReviewNet.new()
+	server._bind_with_id(peer, "drain-review-net")
+	var slot: int = server._slot_peers.find(peer)
+	if slot == -1:
+		failures.append("the fake phone got no seat")
+	else:
+		peer.push_text(JSON.stringify({"t": "leave"}))
+		peer.push_text(JSON.stringify({"t": "name", "v": "Ghost"}))
+		server._drain(slot, peer)
+		if server._slot_claimed[slot] != 0 or server._slot_peers[slot] != null:
+			failures.append("the leave frame did not release slot %d" % slot)
+		if str(server._slot_name[slot]) != "":
+			failures.append("a frame after the leave renamed the released slot to '%s'" % server._slot_name[slot])
+		if peer.close_reason != ControllerServerScript.LEFT_REASON:
+			failures.append("the phone was closed with '%s'" % peer.close_reason)
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 4: going from Online to Solo tells a dropped PC client the room closed
+## and a dropped phone it is a Solo match, as a refused join would be told.
+func _scenario_online_to_solo_tells_dropped_seats_why_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var link := _LinkReviewNet.new()
+	fx[0].add_child(link)
+	var pc: Variant = _remote_seat_review_net(link, 21, false)
+	var phone: Variant = _remote_seat_review_net(link, 22, true)
+	server._bind_with_id(pc, "pc-review-net")
+	server._bind_with_id(phone, "phone-review-net")
+	if server._slot_peers.find(pc) == -1 or server._slot_peers.find(phone) == -1:
+		failures.append("the remote seats were not bound: %s" % [server._slot_peers])
+	else:
+		server._match_kind = ControllerServerScript.KIND_ONLINE
+		server.set_match_kind(ControllerServerScript.KIND_SOLO)
+		var want: Dictionary = {21: ControllerServerScript.ROOM_CLOSED_REASON, 22: ControllerServerScript.SOLO_MATCH_REASON}
+		for peer_id: int in want:
+			var reason: String = ""
+			for text: String in link.texts_to(peer_id):
+				var msg: Variant = JSON.parse_string(text)
+				if msg is Dictionary and msg.get("t") == "closed":
+					reason = str(msg.get("reason", ""))
+			if reason != want[peer_id]:
+				failures.append("relay peer %d was told '%s', expected '%s'" % [peer_id, reason, want[peer_id]])
+	server.bot_director.remove_bots()
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 5: a socket that takes a slot over does not inherit the old one's weak
+## link state (#777): the old page answered pings, the new one may not.
+func _scenario_taken_over_slot_drops_weak_link_state_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var old := _NetPeerReviewNet.new()
+	server._bind_with_id(old, "weak-review-net")
+	var slot: int = server._slot_peers.find(old)
+	if slot == -1:
+		failures.append("the fake phone got no seat")
+	else:
+		server._weak_link_in[slot] = true
+		server._weak_link[slot] = {"n": 3, "sent": 0, "answered": false, "over_since": 1, "weak": true}
+		var fresh := _NetPeerReviewNet.new()
+		server._bind_with_id(fresh, "weak-review-net")
+		if server._slot_peers[slot] != fresh:
+			failures.append("the same id did not take slot %d over" % slot)
+		if server._weak_link_in.has(slot) or server._weak_link.has(slot):
+			failures.append("the new socket inherited the old weak link state: %s / %s" % [server._weak_link_in, server._weak_link])
+		server._unbind(slot)
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 6: the diagnostic rumble log keeps only the newest MAX_PAD_RUMBLES.
+func _scenario_pad_rumble_log_is_capped_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	server.pad_rumbles.clear()
+	for i in 100:
+		server._rumble_pad(3, "hit")
+	server._rumble_pad(3, "win")
+	if server.pad_rumbles.size() > 64:
+		failures.append("the rumble log grew to %d entries" % server.pad_rumbles.size())
+	if server.pad_rumbles.is_empty() or server.pad_rumbles.back().get("kind") != "win":
+		failures.append("the newest rumble is not the last entry")
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+## Fix 9: a delta only moves what the client already has and carries no HUD
+## text, so a new body, projectile, pickup, flail or hook, or a changed kill
+## feed, banner or modifier list forces a full snapshot.
+func _scenario_structure_changed_on_new_entity_and_hud_change_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var base: Dictionary = {"round_phase": 1, "stage_id": 0,
+		"players": [{"player_id": 0}], "projectiles": [{"projectile_id": 1}], "pickups": [{"pickup_id": 2}],
+		"flail": {}, "grapple": {}, "kill_feed": [{"text": "A knocked out B"}],
+		"announcer_text": "", "modifiers": []}
+	if SnapshotCaptureScript251.structure_changed(base.duplicate(true), base):
+		failures.append("an unchanged world counted as a structure change")
+	var moved: Dictionary = base.duplicate(true)
+	moved["players"] = [{"player_id": 0, "x": 5}]
+	if SnapshotCaptureScript251.structure_changed(moved, base):
+		failures.append("a moved player counted as a structure change")
+	var cases: Dictionary = {
+		"players": [{"player_id": 0}, {"player_id": 1}],
+		"projectiles": [{"projectile_id": 1}, {"projectile_id": 9}],
+		"pickups": [{"pickup_id": 2}, {"pickup_id": 3}],
+		"flail": {"flail_id": 0},
+		"grapple": {"grapple_id": 0},
+		"kill_feed": [{"text": "A knocked out B"}, {"text": "C knocked out A"}],
+		"announcer_text": "Low gravity",
+		"modifiers": [{"modifier_id": 1, "name": "low_gravity"}],
+	}
+	for key: String in cases:
+		var world: Dictionary = base.duplicate(true)
+		world[key] = cases[key]
+		if not SnapshotCaptureScript251.structure_changed(world, base):
+			failures.append("a change to '%s' did not force a full snapshot" % key)
+	_scenario_completed = true
+	return failures
+## Fixes 11-15 on the phone page: IME-safe Enter, the rules labels translated,
+## a throwing WebSocket constructor handled, the drag re-measured on a new
+## radius and names cut by code point; still a single offline file (#798).
+func _scenario_controller_page_review_fixes_review_net() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = _controller_page_lf_194()
+	if not page.contains("ev.key === \"Enter\" && !ev.isComposing && ev.keyCode !== 229"):
+		failures.append("the name prompt's Enter does not skip an IME composition")
+	for pair: Array in [["RULES_OPEN", "menu-rules-open"], ["RULES_MODIFIERS", "rules-mod-heading"], ["RULES_WEAPONS", "rules-weapon-heading"]]:
+		if not page.contains("\"%s\": \"#%s\"" % pair):
+			failures.append("%s is not in MARKUP_TEXT" % pair[0])
+		if not page.contains("id=\"%s\"" % pair[1]):
+			failures.append("no element #%s" % pair[1])
+	var at: int = page.find("new WebSocket(")
+	var try_at: int = page.rfind("try {", at)
+	if at < 0 or try_at < 0 or at - try_at > 80 or page.find("} catch (err) {", at) - at > 200:
+		failures.append("the WebSocket constructor is not wrapped in try/catch")
+	if page.count("dragRadiusPx = computeDragRadius();\n    recompute();") < 2:
+		failures.append("resize() and setReach() do not recompute the drag")
+	if not page.contains("Array.from(name).slice(0, MAX_NAME_LENGTH)"):
+		failures.append("cleanName does not cut by code point")
+	failures.append_array(_controller_offline_problems_798("controller/index.html", page))
+	_scenario_completed = true
+	return failures
+## Review perf: the O(1) stage check agrees with the stage list it stands in for,
+## and the lobby, refreshed every frame, keeps the join-help address labels
+## instead of rebuilding them while nothing changed.
+func _scenario_stage_check_and_join_urls_cached_review_perf() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = (load("res://scripts/HostSettings.gd") as GDScript).new()
+	var names := PackedStringArray(["Pitch", "Dunes", "Cage", "Bastion", "Stronghold", "Flatlands", "Mesa", "Islands"])
+	names.append_array(HostSettingsScript352.shared().known_stages)
+	settings.known_stages = names
+	var probes: PackedStringArray = names.duplicate()
+	probes.append("NotAStage")
+	var modes: Array[String] = ["", "classic", "king_of_the_hill", "sudden_death", "stock", "soccer", "capture_the_flag", "hot_potato"]
+	for mode_id: String in modes:
+		var listed: PackedStringArray = settings.stages_for_mode(mode_id)
+		for stage_name: String in probes:
+			if settings._mode_has_stage(mode_id, stage_name) != listed.has(stage_name):
+				failures.append("mode '%s', stage %s: the quick check says %s, the list %s" % [mode_id, stage_name, settings._mode_has_stage(mode_id, stage_name), listed.has(stage_name)])
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	screen.join_help_button().pressed.emit()
+	if screen.popup_open() != "join_help":
+		failures.append("the join help popup did not open")
+	await _await_ticks(2)
+	var before: Array[Label] = screen.join_help().url_labels().duplicate()
+	await _await_ticks(5)
+	var after: Array[Label] = screen.join_help().url_labels()
+	print("      address labels: %d before, %d after 5 frames" % [before.size(), after.size()])
+	if after.size() != before.size():
+		failures.append("the address list changed size with nothing changed (%d -> %d)" % [before.size(), after.size()])
+	else:
+		for i in after.size():
+			if not is_same(before[i], after[i]) or not is_instance_valid(after[i]) or not after[i].is_inside_tree():
+				failures.append("address label %d was rebuilt with nothing changed" % i)
+				break
+	screen.set_popup("")
+	await _teardown(rig["main"])
+	_scenario_completed = true
 	return failures

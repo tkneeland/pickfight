@@ -223,6 +223,7 @@ func _physics_process(delta: float) -> void:
 		if _pause_left <= 0.0:
 			_pausing = false
 			_next_hall()
+		_refresh_flags() # a flag still carried rides on its carrier through the pause
 		return
 	for slot: int in _lockout.keys():
 		_lockout[slot] = float(_lockout[slot]) - delta

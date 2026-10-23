@@ -327,7 +327,9 @@ func _place(body: RigidBody2D, at: Vector2, rotation: float) -> void:
 	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, xform)
 
 func _update_phase(release_time: float) -> void:
-	var cut_off: bool = _terrain_between(head.global_position, ball.global_position)
+	# The ray is only needed where its answer is read: phased, or past the delay.
+	var cut_off: bool = (ball.phased or release_time >= PHASE_DELAY) \
+		and _terrain_between(head.global_position, ball.global_position)
 	if ball.phased:
 		if not cut_off and not ball.overlaps_world():
 			ball.set_phased(false)

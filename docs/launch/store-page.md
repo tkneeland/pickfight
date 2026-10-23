@@ -1,6 +1,6 @@
 # PickFight: Steam store page draft
 
-**DRAFT — needs owner approval.** Nothing here is published. Facts come from `docs/FEATURES.md`, `docs/launch/owner-decisions.md`, `docs/launch/digest.md` and `project.godot`. Counts: 43 stages and 6 game modes are from FEATURES.md; 13 weapons in rotation = the pickaxe everyone starts with plus the 12 on-stage pickups (staff, sword, dagger, axe, shield, umbrella, boomstick, grappling hook, flail, boomerang, fishing rod, magnet). The spear and pogo stick stay in the code but are retired from rotation (#642, #655), so they are not counted. Recount from FEATURES.md before submitting.
+**DRAFT — needs owner approval.** Nothing here is published. Facts come from `docs/FEATURES.md`, `docs/launch/owner-decisions.md`, `docs/launch/digest.md` and `project.godot`. Counts: 44 stages and 6 game modes are from FEATURES.md; 13 weapons in rotation = the pickaxe everyone starts with plus the 12 on-stage pickups (staff, sword, dagger, axe, shield, umbrella, boomstick, grappling hook, flail, boomerang, fishing rod, magnet). The spear and pogo stick stay in the code but are retired from rotation (#642, #655), so they are not counted. Recount from FEATURES.md before submitting.
 
 | Field | Value |
 | --- | --- |
@@ -13,7 +13,7 @@
 
 ## Short description
 
-PickFight is a same-room party brawler for up to 8 players. No controllers needed: everyone scans a QR code and fights with their phone, swinging a pickaxe, sword or grappling hook across 43 stages. Play on the couch, online by room code, or solo against bots.
+PickFight is a same-room party brawler for up to 8 players. No controllers needed: everyone scans a QR code and fights with their phone, swinging a pickaxe, sword or grappling hook across 44 stages. Play on the couch, online by room code, or solo against bots.
 
 (260 characters; Steam's limit is 300.)
 
@@ -26,7 +26,7 @@ PickFight is a same-room platform fighter for up to eight players. One computer 
 Movement is physics, not buttons. Your weapon is a jointed arm that bites into the ground, so climbing, swinging and throwing yourself across gaps are all the same drag. It is scrappy, a bit clumsy on purpose, and funny to watch.
 
 **A whole pack of stuff to fight over**
-- 43 rotating stages built from hazards: lava, spikes, saws, moving platforms, crumbling ledges, bounce pads, wind zones, fans, falling rocks.
+- 44 rotating stages built from hazards: lava, spikes, saws, moving platforms, crumbling ledges, bounce pads, wind zones, fans, falling rocks.
 - 13 weapons: everyone starts with a pickaxe, and the rest drop onto the stage as pickups. Sword, axe, dagger, staff, shield, umbrella, boomstick, grappling hook, flail, boomerang, fishing rod, magnet.
 - 6 game modes: Classic, King of the Hill, Sudden Death, Stock, Soccer and Capture the Flag, with Free-for-all or Red vs Blue teams.
 - Round modifiers now and then: low gravity, double damage, meteor shower, slippery floors and more.
@@ -42,7 +42,7 @@ A match is Couch or Online, never mixed. If your Wi-Fi blocks phones from reachi
 
 - Up to 8 players on one screen, joined by QR code from any phone browser: no app, no controllers.
 - Your weapon is your arm: drag to swing, climb and fling yourself around.
-- 43 stages with lava, spikes, saws, moving platforms, bounce pads and wind.
+- 44 stages with lava, spikes, saws, moving platforms, bounce pads and wind.
 - 13 weapons, from the pickaxe everyone starts with to the grappling hook, boomerang, fishing rod and magnet.
 - 6 modes: Classic, King of the Hill, Sudden Death, Stock, Soccer, Capture the Flag.
 - Couch, Online by room code, or Solo against bots (Easy, Normal, Hard).

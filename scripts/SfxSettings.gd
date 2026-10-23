@@ -74,6 +74,10 @@ var _notice_off: Button
 var _notice_ok: Button
 var _hide_code_box: CheckBox
 var _kill_feed_box: CheckBox
+var _damage_numbers_box: CheckBox
+var _match_point_plate_box: CheckBox
+var _hit_pause_box: CheckBox
+var _pickup_callouts_box: CheckBox
 var _scale_button: OptionButton
 ## Text size (#751): Settings > More options.
 var _text_size_button: OptionButton
@@ -181,9 +185,13 @@ func _ready() -> void:
 		_resolution.add_item(tr("SETTINGS_WINDOW_DEFAULT") if size == Vector2i.ZERO else tr("SETTINGS_WINDOW_SIZE") % [size.x, size.y])
 	content.add_child(_resolution)
 	_shake_box = _add_box(content, "ScreenShake", tr("SETTINGS_SCREEN_SHAKE"))
+	_hit_pause_box = _add_box(content, "HitPause", tr("SETTINGS_HIT_PAUSE"))
 	_flash_box = _add_box(content, "ReduceFlash", tr("SETTINGS_REDUCE_FLASHES"))
 	_hide_code_box = _add_box(content, "HideRoomCode", tr("SETTINGS_HIDE_ROOM_CODE"))
 	_kill_feed_box = _add_box(content, "KillFeed", tr("SETTINGS_KILL_FEED"))
+	_damage_numbers_box = _add_box(content, "DamageNumbers", tr("SETTINGS_DAMAGE_NUMBERS"))
+	_match_point_plate_box = _add_box(content, "MatchPointPlate", tr("SETTINGS_MATCH_POINT_PLATE"))
+	_pickup_callouts_box = _add_box(content, "PickupCallouts", tr("SETTINGS_PICKUP_CALLOUTS"))
 	_scale_button = OptionButton.new()
 	_scale_button.name = "TagSize"
 	for option: float in sfx.UI_SCALES:
@@ -324,8 +332,12 @@ func _ready() -> void:
 	_resolution.item_selected.connect(_on_resolution_selected)
 	_language.item_selected.connect(_on_language_selected)
 	_shake_box.toggled.connect(func(pressed: bool) -> void: sfx.set_screen_shake(pressed))
+	_hit_pause_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hit_pause(pressed))
 	_flash_box.toggled.connect(func(pressed: bool) -> void: sfx.set_reduce_flash(pressed))
 	_kill_feed_box.toggled.connect(func(pressed: bool) -> void: sfx.set_kill_feed(pressed))
+	_damage_numbers_box.toggled.connect(func(pressed: bool) -> void: sfx.set_damage_numbers(pressed))
+	_match_point_plate_box.toggled.connect(func(pressed: bool) -> void: sfx.set_match_point_plate(pressed))
+	_pickup_callouts_box.toggled.connect(func(pressed: bool) -> void: sfx.set_pickup_callouts(pressed))
 	_hide_code_box.toggled.connect(func(pressed: bool) -> void: sfx.set_hide_room_code(pressed))
 	_scale_button.item_selected.connect(func(index: int) -> void: sfx.set_ui_scale(sfx.UI_SCALES[index]))
 	_text_size_button.item_selected.connect(func(index: int) -> void: sfx.set_text_scale(sfx.TEXT_SCALES[index]))
@@ -418,6 +430,7 @@ func refresh() -> void:
 	_fullscreen.set_pressed_no_signal(sfx.fullscreen)
 	_toggle.text = tr("SETTINGS_MUTED") if sfx.muted else tr("SETTINGS")
 	_shake_box.set_pressed_no_signal(sfx.screen_shake)
+	_hit_pause_box.set_pressed_no_signal(sfx.hit_pause)
 	_flash_box.set_pressed_no_signal(sfx.reduce_flash)
 	_stats_box.set_pressed_no_signal(host.share_stats)
 	_crash_box.set_pressed_no_signal(host.send_crash_reports)
@@ -429,6 +442,9 @@ func refresh() -> void:
 	_refresh_notice()
 	_hide_code_box.set_pressed_no_signal(sfx.hide_room_code)
 	_kill_feed_box.set_pressed_no_signal(sfx.kill_feed)
+	_damage_numbers_box.set_pressed_no_signal(sfx.damage_numbers)
+	_match_point_plate_box.set_pressed_no_signal(sfx.match_point_plate)
+	_pickup_callouts_box.set_pressed_no_signal(sfx.pickup_callouts)
 	_scale_button.select(maxi(sfx.UI_SCALES.find(sfx.ui_scale), 0))
 	_text_size_button.select(maxi(sfx.TEXT_SCALES.find(sfx.text_scale), 0))
 	_deadzone_button.select(maxi(HostSettingsScript.PAD_DEADZONES.find(host.pad_deadzone), 0))
@@ -702,6 +718,18 @@ func more_box() -> CheckBox:
 func kill_feed_box() -> CheckBox:
 	return _kill_feed_box
 
+func damage_numbers_box() -> CheckBox:
+	return _damage_numbers_box
+
+func match_point_plate_box() -> CheckBox:
+	return _match_point_plate_box
+
+func hit_pause_box() -> CheckBox:
+	return _hit_pause_box
+
+func pickup_callouts_box() -> CheckBox:
+	return _pickup_callouts_box
+
 func shake_box() -> CheckBox:
 	return _shake_box
 
@@ -892,10 +920,14 @@ func _retranslate() -> void:
 	_fullscreen.text = tr("SETTINGS_FULLSCREEN")
 	_more.text = tr("SETTINGS_MORE_OPTIONS")
 	_shake_box.text = tr("SETTINGS_SCREEN_SHAKE")
+	_hit_pause_box.text = tr("SETTINGS_HIT_PAUSE")
 	_flash_box.text = tr("SETTINGS_REDUCE_FLASHES")
 	_numbers_box.text = tr("SETTINGS_PLAYER_NUMBERS")
 	_hide_code_box.text = tr("SETTINGS_HIDE_ROOM_CODE")
 	_kill_feed_box.text = tr("SETTINGS_KILL_FEED")
+	_damage_numbers_box.text = tr("SETTINGS_DAMAGE_NUMBERS")
+	_match_point_plate_box.text = tr("SETTINGS_MATCH_POINT_PLATE")
+	_pickup_callouts_box.text = tr("SETTINGS_PICKUP_CALLOUTS")
 	_stats_box.text = tr("SETTINGS_SHARE_STATS")
 	_crash_box.text = tr("SETTINGS_SEND_CRASH_REPORTS")
 	_replay_box.text = tr("SETTINGS_PLAY_OF_ROUND")

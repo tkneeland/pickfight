@@ -28,13 +28,15 @@ const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
 const CONTROL_KEYS: Dictionary = {
 	"local": KEY_C, "online": KEY_O, "solo": KEY_S, "mode": KEY_T, "bots": KEY_B, "target_down": KEY_MINUS,
-	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J, "join_help": KEY_H,
+	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J, "join_help": KEY_H, "copy_code": KEY_K, # C is Couch (#863)
 }
 const KIND_IDS: Array[String] = ["local", "online", "solo"] # the switch's cells, left to right
 const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_FONT_SIZE
 ## The big online room code on the join card (the mockup's 96 px, outlined).
 const ROOM_CODE_FONT_SIZE: int = 96
 const STEP_BUTTON_PX: float = 44.0
+## How long Copy code reads "Copied" after a press (#863).
+const COPIED_MSEC: int = 1500
 const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 const MAIN_SCENE: String = "res://scenes/Main.tscn"
 ## How long Leave lobby stays armed after its first press, when others are seated (#716).
@@ -52,6 +54,10 @@ var _screen # the LobbyScreen
 var _controls: Dictionary = {}
 var _room_label: Label
 var _online_status: Label
+var _copy_button: Button
+var _copied_until_msec: int = 0
+## The clipboard write, a seam so the scenarios never touch the real clipboard (#863).
+var clipboard_setter: Callable = func(text: String) -> void: DisplayServer.clipboard_set(text)
 var _join_blocked: Label
 
 var start_notice: String = ""
@@ -175,6 +181,14 @@ func _build_room_widgets() -> void:
 	box.add_child(_online_status)
 	box.move_child(_room_label, _screen._join_note.get_index())
 	box.move_child(_online_status, _screen._join_note.get_index())
+	# Copy code (#863): under the big code, Online only, so the host can paste it into a chat.
+	_copy_button = _action_button("copy_code", _screen.tr("LOBBY_COPY_CODE"), UiThemeScript.ACTION_BUTTON)
+	_copy_button.name = "CopyCode"
+	_copy_button.add_theme_font_size_override("font_size", 20)
+	_copy_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_copy_button.visible = false
+	box.add_child(_copy_button)
+	box.move_child(_copy_button, _room_label.get_index() + 1)
 
 ## The Host panel: the mode's target (First to / Lives / Goals to win / Captures
 ## to win), Bots and Teams, each a stepper or a switch (#547).
@@ -331,6 +345,13 @@ func press_control(id: String) -> void:
 		"stages_rules":
 			_popup_opener = id
 			_screen.open_stages_rules()
+		"copy_code":
+			var code: String = server.online_room_code()
+			if not _copy_button.visible or code == "":
+				return # Couch, Solo or streamer mode: nothing to copy, so K does nothing
+			clipboard_setter.call(code)
+			_copied_until_msec = Time.get_ticks_msec() + COPIED_MSEC
+			_screen.get_tree().create_timer(COPIED_MSEC / 1000.0 + 0.05).timeout.connect(refresh)
 		"join_help":
 			if not _screen.join_help_button().visible:
 				return # Online or Solo: no LAN join to help with, so H does nothing
@@ -419,6 +440,8 @@ func _can_join_online() -> bool:
 ## Redraws the controls' captions from the server: the link state and the
 ## room code beside the toggle, and why Join is off when it is.
 func refresh() -> void:
+	if not is_instance_valid(_screen):
+		return
 	var server: Object = _screen._server
 	if server == null:
 		return
@@ -430,6 +453,11 @@ func refresh() -> void:
 	_online_status.text = {"connecting": _screen.tr("ONLINE_CONNECTING"), "unreachable": _screen.tr("ONLINE_UNREACHABLE")}.get(status, "")
 	_room_label.text = code
 	_room_label.visible = code != "" and not (server.has_method("room_code_hidden") and server.room_code_hidden())
+	_copy_button.visible = _room_label.visible and kind == "online"
+	if Time.get_ticks_msec() < _copied_until_msec:
+		_copy_button.text = _screen.tr("LOBBY_COPIED")
+	else:
+		_copy_button.text = _screen.tr("LOBBY_COPY_CODE_PAD" if _pad_active else "LOBBY_COPY_CODE")
 	# The code says "online" already; the status stays for connecting or a blip.
 	_online_status.visible = _online_status.text != "" and kind == "online"
 	_screen._apply_streamer_mode(server)
@@ -540,7 +568,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["join_help", "relay_nudge"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["join_help", "relay_nudge"], ["join"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]

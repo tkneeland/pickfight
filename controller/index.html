@@ -13,13 +13,13 @@
     font-family: "Lilita One";
     font-weight: 400;
     font-display: swap;
-    src: url(/fonts/LilitaOne-Latin.woff2) format("woff2");
+    src: url(fonts/LilitaOne-Latin.woff2) format("woff2");
   }
   @font-face {
     font-family: "Nunito";
     font-weight: 600 900;
     font-display: swap;
-    src: url(/fonts/Nunito-Latin.woff2) format("woff2");
+    src: url(fonts/Nunito-Latin.woff2) format("woff2");
   }
   :root {
     --ground: #232A4A;
@@ -212,6 +212,23 @@
     pointer-events: none;
   }
   #hill.show { display: block; }
+  /* Round modifier chip (#908): the active modifier's title under the damage bar. */
+  #modchip {
+    position: fixed;
+    z-index: 3;
+    top: 34px;
+    left: 10px;
+    display: none;
+    max-width: 60vw;
+    color: #ffffff;
+    background: rgba(20, 24, 29, 0.7);
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    padding: 1px 8px;
+    font: 700 16px sans-serif;
+    pointer-events: none;
+  }
+  #modchip.show { display: block; }
   /* Weak connection (#777): a small non-blocking chip in the top-right corner,
      clear of the drag area and the hill / lives readouts on the left. */
   #weak-chip {
@@ -541,7 +558,7 @@
     color: var(--ink);
     background: var(--yellow);
   }
-  #look-btn, #vibration-btn, #leave-btn {
+  #look-btn, #surprise-btn, #vibration-btn, #leave-btn {
     font: inherit;
     font-size: 18px;
     font-weight: 700;
@@ -578,7 +595,7 @@
   #dmgbar { background: rgba(20, 24, 29, 0.55); border-bottom: 1px solid var(--ink); }
 
   /* Every button: cream face, ink outline, hard shadow that the press eats. */
-  #ready-btn, #look-btn, #vibration-btn, #leave-btn, #name-shuffle, #name-go, #look-go, #tip-go, #steal, #mouse-capture,
+  #ready-btn, #look-btn, #surprise-btn, #vibration-btn, #leave-btn, #name-shuffle, #name-go, #look-go, #tip-go, #steal, #mouse-capture,
   #host-menu button, #team-row button, #target-row button, #hat-grid button, #eyes-grid button, #color-row button {
     font-family: var(--display);
     font-weight: 400;
@@ -588,7 +605,7 @@
     border-radius: 16px;
     box-shadow: 4px 4px 0 var(--ink);
   }
-  #ready-btn:active, #look-btn:active, #vibration-btn:active, #leave-btn:active, #name-shuffle:active, #name-go:active, #look-go:active, #tip-go:active,
+  #ready-btn:active, #look-btn:active, #surprise-btn:active, #vibration-btn:active, #leave-btn:active, #name-shuffle:active, #name-go:active, #look-go:active, #tip-go:active,
   #steal:active, #mouse-capture:active, #host-menu button:active, #team-row button:active, #target-row button:active,
   #hat-grid button:active, #eyes-grid button:active, #color-row button:active {
     transform: translate(3px, 3px);
@@ -632,7 +649,7 @@
   #team-row button.on { box-shadow: 0 0 0 3px var(--cream), 0 0 0 6px var(--ink), 4px 4px 0 6px var(--ink); }
   #team-line { font-family: var(--display); font-weight: 400; font-size: 24px; text-shadow: 2px 2px 0 var(--ink); }
 
-  #look-btn, #vibration-btn, #leave-btn { font-size: 20px; }
+  #look-btn, #surprise-btn, #vibration-btn, #leave-btn { font-size: 20px; }
   #name-input {
     font-family: var(--display);
     font-weight: 400;
@@ -667,6 +684,7 @@
 <div id="dmgbar"><div id="dmgfill"></div></div>
 <div id="lives"></div>
 <div id="hill"></div>
+<div id="modchip"></div>
 <div id="weak-chip">Weak connection</div>
 <button id="steal" type="button">Steal a life</button>
 <div id="hud">
@@ -695,6 +713,7 @@
   </div>
   <button id="ready-btn" type="button">Ready</button>
   <button id="look-btn" type="button">Hat &amp; colour</button>
+  <button id="surprise-btn" type="button">Surprise me</button>
   <button id="vibration-btn" type="button">Vibration: on</button>
   <label id="reach-row" for="reach">Swing reach
     <input id="reach" type="range" min="0.6" max="1.6" step="0.05" value="1">
@@ -816,6 +835,7 @@
         "PHONE_TEAM_AUTO": "Auto",
         "PHONE_READY": "Ready",
         "PHONE_HAT_AND_COLOUR": "Hat & colour",
+        "PHONE_SURPRISE_ME": "Surprise me",
         "PHONE_PICK_NAME": "Pick your name",
         "PHONE_NAME_INFO": "Up to 12 letters. It shows above your fighter.",
         "PHONE_SHUFFLE": "Shuffle",
@@ -960,6 +980,7 @@
       "PHONE_TEAM_AUTO": "Auto",
       "PHONE_READY": "Bereit",
       "PHONE_HAT_AND_COLOUR": "Hut & Farbe",
+      "PHONE_SURPRISE_ME": "Überrasch mich",
       "PHONE_PICK_NAME": "Wähl deinen Namen",
       "PHONE_NAME_INFO": "Bis zu 12 Buchstaben. Er steht über deinem Kämpfer.",
       "PHONE_SHUFFLE": "Mischen",
@@ -1104,6 +1125,7 @@
       "PHONE_TEAM_AUTO": "Auto",
       "PHONE_READY": "Prêt",
       "PHONE_HAT_AND_COLOUR": "Chapeau & couleur",
+      "PHONE_SURPRISE_ME": "Surprends-moi",
       "PHONE_PICK_NAME": "Choisis ton nom",
       "PHONE_NAME_INFO": "12 lettres max. Il s'affiche au-dessus de ton combattant.",
       "PHONE_SHUFFLE": "Au hasard",
@@ -1248,6 +1270,7 @@
       "PHONE_TEAM_AUTO": "Auto",
       "PHONE_READY": "Listo",
       "PHONE_HAT_AND_COLOUR": "Sombrero y color",
+      "PHONE_SURPRISE_ME": "Sorpréndeme",
       "PHONE_PICK_NAME": "Elige tu nombre",
       "PHONE_NAME_INFO": "Hasta 12 letras. Aparece sobre tu luchador.",
       "PHONE_SHUFFLE": "Al azar",
@@ -1392,6 +1415,7 @@
       "PHONE_TEAM_AUTO": "Auto",
       "PHONE_READY": "Pronto",
       "PHONE_HAT_AND_COLOUR": "Chapéu e cor",
+      "PHONE_SURPRISE_ME": "Me surpreenda",
       "PHONE_PICK_NAME": "Escolha seu nome",
       "PHONE_NAME_INFO": "Até 12 letras. Aparece acima do seu lutador.",
       "PHONE_SHUFFLE": "Aleatório",
@@ -1536,6 +1560,7 @@
       "PHONE_TEAM_AUTO": "自动",
       "PHONE_READY": "准备",
       "PHONE_HAT_AND_COLOUR": "帽子和颜色",
+      "PHONE_SURPRISE_ME": "随机搭配",
       "PHONE_PICK_NAME": "起个名字",
       "PHONE_NAME_INFO": "最多 12 个字。会显示在你的角色头顶。",
       "PHONE_SHUFFLE": "随机",
@@ -1680,6 +1705,7 @@
       "PHONE_TEAM_AUTO": "自動",
       "PHONE_READY": "準備OK",
       "PHONE_HAT_AND_COLOUR": "帽子とカラー",
+      "PHONE_SURPRISE_ME": "おまかせ",
       "PHONE_PICK_NAME": "名前を決めよう",
       "PHONE_NAME_INFO": "最大12文字。キャラの頭上に表示されるよ。",
       "PHONE_SHUFFLE": "シャッフル",
@@ -1824,6 +1850,7 @@
       "PHONE_TEAM_AUTO": "자동",
       "PHONE_READY": "준비",
       "PHONE_HAT_AND_COLOUR": "모자와 색상",
+      "PHONE_SURPRISE_ME": "랜덤 꾸미기",
       "PHONE_PICK_NAME": "이름을 정하세요",
       "PHONE_NAME_INFO": "최대 12글자. 캐릭터 머리 위에 표시돼요.",
       "PHONE_SHUFFLE": "섞기",
@@ -1968,6 +1995,7 @@
       "PHONE_TEAM_AUTO": "Авто",
       "PHONE_READY": "Готов",
       "PHONE_HAT_AND_COLOUR": "Шапка и цвет",
+      "PHONE_SURPRISE_ME": "Удиви меня",
       "PHONE_PICK_NAME": "Выберите имя",
       "PHONE_NAME_INFO": "До 12 букв. Показывается над вашим бойцом.",
       "PHONE_SHUFFLE": "Случайно",
@@ -2136,6 +2164,7 @@
       "PHONE_TEAM_AUTO": "#team-auto",
       "PHONE_READY": "#ready-btn",
       "PHONE_HAT_AND_COLOUR": "#look-btn",
+      "PHONE_SURPRISE_ME": "#surprise-btn",
       "PHONE_LEAVE": "#leave-btn",
       "PHONE_WEAK_CONNECTION": "#weak-chip",
       "PHONE_PICK_NAME": "#name-prompt-title",
@@ -2161,6 +2190,9 @@
       "RULES_ALL_ON": "#rules-all-on",
       "RULES_ALL_OFF": "#rules-all-off",
       "RULES_DONE": "#rules-done",
+      "RULES_OPEN": "#menu-rules-open",
+      "RULES_MODIFIERS": "#rules-mod-heading",
+      "RULES_WEAPONS": "#rules-weapon-heading",
       "PHONE_YES": "#confirm-yes",
       "PHONE_NO": "#confirm-no",
       "PHONE_MOUSE_CAPTURE": "#mouse-capture",
@@ -2279,8 +2311,10 @@
   // and paragraph separators go. The host has the last word
   // (ControllerServer.clean_name, issue #164); this only keeps the prompt honest.
   function cleanName(raw) {
-    return String(raw || "").replace(/[\u0000-\u001f\u007f-\u00a0\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "")
-      .trim().slice(0, MAX_NAME_LENGTH).trim();
+    var name = String(raw || "").replace(/[\u0000-\u001f\u007f-\u00a0\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "")
+      .trim();
+    // By code point, as the host counts, never splitting an emoji's surrogate pair.
+    return Array.from(name).slice(0, MAX_NAME_LENGTH).join("").trim();
   }
   function randomName() {
     for (;;) {
@@ -2338,6 +2372,7 @@
     canvas.height = Math.round(window.innerHeight * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     dragRadiusPx = computeDragRadius();
+    recompute(); // a drag in progress is measured against the new radius
   }
   window.addEventListener("resize", resize);
   window.addEventListener("orientationchange", resize);
@@ -2633,7 +2668,8 @@
     nameInput.value = randomName();
   });
   nameInput.addEventListener("keydown", function (ev) {
-    if (ev.key === "Enter") { commitName(); }
+    // Not the Enter that confirms an IME composition (CJK keyboards).
+    if (ev.key === "Enter" && !ev.isComposing && ev.keyCode !== 229) { commitName(); }
   });
   nameEl.addEventListener("click", openNamePrompt);
 
@@ -2791,6 +2827,14 @@
     var n = typeof msg.v === "number" ? msg.v : -1;
     hillEl.classList.toggle("show", n >= 0);
     hillEl.textContent = "Hill " + n + " / " + (typeof msg.win === "number" ? msg.win : 15) + " s";
+  }
+
+  // Round modifier chip (issue #908): {t:"mod", v:<title>}; "" hides it. The host sends the translated title.
+  var modChipEl = document.getElementById("modchip");
+  function showModifier(msg) {
+    var title = typeof msg.v === "string" ? msg.v.slice(0, 40) : "";
+    modChipEl.textContent = title;
+    modChipEl.classList.toggle("show", title !== "");
   }
 
   // Issue #776: calm mode = the host's Reduce flashes or the browser's prefers-reduced-motion.
@@ -3184,8 +3228,41 @@
     }
   }
 
+  // "Surprise me": a random hat, eyes and a colour no one else holds, sent as
+  // the same hat, eyes and color frames the pickers send (issue #865). It
+  // mirrors CosmeticsPicker.random_pick on the host side.
+  function surpriseMe() {
+    if (!looks || !looks.hats || !looks.eyes) { return; }
+    var mine = lookOf(slot);
+    var pick = function (list) { return list[Math.floor(Math.random() * list.length)]; };
+    var hat = pick(looks.hats).id;
+    var eyes = pick(looks.eyes).id;
+    var free = [];
+    var palette = looks.palette || [];
+    for (var k = 0; k < palette.length; k++) {
+      if (!palette[k]) { continue; }
+      var held = false;
+      for (var m = 0; m < looks.looks.length; m++) {
+        if (looks.looks[m].color === k && looks.looks[m].slot !== slot) { held = true; }
+      }
+      if (!held) { free.push(k); }
+    }
+    store(HAT_KEY, hat);
+    sendText({ t: "hat", v: hat });
+    store(EYES_KEY, eyes);
+    sendText({ t: "eyes", v: eyes });
+    if (free.length) {
+      var color = pick(free);
+      store(COLOR_KEY, String(color));
+      sendText({ t: "color", v: color });
+    }
+    if (mine) { mine.hat = hat; mine.eyes = eyes; }
+    if (lookEl.classList.contains("show")) { renderLookPrompt(); }
+  }
+
   document.getElementById("look-go").addEventListener("click", closeLookPrompt);
   document.getElementById("look-btn").addEventListener("click", openLookPrompt);
+  document.getElementById("surprise-btn").addEventListener("click", surpriseMe);
 
   // ---- vibration switch (issue #749) ---------------------------------------------
   // Hidden where the browser cannot vibrate at all (iOS Safari): the flash is the only buzz there.
@@ -3214,6 +3291,7 @@
     reachEl.value = String(v);
     reachValueEl.textContent = v.toFixed(2) + "x";
     dragRadiusPx = computeDragRadius();
+    recompute();
   }
   if (finePointer) { document.getElementById("reach-row").style.display = "none"; }
   setReach(stored(REACH_KEY));
@@ -3645,7 +3723,16 @@
     if (RELAY && !RELAY.ok) { setStatus(t("PHONE_RELAY_BAD_URL")); return; }
     // Every handler checks it still belongs to the current socket: a late
     // event from an old one must not undo the new one's state.
-    var sock = new WebSocket(RELAY ? RELAY.url : "ws://" + window.location.hostname + ":" + WS_PORT);
+    var sock;
+    try {
+      sock = new WebSocket(RELAY ? RELAY.url : "ws://" + window.location.hostname + ":" + WS_PORT);
+    } catch (err) {
+      // A blocked or malformed URL (an insecure ws:// from an https page) throws
+      // here: no close event follows, so say so and try again later.
+      setStatus(t("STATUS_RETRYING", String((err && err.message) || err)));
+      setTimeout(connect, REFUSED_RETRY_MS);
+      return;
+    }
     ws = sock;
     sock.binaryType = "arraybuffer";
     relayJoined = false;
@@ -3695,6 +3782,7 @@
         else if (msg.t === "dmg") { showDamage(msg.v); }
         else if (msg.t === "lives") { showLives(msg); }
         else if (msg.t === "hill") { showHill(msg); }
+        else if (msg.t === "mod") { showModifier(msg); }
         else if (msg.t === "ping") { sendText({ t: "pong", n: msg.n }); }
         else if (msg.t === "weak") { document.getElementById("weak-chip").classList.toggle("show", msg.v === true); }
         else if (msg.t === "career") { addCareer(msg.d); }

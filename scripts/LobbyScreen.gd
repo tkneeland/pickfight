@@ -129,6 +129,14 @@ var _invite_button: Button # under the room code, Online with Steam running (#29
 var _join_help_button: Button # under the join QR, Couch only (#680)
 var _relay_nudge := RelayNudgeScript.new() # when to show the button below (#727)
 var _relay_nudge_button: Button # Not connecting? Join over the internet (#727)
+## The join addresses, re-read at most once a second: listing the host's network
+## interfaces every frame is wasted work (they rarely change mid-lobby).
+const JOIN_URLS_REFRESH_MSEC: int = 1000
+var _join_urls_cache: PackedStringArray = PackedStringArray()
+var _join_urls_key: String = ""
+var _join_urls_read_msec: int = 0
+## The solo state the join note's font size was last set for (null: never set).
+var _join_note_solo: Variant = null
 var _stages_box: VBoxContainer
 var _stages_summary: Label
 var _picked_mode: String = GameModesScript.CLASSIC
@@ -475,7 +483,7 @@ func _apply_streamer_mode(join_source: Object) -> void:
 	_invite_button.visible = join_source.has_method("can_invite_steam_friends") and join_source.can_invite_steam_friends()
 	if online and _popups.current() == "join_help":
 		_popups.open("") # the match went Online under the popup: no LAN join to help with
-	var urls: PackedStringArray = join_source.join_urls() if join_source.has_method("join_urls") else PackedStringArray()
+	var urls: PackedStringArray = _cached_join_urls(join_source)
 	_popups.set_join_urls(urls, hidden)
 	_popups.refresh_internet(join_source)
 	if online:
@@ -485,15 +493,34 @@ func _apply_streamer_mode(join_source: Object) -> void:
 	_join_title.text = tr("LOBBY_SOLO_TITLE") if solo else (tr("LOBBY_ROOM_CODE_TITLE") if online else tr("LOBBY_SCAN_TITLE"))
 	_join_note.text = tr("LOBBY_SOLO_NOTE") if solo else tr("LOBBY_ROOM_CODE_NOTE")
 	_join_note.visible = online and not (hidden and not solo)
-	if solo:
-		_join_note.add_theme_font_size_override("font_size", 22)
-	else:
-		_join_note.add_theme_font_size_override("font_size", 20)
+	if _join_note_solo == null or bool(_join_note_solo) != solo:
+		# Only when it changes: re-setting it every frame restyled the label each
+		# frame and undid the Text size scaling (#751).
+		_join_note_solo = solo
+		_join_note.add_theme_font_size_override("font_size", 22 if solo else 20)
+
+## `join_source.join_urls()`, re-read once a second or when the source or its
+## port changes (the read lists every network interface).
+func _cached_join_urls(join_source: Object) -> PackedStringArray:
+	if not join_source.has_method("join_urls"):
+		return PackedStringArray()
+	var key: String = "%d:%s" % [join_source.get_instance_id(), str(join_source.get("http_port"))]
+	var now: int = Time.get_ticks_msec()
+	if key != _join_urls_key or now - _join_urls_read_msec >= JOIN_URLS_REFRESH_MSEC:
+		_join_urls_key = key
+		_join_urls_read_msec = now
+		_join_urls_cache = join_source.join_urls()
+	return _join_urls_cache
 
 ## Shows the "Not connecting? Join over the internet" button under the Couch QR
 ## once the QR has been up 30 s with no phone seated (#727).
 func _update_relay_nudge(join_source: Object) -> void:
 	if _relay_nudge_button == null:
+		return
+	if _lobby_panel == null or not _lobby_panel.visible:
+		# No QR showing. Whatever the nudge would latch now, show_panel("lobby")
+		# resets it before the lobby is seen again, so skip the server calls.
+		_relay_nudge_button.visible = false
 		return
 	var couch: bool = join_source != null and not _online_kind(join_source)
 	var qr_showing: bool = couch and _lobby_qr.visible and _lobby_panel.visible

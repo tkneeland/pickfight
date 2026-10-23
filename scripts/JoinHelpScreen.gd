@@ -189,6 +189,12 @@ func url_heading() -> String:
 ## Sets the addresses to list (`ControllerServer.join_urls()`) and whether
 ## streamer mode hides them.
 func set_urls(urls: PackedStringArray, hidden: bool) -> void:
+	if urls == _urls and hidden == _hidden:
+		# The lobby calls this every frame: keep the labels, only refresh the
+		# heading (a language change retranslates it).
+		if _built:
+			_url_head.text = _heading_text()
+		return
 	_urls = urls
 	_hidden = hidden
 	if _built:
@@ -199,15 +205,19 @@ func _rebuild_urls() -> void:
 		_url_box.remove_child(label)
 		label.queue_free()
 	_url_labels.clear()
-	if _hidden:
-		_url_head.text = _screen.tr("ROOM_CODE_HIDDEN")
+	_url_head.text = _heading_text()
+	if _hidden or _urls.is_empty():
 		return
-	if _urls.is_empty():
-		_url_head.text = _screen.tr("JOIN_HELP_NO_ADDRESS")
-		return
-	_url_head.text = _screen.tr("JOIN_HELP_ADDRESSES")
 	for i in _urls.size():
 		var label: Label = ScreenKitScript.themed_label(_urls[i], 24, UiThemeScript.INK_HEADING_LABEL)
 		label.name = "Url%d" % i
 		_url_box.add_child(label)
 		_url_labels.append(label)
+
+## The heading over the address list for the current state.
+func _heading_text() -> String:
+	if _hidden:
+		return _screen.tr("ROOM_CODE_HIDDEN")
+	if _urls.is_empty():
+		return _screen.tr("JOIN_HELP_NO_ADDRESS")
+	return _screen.tr("JOIN_HELP_ADDRESSES")

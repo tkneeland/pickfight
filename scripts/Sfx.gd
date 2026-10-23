@@ -173,6 +173,9 @@ const SOUNDS: Dictionary = {
 	"hazard_hit": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",
 		"kenney_impact/impactPlate_shield_001.ogg"], "db": -2.0, "max_sec": 0.7},
+	"ball_thump": {"files": [
+		"kenney_impact/impactSoft_heavy_000.ogg",
+		"kenney_impact/impactSoft_heavy_001.ogg"], "db": -3.0, "max_sec": 0.5},
 	"wind_tell": {"files": [
 		"kenney_scifi/spaceEngineLow_000.ogg"], "db": -12.0, "overlap": 2, "max_sec": 1.0},
 	"wind_gust": {"files": [
@@ -199,6 +202,9 @@ const SOUNDS: Dictionary = {
 	"wall_break": {"files": [
 		"kenney_impact/impactPlate_heavy_000.ogg",
 		"kenney_impact/impactPlate_heavy_001.ogg"], "db": 2.0},
+	# Grabbing a pickup (#898): a short quiet blip at the grabber.
+	"pickup_grab": {"files": [
+		"kenney_interface/maximize_006.ogg"], "db": -9.0, "overlap": 2, "max_sec": 0.4},
 	# --- Round and UI -------------------------------------------------------
 	"countdown": {"files": [
 		"kenney_interface/tick_001.ogg"], "db": 0.0, "overlap": 1, "positional": false},
@@ -331,6 +337,18 @@ var screen_shake: bool = true
 ## Whether the KO ticker (`KillFeed`, #833) lists KOs. On by default; the centre
 ## banners show either way. Set through `set_kill_feed()`.
 var kill_feed: bool = true
+## Whether `HitFeedback` draws the floating damage numbers (#873). On by default;
+## hit sparks and shake are unaffected. Set through `set_damage_numbers()`.
+var damage_numbers: bool = true
+## Whether the "MATCH POINT: name" plate (#825) shows at round start (#892). On by
+## default; the gold dots and all scoring are unaffected. Set through `set_match_point_plate()`.
+var match_point_plate: bool = true
+## Whether `Juice` freezes the game for 3 ticks on a heavy strike (#916). On by
+## default; shake and slow-motion are unaffected. Set through `set_hit_pause()`.
+var hit_pause: bool = true
+## Whether `PickupCallout` (#818) names a grabbed weapon over the fighter (#882).
+## On by default; pickups and the Magpie stat are unaffected.
+var pickup_callouts: bool = true
 ## Comfort option (#317): when on, the white/bright flashes (elimination burst,
 ## bounce pad, breaking wall) are not drawn. Off by default.
 var reduce_flash: bool = false
@@ -669,6 +687,26 @@ func set_screen_shake(value: bool) -> void:
 	screen_shake = value
 	_save_settings()
 
+## Turn the floating damage numbers (#873) on or off, and remember the choice.
+func set_damage_numbers(value: bool) -> void:
+	damage_numbers = value
+	_save_settings()
+
+## Turn the MATCH POINT plate (#892) on or off, and remember the choice.
+func set_match_point_plate(value: bool) -> void:
+	match_point_plate = value
+	_save_settings()
+
+## Turn the hit-stop freeze (#916) on or off, and remember the choice.
+func set_hit_pause(value: bool) -> void:
+	hit_pause = value
+	_save_settings()
+
+## Turn the weapon-name pickup callouts (#882) on or off, and remember the choice.
+func set_pickup_callouts(value: bool) -> void:
+	pickup_callouts = value
+	_save_settings()
+
 ## Turn the KO ticker (#833) on or off, and remember the choice.
 func set_kill_feed(value: bool) -> void:
 	kill_feed = value
@@ -761,6 +799,10 @@ func restore_defaults() -> void:
 	fullscreen = false
 	screen_shake = true
 	kill_feed = true
+	damage_numbers = true
+	match_point_plate = true
+	hit_pause = true
+	pickup_callouts = true
 	reduce_flash = false
 	ui_scale = 1.0
 	text_scale = 1.0
@@ -871,6 +913,10 @@ func load_settings() -> void:
 		fullscreen = _flag(config.get_value("display", "fullscreen", false), false)
 		screen_shake = _flag(config.get_value("display", "screen_shake", true), true)
 		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
+		damage_numbers = _flag(config.get_value("display", "damage_numbers", true), true)
+		match_point_plate = _flag(config.get_value("display", "match_point_plate", true), true)
+		hit_pause = _flag(config.get_value("display", "hit_pause", true), true)
+		pickup_callouts = _flag(config.get_value("display", "pickup_callouts", true), true)
 		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
 		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
 		hide_room_code = _flag(config.get_value("display", "hide_room_code", false), false)
@@ -899,6 +945,10 @@ func _save_settings() -> void:
 	config.set_value("display", "fullscreen", fullscreen)
 	config.set_value("display", "screen_shake", screen_shake)
 	config.set_value("display", "kill_feed", kill_feed)
+	config.set_value("display", "damage_numbers", damage_numbers)
+	config.set_value("display", "match_point_plate", match_point_plate)
+	config.set_value("display", "hit_pause", hit_pause)
+	config.set_value("display", "pickup_callouts", pickup_callouts)
 	config.set_value("display", "reduce_flash", reduce_flash)
 	config.set_value("display", "ui_scale", ui_scale)
 	config.set_value("display", "hide_room_code", hide_room_code)

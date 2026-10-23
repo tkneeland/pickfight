@@ -108,6 +108,26 @@ static func clean_pick(raw: Variant) -> Dictionary:
 		"color": int(color) if (color is int or color is float) and int(color) >= 0 else -1,
 	}
 
+## "Surprise me" (#865): a random hat, eyes and colour as a clean pick. The colour
+## is drawn from the palette indices (`palette_size` of them) that no seat other
+## than `own_slot` wears, the same rule a colour request is held to; with none
+## free, or no palette given, it stays -1 (the automatic colour). `rng` makes it
+## repeatable: the same seed over the same `looks` gives the same pick.
+static func random_pick(looks: Array, own_slot: int, rng: RandomNumberGenerator, palette_size: int = 0) -> Dictionary:
+	var hats: Array = options("hat")
+	var eyes: Array = options("eyes")
+	var taken: Array[int] = taken_colors(looks, own_slot)
+	var free: Array[int] = []
+	for index in range(maxi(0, palette_size)):
+		if not taken.has(index):
+			free.append(index)
+	var hat: Variant = hats[rng.randi_range(0, hats.size() - 1)]
+	var eye: Variant = eyes[rng.randi_range(0, eyes.size() - 1)]
+	var color: int = -1
+	if not free.is_empty():
+		color = free[rng.randi_range(0, free.size() - 1)]
+	return clean_pick({"hat": hat, "eyes": eye, "color": color})
+
 static func read_pick(config: ConfigFile, section: String) -> Dictionary:
 	return clean_pick({
 		"hat": config.get_value(section, "hat", HatScript.NONE),

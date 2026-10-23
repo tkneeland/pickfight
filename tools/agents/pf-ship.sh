@@ -5,6 +5,8 @@
 . "$(dirname "$0")/pf-env.sh" || exit 1
 i=$1; t=$2; b=$3; R=$ROOT; W=$R/.claude/worktrees/$i/pickfight
 FIXER=${FIX_RUNNER:-$HOME/.claude/pf-fix-runner.sh}   # optional helper that repairs tools/scenario_runner.gd conflicts
+# Agent worktrees (.claude/worktrees/agent-*) work too: fall back to the current checkout when its branch names the issue.
+[ -d "$W" ] || { c=$(git rev-parse --show-toplevel 2>/dev/null) && git -C "$c" branch --show-current | grep -q "issue-$i-" && W=$c; }
 cd "$W" || exit 1
 git fetch -q
 if ! git merge -q origin/main >/dev/null 2>&1; then
@@ -14,6 +16,7 @@ if ! git merge -q origin/main >/dev/null 2>&1; then
   if [ "$(grep -c "^		_:$" tools/scenario_runner.gd)" != "1" ]; then echo "CONFLICT $i: runner default arm misplaced"; exit 2; fi
   git add -A && git commit -qm "merge: main into #$i" || exit 2
 fi
+bash "$PF_DIR/pf-cjk-refresh.sh" "$W" || { echo "ABORT $i: CJK subset refresh failed"; exit 1; }
 bash "$PF_DIR/pf-msg-leakcheck.sh" "$W" || { echo "ABORT $i: channel topic would be pushed"; exit 1; }
 git push -qu origin HEAD 2>&1 | grep -v remote
 S=$(jq -r '.rate_limits' "$PF_STATE/usage-snapshot.json")
@@ -38,4 +41,4 @@ if gh pr checks $n 2>&1 | grep -qE "[[:space:]]fail[[:space:]]"; then echo "CI F
 echo "$s" | grep -v pass
 if gh pr view $n --json labels -q '.labels[].name' | grep -qx review-blocked; then echo "REVIEW-BLOCKED $n: a confirmed reviewer finding must be fixed first. Not merging."; exit 1; fi
 gh pr merge $n --merge --delete-branch 2>&1 | tail -1; st=$(gh pr view $n --json state -q .state); echo "$n $st"; [ "$st" = MERGED ] || { echo "MERGE FAILED $n"; exit 1; }
-cd $R && git pull -q; [ -n "${INSTALL_SCRIPT:-}" ] && [ -f "$INSTALL_SCRIPT" ] && bash "$INSTALL_SCRIPT" 2>&1 | tail -1; exit 0
+cd $R && { git fetch -q origin && git merge -q --ff-only origin/main || echo "WARN: main checkout not fast-forwarded"; }; [ -n "${INSTALL_SCRIPT:-}" ] && [ -f "$INSTALL_SCRIPT" ] && bash "$INSTALL_SCRIPT" 2>&1 | tail -1; exit 0

@@ -203,17 +203,19 @@ static func award_cards(awards: Array, name_of: Callable, color_of: Callable) ->
 	var row := HBoxContainer.new()
 	row.name = "Awards"
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 48 if awards.size() <= 3 else (32 if awards.size() <= 4 else 12))
-	var who_size: int = 20 if awards.size() <= 4 else 14 # six cards must fit 1600 px (#613)
+	row.add_theme_constant_override("separation", 48 if awards.size() <= 3 else (32 if awards.size() <= 4 else (12 if awards.size() <= 6 else (6 if awards.size() <= 7 else 4))))
+	var crowded: bool = awards.size() > 6 # seven cards (Streaker, #890) shrink once more
+	var packed: bool = awards.size() > 7 # eight (Combo, #921) once again
+	var who_size: int = 20 if awards.size() <= 4 else (11 if packed else (12 if crowded else 14)) # six cards must fit 1600 px (#613)
 	for award: Dictionary in awards:
 		var card := VBoxContainer.new()
 		card.name = "Award" + str(award["category"]).capitalize()
 		card.add_theme_constant_override("separation", 0)
 		plate_behind(card)
-		var category: Label = _label(TranslationServer.translate("AWARD_CATEGORY_" + str(award["category"])), 18 if awards.size() <= 4 else 14, MUTED_TEXT)
+		var category: Label = _label(TranslationServer.translate("AWARD_CATEGORY_" + str(award["category"])), 18 if awards.size() <= 4 else (11 if packed else (12 if crowded else 14)), MUTED_TEXT)
 		category.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(category)
-		var title: Label = _label(str(award["title"]), 30 if awards.size() <= 4 else 20, ACCENT, true)
+		var title: Label = _label(str(award["title"]), 30 if awards.size() <= 4 else (15 if packed else (17 if crowded else 20)), ACCENT, true)
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add_child(title)
 		var slot: int = int(award["slot"])

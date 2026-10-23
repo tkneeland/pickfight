@@ -1,9 +1,10 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="3"]
 [ext_resource type="Script" path="res://scripts/KillZone.gd" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MudPatch.tscn" id="mud"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_street"]
 size = Vector2(1010, 40)
@@ -106,6 +107,11 @@ launch_speed = 1250.0
 position = Vector2(760, 412)
 size = Vector2(120, 16)
 launch_speed = 1250.0
+
+; Mud patch (issue #910): a sticky strip on the left street between PadLeft and Spawn6, clear of every spawn drop line, pickup spot and pad.
+[node name="StreetMud" parent="." instance=ExtResource("mud")]
+position = Vector2(-600, 416)
+size = Vector2(110, 8)
 
 ; Spawns: four on the solid ends of the deck, four on the street under them,
 ; mirrored. None on a crumbling span or a pad.
