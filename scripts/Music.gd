@@ -158,9 +158,11 @@ func _ready() -> void:
 ## the audio server a moment to free the playbacks, then quit. Quitting at
 ## once would report them as "ObjectDB instances leaked at exit". This only
 ## applies in the game (`_start_if_in_game`); scripts quit as they like.
+## Through the `_quitting` guard, so a second close click or a menu Quit
+## during the wait does not start a second release-and-quit.
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and not get_tree().auto_accept_quit:
-		_quit_cleanly()
+		quit_cleanly()
 
 var _quitting: bool = false
 

@@ -26,6 +26,12 @@ extends Node2D
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
 const HookUtilScript := preload("res://scripts/HookUtil.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
+const TextScaleScript := preload("res://scripts/TextScale.gd")
+## The hitmarker's two strokes, as unit vectors (built once, not per redraw).
+const MARKER_DIAGONALS: Array[Vector2] = [Vector2(0.70710678, 0.70710678), Vector2(0.70710678, -0.70710678)]
+const MARKER_OUTLINE: Color = Color(0, 0, 0, 0.8)
+## `_last_zero_frame` is swept of expired pairs once it holds this many.
+const ZERO_PRUNE_AT: int = 64
 
 ## The debug switch. Damage numbers are a testing aid, not part of the game;
 ## flip this to hide them. Hitmarkers are always on.
@@ -55,7 +61,8 @@ const ZERO_COOLDOWN_FRAMES: int = 12
 ## without editing the file.
 var show_damage_numbers: bool = SHOW_DAMAGE_NUMBERS
 
-## "attacker_id:victim_id" -> the physics frame its last `0` was shown on.
+## An attacker/victim pair key (`_pair_key`) -> the physics frame its last `0`
+## was shown on.
 var _last_zero_frame: Dictionary = {}
 
 ## Finished markers and numbers, out of the tree, waiting to be re-used.
@@ -179,12 +186,21 @@ func _world_scale() -> float:
 	return 1.0
 
 func _zero_allowed(attacker: Node, victim: Node) -> bool:
-	var key: String = "%d:%d" % [attacker.get_instance_id(), victim.get_instance_id()]
+	var key: int = _pair_key(attacker, victim)
 	var now: int = Engine.get_physics_frames()
 	if _last_zero_frame.has(key) and now - int(_last_zero_frame[key]) < ZERO_COOLDOWN_FRAMES:
 		return false
+	if _last_zero_frame.size() >= ZERO_PRUNE_AT:
+		# Pairs past their cooldown no longer hold anything back.
+		for old: int in _last_zero_frame.keys():
+			if now - int(_last_zero_frame[old]) >= ZERO_COOLDOWN_FRAMES:
+				_last_zero_frame.erase(old)
 	_last_zero_frame[key] = now
 	return true
+
+## One int per ordered attacker/victim pair, with no String built per contact.
+static func _pair_key(attacker: Node, victim: Node) -> int:
+	return (attacker.get_instance_id() * 1000003) ^ victim.get_instance_id()
 
 func _identity_colour(attacker: Node) -> Color:
 	var colour: Variant = attacker.get("identity_color")
@@ -239,12 +255,11 @@ class HitMarker extends Node2D:
 
 	func _draw() -> void:
 		var width: float = 4.0 if lethal else 3.0
-		var outline: Color = Color(0, 0, 0, 0.8)
-		for dir: Vector2 in [Vector2(1, 1), Vector2(1, -1)]:
-			var d: Vector2 = dir.normalized() * arm
-			draw_line(-d, d, outline, width + 2.0)
-		for dir: Vector2 in [Vector2(1, 1), Vector2(1, -1)]:
-			var d: Vector2 = dir.normalized() * arm
+		for dir: Vector2 in MARKER_DIAGONALS:
+			var d: Vector2 = dir * arm
+			draw_line(-d, d, MARKER_OUTLINE, width + 2.0)
+		for dir: Vector2 in MARKER_DIAGONALS:
+			var d: Vector2 = dir * arm
 			draw_line(-d, d, colour, width)
 
 ## The damage a strike dealt, rising and fading from where it landed.
@@ -263,6 +278,9 @@ class DamageNumber extends Label:
 		age = 0.0
 		modulate.a = 1.0
 		set_process(true)
+		# World-space text with its own size: Text size leaves it alone, and
+		# Sfx skips its deferred rescale on every re-add from the pool.
+		set_meta(TextScaleScript.META_SKIP, true)
 		text = str(roundi(dealt))
 		if settings == null:
 			settings = LabelSettings.new()

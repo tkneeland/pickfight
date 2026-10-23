@@ -802,7 +802,9 @@ func fit_roots() -> Array[Control]:
 func _on_node_added(node: Node) -> void:
 	if node is Control and TextScaleScript.is_fit_root(node):
 		_fit.register(node as Control, text_scale)
-	if text_scale != 1.0 and node is Control:
+	# A control marked to keep its own size (the pooled damage numbers,
+	# re-added on every hit) costs no deferred call.
+	if text_scale != 1.0 and node is Control and not node.has_meta(TextScaleScript.META_SKIP):
 		# After the screen has set its own sizes.
 		(func() -> void:
 			if is_instance_valid(node):
