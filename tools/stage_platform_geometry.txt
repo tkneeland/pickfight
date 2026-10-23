@@ -198,9 +198,9 @@ Cascade|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShap
 Cascade|tinted|TopPlatform/TopPlatformVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Cascade|tinted|BalconyLeft/BalconyLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Cascade|tinted|BalconyRight/BalconyRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Cascade|tinted|Platform1/@Polygon2D@298|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Cascade|tinted|Platform2/@Polygon2D@300|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Cascade|tinted|Platform3/@Polygon2D@302|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Cascade|tinted|Platform1/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Cascade|tinted|Platform2/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Cascade|tinted|Platform3/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Cascade|tinted|Floor/FloorVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Cascade|tinted|FloorConveyor/Belt|Color(0.3, 0.3, 0.34, 1)
 Colosseum|body|Ground|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 470)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
@@ -278,7 +278,7 @@ Ferry|shape|PadRight/PadRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2
 Ferry|poly|PadRight/PadRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-210, -12, 210, -12, 210, 12, -210, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Ferry|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 560)|layer=1|mask=1|z=0|zrel=true|visible=true|script=res://scripts/KillZone.gd|rise_warning_sec=4.0|surface_depth=2000.0
 Ferry|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
-Ferry|tinted|Barge/@Polygon2D@497|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Ferry|tinted|Barge/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Ferry|tinted|PadLeft/PadLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Ferry|tinted|PadRight/PadRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 FinalDestination|body|Ground|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
@@ -324,7 +324,7 @@ Footbridge|tinted|BankRight/BankRightVisual|Color(0.16470589, 0.20392157, 0.2509
 Footbridge|tinted|Ledge0/Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Footbridge|tinted|Ledge1/Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Footbridge|tinted|Ledge2/Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Footbridge|tinted|Overhead/@Polygon2D@670|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Footbridge|tinted|Overhead/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Furnace|body|Ground|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Furnace|shape|Ground/GroundShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(1300, 40)|oneway=false|disabled=false
 Furnace|poly|Ground/GroundVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-650, -20, 650, -20, 650, 20, -650, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
@@ -360,7 +360,7 @@ Gantry|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 480)|layer=1|mask=1|z=0|z
 Gantry|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Gantry|tinted|BankLeft/BankLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Gantry|tinted|BankRight/BankRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Gantry|tinted|Crane/@Polygon2D@842|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Gantry|tinted|Crane/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Gauntlet|body|BankLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -505, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Gauntlet|shape|BankLeft/BankLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(430, 40)|oneway=false|disabled=false
 Gauntlet|poly|BankLeft/BankLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
@@ -439,7 +439,7 @@ Islands|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 480)|layer=1|mask=1|z=0|
 Islands|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Islands|tinted|IslandA/IslandAVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Islands|tinted|IslandB/IslandBVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Islands|tinted|Ferry/@Polygon2D@987|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Islands|tinted|Ferry/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Islands|tinted|IslandD/IslandDVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Islands|tinted|IslandE/IslandEVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Islands|tinted|IslandF/IslandFVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
@@ -468,8 +468,8 @@ Mesa|tinted|Mesa/MesaVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Mesa|tinted|LedgeLeft/LedgeLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Mesa|tinted|LedgeRight/LedgeRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Mesa|tinted|Crown/CrownVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Mesa|tinted|LiftLeft/@Polygon2D@1045|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Mesa|tinted|LiftRight/@Polygon2D@1047|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Mesa|tinted|LiftLeft/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Mesa|tinted|LiftRight/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Mesa|tinted|FloorConveyor/Belt|Color(0.3, 0.3, 0.34, 1)
 Mill|body|FieldLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -430, 340)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Mill|shape|FieldLeft/FieldLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(340, 40)|oneway=false|disabled=false
@@ -533,8 +533,8 @@ Orbit|tinted|FloorLeft/FloorLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 
 Orbit|tinted|FloorRight/FloorRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Orbit|tinted|PerchLeft/PerchLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Orbit|tinted|PerchRight/PerchRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Orbit|tinted|OrbitA/@Polygon2D@1176|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Orbit|tinted|OrbitB/@Polygon2D@1178|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Orbit|tinted|OrbitA/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Orbit|tinted|OrbitB/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Overpass|body|StreetLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -555, 440)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Overpass|shape|StreetLeft/StreetLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(1010, 40)|oneway=false|disabled=false
 Overpass|poly|StreetLeft/StreetLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-505, -20, 505, -20, 505, 20, -505, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
@@ -608,13 +608,13 @@ Pistons|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 700)|layer=1|mask=1|z=0|
 Pistons|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Pistons|tinted|BastionLeft/BastionLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pistons|tinted|BastionRight/BastionRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Pistons|tinted|PistonCentre/@Polygon2D@1382|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Pistons|tinted|PistonInnerLeft/@Polygon2D@1384|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Pistons|tinted|PistonInnerRight/@Polygon2D@1386|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Pistons|tinted|PistonMidLeft/@Polygon2D@1388|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Pistons|tinted|PistonMidRight/@Polygon2D@1390|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Pistons|tinted|PistonOuterLeft/@Polygon2D@1392|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Pistons|tinted|PistonOuterRight/@Polygon2D@1394|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Pistons|tinted|PistonCentre/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Pistons|tinted|PistonInnerLeft/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Pistons|tinted|PistonInnerRight/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Pistons|tinted|PistonMidLeft/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Pistons|tinted|PistonMidRight/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Pistons|tinted|PistonOuterLeft/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Pistons|tinted|PistonOuterRight/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pistons|tinted|GantryLeft/GantryLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pistons|tinted|GantryRight/GantryRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pitch|body|Floor|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
@@ -684,8 +684,8 @@ Quarry|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 480)|layer=1|mask=1|z=0|z
 Quarry|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Quarry|tinted|YardLeft/YardLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Quarry|tinted|YardRight/YardRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Quarry|tinted|LiftLeft/@Polygon2D@1551|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Quarry|tinted|LiftRight/@Polygon2D@1553|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Quarry|tinted|LiftLeft/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Quarry|tinted|LiftRight/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Quarry|tinted|Roof/RoofVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Racetrack|body|Floor|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 420)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Racetrack|shape|Floor/FloorShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(1400, 40)|oneway=false|disabled=false
@@ -745,7 +745,7 @@ Reactor|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShap
 Reactor|tinted|Floor/FloorVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Reactor|tinted|ShieldLeft/Visual|Color(0.62, 0.52, 0.42, 1)
 Reactor|tinted|ShieldRight/Visual|Color(0.62, 0.52, 0.42, 1)
-Reactor|tinted|Bridge/@Polygon2D@1651|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Reactor|tinted|Bridge/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Relay|body|Floor|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 400)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Relay|shape|Floor/FloorShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(1500, 40)|oneway=false|disabled=false
 Relay|poly|Floor/FloorVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-750, -20, 750, -20, 750, 20, -750, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
@@ -819,8 +819,8 @@ Roundabout|tinted|Top/TopVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Roundabout|tinted|Left/LeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Roundabout|tinted|Right/RightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Roundabout|tinted|Bottom/BottomVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Roundabout|tinted|LiftLeft/@Polygon2D@1766|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Roundabout|tinted|LiftRight/@Polygon2D@1768|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Roundabout|tinted|LiftLeft/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Roundabout|tinted|LiftRight/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Roundabout|tinted|FloorIce/Ice|Color(0.7, 0.86, 0.96, 1)
 Sinkhole|body|RimLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -570, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Sinkhole|body|FarLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -330, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
@@ -961,7 +961,7 @@ Switchyard|tinted|YardRight/YardRightVisual|Color(0.16470589, 0.20392157, 0.2509
 Switchyard|tinted|RaisedLeft/RaisedLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Switchyard|tinted|RaisedRight/RaisedRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Switchyard|tinted|Bridge/BridgeVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Switchyard|tinted|Shuttle/@Polygon2D@2116|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Switchyard|tinted|Shuttle/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Switchyard|tinted|Spinner/Visual|Color(0.62, 0.48, 0.85, 1)
 Switchyard|tinted|Spinner/Stripe0|Color(0.5, 0.36, 0.72, 1)
 Switchyard|tinted|Spinner/Stripe1|Color(0.5, 0.36, 0.72, 1)

@@ -53169,17 +53169,17 @@ func _stage_geometry_lines_refactor_platforms(stage_name: String) -> PackedStrin
 			if child is CollisionShape2D:
 				var shape_node: CollisionShape2D = child
 				var shape: Shape2D = shape_node.shape
-				out.append("%s|shape|%s/%s|%s|%s|%s|oneway=%s|disabled=%s" % [stage_name, path, child.name,
+				out.append("%s|shape|%s/%s|%s|%s|%s|oneway=%s|disabled=%s" % [stage_name, path, _geometry_name_refactor_platforms(child),
 						var_to_str(shape_node.transform), shape.get_class() if shape != null else "null",
 						var_to_str(shape.get("size")) if shape != null else "", shape_node.one_way_collision,
 						shape_node.disabled])
 			elif child is Polygon2D:
 				var poly: Polygon2D = child
 				out.append("%s|poly|%s/%s|%s|%s|%s|z=%d|visible=%s|texture=%s|offset=%s" % [stage_name, path,
-						child.name, var_to_str(poly.transform), var_to_str(poly.polygon), var_to_str(poly.color),
+						_geometry_name_refactor_platforms(child), var_to_str(poly.transform), var_to_str(poly.polygon), var_to_str(poly.color),
 						poly.z_index, poly.visible, poly.texture != null, var_to_str(poly.offset)])
 			else:
-				out.append("%s|child|%s/%s|%s" % [stage_name, path, child.name, child.get_class()])
+				out.append("%s|child|%s/%s|%s" % [stage_name, path, _geometry_name_refactor_platforms(child), child.get_class()])
 	# In the tree under a fixed mood: what colour the stage paints each of them.
 	instance.set("stage_index", 0)
 	var holder := Node2D.new()
@@ -53189,7 +53189,7 @@ func _stage_geometry_lines_refactor_platforms(stage_name: String) -> PackedStrin
 		for child: Node in node.get_children():
 			if child is Polygon2D:
 				out.append("%s|tinted|%s/%s|%s" % [stage_name, _geometry_path_refactor_platforms(instance, node),
-						child.name, var_to_str((child as Polygon2D).color)])
+						_geometry_name_refactor_platforms(child), var_to_str((child as Polygon2D).color)])
 	holder.queue_free()
 	await process_frame
 	return out
@@ -53198,7 +53198,7 @@ func _geometry_path_refactor_platforms(root: Node, node: Node) -> String:
 	var parts: PackedStringArray = []
 	var at: Node = node
 	while at != null and at != root:
-		parts.insert(0, String(at.name))
+		parts.insert(0, _geometry_name_refactor_platforms(at))
 		at = at.get_parent()
 	return "/".join(parts)
 
@@ -53210,3 +53210,10 @@ func _geometry_xform_refactor_platforms(root: Node, node: Node2D) -> Transform2D
 			xform = (at as Node2D).transform * xform
 		at = at.get_parent()
 	return xform
+
+## A node's name with the counter of an auto-generated one (`@Polygon2D@354`,
+## given to children a part builds without naming) dropped: that number
+## depends on how many nodes the process has made, not on the stage.
+func _geometry_name_refactor_platforms(node: Node) -> String:
+	var auto := RegEx.create_from_string("^@(\\w+)@\\d+$")
+	return auto.sub(String(node.name), "@$1@")
