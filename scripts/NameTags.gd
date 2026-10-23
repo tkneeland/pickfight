@@ -39,6 +39,9 @@ var _rings: Array = []
 const TeamBadgeScript := preload("res://scripts/TeamBadge.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const IdleHintScript := preload("res://scripts/IdleHint.gd")
+const BoomstickRingScript := preload("res://scripts/BoomstickRing.gd")
+## Issue #965: the boomstick's fire-clock ring, built with the tags.
+var _boomstick_ring: Node2D
 ## Issue #826: the first-round "Drag to swing" hint, built with the tags.
 var _idle_hint: Node2D
 const TEAM_BADGE_PX: float = 26.0
@@ -94,6 +97,8 @@ func build() -> void:
 		_team_badges.append(badge)
 	_idle_hint = IdleHintScript.new(_players, _slot_color)
 	add_child(_idle_hint)
+	_boomstick_ring = BoomstickRingScript.new(_players, _slot_color)
+	add_child(_boomstick_ring)
 
 ## Shows, names, colours and places every living player's tag for this frame.
 func tick() -> void:
@@ -163,6 +168,9 @@ func tick() -> void:
 			var below: float = rect.position.y + rect.size.y + (PIP_RADIUS + 2.0) * tag_scale
 			_pips.append([slot, Vector2(rect.position.x + rect.size.x * 0.5, below), count, tag_scale])
 	_tick_idle_hint(tag_scale)
+	_boomstick_ring.tick(func(slot: int) -> Vector2:
+		var t: Label = _name_tags[slot]
+		return t.position + Vector2(t.get_minimum_size().x * 0.5 * tag_scale, 0.0), tag_scale)
 	if had_rings or not _rings.is_empty() or not _pips.is_empty():
 		queue_redraw()
 
@@ -207,6 +215,10 @@ func _tick_idle_hint(tag_scale: float) -> void:
 			var tag: Label = _name_tags[slot]
 			return tag.position + Vector2(tag.get_minimum_size().x * 0.5 * tag_scale, 0.0)
 	_idle_hint.tick(ctx)
+
+## The boomstick ring (#965), for the scenarios.
+func boomstick_ring() -> Node2D:
+	return _boomstick_ring
 
 ## The idle hint node (#826), for the scenarios.
 func idle_hint() -> Node2D:
