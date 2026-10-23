@@ -659,6 +659,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"shield_blocks_a_hit_on_its_face",
 	"shield_bash_knocks_back_harder_than_pickaxe",
 	"shield_is_in_the_pickup_set",
+	"pickup_of_held_weapon_is_left_on_stage",
 	"pickup_shows_weapon_name_callout_818",
 	"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818",
 	"announcer_calls_each_mode_at_round_start",
@@ -1792,6 +1793,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_no_single_strike_kills()
 		"pickup_appears_at_round_start":
 			return await _scenario_pickup_appears_at_round_start()
+		"pickup_of_held_weapon_is_left_on_stage":
+			return await _scenario_pickup_of_held_weapon_is_left_on_stage()
 		"pickup_shows_weapon_name_callout_818":
 			return await _scenario_pickup_shows_weapon_name_callout_818()
 		"pickup_callout_replaces_previous_and_skips_pickaxe_respawn_818":
@@ -50645,6 +50648,52 @@ func _callouts_818(loop: Dictionary) -> Array[Node]:
 		if not node.is_queued_for_deletion():
 			found.append(node)
 	return found
+## Issue #1006: touching a pickup of the weapon already held leaves it on the
+## stage (no claim, callout, signal); another weapon, or the same one after a
+## switch, takes it as before.
+func _scenario_pickup_of_held_weapon_is_left_on_stage() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	var fighter: RigidBody2D = players[1]
+	fighter.set_weapon_stats(load("res://resources/boomstick.tres"))
+	await _await_ticks(3)
+	var picks: Array = [0]
+	fighter.weapon_picked_up.connect(func(_n: String) -> void: picks[0] += 1)
+	var pickup: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	pickup.set_weapon(load("res://resources/boomstick.tres"))
+	loop["stage"].add_child(pickup)
+	pickup.global_position = fighter.global_position
+	await _await_ticks(5)
+	if not is_instance_valid(pickup) or pickup.is_queued_for_deletion() or pickup._claimed:
+		failures.append("pickup of the held weapon was consumed")
+	elif not pickup.is_in_group("pickups"):
+		failures.append("pickup left the pickups group")
+	if picks[0] != 0:
+		failures.append("weapon_picked_up fired %d times for a held weapon" % picks[0])
+	if not _callouts_818(loop).is_empty():
+		failures.append("a callout appeared for a held weapon")
+	# After the fighter switches, the same pickup can be claimed.
+	if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
+		fighter.set_weapon_stats(load("res://resources/pickaxe.tres"))
+		await _await_ticks(3)
+		pickup._on_body_entered(fighter)
+		await _await_ticks(3)
+		if is_instance_valid(pickup) and not pickup.is_queued_for_deletion():
+			pickup.queue_free()
+		if picks[0] != 1:
+			failures.append("pickup not claimable after the fighter switched weapons")
+	# A different weapon is taken as today.
+	var other: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	other.set_weapon(load("res://resources/axe.tres"))
+	loop["stage"].add_child(other)
+	other.global_position = players[2].global_position
+	await _await_ticks(5)
+	if is_instance_valid(other) and not other.is_queued_for_deletion():
+		failures.append("a different-weapon pickup was not taken")
+		other.queue_free()
+	await _teardown(loop["stage"])
+	return failures
 func _scenario_pickup_shows_weapon_name_callout_818() -> Array[String]:
 	var failures: Array[String] = []
 	var loop: Dictionary = await _ghost_round()
