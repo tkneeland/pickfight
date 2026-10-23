@@ -43,6 +43,8 @@ const KillZoneScript: GDScript = preload("res://scripts/KillZone.gd")
 const CrumblingLedgeScript: GDScript = preload("res://scripts/CrumblingLedge.gd")
 const CollapsingFloorScript: GDScript = preload("res://scripts/CollapsingFloor.gd")
 const RotatingPlatformScript: GDScript = preload("res://scripts/RotatingPlatform.gd")
+const IcePatchScript: GDScript = preload("res://scripts/IcePatch.gd")
+const ConveyorScript: GDScript = preload("res://scripts/Conveyor.gd")
 const BouncePadScript: GDScript = preload("res://scripts/BouncePad.gd")
 const FallingRockScript: GDScript = preload("res://scripts/FallingRock.gd")
 const MovingPlatformScript: GDScript = preload("res://scripts/MovingPlatform.gd")
@@ -475,6 +477,9 @@ func think(delta: float) -> Vector2:
 	var gun: Vector2 = _gun_drive()
 	if gun != Vector2.INF:
 		return gun
+	var strip: Vector2 = _strip_drive()
+	if strip != Vector2.INF:
+		return strip
 	if mode == "attack" and _alive(_target):
 		_hooked_for = 0.0
 		var brake: Vector2 = _brake()
@@ -1130,6 +1135,41 @@ func _umbrella_drive() -> Vector2:
 	_canopy_up = true
 	var lean: float = clampf((goal.x - me.x) / 400.0, -0.6, 0.6)
 	return Vector2(lean, -1.0).normalized()
+
+## Issue #963: a bot standing on an ice patch or a conveyor with a drop within
+## STRIP_DROP_ROOM px in the way it slips or is carried treats the strip as a
+## mild hazard. On a belt it plants the head ahead (down, towards the drop) and
+## pushes, which walks the body against the belt; on ice it brakes when sliding
+## at the drop and otherwise holds still instead of running at it. Vector2.INF
+## when it has no say: Easy, off the ground, on any other floor, or no drop near.
+const STRIP_DROP_ROOM: float = 200.0
+const STRIP_SLIP_SPEED: float = 40.0
+func _strip_drive() -> Vector2:
+	if difficulty_level() == "easy":
+		return Vector2.INF
+	var body := player as RigidBody2D
+	if body == null:
+		return Vector2.INF
+	var me: Vector2 = player.global_position
+	var query := PhysicsRayQueryParameters2D.create(me, me + Vector2(0.0, BODY_RADIUS + 10.0), LAYER_WORLD, _player_rids())
+	query.hit_from_inside = true
+	var hit: Dictionary = player.get_world_2d().direct_space_state.intersect_ray(query)
+	if hit.is_empty() or hit["collider"] == null:
+		return Vector2.INF
+	var script: Script = (hit["collider"] as Object).get_script()
+	var side: float = 0.0
+	var belt: bool = script == ConveyorScript
+	if belt:
+		var carry: Vector2 = (hit["collider"] as Node2D).call("carry_direction")
+		side = signf(carry.x * float((hit["collider"] as Node2D).get("belt_speed")))
+	elif script == IcePatchScript:
+		side = signf(body.linear_velocity.x) if absf(body.linear_velocity.x) > STRIP_SLIP_SPEED else signf(goal.x - me.x)
+	if side == 0.0 or _edge_room(side, STRIP_DROP_ROOM) >= STRIP_DROP_ROOM:
+		return Vector2.INF
+	if not belt and absf(body.linear_velocity.x) <= STRIP_SLIP_SPEED:
+		return Vector2.ZERO
+	var dir := Vector2(side * 0.5, 0.87).normalized()
+	return dir * (PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0)
 
 ## Issue #952: a bot holding a weapon that fires on its own (the boomstick),
 ## within GUN_AIM_WINDOW_SEC of its shot, points the head along the line to its
