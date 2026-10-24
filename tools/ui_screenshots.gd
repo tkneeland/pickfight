@@ -269,6 +269,7 @@ func _online() -> void:
 	var screen: CanvasLayer = rig["screen"]
 	var server: Node = rig["server"]
 	screen.press_title("online")
+	screen.press_title("host")
 	await _wait_until(func() -> bool: return server.is_online(), 8000)
 	await _seats(rig, 1) # the host's own seat is always there
 	await _shot("lobby_online_0")

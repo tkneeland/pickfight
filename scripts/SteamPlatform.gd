@@ -36,6 +36,8 @@ signal join_requested(code: String)
 ## The connect string key in the launch args and the rich presence payload.
 const CONNECT_FLAG := "+pickfight_room"
 const RemoteClientScript := preload("res://scripts/RemoteClient.gd")
+const InviteConfirmScript := preload("res://scripts/InviteConfirm.gd")
+const QuitGameScript := preload("res://scripts/QuitGame.gd")
 const REMOTE_CLIENT_SCENE := "res://scenes/RemoteClient.tscn"
 
 ## A room code from a launch/connect request that arrived with no join screen
@@ -165,19 +167,51 @@ func _on_join_game_requested(_friend: int, connect: String) -> void:
 		_open_join_screen_if_idle()
 	join_requested.emit(code)
 
-## From the host's own screen, a friend's Join Game opens the PC join screen
-## unless a match with other players is already being hosted.
+## Test seams (#1075): `join_screen_for_test`, when valid, stands in for the scene change to the join
+## screen; `invite_scene_for_test` stands in for the current scene, which a `-s` run does not have.
+var join_screen_for_test: Callable = Callable()
+var invite_scene_for_test: Node = null
+## The open "Leave your room?" prompt (InviteConfirm.gd), or null.
+var invite_confirm: Node = null
+
+## A friend's Join Game from the host's own screen is never ignored (#1075). A host alone or with only
+## bots goes to the PC join screen at once. A host with another human seated, in the lobby, a
+## countdown or mid-match, is asked first: the match keeps running behind the prompt, a second invite
+## replaces the pending code, and Stay drops it. Joining closes the room on the scene change, so the
+## others see Host left.
 func _open_join_screen_if_idle() -> void:
 	var tree := get_tree()
-	if tree == null or tree.current_scene == null or fake_running_for_test:
+	var scene: Node = invite_scene_for_test if invite_scene_for_test != null else (tree.current_scene if tree != null else null)
+	if tree == null or scene == null or (fake_running_for_test and not join_screen_for_test.is_valid()):
 		return
-	for node: Node in tree.current_scene.find_children("*", "", true, false):
+	if invite_confirm != null and is_instance_valid(invite_confirm):
+		return # already asking: the new code replaced the pending one
+	var server: Node = null
+	for node: Node in scene.find_children("*", "", true, false):
 		if node.has_method("host_pc_slot") and node.has_method("claimed_slots"):
-			var own: int = 1 if int(node.call("host_pc_slot")) != -1 else 0
-			if (node.call("claimed_slots") as Array).size() > own:
-				pending_join_code = ""
-				return
-	tree.change_scene_to_file.call_deferred(REMOTE_CLIENT_SCENE)
+			server = node
+			break
+	if server == null or not QuitGameScript.others_seated(server):
+		_go_to_join_screen()
+		return
+	invite_confirm = InviteConfirmScript.new(server)
+	invite_confirm.decided.connect(_on_invite_decided)
+	tree.root.add_child(invite_confirm)
+
+func _on_invite_decided(join: bool) -> void:
+	if invite_confirm != null and is_instance_valid(invite_confirm):
+		invite_confirm.queue_free()
+	invite_confirm = null
+	if join:
+		_go_to_join_screen()
+	else:
+		pending_join_code = "" # Stay: the invite is dropped
+
+func _go_to_join_screen() -> void:
+	if join_screen_for_test.is_valid():
+		join_screen_for_test.call()
+		return
+	get_tree().change_scene_to_file.call_deferred(REMOTE_CLIENT_SCENE)
 
 # --- Store page (#793) -----------------------------------------------------------
 
