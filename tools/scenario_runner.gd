@@ -324,6 +324,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"magnet_ignores_wielder_dead_and_dropped",
 	"magnet_does_not_pull_through_solid_terrain",
 	"magnet_plays_pull_sound_rate_limited",
+	"magnet_skips_spawn_protected",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -2343,6 +2344,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_magnet_does_not_pull_through_solid_terrain()
 		"magnet_plays_pull_sound_rate_limited":
 			return await _scenario_magnet_plays_pull_sound_rate_limited()
+		"magnet_skips_spawn_protected":
+			return await _scenario_magnet_skips_spawn_protected()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -22083,6 +22086,84 @@ func _scenario_magnet_plays_pull_sound_rate_limited() -> Array[String]:
 		failures.append("a rival behind a wall still played magnet_pull %d times" % wall_n)
 	_scenario_completed = true
 	return failures
+## Issue #1056: a spawn-protected fighter in the field is not pulled and does
+## not make the pull sound; an unprotected one in the same field is; and the
+## protected one is pulled as before the moment protection ends. Read against
+## a pickaxe control, so a magnet that ignores protection fails the first check.
+func _scenario_magnet_skips_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var stats: Resource = load(MAGNET_PATH)
+	var control: Array[float] = await _magnet_protect_trial(sfx, load(PICKAXE_PATH_MAGNET_CONTROL), true, false)
+	var run: Array[float] = await _magnet_protect_trial(sfx, stats, true, false)
+	var sound_n: int = int(run[3])
+	var after: Array[float] = await _magnet_protect_trial(sfx, stats, true, true)
+	var sound_only_protected: int = int(await _magnet_protect_only_sound(sfx, stats))
+	print("      protected %.1f (control %.1f), unprotected %.1f (control %.1f), released %.1f, sounds only-protected %d" % [run[0], control[0], run[1], control[1], after[0], sound_only_protected])
+	if run[0] - control[0] < -3.0:
+		failures.append("a spawn-protected fighter was pulled %.1f px against the control" % (run[0] - control[0]))
+	if run[1] - control[1] < 3.0:
+		failures.append("the unprotected fighter in the same field was not pulled (%.1f against control)" % (run[1] - control[1]))
+	if after[0] - control[0] > -3.0:
+		failures.append("the fighter was not pulled once protection ended (%.1f against control)" % (after[0] - control[0]))
+	if sound_n < 1:
+		failures.append("the field with an unprotected fighter in it made no pull sound")
+	if sound_only_protected != 0:
+		failures.append("a field holding only a protected fighter played magnet_pull %d times" % sound_only_protected)
+	_scenario_completed = true
+	return failures
+## One trial: wielder at the park, a victim at MAGNET_NEAR (protected, unless
+## `release` drops protection after 5 ticks) and an unprotected victim at the
+## far offset. Returns [near dx, far dx, 0, pull sounds].
+func _magnet_protect_trial(sfx: Node, wielder_stats: Resource, protect: bool, release: bool) -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var near: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + MAGNET_NEAR)
+	var far: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + MAGNET_FAR)
+	near.spawn_protected = protect  # before the magnet is raised, so nothing slips in
+	await _await_ticks(2)
+	sfx.start_recording()
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	near.linear_velocity = Vector2.ZERO
+	far.linear_velocity = Vector2.ZERO
+	near.spawn_protected = protect
+	var near_start: float = near.global_position.x
+	var far_start: float = far.global_position.x
+	if release:
+		await _await_ticks(5)
+		near.spawn_protected = false
+		near_start = near.global_position.x
+		near.linear_velocity = Vector2.ZERO
+		await _await_ticks(MAGNET_TRIAL_TICKS - 5)
+	else:
+		await _await_ticks(MAGNET_TRIAL_TICKS)
+	var out: Array[float] = [near.global_position.x - near_start, far.global_position.x - far_start, 0.0, float(_sfx_count(sfx, "magnet_pull"))]
+	sfx.stop_recording()
+	await _teardown(stage, false)
+	return out
+## Pull sounds over 200 ticks with only a protected fighter in the field.
+func _magnet_protect_only_sound(sfx: Node, wielder_stats: Resource) -> int:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + MAGNET_NEAR)
+	victim.spawn_protected = true
+	await _await_ticks(2)
+	sfx.start_recording()
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	victim.linear_velocity = Vector2.ZERO
+	for i in 200:
+		victim.spawn_protected = true
+		await _await_ticks(1)
+	var played: int = _sfx_count(sfx, "magnet_pull")
+	sfx.stop_recording()
+	await _teardown(stage, false)
+	return played
 ## Counts magnet_pull plays over 200 ticks with one victim at `offset`.
 func _magnet_sound_trial(sfx: Node, wielder_stats: Resource, offset: Vector2, wall: bool) -> int:
 	var stage: Node2D = _new_stage()
