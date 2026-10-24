@@ -28,7 +28,7 @@ const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 
 const CONTROL_KEYS: Dictionary = {
 	"local": KEY_C, "online": KEY_O, "solo": KEY_S, "mode": KEY_T, "bots": KEY_B, "target_down": KEY_MINUS,
-	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join": KEY_J, "join_help": KEY_H, "copy_code": KEY_K, # C is Couch (#863)
+	"target_up": KEY_EQUAL, "start": KEY_ENTER, "join_help": KEY_H, "copy_code": KEY_K, # C is Couch (#863)
 }
 const KIND_IDS: Array[String] = ["local", "online", "solo"] # the switch's cells, left to right
 const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_FONT_SIZE
@@ -36,7 +36,8 @@ const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_F
 const ROOM_CODE_FONT_SIZE: int = 96
 const STEP_BUTTON_PX: float = 44.0
 ## How long Copy code reads "Copied" after a press (#863).
-const COPIED_MSEC: int = 1500
+const CopyCodeScript := preload("res://scripts/CopyCode.gd")
+const COPIED_MSEC: int = CopyCodeScript.COPIED_MSEC
 const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 const MAIN_SCENE: String = "res://scenes/Main.tscn"
 ## How long Leave lobby stays armed after its first press, when others are seated (#716).
@@ -48,7 +49,7 @@ const LEAVE_BUTTON_FONT_SIZE: int = 18
 ## #545: Start pressed with the lobby's conditions unmet used to do nothing and
 ## say nothing. The reason shows in the status line for a few seconds.
 const START_NOTICE_MSEC: int = 4000
-const PAD_ORDER: Array[String] = ["online", "local", "solo", "mode", "bots", "bot_skill", "target_down", "target_up", "start", "join"] # focus lands on the match kind first, where Go online was
+const PAD_ORDER: Array[String] = ["online", "local", "solo", "mode", "bots", "bot_skill", "target_down", "target_up", "start"] # focus lands on the match kind first, where Go online was
 
 var _screen # the LobbyScreen
 var _controls: Dictionary = {}
@@ -58,7 +59,6 @@ var _copy_button: Button
 var _copied_until_msec: int = 0
 ## The clipboard write, a seam so the scenarios never touch the real clipboard (#863).
 var clipboard_setter: Callable = func(text: String) -> void: DisplayServer.clipboard_set(text)
-var _join_blocked: Label
 
 var start_notice: String = ""
 var start_notice_until_msec: int = 0
@@ -111,11 +111,6 @@ func attach(server: Object) -> void:
 	_controls["join_help"] = _screen.join_help_button()
 	_controls["relay_nudge"] = _screen.relay_nudge_button() # #727, beside it in the pad chain
 	_controls["invite"] = _screen.invite_button() # Invite Steam friends (#298): pressed already calls the server; in the pad chain so a Steam Deck host reaches it
-	# The way into someone else's room code (Online only), with why it is off when it is.
-	lobby_right.add_child(_action_button("join", _screen.tr("HOST_JOIN_ONLINE"), UiThemeScript.ACTION_BUTTON))
-	_join_blocked = ScreenKitScript.themed_label(_screen.tr("HOST_JOIN_BLOCKED"), ScreenKitScript.DECK_MIN_FONT_SIZE, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "JoinBlocked", TextServer.AUTOWRAP_WORD_SMART)
-	_join_blocked.visible = false
-	lobby_right.add_child(_join_blocked)
 	var spacer := Control.new()
 	spacer.name = "Spacer"
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -274,7 +269,7 @@ func set_start_ready(on: bool) -> void:
 	_start_ready = on
 
 ## The control button `id` ("local", "online", "solo", "mode", "bots", "bots_down",
-## "bots_up", "target_down", "target_up", "look", "how_to_play", "join", "start"), or null.
+## "bots_up", "target_down", "target_up", "look", "how_to_play", "start"), or null.
 func control_button(id: String) -> Button:
 	return _controls.get(id) as Button
 
@@ -329,9 +324,7 @@ func press_control(id: String) -> void:
 			var code: String = server.online_room_code()
 			if not _copy_button.visible or code == "":
 				return # Couch, Solo or streamer mode: nothing to copy, so K does nothing
-			clipboard_setter.call(code)
-			_copied_until_msec = Time.get_ticks_msec() + COPIED_MSEC
-			_screen.get_tree().create_timer(COPIED_MSEC / 1000.0 + 0.05).timeout.connect(refresh)
+			_copied_until_msec = CopyCodeScript.press(code, clipboard_setter, _screen.get_tree(), refresh)
 		"join_help":
 			if not _screen.join_help_button().visible:
 				return # Online or Solo: no LAN join to help with, so H does nothing
@@ -347,16 +340,6 @@ func press_control(id: String) -> void:
 				_leave_lobby(server)
 				return
 			_leave_armed_until_msec = Time.get_ticks_msec() + LEAVE_CONFIRM_MSEC
-		"join":
-			# Issue #241: leave this host's lobby for the PC client's join
-			# screen. Online only (#547), and only while nobody but the host's
-			# own seat (and bots) is in it, so a click cannot end a match
-			# someone is in. An open room is closed on the way out.
-			if _kind_of(server) == "online" and _can_join_online():
-				if server.online_requested():
-					server.apply_host_command("online", false)
-				_screen.get_tree().change_scene_to_file(REMOTE_CLIENT_SCENE)
-				return
 	refresh()
 
 ## Whether Leave lobby is waiting for its confirming press.
@@ -434,10 +417,7 @@ func refresh() -> void:
 	_room_label.text = code
 	_room_label.visible = code != "" and not (server.has_method("room_code_hidden") and server.room_code_hidden())
 	_copy_button.visible = _room_label.visible and kind == "online"
-	if Time.get_ticks_msec() < _copied_until_msec:
-		_copy_button.text = _screen.tr("LOBBY_COPIED")
-	else:
-		_copy_button.text = _screen.tr("LOBBY_COPY_CODE_PAD" if _pad_active else "LOBBY_COPY_CODE")
+	_copy_button.text = _screen.tr(CopyCodeScript.caption_key(_copied_until_msec, not _pad_active))
 	# The code says "online" already; the status stays for connecting or a blip.
 	_online_status.visible = _online_status.text != "" and kind == "online"
 	_screen._apply_streamer_mode(server)
@@ -447,18 +427,13 @@ func refresh() -> void:
 	_set_variation(control_button("mode"), UiThemeScript.SWITCH_BUTTON_ON if teams_on else UiThemeScript.SWITCH_BUTTON)
 	control_button("bots").text = str(server.bot_director.bot_count())
 	control_button("bot_skill").text = _screen.tr("BOT_SKILL_" + str(HostSettingsScript.shared().bot_difficulty).to_upper())
-	var join: Button = control_button("join")
-	join.disabled = not _can_join_online()
-	join.visible = kind == "online"
 	var leave: Button = control_button("leave")
 	leave.text = _screen.tr("LOBBY_LEAVE_CONFIRM") if leave_armed() else _screen.tr("LOBBY_LEAVE")
 	_set_variation(leave, UiThemeScript.SWITCH_BUTTON_ON if leave_armed() else UiThemeScript.ACTION_BUTTON)
 	_sync_host_picker()
-	_join_blocked.visible = join.visible and join.disabled
 	var start: Button = control_button("start")
 	# No keyboard glyph while a gamepad is the active input (#368).
 	start.text = _screen.tr("HOST_START_MATCH") if _start_ready else _screen.tr("HOST_START_WAITING")
-	join.text = _screen.tr("HOST_JOIN_ONLINE_PAD") if _pad_active else _screen.tr("HOST_JOIN_ONLINE")
 	_set_variation(start, UiThemeScript.START_BUTTON if _start_ready else UiThemeScript.START_BUTTON_OFF)
 	if _pad_menu_open:
 		_chain_pad_focus()
@@ -549,7 +524,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["invite"], ["join_help", "relay_nudge"], ["join"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["invite"], ["join_help", "relay_nudge"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]
@@ -666,6 +641,16 @@ func unhandled_key_input(event: InputEvent) -> void:
 	if _screen.popup_open() != "":
 		return # a popup is up: the lobby's keys wait
 	if _screen.title_visible():
+		if _screen.title_fork_open():
+			# The Online fork (#1075): H hosts, J joins a friend, Esc goes back; the other title keys wait.
+			if key.physical_keycode == KEY_ESCAPE:
+				_screen.press_title("back")
+				_screen.get_viewport().set_input_as_handled()
+			for fork_kind: String in TitleScreenScript.FORK_KEYS:
+				if key.physical_keycode == TitleScreenScript.FORK_KEYS[fork_kind]:
+					_screen.press_title(fork_kind)
+					_screen.get_viewport().set_input_as_handled()
+			return
 		for kind: String in TitleScreenScript.TITLE_KEYS:
 			if key.physical_keycode == TitleScreenScript.TITLE_KEYS[kind]:
 				_screen.press_title(kind)
