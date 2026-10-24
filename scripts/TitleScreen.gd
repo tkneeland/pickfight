@@ -32,13 +32,23 @@ const TITLE_KEYS: Dictionary = {"local": KEY_C, "online": KEY_O, "solo": KEY_S}
 const TITLE_BUTTON_FONT_SIZE: int = 40
 ## The logo as the mockup frames it (#546), and each card's colour variation.
 const TITLE_LOGO_SIZE: Vector2 = Vector2(1360, 300)
-const TITLE_CARD_VARIATIONS: Dictionary = {"local": &"TitleCardOrange", "online": &"TitleCardSky", "solo": &"TitleCardGreen"}
+const TITLE_CARD_VARIATIONS: Dictionary = {"local": &"TitleCardOrange", "online": &"TitleCardSky", "solo": &"TitleCardGreen", "host": &"TitleCardSky", "join": &"TitleCardOrange"}
 const TITLE_CARD_HEIGHT: float = 210.0
+## The fork after Online (#1075): Host a room or Join a friend, with a Back path.
+const FORK_KINDS: Array[String] = ["host", "join"]
+const FORK_KEYS: Dictionary = {"host": KEY_H, "join": KEY_J}
+const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 
 var _screen # the LobbyScreen
 var _title_panel: Control
 var _title_buttons: Dictionary = {}
 var _kind_notice: Label
+var _fork_open: bool = false
+var _fork_box: Control
+## The controls the fork hides while it shows (the heading, cards, footer and bottom row).
+var _main_nodes: Array[Control] = []
+## What Join a friend does: the PC client's join screen. A scenario swaps it for a recorder.
+var join_a_friend: Callable = Callable()
 
 func _init(screen) -> void:
 	_screen = screen
@@ -60,6 +70,8 @@ func title_button(kind: String) -> Button:
 func show_title(on: bool) -> void:
 	if _title_panel == null:
 		return
+	if on:
+		_set_fork(false) # the title always comes back on the three cards
 	_title_panel.visible = on
 	PadMenuScript.set_open("title", on)
 	var focused: Control = _screen.get_viewport().gui_get_focus_owner() if _screen.is_inside_tree() else null
@@ -78,11 +90,15 @@ func input(event: InputEvent) -> void:
 		if ours and (event as InputEventMouseMotion).relative != Vector2.ZERO:
 			focused.release_focus()
 		return
+	if _fork_open and PadMenuScript.pressed(event, JOY_BUTTON_B):
+		press_title("back") # B is Back from the fork (#1075)
+		_screen.get_viewport().set_input_as_handled()
+		return
 	if ours:
 		return
 	for action: StringName in [&"ui_left", &"ui_right", &"ui_up", &"ui_down", &"ui_accept"]:
 		if event.is_action_pressed(action, false, true):
-			(_title_buttons["local"] as Button).grab_focus()
+			(_title_buttons["host" if _fork_open else "local"] as Button).grab_focus()
 			_screen.get_viewport().set_input_as_handled()
 			return
 
@@ -98,11 +114,44 @@ func press_title(kind: String) -> void:
 		QuitGameScript.quit_game(_screen.get_tree(), _screen._server) # nobody is seated yet: no confirm (#718)
 		return
 	var server: Object = _screen._server
-	if server == null or not TITLE_KINDS.has(kind):
+	if server == null:
 		return
+	# Online asks first (#1075): Host a room goes online as before, Join a friend opens the join screen.
+	if kind == "online" or kind == "back":
+		_set_fork(kind == "online")
+		return
+	if kind == "join":
+		_set_fork(false)
+		show_title(false)
+		if join_a_friend.is_valid():
+			join_a_friend.call()
+		else:
+			_screen.get_tree().change_scene_to_file(REMOTE_CLIENT_SCENE) # no room is opened; the relay waits for a code
+		return
+	if kind == "host":
+		kind = "online"
+	elif not TITLE_KINDS.has(kind):
+		return
+	_set_fork(false)
 	server.apply_host_command("kind", kind)
 	show_title(false)
 	_screen.refresh_controls()
+
+## Whether the Host-or-Join fork shows in place of the three cards (#1075).
+func fork_open() -> bool:
+	return _fork_open
+
+## Swaps the three cards for the fork (or back), and lets go of focus so no card looks hovered.
+func _set_fork(on: bool) -> void:
+	_fork_open = on
+	if _fork_box == null:
+		return
+	_fork_box.visible = on
+	for node: Control in _main_nodes:
+		node.visible = not on
+	var focused: Control = _screen.get_viewport().gui_get_focus_owner() if _screen.is_inside_tree() else null
+	if focused != null and _title_panel.is_ancestor_of(focused):
+		focused.release_focus()
 
 ## Whether `source` (the ControllerServer) runs a match with no QR and no LAN
 ## URL: Online, or Solo, which is offline (#522).
@@ -197,6 +246,42 @@ func build() -> void:
 	last_card.focus_neighbor_bottom = last_card.get_path_to(quit_button)
 	quit_button.focus_neighbor_top = quit_button.get_path_to(last_card)
 	credits_button.focus_neighbor_top = credits_button.get_path_to(last_card)
+	# The Online fork (#1075): Host a room or Join a friend, in place of the three cards.
+	_main_nodes.assign([pick, cards, footer, bottom_row])
+	_fork_box = VBoxContainer.new()
+	_fork_box.name = "Fork"
+	_fork_box.add_theme_constant_override("separation", 24)
+	_fork_box.visible = false
+	box.add_child(_fork_box)
+	var fork_pick := Label.new()
+	fork_pick.name = "ForkPick"
+	fork_pick.text = _screen.tr("TITLE_ONLINE_PICK")
+	fork_pick.theme_type_variation = UiThemeScript.TITLE_HEADING_LABEL
+	fork_pick.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fork_box.add_child(fork_pick)
+	var fork_cards := HBoxContainer.new()
+	fork_cards.name = "ForkCards"
+	fork_cards.add_theme_constant_override("separation", 40)
+	_fork_box.add_child(fork_cards)
+	var fork_labels: Dictionary = {"host": ["TITLE_HOST", "TITLE_HOST_HINT"], "join": ["TITLE_JOIN", "TITLE_JOIN_HINT"]}
+	var host_card := _build_card("host", fork_labels["host"][0], fork_labels["host"][1])
+	var join_card := _build_card("join", fork_labels["join"][0], fork_labels["join"][1])
+	fork_cards.add_child(host_card)
+	fork_cards.add_child(join_card)
+	_title_buttons["host"] = host_card
+	_title_buttons["join"] = join_card
+	var back_row := HBoxContainer.new()
+	back_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_fork_box.add_child(back_row)
+	var back_button := ScreenKitScript.themed_button(_screen.tr("TITLE_BACK"), UiThemeScript.ACTION_BUTTON, "Title_back", true)
+	back_button.pressed.connect(press_title.bind("back"))
+	back_row.add_child(back_button)
+	_title_buttons["back"] = back_button
+	host_card.focus_neighbor_right = host_card.get_path_to(join_card)
+	join_card.focus_neighbor_left = join_card.get_path_to(host_card)
+	host_card.focus_neighbor_bottom = host_card.get_path_to(back_button)
+	join_card.focus_neighbor_bottom = join_card.get_path_to(back_button)
+	back_button.focus_neighbor_top = back_button.get_path_to(host_card)
 	# Wishlist on Steam (#793): demo build only, and only once the store page exists; beside Credits.
 	if DemoBuildScript.wishlist_available():
 		var wishlist_button := ScreenKitScript.themed_button(_screen.tr("WISHLIST_BUTTON"), UiThemeScript.ACTION_BUTTON, "Title_wishlist", true)
@@ -263,7 +348,7 @@ func _build_card(kind: String, name_key: String, hint_key: String) -> Button:
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(badge)
 	var key := Label.new()
-	key.text = OS.get_keycode_string(TITLE_KEYS[kind])
+	key.text = OS.get_keycode_string(TITLE_KEYS[kind] if TITLE_KEYS.has(kind) else FORK_KEYS[kind])
 	key.theme_type_variation = UiThemeScript.KEY_BADGE_LABEL
 	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	key.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

@@ -1,6 +1,8 @@
 # 21. Local or online matches, never mixed
 
 > Amended by [ADR-0023](0023-solo-is-offline.md): Solo is its own offline match kind, not an Online match with the room closed.
+
+> Amended by #1075: picking Online on the title screen no longer goes online at once. It asks Host a room or Join a friend first; only Host a room opens the room and shows the lobby, and Join a friend opens the PC client join screen with the relay untouched until a code is submitted. "Join someone's game (J)" is removed from the Host panel, so joining a friend is only through that fork; a Steam friend invite skips it and, for a host with another human seated, asks before leaving the room.
 - Status: Accepted
 - Date: 2026-10-02
 

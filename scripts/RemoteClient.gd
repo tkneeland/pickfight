@@ -333,6 +333,7 @@ func _listen_for_steam_invites() -> void:
 		_on_steam_join_requested(pending)
 
 func _on_steam_join_requested(code: String) -> void:
+	leave() # an invite is always accepted: a client already in a room hangs up and joins the friend's (#1075)
 	if _room_edit != null:
 		_room_edit.text = code
 	join(code, _name_edit.text if _name_edit != null else player_name)

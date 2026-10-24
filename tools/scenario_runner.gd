@@ -1242,6 +1242,18 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_client_lobby_copy_code",
 	"online_client_attention_on_countdown",
 	"online_client_enter_readies",
+	"title_online_shows_host_or_join_fork_1075",
+	"title_fork_host_a_room_goes_online_1075",
+	"title_fork_join_a_friend_skips_the_relay_1075",
+	"title_fork_back_and_key_and_pad_paths_1075",
+	"title_fork_fits_every_resolution_1075",
+	"steam_invite_host_alone_joins_at_once_1075",
+	"steam_invite_with_human_seated_asks_and_join_leaves_1075",
+	"steam_invite_stay_keeps_the_room_and_drops_the_invite_1075",
+	"steam_invite_prompt_key_and_pad_paths_and_second_invite_1075",
+	"steam_invite_mid_match_asks_first_1075",
+	"steam_invite_room_emptying_under_the_prompt_joins_1075",
+	"steam_invite_as_a_client_leaves_and_joins_1075",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -1710,7 +1722,7 @@ const SFX_RESTORED_FIELDS: PackedStringArray = [
 const MUSIC_RESTORED_FIELDS: PackedStringArray = ["settings_path", "persist_settings"]
 ## The SteamPlatform autoload's test seams (#298, #538), restored like Sfx's.
 const STEAM_RESTORED_FIELDS: PackedStringArray = [
-	"fake_running_for_test", "fake_persona_for_test", "calls_for_test", "pending_join_code",
+	"fake_running_for_test", "fake_persona_for_test", "calls_for_test", "pending_join_code", "join_screen_for_test", "invite_scene_for_test", "invite_confirm",
 ]
 ## Every script variable of `obj` (the shared HostSettings), deep-copied, so
 ## a scenario that changes one -- and fails before it puts it back -- leaves
@@ -4155,6 +4167,30 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_client_attention_on_countdown()
 		"online_client_enter_readies":
 			return await _scenario_online_client_enter_readies()
+		"title_online_shows_host_or_join_fork_1075":
+			return await _scenario_title_online_shows_host_or_join_fork_1075()
+		"title_fork_host_a_room_goes_online_1075":
+			return await _scenario_title_fork_host_a_room_goes_online_1075()
+		"title_fork_join_a_friend_skips_the_relay_1075":
+			return await _scenario_title_fork_join_a_friend_skips_the_relay_1075()
+		"title_fork_back_and_key_and_pad_paths_1075":
+			return await _scenario_title_fork_back_and_key_and_pad_paths_1075()
+		"title_fork_fits_every_resolution_1075":
+			return await _scenario_title_fork_fits_every_resolution_1075()
+		"steam_invite_host_alone_joins_at_once_1075":
+			return await _scenario_steam_invite_host_alone_joins_at_once_1075()
+		"steam_invite_with_human_seated_asks_and_join_leaves_1075":
+			return await _scenario_steam_invite_with_human_seated_asks_and_join_leaves_1075()
+		"steam_invite_stay_keeps_the_room_and_drops_the_invite_1075":
+			return await _scenario_steam_invite_stay_keeps_the_room_and_drops_the_invite_1075()
+		"steam_invite_prompt_key_and_pad_paths_and_second_invite_1075":
+			return await _scenario_steam_invite_prompt_key_and_pad_paths_and_second_invite_1075()
+		"steam_invite_mid_match_asks_first_1075":
+			return await _scenario_steam_invite_mid_match_asks_first_1075()
+		"steam_invite_room_emptying_under_the_prompt_joins_1075":
+			return await _scenario_steam_invite_room_emptying_under_the_prompt_joins_1075()
+		"steam_invite_as_a_client_leaves_and_joins_1075":
+			return await _scenario_steam_invite_as_a_client_leaves_and_joins_1075()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -29996,20 +30032,18 @@ func _scenario_remote_client_join_entry_in_lobby() -> Array[String]:
 	var built: Dictionary = await _snap_main_251(0)
 	var server: Node = built["server"]
 	var screen: CanvasLayer = built["rm"].get_node("LobbyLayer")
-	var button: Button = screen.control_button("join")
-	if button == null:
-		failures.append("the lobby screen has no Join online game control")
-	else:
-		screen.refresh_controls()
-		if button.disabled:
-			failures.append("Join online game is disabled with nobody seated")
-		if not ResourceLoader.exists(screen.REMOTE_CLIENT_SCENE) or screen.CONTROL_KEYS.get("join") != KEY_J:
-			failures.append("the join control's scene or key is wrong")
-		server.apply_host_command("pc_seat", true)
-		screen.refresh_controls()
-		# The host PC's own seat ends nobody else's match (#425 playtest); another seat turning Join off is checked in lobby_worst_state_fits_and_join_by_code_is_reachable.
-		if button.disabled:
-			failures.append("Join someone else's game is off with only the host PC's own seat taken")
+	# The way into someone else's room is Join a friend on the title screen's Online fork (#1075); the Host panel has no join control.
+	if screen.control_button("join") != null or screen.CONTROL_KEYS.has("join"):
+		failures.append("the Host panel still has a Join someone's game control")
+	if not ResourceLoader.exists(screen.REMOTE_CLIENT_SCENE):
+		failures.append("the join screen's scene is missing")
+	var opened: Array[bool] = [false]
+	screen.set_join_a_friend(func() -> void: opened[0] = true)
+	screen.show_title(true)
+	screen.press_title("online")
+	screen.press_title("join")
+	if not opened[0] or server.match_kind() != "":
+		failures.append("Join a friend did not reach the join screen with no kind picked (opened %s, kind '%s')" % [opened[0], server.match_kind()])
 	if ProjectSettings.get_setting("application/run/main_scene") != MAIN_SCENE_PATH:
 		failures.append("the main scene is %s, not Main" % ProjectSettings.get_setting("application/run/main_scene"))
 	await _teardown(built["main"])
@@ -38615,15 +38649,15 @@ func _scenario_deck_captions_drop_keyboard_glyphs_for_a_gamepad() -> Array[Strin
 	Input.parse_input_event(key)
 	Input.flush_buffered_events()
 	await _await_ticks(3)
-	if screen.pad_active() or not screen.control_button("join").text.contains("(J)"):
-		failures.append("with the keyboard active the join button reads '%s'" % screen.control_button("join").text)
+	if screen.pad_active() or not screen.control_button("copy_code").text.contains("(K)"):
+		failures.append("with the keyboard active the copy code button reads '%s'" % screen.control_button("copy_code").text)
 	await _pad_tap_368(0, JOY_BUTTON_DPAD_UP)
 	await _await_ticks(3)
 	if not screen.pad_active():
 		failures.append("a gamepad press did not make the gamepad the active input")
-	var text: String = screen.control_button("join").text
-	if text.contains("(J)") or text.contains("("):
-		failures.append("with a gamepad active the join button still reads '%s'" % text)
+	var text: String = screen.control_button("copy_code").text
+	if text.contains("(K)") or text.contains("("):
+		failures.append("with a gamepad active the copy code button still reads '%s'" % text)
 	var hint: Label = screen.lobby_panel().find_child("GamepadHint", true, false) as Label
 	if hint == null or not hint.text.contains("Y"):
 		failures.append("no gamepad hint naming Y (hint %s, text '%s', locale %s)" % [hint != null, hint.text if hint != null else "", TranslationServer.get_locale()])
@@ -39053,9 +39087,7 @@ func _lobby_overlaps_425b(screen: CanvasLayer) -> Array[String]:
 ## type someone else's room code, sat last and silently grey. In the worst
 ## state (online with the code showing, Play on this PC on, eight seated) every
 ## lobby control is inside the window at 1600x900, 1920x1080 and 1280x800, no
-## two overlap, the text stays at 16 design px or more, and Join heads the host
-## controls: on while only the host's own seat is taken, off with a caption
-## saying why once someone else sits down.
+## two overlap, the text stays at 16 design px or more, and the Host panel has no join control (#1075: joining a friend is on the title screen).
 func _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable() -> Array[String]:
 	var failures: Array[String] = []
 	var relay: Node = _relay_start()
@@ -39064,38 +39096,30 @@ func _scenario_lobby_worst_state_fits_and_join_by_code_is_reachable() -> Array[S
 	var old_setting: Variant = _relay_setting_239(_relay_port_next)
 	var rig: Dictionary = await _deck_rig_368()
 	var screen: CanvasLayer = rig["screen"]
-	var join: Button = screen.control_button("join")
-	var blocked: Label = screen.lobby_panel().find_child("JoinBlocked", true, false) as Label
 	var code_label: Label = screen.lobby_panel().find_child("RoomCode", true, false) as Label
-	if join == null or blocked == null or code_label == null:
-		failures.append("missing lobby nodes: join %s, JoinBlocked %s, RoomCode %s" % [join != null, blocked != null, code_label != null])
+	if code_label == null:
+		failures.append("missing lobby node: RoomCode")
 	else:
-		failures.append_array(await _lobby_worst_state_checks_425b(rig, join, blocked, code_label))
+		failures.append_array(await _lobby_worst_state_checks_425b(rig, code_label))
 	PadMenuScript368.reset()
 	await _teardown(rig["main"], false)
 	ProjectSettings.set_setting("pickfight/relay_url", old_setting)
 	_relay_stop(relay, [])
 	_scenario_completed = true
 	return failures
-func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Label, code_label: Label) -> Array[String]:
+func _lobby_worst_state_checks_425b(rig: Dictionary, code_label: Label) -> Array[String]:
 	var failures: Array[String] = []
 	var server: Node = rig["server"]
 	var screen: CanvasLayer = rig["screen"]
-	if not join.text.contains("someone's game") or not join.text.contains("(J)"):
-		failures.append("the join control reads '%s', not a Join someone's game (J) label" % join.text)
-	if join.visible:
-		failures.append("the Join control shows outside an Online lobby (#547)")
 	server.apply_host_command("kind", "online") # #435: the host-PC seat and the room come with it
 	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != "", 5000):
 		failures.append("Go online never came up (%s)" % server.online_status())
 	await _await_ticks(2)
-	if join.disabled or blocked.visible:
-		failures.append("Join is off (caption shown %s) with only the host PC seated and online on; leaving ends nobody's match" % blocked.visible)
-	# The D-pad reaches Join and Start from the host menu.
+	# The D-pad reaches Start from the host menu.
 	await _pad_tap_368(0, JOY_BUTTON_Y)
 	var focus: Control = get_root().gui_get_focus_owner()
 	var seen: Dictionary = _focus_reach_368(focus) if focus != null else {}
-	for id in ["join", "online", "mode", "target_down", "target_up", "start"]:
+	for id in ["online", "mode", "target_down", "target_up", "start"]:
 		if not seen.has(id):
 			failures.append("the D-pad never reaches '%s' (saw %s)" % [id, seen.keys()])
 	await _pad_tap_368(0, JOY_BUTTON_B)
@@ -39104,13 +39128,6 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 	await _await_ticks(2)
 	if server.pad_slot(0) == -1:
 		failures.append("A did not seat the gamepad")
-	elif not join.disabled or not blocked.is_visible_in_tree() or blocked.text.is_empty():
-		failures.append("with a gamepad seated Join is disabled %s, caption shown %s ('%s')" % [join.disabled, blocked.is_visible_in_tree(), blocked.text])
-	screen.press_control("join")
-	await _await_ticks(2)
-	if not is_instance_valid(rig["main"]) or not (rig["main"] as Node).is_inside_tree():
-		failures.append("J left the lobby while another player was seated")
-		return failures
 	# Eight seated, drawn twice in case the round loop republished the real roster in between.
 	screen.refresh_lobby(_lobby_state_425(8), 2, server)
 	await _await_ticks(2)
@@ -39128,8 +39145,8 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 			if (node as Control).is_visible_in_tree() and font_px < 16:
 				failures.append("%s is %d design px, below 16" % [node.name, font_px])
 	var original: Vector2i = get_root().size
-	var watched: Array[Control] = [code_label, blocked]
-	for id in ["join", "online", "mode", "target_down", "target_up", "start"]:
+	var watched: Array[Control] = [code_label]
+	for id in ["online", "mode", "target_down", "target_up", "start"]:
 		watched.append(screen.control_button(id))
 	for res: Vector2i in LOBBY_RESOLUTIONS_425B:
 		get_root().size = res
@@ -39141,7 +39158,7 @@ func _lobby_worst_state_checks_425b(rig: Dictionary, join: Button, blocked: Labe
 			if not window.encloses(px):
 				failures.append("at %s %s %s is outside the window" % [res, control.name, px])
 		print("      %s: QR %s, room code %s, Join %s, Start %s, column bottom %.0f of %d px" % [res, to_px * qr.get_global_rect(),
-			to_px * code_label.get_global_rect(), to_px * join.get_global_rect(), to_px * screen.control_button("start").get_global_rect(),
+			to_px * code_label.get_global_rect(), to_px * screen.control_button("start").get_global_rect(),
 			(to_px * right.get_global_rect()).end.y, res.y])
 	get_root().size = original
 	await _await_ticks(1)
@@ -40012,6 +40029,9 @@ func _scenario_match_kind_online_refuses_phone_and_shows_no_qr() -> Array[String
 	if int(got["slot"]) < 0:
 		failures.append("a phone could not join before a kind was picked (%s)" % got["reason"])
 	screen.press_title("online")
+	if server.match_kind() != "":
+		failures.append("picking Online went online before Host a room was chosen (#1075), kind '%s'" % server.match_kind())
+	screen.press_title("host")
 	if server.match_kind() != "online":
 		failures.append("picking Online left the kind '%s'" % server.match_kind())
 	var reason: String = await _wait_closed_435(early)
@@ -41917,7 +41937,7 @@ func _bots_rig_445(kind: String, relay_up: bool, failures: Array[String]) -> Dic
 	await _await_ticks(LOBBY_SETTLE_TICKS)
 	_phone_ws_port = rig["server"].ws_port
 	rig["screen"] = rig["rm"].get_node("LobbyLayer")
-	rig["screen"].press_title(kind)
+	rig["screen"].press_title("host" if kind == "online" else kind) # Online asks Host or Join first (#1075)
 	if kind == "online" and relay_up:
 		if not await _wait_for_239(func() -> bool: return rig["server"].is_online()):
 			failures.append("host never came online")
@@ -44151,6 +44171,13 @@ func _scenario_title_screen_restyle_fits_every_resolution_546() -> Array[String]
 	event.pressed = true
 	screen._unhandled_key_input(event)
 	await _await_ticks(2)
+	if server.match_kind() != "" or not screen.title_visible() or not screen.title_fork_open():
+		failures.append("the O key opened the fork wrongly: kind '%s', title showing %s, fork %s" % [server.match_kind(), screen.title_visible(), screen.title_fork_open()])
+	var host_key := InputEventKey.new()
+	host_key.physical_keycode = KEY_H # Host a room (#1075)
+	host_key.pressed = true
+	screen._unhandled_key_input(host_key)
+	await _await_ticks(2)
 	if server.match_kind() != "online" or screen.title_visible():
 		failures.append("the O key gave kind '%s', title showing %s" % [server.match_kind(), screen.title_visible()])
 	await _kind_close_435(rig)
@@ -44541,9 +44568,6 @@ func _scenario_lobby_kind_keys_and_join_only_online_547() -> Array[String]:
 		await _await_ticks(3)
 		if server.match_kind() != keys[code]:
 			failures.append("key %s gave kind '%s', expected '%s'" % [OS.get_keycode_string(code), server.match_kind(), keys[code]])
-		var join: Button = screen.control_button("join")
-		if join.visible != (server.match_kind() == "online"):
-			failures.append("kind '%s': Join visible is %s" % [server.match_kind(), join.visible])
 	for kind: String in ["local", "solo"]:
 		server.apply_host_command("kind", kind)
 		await _await_ticks(3)
@@ -56322,7 +56346,7 @@ func _scenario_pad_reaches_invite_and_your_look_picks_review_ui() -> Array[Strin
 		if invite.focus_mode != Control.FOCUS_ALL:
 			failures.append("the pad menu left Invite Steam friends unfocusable")
 		var reached: bool = false
-		for id: String in ["copy_code", "leave", "join_help", "join", "start"]:
+		for id: String in ["copy_code", "leave", "join_help", "start"]:
 			var button: Button = screen.control_button(id)
 			if button == null or not button.is_visible_in_tree():
 				continue
@@ -58085,4 +58109,367 @@ func _scenario_online_client_enter_readies() -> Array[String]:
 	if client._ready_button.text.contains("Enter"):
 		failures.append("Ready kept the key hint with a gamepad active: '%s'" % client._ready_button.text)
 	await _bots_close_445(rig)
+	return failures
+## #1075: Online on the title screen asks Host a room or Join a friend first. Nothing goes online
+## and no room is opened until a choice is made.
+func _scenario_title_online_shows_host_or_join_fork_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	await _await_ticks(2)
+	if screen.title_fork_open():
+		failures.append("the fork showed before Online was picked")
+	screen.title_button("online").pressed.emit()
+	await _await_ticks(2)
+	if not screen.title_fork_open() or not screen.title_visible():
+		failures.append("picking Online did not open the fork (fork %s, title %s)" % [screen.title_fork_open(), screen.title_visible()])
+	for id: String in ["host", "join", "back"]:
+		var button: Button = screen.title_button(id)
+		if button == null or not button.is_visible_in_tree():
+			failures.append("the fork has no visible %s control" % id)
+	for id: String in ["local", "online", "solo"]:
+		if screen.title_button(id).is_visible_in_tree():
+			failures.append("the %s card still shows over the fork" % id)
+	if server.match_kind() != "" or server.is_online() or server.online_requested() or server.online_room_code() != "":
+		failures.append("the fork already went online (kind '%s', online %s, code '%s')" % [server.match_kind(), server.is_online(), server.online_room_code()])
+	await _kind_close_435(rig)
+	return failures
+## #1075: Host a room is today's Online behaviour: the kind, the relay room and its code.
+func _scenario_title_fork_host_a_room_goes_online_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	screen.title_button("online").pressed.emit()
+	screen.title_button("host").pressed.emit()
+	if server.match_kind() != "online" or screen.title_visible() or screen.title_fork_open():
+		failures.append("Host a room left kind '%s', title %s, fork %s" % [server.match_kind(), screen.title_visible(), screen.title_fork_open()])
+	if not await _wait_for_239(func() -> bool: return server.is_online() and server.online_room_code() != "", 5000):
+		failures.append("Host a room never came up (%s)" % server.online_status())
+	await _await_ticks(2)
+	var code_label: Label = screen.lobby_panel().find_child("RoomCode", true, false) as Label
+	if code_label == null or not code_label.text.contains(server.online_room_code()):
+		failures.append("the lobby does not show the room code")
+	await _kind_close_435(rig)
+	return failures
+## #1075: Join a friend opens the PC join screen with no host room started; the relay is not
+## contacted by the title screen at all.
+func _scenario_title_fork_join_a_friend_skips_the_relay_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var opened: Array[int] = [0]
+	screen.set_join_a_friend(func() -> void: opened[0] += 1)
+	screen.show_title(true)
+	screen.title_button("online").pressed.emit()
+	screen.title_button("join").pressed.emit()
+	await _await_ticks(5)
+	if opened[0] != 1:
+		failures.append("Join a friend opened the join screen %d times" % opened[0])
+	if server.match_kind() != "" or server.is_online() or server.online_requested() or server.online_room_code() != "":
+		failures.append("Join a friend started a host room (kind '%s', online %s, code '%s', status %s)" % [server.match_kind(), server.is_online(), server.online_room_code(), server.online_status()])
+	if screen.title_visible() or screen.title_fork_open():
+		failures.append("the title or fork stayed up after Join a friend")
+	await _kind_close_435(rig)
+	return failures
+func _title_key_1075(screen: CanvasLayer, code: Key) -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = code
+	event.pressed = true
+	screen._unhandled_key_input(event)
+## #1075: Esc, B and the Back button leave the fork; H and J, and the D-pad plus A, pick; A never
+## seats the pad.
+func _scenario_title_fork_back_and_key_and_pad_paths_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	var opened: Array[int] = [0]
+	screen.set_join_a_friend(func() -> void: opened[0] += 1)
+	screen.show_title(true)
+	await _await_ticks(2)
+	_title_key_1075(screen, KEY_O)
+	if not screen.title_fork_open():
+		failures.append("the O key did not open the fork")
+	_title_key_1075(screen, KEY_ESCAPE)
+	if screen.title_fork_open() or not screen.title_visible() or not screen.title_button("local").is_visible_in_tree():
+		failures.append("Esc did not return to the three cards")
+	screen.title_button("online").pressed.emit()
+	screen.title_button("back").pressed.emit()
+	if screen.title_fork_open() or server.match_kind() != "":
+		failures.append("the Back button did not return to the title (fork %s, kind '%s')" % [screen.title_fork_open(), server.match_kind()])
+	# While the fork shows, the card keys C and S do nothing.
+	_title_key_1075(screen, KEY_O)
+	_title_key_1075(screen, KEY_S)
+	if server.match_kind() != "" or not screen.title_fork_open():
+		failures.append("S picked Solo from over the fork (kind '%s')" % server.match_kind())
+	_title_key_1075(screen, KEY_J)
+	if opened[0] != 1 or server.is_online():
+		failures.append("J did not join a friend (opened %d)" % opened[0])
+	# The pad: B goes back, the first D-pad press focuses Host, Right reaches Join, A picks.
+	screen.show_title(true)
+	await _await_ticks(1)
+	_title_key_1075(screen, KEY_O)
+	await _pad_tap_368(0, JOY_BUTTON_B)
+	if screen.title_fork_open():
+		failures.append("pad B did not leave the fork")
+	_title_key_1075(screen, KEY_O)
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_DOWN)
+	if get_root().gui_get_focus_owner() != screen.title_button("host"):
+		failures.append("the first D-pad press in the fork did not focus Host")
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_RIGHT)
+	if get_root().gui_get_focus_owner() != screen.title_button("join"):
+		failures.append("D-pad Right did not reach Join")
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	await _await_ticks(2)
+	if opened[0] != 2 or server.pad_slot(0) != -1:
+		failures.append("pad A on Join: opened %d, pad seated %s" % [opened[0], server.pad_slot(0) != -1])
+	screen.show_title(true)
+	await _await_ticks(1)
+	_title_key_1075(screen, KEY_O)
+	await _pad_tap_368(0, JOY_BUTTON_DPAD_DOWN)
+	await _pad_tap_368(0, JOY_BUTTON_A)
+	await _await_ticks(3)
+	if server.match_kind() != "online" or server.pad_slot(0) != -1:
+		failures.append("pad A on Host gave kind '%s', pad seated %s" % [server.match_kind(), server.pad_slot(0) != -1])
+	await _kind_close_435(rig)
+	return failures
+## #1075: the fork keeps every control inside the window at 1600x900, 1920x1080 and the Deck's
+## 1280x800, with its two cards side by side and each holding its labels.
+func _scenario_title_fork_fits_every_resolution_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var screen: CanvasLayer = rig["screen"]
+	var was_size: Vector2i = get_root().size
+	screen.show_title(true)
+	screen.title_button("online").pressed.emit()
+	for size: Vector2i in [Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(1280, 800)]:
+		get_root().size = size
+		await _await_ticks(4)
+		var canvas := Rect2(Vector2.ZERO, get_root().get_visible_rect().size)
+		for node: Node in screen.title_panel().find_children("*", "Control", true, false):
+			var control: Control = node as Control
+			if not control.is_visible_in_tree() or control.name == "Ground":
+				continue
+			var rect: Rect2 = control.get_global_rect()
+			if rect.size.x > 0.0 and rect.size.y > 0.0 and not canvas.encloses(rect):
+				failures.append("%s: %s %s is outside the window %s" % [size, control.get_path(), rect, canvas])
+		var host: Button = screen.title_button("host")
+		var join: Button = screen.title_button("join")
+		if host.get_global_rect().intersects(join.get_global_rect()) or host.get_global_rect().get_center().x > join.get_global_rect().get_center().x:
+			failures.append("%s: the fork cards overlap or are out of order" % size)
+		for button: Button in [host, join]:
+			for label: Node in button.find_children("*", "Label", true, false):
+				if not button.get_global_rect().encloses((label as Label).get_global_rect()):
+					failures.append("%s: the %s card does not hold its label '%s'" % [size, button.name, (label as Label).text])
+	get_root().size = was_size
+	await _kind_close_435(rig)
+	return failures
+## A Steam invite fixture: a Main with an Online host (and a recorder for the join screen).
+func _invite_rig_1075(others: bool, failures: Array[String]) -> Dictionary:
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return rig
+	var server: Node = rig["server"]
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var opened: Array[int] = [0]
+	rig["opened"] = opened
+	steam.join_screen_for_test = func() -> void: opened[0] += 1
+	steam.invite_scene_for_test = rig["main"]
+	rig["screen"].press_title("host")
+	if not await _wait_for_239(func() -> bool: return server.is_online()):
+		failures.append("host never came online")
+	if others:
+		await _pad_tap_368(0, JOY_BUTTON_A) # a gamepad takes a second human seat
+		await _await_ticks(2)
+		if server.pad_slot(0) == -1:
+			failures.append("the gamepad did not take a seat")
+	return rig
+func _invite_close_1075(rig: Dictionary) -> void:
+	var steam: Node = get_root().get_node("SteamPlatform")
+	if steam.invite_confirm != null and is_instance_valid(steam.invite_confirm):
+		steam.invite_confirm.free()
+	steam.invite_confirm = null
+	steam.join_screen_for_test = Callable()
+	steam.invite_scene_for_test = null
+	steam.pending_join_code = ""
+	await _kind_close_435(rig)
+func _invite_prompt_1075() -> Node:
+	var steam: Node = get_root().get_node("SteamPlatform")
+	return steam.invite_confirm if steam.invite_confirm != null and is_instance_valid(steam.invite_confirm) else null
+## #1075: a host alone, or with only bots, joins the friend's room at once, with no prompt.
+func _scenario_steam_invite_host_alone_joins_at_once_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _invite_rig_1075(false, failures)
+	if rig.is_empty():
+		return failures
+	var steam: Node = get_root().get_node("SteamPlatform")
+	rig["server"].apply_host_command("bots", 2)
+	await _await_ticks(2)
+	steam.emit_join_for_test("+pickfight_room mnpq")
+	if rig["opened"][0] != 1 or _invite_prompt_1075() != null:
+		failures.append("an invite to a host with only bots: opened %d, prompt %s" % [rig["opened"][0], _invite_prompt_1075() != null])
+	if steam.pending_join_code != "MNPQ":
+		failures.append("the invite's code was not kept for the join screen ('%s')" % steam.pending_join_code)
+	await _invite_close_1075(rig)
+	return failures
+## #1075: with another human seated the host is asked; Join leaves and joins the friend's room.
+func _scenario_steam_invite_with_human_seated_asks_and_join_leaves_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _invite_rig_1075(true, failures)
+	if rig.is_empty():
+		return failures
+	var steam: Node = get_root().get_node("SteamPlatform")
+	steam.emit_join_for_test("+pickfight_room mnpq")
+	await _await_ticks(2)
+	var prompt: Node = _invite_prompt_1075()
+	if prompt == null or rig["opened"][0] != 0:
+		failures.append("with a human seated: prompt %s, opened %d (wanted a prompt and no join yet)" % [prompt != null, rig["opened"][0]])
+	else:
+		if not rig["server"].is_online():
+			failures.append("the room closed before the host answered")
+		prompt.join_button().pressed.emit()
+		await _await_ticks(2)
+		if rig["opened"][0] != 1 or _invite_prompt_1075() != null or steam.pending_join_code != "MNPQ":
+			failures.append("Join: opened %d, prompt %s, code '%s'" % [rig["opened"][0], _invite_prompt_1075() != null, steam.pending_join_code])
+	await _invite_close_1075(rig)
+	return failures
+## #1075: Stay keeps the room and drops the invite.
+func _scenario_steam_invite_stay_keeps_the_room_and_drops_the_invite_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _invite_rig_1075(true, failures)
+	if rig.is_empty():
+		return failures
+	var steam: Node = get_root().get_node("SteamPlatform")
+	steam.emit_join_for_test("+pickfight_room mnpq")
+	await _await_ticks(2)
+	var prompt: Node = _invite_prompt_1075()
+	if prompt == null:
+		failures.append("no prompt with a human seated")
+	else:
+		prompt.stay_button().pressed.emit()
+		await _await_ticks(2)
+		if rig["opened"][0] != 0 or _invite_prompt_1075() != null or steam.pending_join_code != "":
+			failures.append("Stay: opened %d, prompt %s, pending code '%s'" % [rig["opened"][0], _invite_prompt_1075() != null, steam.pending_join_code])
+		if not rig["server"].is_online() or rig["server"].pad_slot(0) == -1:
+			failures.append("Stay did not keep the room and its players")
+	await _invite_close_1075(rig)
+	return failures
+## #1075: Enter and Y join, Esc and N stay, A joins and B stays; a second invite replaces the
+## pending code without a second prompt.
+func _scenario_steam_invite_prompt_key_and_pad_paths_and_second_invite_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _invite_rig_1075(true, failures)
+	if rig.is_empty():
+		return failures
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var opened: Array[int] = rig["opened"]
+	var want_opened: int = 0
+	for step: Array in [[KEY_ENTER, true], [KEY_ESCAPE, false], [KEY_Y, true], [KEY_N, false]]:
+		steam.emit_join_for_test("+pickfight_room mnpq")
+		await _await_ticks(2)
+		if _invite_prompt_1075() == null:
+			failures.append("no prompt before key %s" % OS.get_keycode_string(step[0]))
+			break
+		var event := InputEventKey.new()
+		event.physical_keycode = step[0]
+		event.pressed = true
+		_invite_prompt_1075()._input(event)
+		await _await_ticks(2)
+		want_opened += 1 if step[1] else 0
+		if opened[0] != want_opened or _invite_prompt_1075() != null:
+			failures.append("key %s: opened %d, wanted %d, prompt left %s" % [OS.get_keycode_string(step[0]), opened[0], want_opened, _invite_prompt_1075() != null])
+	for step: Array in [[JOY_BUTTON_A, true], [JOY_BUTTON_B, false]]:
+		steam.emit_join_for_test("+pickfight_room mnpq")
+		await _await_ticks(2)
+		if _invite_prompt_1075() == null:
+			failures.append("no prompt before pad button %d" % step[0])
+			break
+		var pad_before: int = rig["server"].pad_slot(0)
+		await _pad_tap_368(0, step[0])
+		await _await_ticks(2)
+		want_opened += 1 if step[1] else 0
+		if opened[0] != want_opened or _invite_prompt_1075() != null or rig["server"].pad_slot(0) != pad_before:
+			failures.append("pad button %d: opened %d, wanted %d, prompt left %s" % [step[0], opened[0], want_opened, _invite_prompt_1075() != null])
+	steam.emit_join_for_test("+pickfight_room mnpq")
+	await _await_ticks(2)
+	var first: Node = _invite_prompt_1075()
+	steam.emit_join_for_test("+pickfight_room wxyz")
+	await _await_ticks(2)
+	if first == null or _invite_prompt_1075() != first or steam.pending_join_code != "WXYZ":
+		failures.append("a second invite: same prompt %s, pending code '%s' (wanted WXYZ)" % [_invite_prompt_1075() == first, steam.pending_join_code])
+	await _invite_close_1075(rig)
+	return failures
+## #1075: mid-match the host is asked too, and the match keeps running behind the prompt.
+func _scenario_steam_invite_mid_match_asks_first_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _invite_rig_1075(true, failures)
+	if rig.is_empty():
+		return failures
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var server: Node = rig["server"]
+	server.set_lobby_state({"phase": "playing", "players": []})
+	steam.emit_join_for_test("+pickfight_room mnpq")
+	await _await_ticks(5)
+	var prompt: Node = _invite_prompt_1075()
+	if prompt == null or rig["opened"][0] != 0:
+		failures.append("mid-match: prompt %s, opened %d" % [prompt != null, rig["opened"][0]])
+	if get_root().get_tree().paused:
+		failures.append("the prompt paused the match")
+	if prompt != null:
+		prompt.join_button().pressed.emit()
+		await _await_ticks(2)
+		if rig["opened"][0] != 1:
+			failures.append("Join mid-match opened %d times" % rig["opened"][0])
+	await _invite_close_1075(rig)
+	return failures
+## #1075: if the room empties while the prompt is open, it just joins.
+func _scenario_steam_invite_room_emptying_under_the_prompt_joins_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _invite_rig_1075(true, failures)
+	if rig.is_empty():
+		return failures
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var server: Node = rig["server"]
+	steam.emit_join_for_test("+pickfight_room mnpq")
+	await _await_ticks(2)
+	if _invite_prompt_1075() == null:
+		failures.append("no prompt with a human seated")
+	server.kick(server.pad_slot(0), true)
+	await _await_ticks(4)
+	if rig["opened"][0] != 1 or _invite_prompt_1075() != null:
+		failures.append("the room emptied: opened %d, prompt %s" % [rig["opened"][0], _invite_prompt_1075() != null])
+	await _invite_close_1075(rig)
+	return failures
+## #1075: a client already in a room who accepts an invite leaves it and joins the friend's.
+func _scenario_steam_invite_as_a_client_leaves_and_joins_1075() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(2, failures)
+	if rig.is_empty():
+		return failures
+	var steam: Node = get_root().get_node("SteamPlatform")
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var old_socket: Variant = client._socket
+	steam.emit_join_for_test("+pickfight_room abcd")
+	if client.room_code != "ABCD" or client._socket == old_socket or client.state == RcState241.PLAYING:
+		failures.append("the invite as a client: room '%s', same socket %s, state %d" % [client.room_code, client._socket == old_socket, client.state])
+	steam.pending_join_code = ""
+	await _rc_close_241(rig)
 	return failures

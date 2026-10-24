@@ -846,6 +846,13 @@ func title_visible() -> bool:
 func title_button(kind: String) -> Button:
 	return _title_screen.title_button(kind)
 
+func title_fork_open() -> bool:
+	return _title_screen.fork_open()
+
+## Swaps what Join a friend does (#1075), for the scenarios.
+func set_join_a_friend(action: Callable) -> void:
+	_title_screen.join_a_friend = action
+
 func show_title(on: bool) -> void:
 	_title_screen.show_title(on)
 
