@@ -181,6 +181,8 @@ const SOUNDS: Dictionary = {
 		"kenney_impact/impactSoft_medium_001.ogg"], "db": -6.0, "max_sec": 0.4},
 	"strip_boost": {"files": [
 		"kenney_scifi/thrusterFire_000.ogg"], "db": -8.0, "max_sec": 0.4},
+	"belt_step": {"files": [
+		"kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "max_sec": 0.35},
 	"ice_skid": {"files": [
 		"kenney_impact/impactMetal_light_000.ogg",
 		"kenney_impact/impactMetal_light_001.ogg"], "db": -8.0, "max_sec": 0.4},
