@@ -179,6 +179,8 @@ func _boo() -> void:
 			continue
 		if _player != null and _player.is_teammate(rival):
 			continue
+		if rival.spawn_protected:
+			continue  # just respawned: not nudged off its ledge (#1053)
 		var dist: float = rival.global_position.distance_to(global_position)
 		if dist <= best_dist:
 			target = rival

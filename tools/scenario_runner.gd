@@ -602,6 +602,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ghost_grabs_carries_and_drops_one_pickup_at_a_time_660",
 	"ghost_boo_shoves_nearest_rival_on_cooldown_without_ko_credit_660",
 	"ghost_boo_skips_teammates_660",
+	"ghost_boo_skips_spawn_protected",
 	"ghost_round_end_drops_what_it_carries_660",
 	"ghost_phone_tap_and_pad_a_do_the_context_action_660",
 	"ghost_cleared_at_round_end_and_never_for_bots",
@@ -2890,6 +2891,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ghost_boo_shoves_nearest_rival_on_cooldown_without_ko_credit_660()
 		"ghost_boo_skips_teammates_660":
 			return await _scenario_ghost_boo_skips_teammates_660()
+		"ghost_boo_skips_spawn_protected":
+			return await _scenario_ghost_boo_skips_spawn_protected()
 		"ghost_round_end_drops_what_it_carries_660":
 			return await _scenario_ghost_round_end_drops_what_it_carries_660()
 		"ghost_phone_tap_and_pad_a_do_the_context_action_660":
@@ -33009,6 +33012,8 @@ func _ghost_round() -> Dictionary:
 	await _await_ticks(4)
 	players[0].eliminate()
 	await _await_ticks(4)
+	for p: RigidBody2D in players:
+		p.spawn_protected = false  # round-start protection would make a Boo skip them (#1053)
 	return loop
 func _scenario_ghost_hidden_until_touch_then_fades() -> Array[String]:
 	var failures: Array[String] = []
@@ -33222,6 +33227,55 @@ func _scenario_ghost_boo_skips_teammates_660() -> Array[String]:
 	dv = await _boo_660(ghost, players[0], players[2], Vector2(-20.0, 0.0))
 	if dv < 100.0:
 		failures.append("a boo at a rival on the other team did not shove (dvx %.1f)" % dv)
+	await _teardown(loop["stage"])
+	return failures
+## Issue #1053: a Boo skips a spawn-protected rival and falls to the next nearest one.
+func _scenario_ghost_boo_skips_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	ghost.bounds = Rect2(-100000.0, -100000.0, 200000.0, 200000.0)
+	var near: RigidBody2D = players[1]
+	var far: RigidBody2D = players[2]
+	near.spawn_protected = true
+	var park: Vector2 = far.global_position
+	# The protected rival is nearest, an unprotected one 80 px out: the Boo goes to the latter.
+	ghost.global_position = near.global_position + Vector2(-20.0, 0.0)
+	far.global_position = ghost.global_position + Vector2(80.0, -40.0)
+	far.linear_velocity = Vector2.ZERO
+	var near_before: float = near.linear_velocity.x
+	var far_before: float = far.linear_velocity.x
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if absf(near.linear_velocity.x - near_before) > 20.0:
+		failures.append("a boo shoved a spawn-protected rival (dvx %.1f)" % (near.linear_velocity.x - near_before))
+	if far.linear_velocity.x - far_before < 100.0:
+		failures.append("the boo did not fall through to the unprotected rival (dvx %.1f)" % (far.linear_velocity.x - far_before))
+	# Only the protected rival in range: nothing happens and no cooldown starts.
+	ghost._boo_cooldown = 0.0
+	far.global_position = park
+	far.linear_velocity = Vector2.ZERO
+	ghost.global_position = near.global_position + Vector2(-20.0, 0.0)
+	near_before = near.linear_velocity.x
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if absf(near.linear_velocity.x - near_before) > 20.0:
+		failures.append("a boo shoved the only rival in range while protected")
+	if ghost.boo_cooldown_left() > 0.0:
+		failures.append("a boo at nothing spent the cooldown (%.2f)" % ghost.boo_cooldown_left())
+	# Protection over: the same rival can be Booed.
+	near.spawn_protected = false
+	near_before = near.linear_velocity.x
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if near.linear_velocity.x - near_before < 100.0:
+		failures.append("the rival was not Booed once protection ended (dvx %.1f)" % (near.linear_velocity.x - near_before))
 	await _teardown(loop["stage"])
 	return failures
 ## Issue #660: the ghost going away at round end lets go of what it carries.
