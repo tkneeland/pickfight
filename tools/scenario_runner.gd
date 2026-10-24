@@ -747,6 +747,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ctf_a_defender_touch_returns_the_flag",
 	"ctf_a_capture_scores_and_resets_the_flag",
 	"ctf_two_captures_end_the_round",
+	"ctf_clock_gives_leader_the_win",
+	"ctf_level_at_time_goes_to_sudden_death",
 	"ctf_a_ko_drops_the_flag_and_respawns_the_player",
 	"ctf_stages_load_bases_and_weights",
 	"ctf_flag_runner_award",
@@ -3153,6 +3155,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_ctf_is_teams_only()
 		"ctf_touching_the_enemy_flag_picks_it_up":
 			return await _scenario_ctf_touching_the_enemy_flag_picks_it_up()
+		"ctf_clock_gives_leader_the_win":
+			return await _scenario_ctf_clock_gives_leader_the_win()
+		"ctf_level_at_time_goes_to_sudden_death":
+			return await _scenario_ctf_level_at_time_goes_to_sudden_death()
 		"ctf_a_hit_makes_the_carrier_drop_the_flag":
 			return await _scenario_ctf_a_hit_makes_the_carrier_drop_the_flag()
 		"ctf_a_dropped_flag_returns_after_ten_seconds":
@@ -37271,6 +37277,78 @@ func _scenario_ctf_two_captures_end_the_round() -> Array[String]:
 		failures.append("the round was not over after the second capture (phase '%s')" % rm.lobby_phase())
 	await _teardown(rig["stage"])
 	return failures
+## The 6-minute clock (#1013): the team with more captures wins when it runs out.
+func _scenario_ctf_clock_gives_leader_the_win() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var rm: Node = rig["rm"]
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	mode.capture_pause_sec = 0.0
+	if absf(mode.time_left - 360.0) > 2.0:
+		failures.append("the clock starts at %.1f s, wanted 360" % mode.time_left)
+	var stage: Node2D = rm._current_stage
+	var red: RigidBody2D = rig["players"][0]
+	mode.captures_to_win = 5
+	red.teleport_to(stage.get_flag_home(1))
+	await _await_ticks(3)
+	red.teleport_to(stage.get_base_rect(0).get_center())
+	await _await_ticks(3)
+	if int(mode.scores[0]) != 1:
+		failures.append("setup: Red has %d captures, wanted 1" % int(mode.scores[0]))
+	# Control: with time left nobody wins.
+	await _await_ticks(10)
+	if rm.team_score(0) != 0 or rm.lobby_phase() == "round_end":
+		failures.append("the round ended with time on the clock")
+	mode.time_left = 0.05
+	await _await_ticks(2)
+	var went_overtime: bool = is_instance_valid(mode) and mode.overtime
+	await _await_ticks(13)
+	if rm.team_score(0) != 1 or rm.team_score(1) != 0:
+		failures.append("at the clock the leader's team score is %d - %d, wanted 1 - 0" % [rm.team_score(0), rm.team_score(1)])
+	if rm.lobby_phase() != "round_end":
+		failures.append("the round was not over after the clock (phase '%s')" % rm.lobby_phase())
+	if went_overtime:
+		failures.append("a clear leader went to overtime")
+	await _teardown(rig["stage"])
+	return failures
+
+## A level score at the clock plays the shared Sudden Death in place, as Stock's tie does (#1013).
+func _scenario_ctf_level_at_time_goes_to_sudden_death() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var heard: Array[StringName] = []
+	mode.callout.connect(func(sound: StringName) -> void: heard.append(sound))
+	mode.take_flag(1, 0)
+	mode.time_left = 0.05
+	await _await_ticks(15)
+	if not mode.overtime or rm.tiebreaker() == null:
+		failures.append("a level score at the clock did not start the Sudden Death tiebreaker")
+	if not heard.has(&"announce_overtime"):
+		failures.append("the clock tie was not announced 'Overtime!'")
+	if rm.lobby_phase() == "round_end":
+		failures.append("a level score ended the round without a tiebreak")
+	if int(mode.state[1]) != mode.HOME:
+		failures.append("a carried flag was not sent home for the overtime")
+	for player: RigidBody2D in players:
+		if not player.alive:
+			failures.append("a fighter was not standing in the overtime")
+	players[0].strike_landed.emit(players[1], 5.0, Vector2.ZERO, false)
+	players[0].strike_landed.emit(players[3], 5.0, Vector2.ZERO, false)
+	await _await_ticks(10)
+	if players[1].alive:
+		failures.append("the overtime victim came back (a respawn in a one-hit overtime)")
+	if not await _await_condition(func() -> bool: return rm.team_score(0) == 1, 3000):
+		failures.append("one team's last fighter going down in overtime did not decide the round")
+	await _teardown(rig["stage"])
+	return failures
+
 ## A knocked-out carrier drops the flag where they fell and is back in about 1.5 s
 ## with spawn protection; the round goes on while a team is briefly empty.
 func _scenario_ctf_a_ko_drops_the_flag_and_respawns_the_player() -> Array[String]:

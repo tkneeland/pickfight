@@ -57,6 +57,14 @@ var respawn_sec: float = RESPAWN_SEC
 ## Seconds between a capture short of the target and the next hall (#646).
 var capture_pause_sec: float = 1.5
 
+## The match clock (#1013): when it runs out the team with more captures wins;
+## level scores play the shared Sudden Death tiebreaker, as Stock's time limit does.
+const TIME_LIMIT_SEC: float = 360.0
+## Seconds left on the clock; also the seam a scenario drives.
+var time_left: float = TIME_LIMIT_SEC
+## True once a level score at the clock went to Sudden Death: no more clock, flags or respawns.
+var overtime: bool = false
+
 var round_manager: Node
 ## team -> captures this round.
 var scores: Dictionary = {0: 0, 1: 0}
@@ -106,6 +114,8 @@ func start_round(slots: Array[int]) -> void:
 	_damage_seen.clear()
 	_lockout.clear()
 	_finished = false
+	time_left = TIME_LIMIT_SEC
+	overtime = false
 	_pause_left = 0.0
 	_pausing = false
 	_bases_key = [-1]
@@ -198,6 +208,8 @@ func _stage() -> Node:
 func _on_eliminated(slot: int) -> void:
 	if not _active or _finished:
 		return
+	if overtime:
+		return # a one-hit overtime: whoever goes down stays down
 	var held: int = carried_flag_of(slot)
 	if held != -1:
 		drop_flag(held)
@@ -220,10 +232,44 @@ func _physics_process(delta: float) -> void:
 		_lockout[slot] = float(_lockout[slot]) - delta
 		if float(_lockout[slot]) <= 0.0:
 			_lockout.erase(slot)
+	if overtime:
+		return
+	time_left = maxf(time_left - delta, 0.0)
+	if time_left <= 0.0:
+		_timeout()
+		return
 	_check_carrier_hits()
 	_check_touches()
 	_check_captures()
 	_tick_returns(delta)
+	_refresh_flags()
+
+## The clock ran out (#1013): more captures wins; level plays Sudden Death in
+## place among everyone, announced "Overtime!", as Stock's timeout tie does.
+func _timeout() -> void:
+	if scores[0] != scores[1]:
+		_win(0 if int(scores[0]) > int(scores[1]) else 1)
+		return
+	var tied: Array[int] = []
+	for slot: int in _watched.keys():
+		if is_instance_valid(_watched[slot]):
+			tied.append(slot)
+	tied.sort()
+	begin_tiebreak(tied)
+	round_manager.begin_overtime(tied)
+	callout.emit(&"announce_overtime")
+
+## The tiebreaker started among `slots` (here from the clock, or a double-KO
+## replay run by `RoundManager`): everyone is back, flags home, no respawns.
+func begin_tiebreak(slots: Array[int]) -> void:
+	overtime = true
+	for team: int in [0, 1]:
+		return_flag(team)
+	for slot: int in slots:
+		var player: Node2D = _watched.get(slot)
+		if player != null and is_instance_valid(player) and not bool(player.alive) and _respawner.is_pending(slot):
+			_respawner.respawn_now(slot)
+		_respawner.cancel(slot)
 	_refresh_flags()
 
 ## Any rise in a carrier's damage is a hit: the flag drops.
