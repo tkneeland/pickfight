@@ -1886,6 +1886,18 @@ func _refresh_career() -> void:
 	if _career_button != null:
 		_career_button.text = career_text()
 
+## Issue #1054: "Room CODE - hosted by NAME" once the host's seat is in the
+## roster (the name is the masked one the lobby frame carries, #756); plain
+## "Room CODE" before that.
+func lobby_title_text() -> String:
+	var host_slot: int = int(lobby.get("host", -1))
+	for entry: Variant in lobby.get("players", []):
+		if entry is Dictionary and int(entry.get("slot", -2)) == host_slot:
+			var host_name: String = str(entry.get("name", ""))
+			if not host_name.is_empty():
+				return tr("JOIN_ROOM_HOSTED") % [room_code, host_name]
+	return tr("JOIN_ROOM_TITLE") % room_code
+
 func _refresh_lobby() -> void:
 	if _lobby_panel == null or state != State.PLAYING:
 		return
@@ -1897,7 +1909,7 @@ func _refresh_lobby() -> void:
 	elif phase == "victory":
 		_lobby_title.text = tr("JOIN_ROOM_OVER") % room_code
 	else:
-		_lobby_title.text = tr("JOIN_ROOM_TITLE") % room_code
+		_lobby_title.text = lobby_title_text()
 	for child in _lobby_list.get_children():
 		_lobby_list.remove_child(child)
 		child.queue_free()
