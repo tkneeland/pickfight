@@ -60,6 +60,12 @@ var _name_tags: Array[Label] = []
 var lives_of: Callable = Callable()
 const PIP_RADIUS: float = 4.0
 const PIP_GAP: float = 4.0
+## Issue #1064: a fighter on exactly one life draws that pip in warning red, the
+## lethal hitmarker's red (HitFeedback.LETHAL_COLOR, copied by value), with a
+## thin ink ring so it reads on any fighter colour. Static: no pulse or flash.
+const LAST_LIFE_COLOR: Color = Color(0.95, 0.1, 0.08, 1.0)
+const LAST_LIFE_RING_COLOR: Color = Color(0.05, 0.05, 0.08, 1.0)
+const LAST_LIFE_RING_WIDTH: float = 1.5
 ## [slot, centre, count] per slot with pips this frame.
 var _pips: Array = []
 
@@ -238,11 +244,22 @@ func pip_counts() -> Array:
 		counts.append([pip[0], pip[2]])
 	return counts
 
+## Issue #1064: the colour `slot`'s pips draw in this frame: LAST_LIFE_COLOR on
+## one life, else the fighter's own colour; Color.TRANSPARENT with no pips.
+func pip_color(slot: int) -> Color:
+	for pip: Array in _pips:
+		if pip[0] == slot:
+			return LAST_LIFE_COLOR if int(pip[2]) == 1 else _slot_color.call(slot)
+	return Color.TRANSPARENT
+
 func _draw() -> void:
 	for pip: Array in _pips:
 		var step: float = (PIP_RADIUS * 2.0 + PIP_GAP) * float(pip[3])
 		var left: float = (pip[1] as Vector2).x - step * (int(pip[2]) - 1) * 0.5
 		for i in int(pip[2]):
-			draw_circle(to_local(Vector2(left + step * i, (pip[1] as Vector2).y)), PIP_RADIUS * float(pip[3]), _slot_color.call(pip[0]))
+			var centre: Vector2 = to_local(Vector2(left + step * i, (pip[1] as Vector2).y))
+			draw_circle(centre, PIP_RADIUS * float(pip[3]), pip_color(pip[0]))
+			if int(pip[2]) == 1:
+				draw_arc(centre, PIP_RADIUS * float(pip[3]), 0.0, TAU, 24, LAST_LIFE_RING_COLOR, LAST_LIFE_RING_WIDTH * float(pip[3]), true)
 	for ring: Array in _rings:
 		draw_arc(to_local(ring[0]), TEAM_RING_RADIUS, 0.0, TAU, 48, TeamsScript.team_color(ring[1]), TEAM_RING_WIDTH, true)

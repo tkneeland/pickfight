@@ -823,6 +823,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_mode_huds_976",
 	"remote_client_victory_awards_976",
 	"remote_name_tags_and_match_point_dots_976",
+	"remote_last_life_pip_red_1064",
+	"stock_last_life_pip_red",
 	"remote_idle_hint_976",
 	"remote_boomstick_ring_976",
 	"remote_pickup_spawn_ring_976",
@@ -3331,6 +3333,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_victory_awards_976()
 		"remote_name_tags_and_match_point_dots_976":
 			return await _scenario_remote_name_tags_and_match_point_dots_976()
+		"remote_last_life_pip_red_1064":
+			return await _scenario_remote_last_life_pip_red_1064()
+		"stock_last_life_pip_red":
+			return await _scenario_stock_last_life_pip_red()
 		"remote_idle_hint_976":
 			return await _scenario_remote_idle_hint_976()
 		"remote_boomstick_ring_976":
@@ -54527,7 +54533,7 @@ func _idle_hint_fixture(count: int) -> Dictionary:
 		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
 	stage.add_child(tags)
 	tags.build()
-	return {"stage": stage, "players": players, "hint": tags.idle_hint()}
+	return {"stage": stage, "players": players, "hint": tags.idle_hint(), "tags": tags}
 
 ## Steps `frames` physics frames, ticking the hint each one with `ctx`.
 func _idle_hint_run(hint: Node2D, ctx: Dictionary, frames: int) -> void:
@@ -57426,6 +57432,56 @@ func _fx_puppet_976(client: Node, at: Vector2, colour: Color, hat: String = "non
 	puppet.color = colour
 	puppet.set_look(hat, "round", colour)
 	return puppet
+## Issue #1064: the pips draw in the fighter's colour from 2 lives up, in warning
+## red on exactly one, none on zero; gaining a life back returns the colour.
+func _scenario_stock_last_life_pip_red() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Dictionary = _idle_hint_fixture(3)
+	var tags: Node2D = fx["tags"]
+	var own := Color(0.9, 0.4, 0.2)
+	var lives: Array = [1, 2, 0]
+	tags.lives_of = func(slot: int) -> int: return int(lives[slot])
+	tags.tick()
+	if not tags.has_method("pip_color"):
+		failures.append("NameTags has no pip_color() helper")
+		await _teardown(fx["stage"])
+		return failures
+	var red: Color = Color(0.95, 0.1, 0.08, 1.0) # HitFeedback.LETHAL_COLOR by value
+	if tags.pip_color(0) != red:
+		failures.append("one life drew %s, want warning red" % [tags.pip_color(0)])
+	if tags.pip_color(1) != own:
+		failures.append("two lives drew %s, want the fighter's colour" % [tags.pip_color(1)])
+	if tags.pip_color(2) != Color.TRANSPARENT or tags.pip_counts().size() != 2:
+		failures.append("zero lives still showed pips: %s" % [tags.pip_counts()])
+	lives[1] = 1
+	lives[0] = 3
+	tags.tick()
+	if tags.pip_color(1) != red or tags.pip_color(0) != own:
+		failures.append("after a loss / a gain slot 1 drew %s and slot 0 %s" % [tags.pip_color(1), tags.pip_color(0)])
+	await _teardown(fx["stage"])
+	return failures
+
+## Issue #1064: the Online joiner runs the same NameTags.gd with the lives it
+## receives, so its last-life pip is red too.
+func _scenario_remote_last_life_pip_red_1064() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var puppet: Node2D = _fx_puppet_976(client, client._camera.global_position, Color.BLUE, "crown")
+	client.effects.place_fighter(2, puppet, true, 0, Color.BLUE, "Ann", 0)
+	client.hud = {"mode": "stock", "m": {"lives": {"2": 1}}}
+	client.effects.name_tags.tick()
+	if not client.effects.name_tags.has_method("pip_color"):
+		failures.append("the joiner's NameTags has no pip_color() helper")
+	elif client.effects.name_tags.pip_color(2) != Color(0.95, 0.1, 0.08, 1.0):
+		failures.append("the joiner's one-life pip drew %s, want warning red" % [client.effects.name_tags.pip_color(2)])
+	client.hud = {"mode": "stock", "m": {"lives": {"2": 2}}}
+	client.effects.name_tags.tick()
+	if client.effects.name_tags.has_method("pip_color") and client.effects.name_tags.pip_color(2) != Color.BLUE:
+		failures.append("the joiner's two-life pips drew %s, want the fighter's colour" % [client.effects.name_tags.pip_color(2)])
+	await _rc_close_241(rig)
+	return failures
+
 ## The joiner's name tags are the host's NameTags.gd: name, colour, team
 ## outline, team badge, seat number and Stock pips; MATCH POINT puts its gold
 ## dot on that tag; the puppet draws no name of its own.
