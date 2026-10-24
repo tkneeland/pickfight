@@ -1230,6 +1230,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_platform_geometry_unchanged_refactor_platforms",
 	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
+	"online_client_attention_on_countdown",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4119,6 +4120,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patches_overlapping_keep_grip_off_refactor_modes()
 		"controller_page_review_fixes_refactor_phone":
 			return _scenario_controller_page_review_fixes_refactor_phone()
+		"online_client_attention_on_countdown":
+			return await _scenario_online_client_attention_on_countdown()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -57331,5 +57334,51 @@ func _scenario_remote_loaded_weapon_art_976() -> Array[String]:
 	if p0 != null and p0.loaded:
 		failures.append("the fired grapple still shows loaded on the joiner")
 	await _rc_close_241(rig)
+	_scenario_completed = true
+	return failures
+## #1034: a countdown starting while the client window is unfocused asks the OS
+## for attention once; with focus none; a later round start does not ask again
+## for the same countdown. The real request is a no-op headless.
+func _scenario_online_client_attention_on_countdown() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	var asks: Array[int] = [0]
+	client.attention_requester = func() -> void: asks[0] += 1
+	var focused: Array[bool] = [false]
+	client.window_focused = func() -> bool: return focused[0]
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 2}))
+	var lobby_phase := func(phase: String, count: int) -> void:
+		client._on_host_text(JSON.stringify({"t": "lobby", "phase": phase, "count": count, "players": [{"slot": 2, "ready": true}]}))
+	lobby_phase.call("lobby", 0)
+	if asks[0] != 0:
+		failures.append("the lobby alone asked for attention")
+	lobby_phase.call("countdown", 3)
+	lobby_phase.call("countdown", 2)
+	lobby_phase.call("countdown", 1)
+	if asks[0] != 1:
+		failures.append("an unfocused countdown asked %d times, not once" % asks[0])
+	client._attention_on_round_start()
+	if asks[0] != 1:
+		failures.append("the round start asked again for the same countdown (%d)" % asks[0])
+	lobby_phase.call("lobby", 0)
+	lobby_phase.call("countdown", 3)
+	if asks[0] != 2:
+		failures.append("a second countdown did not ask (%d)" % asks[0])
+	client._attention_on_round_start()
+	lobby_phase.call("lobby", 0)
+	focused[0] = true
+	lobby_phase.call("countdown", 3)
+	client._attention_on_round_start()
+	if asks[0] != 2:
+		failures.append("a focused window asked for attention (%d)" % asks[0])
+	var fresh: Node = RemoteClientScene241.instantiate()
+	fresh.attention_requester.call() # headless: must not touch the window
+	fresh.free()
+	client.queue_free()
+	await process_frame
 	_scenario_completed = true
 	return failures
