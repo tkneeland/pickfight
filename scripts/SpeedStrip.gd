@@ -38,7 +38,17 @@ const _DETECTOR_ABOVE: float = 6.0
 const _DETECTOR_BELOW: float = 2.0
 const _CHEVRON_SPACING: float = 24.0
 
+## Issue #1058: a whoosh when a living fighter first steps onto the strip, at
+## most once per fighter per second (the `MudPatch` squelch pattern). Played on
+## the host only; online clients hear it through the generic Sfx snapshot
+## trailer, so nothing here is replicated.
+const WHOOSH_INTERVAL_SEC: float = 1.0
+
 var _detector: Area2D
+## Instance ids of the fighters boosting last tick.
+var _boosting_last: Dictionary = {}
+## Instance id -> seconds until that fighter may whoosh again.
+var _whoosh_wait: Dictionary = {}
 
 func _ready() -> void:
 	var half: Vector2 = size / 2.0
@@ -68,9 +78,23 @@ func _ready() -> void:
 	_detector = PartKitScript.add_top_detector(self, size, _DETECTOR_ABOVE, _DETECTOR_BELOW)
 
 func _physics_process(delta: float) -> void:
+	for id: int in _whoosh_wait.keys():
+		var left: float = float(_whoosh_wait[id]) - delta
+		if left <= 0.0:
+			_whoosh_wait.erase(id)
+		else:
+			_whoosh_wait[id] = left
+	var now: Dictionary = {}
 	for body: Node2D in _detector.get_overlapping_bodies():
 		if body is RigidBody2D and body.is_in_group("players") and PartKitScript.touching(self, body):
 			_boost(body as RigidBody2D, delta)
+			if bool(body.get("alive")):
+				var id: int = body.get_instance_id()
+				now[id] = true
+				if not _boosting_last.has(id) and not _whoosh_wait.has(id):
+					_whoosh_wait[id] = WHOOSH_INTERVAL_SEC
+					PartKitScript.sfx(self, &"strip_boost", body.global_position)
+	_boosting_last = now
 
 ## True while `body` is standing on the strip.
 func is_boosting(body: RigidBody2D) -> bool:
