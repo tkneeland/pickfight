@@ -591,6 +591,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_spawn_rules_unchanged_by_pop_816",
 	"pickup_spawn_plays_sound_once",
 	"pickup_spawn_refused_plays_no_sound",
+	"pickup_draw_skips_weapon_already_on_stage",
+	"pickup_draw_with_live_weapons_is_seeded_repeatable_1038",
 	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_leaves_loose_pickups_alone",
@@ -1877,6 +1879,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_erosion_island_survives_full_erosion()
 		"no_single_strike_kills":
 			return await _scenario_no_single_strike_kills()
+		"pickup_draw_skips_weapon_already_on_stage":
+			return await _scenario_pickup_draw_skips_weapon_already_on_stage()
+		"pickup_draw_with_live_weapons_is_seeded_repeatable_1038":
+			return await _scenario_pickup_draw_with_live_weapons_is_seeded_repeatable_1038()
 		"pickup_appears_at_round_start":
 			return await _scenario_pickup_appears_at_round_start()
 		"pickup_of_held_weapon_is_left_on_stage":
@@ -31607,6 +31613,73 @@ func _scenario_windy_stage_favours_umbrella_pickups() -> Array[String]:
 	var again: Dictionary = _weapon_theme_tally(_weapon_theme_director(true, 310), offered, draws)
 	if again != windy:
 		failures.append("the same seed drew a different windy sequence")
+	_scenario_completed = true
+	return failures
+## Issue #1038: a stand-in pickup (only its weapon matters) on the director's stage.
+func _live_pickup_stub(director: Node, stats: Resource) -> void:
+	var stub_script := GDScript.new()
+	stub_script.source_code = "extends Node2D\nvar weapon_stats = null\n"
+	stub_script.reload()
+	var stub: Node2D = stub_script.new()
+	stub.weapon_stats = stats
+	director._rm._current_stage.add_child(stub)
+	director._pickups.append(stub)
+func _scenario_pickup_draw_skips_weapon_already_on_stage() -> Array[String]:
+	var failures: Array[String] = []
+	var offered: Array[Resource] = WeaponThemePickupWeapons.available_weapons()
+	# A windy stage puts extra umbrella copies in the bag: the likeliest dup.
+	var director: Node = _weapon_theme_director(true, 310)
+	var umbrella: Resource = null
+	for stats: Resource in offered:
+		if stats.resource_path.get_file().get_basename() == "umbrella":
+			umbrella = stats
+	if umbrella == null:
+		failures.append("no umbrella among the offered weapons")
+		director.get_parent().queue_free()
+		_scenario_completed = true
+		return failures
+	_live_pickup_stub(director, umbrella)
+	for i in offered.size() * WEAPON_THEME_BAGS:
+		var drawn: Resource = director.draw_weapon(offered)
+		if drawn == null or drawn == umbrella:
+			failures.append("draw %d was %s while an umbrella pickup lay on the stage" % [i, "null" if drawn == null else "the umbrella"])
+			break
+	# The skipped umbrellas are kept for later: once it is collected it deals again.
+	director._pickups.clear()
+	var again: bool = false
+	for i in offered.size() * WEAPON_THEME_BAGS:
+		if director.draw_weapon(offered) == umbrella:
+			again = true
+			break
+	if not again:
+		failures.append("the umbrella never dealt again once it left the stage")
+	# Only the umbrella offered, and live: still spawns.
+	_live_pickup_stub(director, umbrella)
+	var only: Array[Resource] = [umbrella]
+	if director.draw_weapon(only) != umbrella:
+		failures.append("the only offered weapon did not spawn while live")
+	# Every offered weapon live: draws as before.
+	for stats: Resource in offered:
+		_live_pickup_stub(director, stats)
+	if director.draw_weapon(offered) == null:
+		failures.append("nothing drew when every offered weapon was live")
+	director.get_parent().queue_free()
+	_scenario_completed = true
+	return failures
+func _scenario_pickup_draw_with_live_weapons_is_seeded_repeatable_1038() -> Array[String]:
+	var failures: Array[String] = []
+	var offered: Array[Resource] = WeaponThemePickupWeapons.available_weapons()
+	var runs: Array = []
+	for r in 2:
+		var director: Node = _weapon_theme_director(true, 1038)
+		_live_pickup_stub(director, offered[0])
+		var seq: Array[String] = []
+		for i in 30:
+			seq.append(director.draw_weapon(offered).resource_path)
+		runs.append(seq)
+		director.get_parent().queue_free()
+	if runs[0] != runs[1]:
+		failures.append("the same seed dealt a different sequence with a weapon live")
 	_scenario_completed = true
 	return failures
 func _scenario_themed_pool_keeps_every_enabled_weapon() -> Array[String]:

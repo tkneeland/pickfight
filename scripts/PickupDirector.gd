@@ -208,23 +208,59 @@ func _switched_on(offered: Array[Resource]) -> Array[Resource]:
 ## offered is skipped, and the pickaxe never goes in. Shuffled from `rng`, so
 ## a seeded match still draws the same sequence.
 func draw_weapon(offered: Array[Resource]) -> Resource:
-	while not _bag.is_empty():
+	# #1038: a weapon already lying on the stage is passed over (and kept for
+	# a later draw) while any other offered weapon is not. When every offered
+	# weapon is lying there, nothing is skipped.
+	var live: Array[String] = _live_weapon_paths()
+	var skip_live: bool = false
+	for stats: Resource in offered:
+		if not live.has(stats.resource_path):
+			skip_live = true
+			break
+	var deferred: Array[Resource] = []
+	var drawn: Resource = null
+	while drawn == null:
+		if _bag.is_empty():
+			if not _refill_bag(offered):
+				break
 		var next: Resource = _bag.pop_back()
-		if offered.has(next):
-			return next
+		if not offered.has(next):
+			continue
+		if skip_live and live.has(next.resource_path):
+			deferred.append(next)
+			continue
+		drawn = next
+	# Put the passed-over weapons back at the bottom of the bag, so they come
+	# out after the rest of it.
+	for stats: Resource in deferred:
+		_bag.push_front(stats)
+	return drawn
+
+## Deals a fresh shuffled bag of `offered`, themed copies included. False when
+## that leaves it empty. Shuffled off our own stream: Array.shuffle() uses the
+## global RNG.
+func _refill_bag(offered: Array[Resource]) -> bool:
 	var stage: Variant = _rm._current_stage if _rm != null else null
 	var copies: Dictionary = WeaponThemesScript.copies_for(stage, offered)
 	for stats: Resource in offered:
 		if copies.has(stats):
 			for i in int(copies[stats]):
 				_bag.append(stats)
-	# Fisher-Yates off our own stream: Array.shuffle() uses the global RNG.
 	for i in range(_bag.size() - 1, 0, -1):
 		var j: int = rng.randi() % (i + 1)
 		var swap: Resource = _bag[i]
 		_bag[i] = _bag[j]
 		_bag[j] = swap
-	return _bag.pop_back() if not _bag.is_empty() else null
+	return not _bag.is_empty()
+
+## Resource paths of the weapons of the pickups on the stage now (#1038).
+func _live_weapon_paths() -> Array[String]:
+	var paths: Array[String] = []
+	for pickup: Node2D in _live_pickups():
+		var stats: Variant = pickup.get("weapon_stats")
+		if stats != null:
+			paths.append((stats as Resource).resource_path)
+	return paths
 
 ## A random declared spot with no pickup already on it, or the fallback above
 ## the stage's centre when the stage declares none. Null when every spot is
