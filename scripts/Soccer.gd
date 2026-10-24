@@ -102,6 +102,7 @@ var _thump_cool: float = 0.0
 var _stuck_sec: float = 0.0
 var _hud: CanvasLayer
 var _score_label: Label
+var _clock_label: Label
 var _goal_label: Label
 ## The stage geometry `_refresh_geometry()` read last, and from which stage.
 var _geometry_key: Array = [-1]
@@ -154,6 +155,7 @@ func end_round() -> void:
 		_hud.queue_free()
 	_hud = null
 	_score_label = null
+	_clock_label = null
 	_goal_label = null
 
 ## Hands this round's goals to the match stats (issue #355).
@@ -303,6 +305,7 @@ func _physics_process(delta: float) -> void:
 			_kick_off()
 		return
 	time_left = maxf(time_left - delta, 0.0)
+	_update_hud()
 	if time_left <= 0.0:
 		_time_up()
 		return
@@ -446,6 +449,9 @@ func _build_hud() -> void:
 	_hud.name = "SoccerHud"
 	_score_label = ModeKitScript.hud_pill("SoccerScore", 12)
 	_hud.add_child(_score_label)
+	_clock_label = ModeKitScript.hud_pill("SoccerClock", 72)
+	_clock_label.visible = false
+	_hud.add_child(_clock_label)
 	_goal_label = Label.new()
 	_goal_label.name = "SoccerGoal"
 	_goal_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE, 0)
@@ -461,11 +467,22 @@ func _build_hud() -> void:
 	_hud.add_child(_goal_label)
 	add_child(_hud)
 
+## The match clock's text (#1040): "m:ss" in its last 30 s, as King of the
+## Hill shows its own; "" before that, once it has run out, or in Sudden Death.
+func clock_text() -> String:
+	if time_left <= 0.0:
+		return ""
+	return ModeKitScript.clock_text(time_left, ModeKitScript.CLOCK_SHOWN_SEC)
+
 ## "2 - 1": Red's goals, then Blue's.
 func score_text() -> String:
 	return ModeKitScript.score_text(scores)
 
 func _update_hud() -> void:
+	if _clock_label != null:
+		var clock: String = clock_text()
+		_clock_label.text = clock
+		_clock_label.visible = clock != ""
 	if _score_label != null:
 		_score_label.text = score_text()
 

@@ -94,6 +94,7 @@ var _root: Node2D
 var _flag_nodes: Dictionary = {}
 var _hud: CanvasLayer
 var _score_label: Label
+var _clock_label: Label
 ## The base rectangles `base_rect()` read last, and from which stage.
 var _bases_key: Array = [-1]
 var _base_rects: Array[Rect2] = [Rect2(), Rect2()]
@@ -149,6 +150,7 @@ func end_round() -> void:
 		_hud.queue_free()
 	_hud = null
 	_score_label = null
+	_clock_label = null
 
 ## Hands this round's captures to the match stats (issue #355).
 func report_stats(stats: RefCounted) -> void:
@@ -235,6 +237,7 @@ func _physics_process(delta: float) -> void:
 	if overtime:
 		return
 	time_left = maxf(time_left - delta, 0.0)
+	_update_hud()
 	if time_left <= 0.0:
 		_timeout()
 		return
@@ -503,12 +506,26 @@ func _build_hud() -> void:
 	_hud.name = "CtfHud"
 	_score_label = ModeKitScript.hud_pill("CtfScore", 12)
 	_hud.add_child(_score_label)
+	_clock_label = ModeKitScript.hud_pill("CtfClock", 72)
+	_clock_label.visible = false
+	_hud.add_child(_clock_label)
 	add_child(_hud)
+
+## The match clock's text (#1040): "m:ss" in its last 30 s, as King of the
+## Hill shows its own; "" before that, once it has run out, or in Sudden Death.
+func clock_text() -> String:
+	if time_left <= 0.0:
+		return ""
+	return ModeKitScript.clock_text(time_left, ModeKitScript.CLOCK_SHOWN_SEC)
 
 ## "1 - 0": Red's captures, then Blue's.
 func score_text() -> String:
 	return ModeKitScript.score_text(scores)
 
 func _update_hud() -> void:
+	if _clock_label != null:
+		var clock: String = clock_text()
+		_clock_label.text = clock
+		_clock_label.visible = clock != ""
 	if _score_label != null:
 		_score_label.text = score_text()

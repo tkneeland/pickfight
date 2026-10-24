@@ -86,9 +86,9 @@ static func _mode(id: String, node: Object, rm: Node) -> Dictionary:
 				"team_hold": [roundi(node.team_hold_of(0)), roundi(node.team_hold_of(1))]}
 		"capture_the_flag":
 			return {"score": [int(node.scores[0]), int(node.scores[1])], "flag": [int(node.state[0]), int(node.state[1])],
-				"carrier": [int(node.carrier[0]), int(node.carrier[1])], "win": int(node.captures_to_win)}
+				"carrier": [int(node.carrier[0]), int(node.carrier[1])], "win": int(node.captures_to_win), "clock": str(node.clock_text())}
 		"soccer":
-			return {"score": [int(node.scores[0]), int(node.scores[1])], "win": int(node.goals_to_win)}
+			return {"score": [int(node.scores[0]), int(node.scores[1])], "win": int(node.goals_to_win), "clock": str(node.clock_text())}
 		"hot_potato":
 			return {"it": int(node.it_slot), "fuse": ceili(float(node.fuse_left))}
 		"stock":
