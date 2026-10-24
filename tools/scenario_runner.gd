@@ -4627,7 +4627,7 @@ func _new_stage() -> Node2D:
 func _spawn_player(stage: Node2D, pos: Vector2) -> RigidBody2D:
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	stage.add_child(player)
-	player.global_position = pos
+	player.global_position = pos  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	player.bind_controller()
 	return player
 ## Frees a scenario's stage and marks the scenario complete. A teardown with
@@ -5541,12 +5541,12 @@ func _scenario_damage_reddens_fill_identity_persists() -> Array[String]:
 	var a: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	a.identity_color = IDENTITY_A_COLOR
 	stage.add_child(a)
-	a.global_position = DEEP_PARK_POSITION
+	a.global_position = DEEP_PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	a.bind_controller()
 	var b: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	b.identity_color = IDENTITY_B_COLOR
 	stage.add_child(b)
-	b.global_position = DEEP_PARK_POSITION + Vector2(200.0, 0.0)
+	b.global_position = DEEP_PARK_POSITION + Vector2(200.0, 0.0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	b.bind_controller()
 	await physics_frame
 	_brace(a)
@@ -5829,12 +5829,12 @@ func _scenario_stage_rotates_each_round() -> Array[String]:
 	var p1: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	p1.name = "P1"
 	stage.add_child(p1)
-	p1.global_position = DEEP_PARK_POSITION
+	p1.global_position = DEEP_PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	p1.bind_controller()
 	var p2: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	p2.name = "P2"
 	stage.add_child(p2)
-	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)
+	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	p2.bind_controller()
 	var roster := _FakeRoster.new()
 	roster.name = "Roster"
@@ -8820,12 +8820,12 @@ func _collect_stage_rotation(stage_names: PackedStringArray, seed_value: int, ro
 	var p1: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	p1.name = "P1"
 	stage.add_child(p1)
-	p1.global_position = DEEP_PARK_POSITION
+	p1.global_position = DEEP_PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	p1.bind_controller()
 	var p2: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	p2.name = "P2"
 	stage.add_child(p2)
-	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)
+	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	p2.bind_controller()
 	var roster := _FakeRoster.new()
 	roster.name = "Roster"
@@ -11589,7 +11589,7 @@ func _scenario_teleporter_moves_player_to_twin() -> Array[String]:
 		var ticks_ignored: int = 0
 		var sent_again: bool = false
 		for tick in 120:
-			player.global_position = TELEPORTER_A
+			player.teleport_to(TELEPORTER_A)
 			player.linear_velocity = Vector2.ZERO
 			await physics_frame
 			if player.global_position.x > 400.0:
@@ -11607,7 +11607,7 @@ func _scenario_teleporter_moves_player_to_twin() -> Array[String]:
 	var ghost: RigidBody2D = _spawn_player(stage, TELEPORTER_A)
 	ghost.alive = false
 	for _tick in 20:
-		ghost.global_position = TELEPORTER_A
+		ghost.teleport_to(TELEPORTER_A)
 		ghost.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if ghost.global_position.distance_to(TELEPORTER_A) > 40.0:
@@ -11637,7 +11637,7 @@ func _scenario_teleporter_plays_own_sound() -> Array[String]:
 		failures.append("the teleporter still plays wind_gust")
 	# Held on the exit portal inside the 1 s window: ignored, so silent.
 	for _tick in 30:
-		player.global_position = TELEPORTER_B
+		player.teleport_to(TELEPORTER_B)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if _sfx_count(sfx, "teleport") != played:
@@ -11680,7 +11680,7 @@ func _scenario_stage_teleporters_pair_up() -> Array[String]:
 ## fighter (ghost) plays none. The sound reaches online joiners through the
 ## Sfx `played` signal -> snapshot sound trailer, at the same position.
 func _belt_step_drop(player: RigidBody2D, belt: StaticBody2D, sfx: Node) -> int:
-	player.global_position = belt.position + Vector2(0, -60)
+	player.teleport_to(belt.position + Vector2(0, -60))
 	player.linear_velocity = Vector2.ZERO
 	var before: int = _sfx_count(sfx, "belt_step")
 	for _tick in 40:
@@ -11940,7 +11940,7 @@ func _scenario_ice_patch_slides_player_and_restores() -> Array[String]:
 ## Issue #993: stepping onto ice plays ice_skid once; staying is silent; a
 ## re-entry within 1 s is silent, after 1 s plays again; a ghost plays none.
 func _ice_skid_drop(player: RigidBody2D, ice: StaticBody2D, sfx: Node) -> int:
-	player.global_position = ice.position + Vector2(0, -60)
+	player.teleport_to(ice.position + Vector2(0, -60))
 	player.linear_velocity = Vector2.ZERO
 	var before: int = _sfx_count(sfx, "ice_skid")
 	for _tick in 40:
@@ -12216,7 +12216,7 @@ func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
 ## fighter (ghost) plays none. The sound reaches online joiners through the
 ## Sfx `played` signal -> snapshot sound trailer, at the same position.
 func _strip_boost_drop(player: RigidBody2D, strip: StaticBody2D, sfx: Node) -> int:
-	player.global_position = strip.position + Vector2(0, -60)
+	player.teleport_to(strip.position + Vector2(0, -60))
 	player.linear_velocity = Vector2.ZERO
 	var before: int = _sfx_count(sfx, "strip_boost")
 	for _tick in 40:
@@ -12421,7 +12421,7 @@ func _scenario_mud_patch_slows_player() -> Array[String]:
 ## (ghost) plays none.
 func _mud_squelch_drop(stage: Node2D, player: RigidBody2D, mud: StaticBody2D, sfx: Node) -> int:
 	# Lift the player clear of the strip, then drop it back on.
-	player.global_position = mud.position + Vector2(0, -60)
+	player.teleport_to(mud.position + Vector2(0, -60))
 	player.linear_velocity = Vector2.ZERO
 	var before: int = _sfx_count(sfx, "mud_squelch")
 	for _tick in 40:
@@ -14399,11 +14399,11 @@ func _scenario_sfx_hazard_hit_plays_once_per_hit() -> Array[String]:
 	var made: Array = _hazard_spikes_with_player(stage, 0.0)
 	var spikes: Area2D = made[0]
 	var player: RigidBody2D = made[1]
-	player.global_position = PART_POSITION
+	player.teleport_to(PART_POSITION)
 	sfx.start_recording()
 	var ticks_held: int = int(spikes.hit_cooldown_sec * 60.0 * 0.5)
 	for tick in ticks_held:
-		player.global_position = PART_POSITION
+		player.teleport_to(PART_POSITION)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	var played: int = _sfx_count(sfx, "hazard_hit")
@@ -14413,7 +14413,7 @@ func _scenario_sfx_hazard_hit_plays_once_per_hit() -> Array[String]:
 	player.set("spawn_protected", true)
 	var before: int = _sfx_count(sfx, "hazard_hit")
 	for tick in int(spikes.hit_cooldown_sec * 60.0) + 10:
-		player.global_position = PART_POSITION
+		player.teleport_to(PART_POSITION)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if _sfx_count(sfx, "hazard_hit") != before:
@@ -17611,7 +17611,7 @@ func _scenario_phone_hat_choice_reaches_player() -> Array[String]:
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	player.name = "HatP0"
 	stage.add_child(player)
-	player.global_position = PARK_POSITION
+	player.global_position = PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	var server: Node = ControllerServerScript.new()
 	server.name = "HatServer"
 	_set_phone_ports(server)
@@ -19094,7 +19094,7 @@ func _round_flow_fixture(player_count: int, roster_slots: Array[int], scenes: Ar
 		player.name = "P%d" % i
 		player.start_in_round = false
 		holder.add_child(player)
-		player.global_position = DEEP_PARK_POSITION + Vector2(400.0 * i, 0.0)
+		player.global_position = DEEP_PARK_POSITION + Vector2(400.0 * i, 0.0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		players.append(player)
 		paths.append(NodePath("../P%d" % i))
 	var roster := _FakeRoster.new()
@@ -21785,11 +21785,11 @@ func _scenario_bots_survive_hazard_stages() -> Array[String]:
 		holder.add_child(stage)
 		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 		holder.add_child(player)
-		player.global_position = case["at"]
+		player.global_position = case["at"]  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		player.bind_controller()
 		var rival: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 		holder.add_child(rival)
-		rival.global_position = case["rival"]
+		rival.global_position = case["rival"]  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		var bot: Node = BotScript.new()
 		bot.rng.seed = HAZARD_BOT_SEED
 		bot.player = player
@@ -22464,7 +22464,7 @@ func _scenario_flail_whip_damage_scales_with_speed() -> Array[String]:
 		# the ball is.
 		var from_body: Vector2 = ball.global_position - attacker.global_position
 		var ahead: float = from_body.angle() - PI * 0.5
-		victim.global_position = attacker.global_position + Vector2.from_angle(ahead) * from_body.length()
+		victim.teleport_to(attacker.global_position + Vector2.from_angle(ahead) * from_body.length())
 		var fastest: float = 0.0
 		for i in 120:
 			angle -= rate / 60.0
@@ -27421,7 +27421,7 @@ func _scenario_eyes_squash_is_visual_and_capped() -> Array[String]:
 	if player.scale != scale0 or player.mass != mass0 or (shape.shape as CircleShape2D).radius != radius0:
 		failures.append("squash touched the physics body (scale/mass/collision radius changed)")
 	# A landing: drop from height and see a squash on arrival.
-	player.global_position = Vector2(0.0, -1200.0)
+	player.teleport_to(Vector2(0.0, -1200.0))
 	player.linear_velocity = Vector2.ZERO
 	var landed_peak: float = 0.0
 	for i: int in 240:
@@ -28920,10 +28920,10 @@ func _scenario_hazard_contact_hits_once_per_cooldown() -> Array[String]:
 	var made: Array = _hazard_spikes_with_player(stage, 0.0)
 	var spikes: Area2D = made[0]
 	var player: RigidBody2D = made[1]
-	player.global_position = PART_POSITION
+	player.teleport_to(PART_POSITION)
 	var ticks_held: int = int(spikes.hit_cooldown_sec * 60.0 * 0.5)
 	for tick in ticks_held:
-		player.global_position = PART_POSITION
+		player.teleport_to(PART_POSITION)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if spikes.hit_count() != 1:
@@ -28932,7 +28932,7 @@ func _scenario_hazard_contact_hits_once_per_cooldown() -> Array[String]:
 		failures.append("damage %.1f after one contact, expected %.1f" % [player.damage, HAZARD_DAMAGE])
 	var past_cooldown: int = int(spikes.hit_cooldown_sec * 60.0) + 10
 	for tick in past_cooldown:
-		player.global_position = PART_POSITION
+		player.teleport_to(PART_POSITION)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if spikes.hit_count() < 2:
@@ -29001,7 +29001,7 @@ func _scenario_eye_styles_render_and_track_aim() -> Array[String]:
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	player.name = "EyeP0"
 	stage.add_child(player)
-	player.global_position = PARK_POSITION
+	player.global_position = PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	await _await_ticks(5)
 	var face: Node2D = player.face_node()
 	if face == null:
@@ -29046,7 +29046,7 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	player.name = "EyeSP0"
 	stage.add_child(player)
-	player.global_position = PARK_POSITION
+	player.global_position = PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	var server: Node = ControllerServerScript.new()
 	server.name = "EyeServer"
 	_set_phone_ports(server)
@@ -32725,7 +32725,7 @@ func _scenario_night_keeps_key_nodes_lit() -> Array[String]:
 	var night: Node2D = _night_stage(true, "Gauntlet")
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	get_root().add_child(player)
-	player.global_position = DEEP_PARK_POSITION
+	player.global_position = DEEP_PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	player.bind_controller()
 	var pickup := Node2D.new()
 	pickup.add_to_group("pickups")
@@ -36421,12 +36421,12 @@ func _scenario_shield_blocks_a_hit_on_its_face() -> Array[String]:
 		var before: float = player.damage
 		player.take_damage(20.0, point, attacker)
 		return player.damage - before
-	attacker.global_position = player.global_position + Vector2(150, 0)
+	attacker.teleport_to(player.global_position + Vector2(150, 0))
 	attacker.linear_velocity = Vector2.ZERO
 	var on_face: float = damage_taken.call(player.global_position + Vector2.RIGHT * 40.0)
 	await physics_frame
 	var pushed_face: float = attacker.linear_velocity.x
-	attacker.global_position = player.global_position + Vector2(-150, 0)
+	attacker.teleport_to(player.global_position + Vector2(-150, 0))
 	attacker.linear_velocity = Vector2.ZERO
 	var behind: float = damage_taken.call(player.global_position + Vector2.LEFT * 40.0)
 	await physics_frame
@@ -42535,7 +42535,7 @@ func _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage() -> Ar
 	await _await_ticks(SETTLE_TICKS)
 	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, -400))
 	shooter.gravity_scale = 0.0
-	shooter.global_position = player.global_position + Vector2(150, 0)
+	shooter.teleport_to(player.global_position + Vector2(150, 0))
 	shooter.linear_velocity = Vector2.ZERO
 	var reported: Array[float] = []
 	shooter.strike_landed.connect(func(_v: Node, amount: float, _p: Vector2, _l: bool) -> void:
@@ -45441,7 +45441,7 @@ func _scenario_respawn_skips_spawns_with_no_floor_605() -> Array[String]:
 	var rig: Dictionary = await _respawn_rig_605(points, [500.0])
 	if rig.is_empty():
 		return ["the round never started"]
-	rig["players"][1].global_position = Vector2(500.0, 400.0)
+	rig["players"][1].teleport_to(Vector2(500.0, 400.0))
 	var got: Vector2 = rig["respawn"].farthest_spawn(0)
 	if got != points[1]:
 		failures.append("respawned at %s, over the void; want the grounded %s" % [got, points[1]])
@@ -45458,7 +45458,7 @@ func _scenario_respawn_stays_on_own_half_605() -> Array[String]:
 	var rig: Dictionary = await _respawn_rig_605(points, [-300.0, 300.0])
 	if rig.is_empty():
 		return ["the round never started"]
-	rig["players"][1].global_position = Vector2(-300.0, 400.0)
+	rig["players"][1].teleport_to(Vector2(-300.0, 400.0))
 	var respawn: RefCounted = rig["respawn"]
 	if respawn.farthest_spawn(0) != points[1]:
 		failures.append("the unfiltered pick was not the far spawn")
@@ -45488,12 +45488,12 @@ func _scenario_respawn_avoids_hazard_adjacent_spawn() -> Array[String]:
 	var rig: Dictionary = await _respawn_rig_605(points, [-300.0, 300.0, 900.0])
 	if rig.is_empty():
 		return ["the round never started"]
-	rig["players"][1].global_position = Vector2(-300.0, 400.0)
+	rig["players"][1].teleport_to(Vector2(-300.0, 400.0))
 	var respawn: RefCounted = rig["respawn"]
 	var stage: Node = rig["stage"]
 	# The rig's fighter drifts between ticks; pin it where the scenario wants it.
 	var _pick := func(slot: int) -> Vector2:
-		rig["players"][1].global_position = Vector2(-300.0, 400.0)
+		rig["players"][1].teleport_to(Vector2(-300.0, 400.0))
 		return respawn.farthest_spawn(slot)
 	# Control: no hazard, the farthest spawn wins as before.
 	if _pick.call(0) != points[2]:
@@ -45533,10 +45533,10 @@ func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 		return ["the round never started"]
 	var respawn: RefCounted = rig["respawn"]
 	respawn.watched = {0: rig["players"][0]}
-	rig["players"][0].global_position = Vector2(0.0, 400.0)
+	rig["players"][0].teleport_to(Vector2(0.0, 400.0))
 	if respawn.farthest_spawn(0) != points[1]:
 		failures.append("alone, died at Spawn0, still respawned at Spawn0")
-	rig["players"][0].global_position = Vector2(500.0, 400.0)
+	rig["players"][0].teleport_to(Vector2(500.0, 400.0))
 	if respawn.farthest_spawn(0) != points[0]:
 		failures.append("alone, died at Spawn1, did not move to Spawn0")
 	await _teardown(rig["stage"])
@@ -46471,7 +46471,7 @@ func _rod_reel_trial(planted: bool, team_up: bool, ticks: int, force: float = -1
 			await _await_ticks(10)
 				# The planted victim stands on its head, its body well above the floor:
 		# the holder hangs level with that body, `gap` px off.
-		shooter.global_position = victim.global_position + Vector2(-gap, -4.0)
+		shooter.teleport_to(victim.global_position + Vector2(-gap, -4.0))
 	else:
 		victim.freeze = true
 	var start_x: float = victim.global_position.x
@@ -46952,7 +46952,7 @@ func _bot_drop_915(weapon_path: String) -> Dictionary:
 	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
 	await _await_ticks(2)
 	await _equip(player, weapon_path)
-	player.global_position = DEEP_PARK_POSITION
+	player.teleport_to(DEEP_PARK_POSITION)
 	player.linear_velocity = Vector2.ZERO
 	var bot: Node = BotScript.new()
 	bot.rng.seed = BOT_SEED
@@ -47440,7 +47440,7 @@ func _scenario_soccer_respawn_never_lands_in_a_goal_648() -> Array[String]:
 		rng.seed = 648
 		for i in 60:
 			var slot: int = i % 4
-			rig["players"][slot].global_position = Vector2(rng.randf_range(-900.0, 900.0), rng.randf_range(-300.0, 300.0))
+			rig["players"][slot].teleport_to(Vector2(rng.randf_range(-900.0, 900.0), rng.randf_range(-300.0, 300.0)))
 			var spot: Vector2 = respawner.farthest_spawn(slot)
 			for rect: Rect2 in rects:
 				if rect.has_point(spot):
@@ -51714,7 +51714,7 @@ func _scenario_player_numbers_badge_on_name_tags_809() -> Array[String]:
 		player.name = "NumP%d" % i
 		player.start_in_round = false
 		stage.add_child(player)
-		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		player.visible = true
 		player.alive = true
 		players.append(player)
@@ -54526,7 +54526,7 @@ func _idle_hint_fixture(count: int) -> Dictionary:
 		player.name = "HintP%d" % i
 		player.start_in_round = false
 		stage.add_child(player)
-		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		player.visible = true
 		player.alive = true
 		players.append(player)
