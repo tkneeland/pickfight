@@ -55,6 +55,12 @@ const BALL_MASS: float = 0.2
 const BALL_GRAVITY_SCALE: float = 0.75
 ## How far outside the stage's view the ball may be before it is put back.
 const OUT_OF_PLAY_MARGIN: float = 200.0
+## A ball slower than this (px/s) with no fighter near it counts as stuck (#988).
+const STUCK_SPEED: float = 20.0
+## How long it must stay stuck before it goes back to the centre.
+const STUCK_SEC: float = 8.0
+## No fighter body or weapon head within this many px of the ball.
+const STUCK_REACH: float = 80.0
 
 var goals_to_win: int = 3
 ## Seconds between a goal and the kick-off.
@@ -77,6 +83,7 @@ var _pause_left: float = 0.0
 var _last_touch: int = -1
 var _prev_velocity: Vector2 = Vector2.ZERO
 var _thump_cool: float = 0.0
+var _stuck_sec: float = 0.0
 var _hud: CanvasLayer
 var _score_label: Label
 var _goal_label: Label
@@ -99,6 +106,7 @@ func start_round(slots: Array[int]) -> void:
 	scorers.clear()
 	_finished = false
 	_pause_left = 0.0
+	_stuck_sec = 0.0
 	_last_touch = -1
 	_geometry_key = [-1]
 	_respawner = RespawnScript.new(round_manager, _watched, respawn_sec)
@@ -118,6 +126,7 @@ func start_round(slots: Array[int]) -> void:
 func end_round() -> void:
 	_active = false
 	ModeKitScript.unwatch(_watched, _handlers, &"eliminated")
+	_stuck_sec = 0.0
 	if _respawner != null:
 		_respawner.clear()
 	if ball != null and is_instance_valid(ball):
@@ -281,6 +290,29 @@ func _physics_process(delta: float) -> void:
 	_track_touch()
 	_check_goals()
 	_check_out_of_play()
+	_check_stuck(delta)
+
+## #988: a ball that stays nearly still with nobody in reach for `STUCK_SEC`
+## goes back to the centre like a kick-off: no score change, no banner.
+func _check_stuck(delta: float) -> void:
+	if ball == null or ball.linear_velocity.length() >= STUCK_SPEED or _fighter_near_ball():
+		_stuck_sec = 0.0
+		return
+	_stuck_sec += delta
+	if _stuck_sec >= STUCK_SEC:
+		_stuck_sec = 0.0
+		_place_ball()
+
+func _fighter_near_ball() -> bool:
+	for slot: int in _watched.keys():
+		var player: Node2D = _watched[slot]
+		if not is_instance_valid(player) or not bool(player.alive):
+			continue
+		if ball.global_position.distance_to(player.global_position) <= STUCK_REACH:
+			return true
+		if player.has_method("weapon_head_position") and ball.global_position.distance_to(player.weapon_head_position()) <= STUCK_REACH:
+			return true
+	return false
 
 ## Emits `ball_thump` when the ball's velocity jumped this tick (a strike or a
 ## bounce), at most once per `THUMP_GAP_SEC`; a roll stays silent.
@@ -337,6 +369,7 @@ func score_goal(team: int) -> void:
 	goal_scored.emit(team, scorer)
 	callout.emit(&"announce_goal")
 	ball.freeze = true
+	_stuck_sec = 0.0
 	_update_hud()
 	if int(scores[team]) >= goals_to_win:
 		_win(team)

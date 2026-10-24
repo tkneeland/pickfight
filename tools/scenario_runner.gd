@@ -727,6 +727,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"rules_table_bans_cannot_be_reenabled",
 	"mode_soccer_is_teams_only",
 	"soccer_ball_in_a_goal_scores_for_the_other_team",
+	"soccer_stuck_ball_returns_to_centre",
+	"soccer_stuck_ball_control_touched_or_moving_never_resets",
 	"soccer_three_goals_end_the_round_for_that_team",
 	"soccer_ko_respawns_the_player",
 	"soccer_stages_load_goals_and_weights",
@@ -3121,6 +3123,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_mode_soccer_is_teams_only()
 		"soccer_ball_in_a_goal_scores_for_the_other_team":
 			return await _scenario_soccer_ball_in_a_goal_scores_for_the_other_team()
+		"soccer_stuck_ball_returns_to_centre":
+			return await _scenario_soccer_stuck_ball(true)
+		"soccer_stuck_ball_control_touched_or_moving_never_resets":
+			return await _scenario_soccer_stuck_ball(false)
 		"soccer_three_goals_end_the_round_for_that_team":
 			return await _scenario_soccer_three_goals_end_the_round_for_that_team()
 		"soccer_ko_respawns_the_player":
@@ -36574,6 +36580,46 @@ func _scenario_soccer_ball_in_a_goal_scores_for_the_other_team() -> Array[String
 		failures.append("a ball in Blue's goal left the score at %s, wanted 1 - 1" % [mode.scores])
 	await _teardown(rig["stage"])
 	return failures
+
+## #988: a ball resting far from every fighter returns to the centre after the
+## stuck window with no score; with `expect_reset` false (control) a fighter
+## stands by the ball, so it must stay where it is.
+func _scenario_soccer_stuck_ball(expect_reset: bool) -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	var stage: Node2D = rm._current_stage
+	var centre: Vector2 = stage.get_ball_spawn()
+	var far: Vector2 = centre + Vector2(-600.0, -200.0)
+	# Frozen = motionless wherever it is put (a reset unfreezes it).
+	mode.ball.freeze = true
+	mode.ball.global_position = far
+	for player: RigidBody2D in rig["players"]:
+		player.teleport_to(centre + Vector2(0.0, -40.0) if expect_reset else far + Vector2(0.0, -40.0))
+		player.linear_velocity = Vector2.ZERO
+	# Keep the fighters parked where we put them.
+	var elapsed: float = 0.0
+	while elapsed < 9.0:
+		await _await_ticks(30)
+		elapsed += 0.5
+		for player: RigidBody2D in rig["players"]:
+			player.teleport_to(centre + Vector2(0.0, -40.0) if expect_reset else far + Vector2(0.0, -40.0))
+			player.linear_velocity = Vector2.ZERO
+	var moved: bool = mode.ball.global_position.distance_to(centre) < 100.0
+	if expect_reset and not moved:
+		failures.append("the stuck ball never returned to the centre (at %s, centre %s)" % [mode.ball.global_position, centre])
+	if not expect_reset and moved:
+		failures.append("a ball with a fighter beside it was reset")
+	if int(mode.scores[0]) != 0 or int(mode.scores[1]) != 0:
+		failures.append("the reset changed the score to %s" % [mode.scores])
+	await _teardown(rig["stage"])
+	return failures
+
 ## The third goal ends the round: the other team is out and the first team wins it.
 func _scenario_soccer_three_goals_end_the_round_for_that_team() -> Array[String]:
 	var failures: Array[String] = []
