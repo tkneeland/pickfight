@@ -104,6 +104,9 @@ var _hud: CanvasLayer
 var _score_label: Label
 var _clock_label: Label
 var _goal_label: Label
+## The scorer's name under GOAL! (#1070); blank for an own goal.
+var _goal_name_label: Label
+var _goal_scorer: int = -1
 ## The stage geometry `_refresh_geometry()` read last, and from which stage.
 var _geometry_key: Array = [-1]
 var _goal_rects: Array[Rect2] = [Rect2(), Rect2()]
@@ -157,6 +160,7 @@ func end_round() -> void:
 	_score_label = null
 	_clock_label = null
 	_goal_label = null
+	_goal_name_label = null
 
 ## Hands this round's goals to the match stats (issue #355).
 func report_stats(stats: RefCounted) -> void:
@@ -411,6 +415,7 @@ func score_goal(team: int) -> void:
 	var scorer: int = _last_touch if _last_touch != -1 and team_of(_last_touch) == team else -1
 	if scorer != -1:
 		scorers[scorer] = int(scorers.get(scorer, 0)) + 1
+	_goal_scorer = scorer
 	goal_scored.emit(team, scorer)
 	callout.emit(&"announce_goal")
 	ball.freeze = true
@@ -465,6 +470,19 @@ func _build_hud() -> void:
 	_goal_label.text = tr("SOCCER_GOAL")
 	_goal_label.visible = false
 	_hud.add_child(_goal_label)
+	_goal_name_label = Label.new()
+	_goal_name_label.name = "SoccerGoalName"
+	_goal_name_label.set_anchors_preset(Control.PRESET_CENTER)
+	_goal_name_label.offset_left = -600.0
+	_goal_name_label.offset_right = 600.0
+	_goal_name_label.offset_top = 70.0
+	_goal_name_label.offset_bottom = 150.0
+	_goal_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_goal_name_label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL
+	_goal_name_label.add_theme_font_size_override("font_size", 56)
+	_goal_name_label.add_theme_constant_override("outline_size", 18)
+	_goal_name_label.visible = false
+	_hud.add_child(_goal_name_label)
 	add_child(_hud)
 
 ## The match clock's text (#1040): "m:ss" in its last 30 s, as King of the
@@ -489,3 +507,9 @@ func _update_hud() -> void:
 func _show_goal(on: bool) -> void:
 	if _goal_label != null:
 		_goal_label.visible = on
+	if _goal_name_label != null:
+		var named: bool = on and _goal_scorer != -1
+		_goal_name_label.visible = named
+		if named:
+			_goal_name_label.text = str(round_manager._slot_name(_goal_scorer))
+			_goal_name_label.add_theme_color_override("font_color", round_manager._slot_color(_goal_scorer) as Color)

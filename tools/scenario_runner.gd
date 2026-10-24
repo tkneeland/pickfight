@@ -744,6 +744,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_ko_respawns_the_player",
 	"soccer_stages_load_goals_and_weights",
 	"soccer_top_scorer_award_and_goal_credit",
+	"soccer_goal_banner_names_scorer",
 	"bot_soccer_pushes_the_ball_toward_the_enemy_goal",
 	"announcer_calls_soccer_and_goal",
 	"bot_four_bots_finish_a_king_of_the_hill_round",
@@ -3175,6 +3176,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_soccer_stages_load_goals_and_weights()
 		"soccer_top_scorer_award_and_goal_credit":
 			return await _scenario_soccer_top_scorer_award_and_goal_credit()
+		"soccer_goal_banner_names_scorer":
+			return await _scenario_soccer_goal_banner_names_scorer()
 		"bot_soccer_pushes_the_ball_toward_the_enemy_goal":
 			return await _scenario_bot_soccer_pushes_the_ball_toward_the_enemy_goal()
 		"announcer_calls_soccer_and_goal":
@@ -37308,6 +37311,74 @@ func _scenario_soccer_stages_load_goals_and_weights() -> Array[String]:
 ## "Top Scorer" goes to the player with most goals, only in Soccer; a goal is
 ## credited to the last player of the scoring team to touch the ball, not to the
 ## other team (an own goal credits nobody).
+## #1070: the GOAL! banner names the scorer under it, in their colour, on the
+## host and (through the mode HUD mirror) on the Online joiner; an own goal shows
+## GOAL! alone and the name is gone at kick-off.
+func _scenario_soccer_goal_banner_names_scorer() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	var mode: Node = rm.game_mode_node()
+	var mirror_rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(mirror_rig)
+	var path: String = str(mode.get_script().resource_path)
+	mode.goal_pause_sec = 0.4
+	var red_player: RigidBody2D = rig["players"][0]
+	rig["players"][1].teleport_to(Vector2(600.0, 240.0))
+	rig["players"][2].teleport_to(Vector2(400.0, 240.0))
+	red_player.teleport_to(Vector2(-300.0, 240.0))
+	mode.ball.global_position = Vector2(-300.0, 240.0)
+	await _await_ticks(2)
+	mode.score_goal(0)
+	var host_name: Label = mode._hud.get_node_or_null("SoccerGoalName") as Label
+	if host_name == null:
+		failures.append("the host built no SoccerGoalName label")
+	else:
+		var want: String = str(rm._slot_name(0))
+		if not host_name.visible or host_name.text != want:
+			failures.append("credited goal: host name line is %s '%s', wanted '%s'" % [host_name.visible, host_name.text, want])
+		if host_name.get_theme_color("font_color") != (rm._slot_color(0) as Color):
+			failures.append("credited goal: the name is not in the scorer's colour")
+		if host_name.get_theme_font_size("font_size") != 56:
+			failures.append("credited goal: the name line is not 56 px")
+	var goal: Label = mode._hud.get_node("SoccerGoal") as Label
+	if not goal.visible or goal.text != "GOAL!":
+		failures.append("the GOAL! line is %s '%s'" % [goal.visible, goal.text])
+	var state: Dictionary = RemoteHudScript976.unpack(RemoteHudScript976._pack(UiMirrorScript976.capture(mode._hud)), {})
+	client.effects.apply_mode_hud(path, state)
+	var mine: Label = null
+	if client.effects.mode_hud != null:
+		mine = client.effects.mode_hud.get_node_or_null("SoccerGoalName") as Label
+	if mine == null:
+		failures.append("the joiner has no name line")
+	elif host_name != null and (not mine.visible or mine.text != host_name.text):
+		failures.append("joiner name line is %s '%s', wanted '%s'" % [mine.visible, mine.text, host_name.text])
+	await _await_msec(900)
+	if host_name != null and host_name.visible:
+		failures.append("the name line stayed after kick-off")
+	# Own goal: the ball last touched by a Blue player scores for Red.
+	var blue_player: RigidBody2D = rig["players"][1]
+	red_player.teleport_to(Vector2(-600.0, 240.0))
+	mode.ball.global_position = blue_player.global_position
+	await _await_ticks(2)
+	mode.score_goal(0)
+	if host_name != null and host_name.visible:
+		failures.append("own goal: the name line showed '%s'" % host_name.text)
+	if not goal.visible:
+		failures.append("own goal: the GOAL! line was hidden")
+	state = RemoteHudScript976.unpack(RemoteHudScript976._pack(UiMirrorScript976.capture(mode._hud)), {})
+	client.effects.apply_mode_hud(path, state)
+	mine = client.effects.mode_hud.get_node_or_null("SoccerGoalName") as Label if client.effects.mode_hud != null else null
+	if mine != null and mine.visible:
+		failures.append("own goal: the joiner showed '%s'" % mine.text)
+	client.effects.apply_mode_hud("", {})
+	await _rc_close_241(mirror_rig)
+	await _teardown(rig["stage"])
+	return failures
+
 func _scenario_soccer_top_scorer_award_and_goal_credit() -> Array[String]:
 	var failures: Array[String] = []
 	var stats: RefCounted = MatchStatsScript.new()
