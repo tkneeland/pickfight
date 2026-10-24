@@ -584,6 +584,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"victory_combo_award_needs_two_kos_inside_three_seconds",
 	"award_sharpshooter_counts_ranged_kos",
 	"award_jack_counts_distinct_weapons",
+	"remote_victory_shows_jack_award_970",
 	"victory_stat_table_fits_eight_players",
 	"pickups_skip_occupied_spots",
 	"pickup_pops_in_when_spawned_816",
@@ -2840,6 +2841,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_award_sharpshooter_counts_ranged_kos()
 		"award_jack_counts_distinct_weapons":
 			return await _scenario_award_jack_counts_distinct_weapons()
+		"remote_victory_shows_jack_award_970":
+			return await _scenario_remote_victory_shows_jack_award_970()
 		"victory_stat_table_fits_eight_players":
 			return await _scenario_victory_stat_table_fits_eight_players()
 		"pickups_skip_occupied_spots":
@@ -32592,6 +32595,28 @@ func _scenario_award_sharpshooter_counts_ranged_kos() -> Array[String]:
 	if not stats.ranged_kos.is_empty():
 		failures.append("begin_match left ranged KOs behind")
 	_scenario_completed = true
+	return failures
+
+## Issue #970: the real Jack of All Trades award, packed and unpacked like the host's hud
+## frame, appears on the online joiner's victory screen with its title and detail.
+func _scenario_remote_victory_shows_jack_award_970() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	for w: String in ["pickaxe", "boomstick", "hammer"]:
+		stats.record_hit(0, 1, 10.0, 1000, w)
+	var slots: Array[int] = [0, 1]
+	var awards: Array[Dictionary] = stats.extra_awards(slots)
+	var data: Dictionary = {"slots": slots, "scores": PackedInt32Array([5, 2]), "winner": 0, "awards": awards,
+		"winner_team": -1, "teams": {}, "team_scores": PackedInt32Array(), "stats": [] as Array[Dictionary],
+		"inputs": PackedStringArray(["pc", "phone"]), "names": {0: ["Ann", Color.RED], 1: ["Bo", Color.BLUE]}, "end_card": false}
+	client.effects.show_victory(RemoteHudScript976.unpack(RemoteHudScript976._pack(data), {}))
+	var texts: PackedStringArray = _texts_976(client.effects.victory.awards_row())
+	if not texts.has("Jack of All Trades") or not texts.has("Ann  -  3 different weapons"):
+		failures.append("Jack of All Trades missing from the joiner's awards %s" % [texts])
+	await _rc_close_241(rig)
 	return failures
 
 ## Issue #970: Jack of All Trades goes to the most distinct weapons landed, at least 3, no ties.
