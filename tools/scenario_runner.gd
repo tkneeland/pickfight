@@ -172,6 +172,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mud_patch_overpass_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
+	"speed_strip_plays_sound_once",
 	"stage_speed_strips_placed",
 	"mud_patch_slows_player",
 	"mud_patch_plays_squelch_once_on_entry",
@@ -2040,6 +2041,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_restores_when_stage_freed()
 		"speed_strip_boosts_run_distance":
 			return await _scenario_speed_strip_boosts_run_distance()
+		"speed_strip_plays_sound_once":
+			return await _scenario_speed_strip_plays_sound_once()
 		"stage_speed_strips_placed":
 			return await _scenario_stage_speed_strips_placed()
 		"mud_patch_slows_player":
@@ -12123,6 +12126,81 @@ func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
 ## Speed strips on two more stages (#961): Flatlands carries one on its floor
 ## and Switchyard a mirrored pair, each inside the floor's width, at least 100 px
 ## from either floor edge, with no spawn, pickup spot or hill spot over it.
+## Issue #1058: stepping onto a speed strip plays strip_boost once; staying is
+## silent; a second entry within 1 s is silent, after 1 s plays again; a dead
+## fighter (ghost) plays none. The sound reaches online joiners through the
+## Sfx `played` signal -> snapshot sound trailer, at the same position.
+func _strip_boost_drop(player: RigidBody2D, strip: StaticBody2D, sfx: Node) -> int:
+	player.global_position = strip.position + Vector2(0, -60)
+	player.linear_velocity = Vector2.ZERO
+	var before: int = _sfx_count(sfx, "strip_boost")
+	for _tick in 40:
+		await physics_frame
+	return _sfx_count(sfx, "strip_boost") - before
+func _scenario_speed_strip_plays_sound_once() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"strip_boost"):
+		return ["strip_boost is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var strip: StaticBody2D = SpeedStripScene.instantiate() as StaticBody2D
+	strip.size = Vector2(1600, 10)
+	strip.position = PART_POSITION
+	stage.add_child(strip)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	var heard: Array = []
+	sfx.played.connect(func(sound: StringName, position: Variant, strength: float) -> void:
+		heard.append({"name": String(sound), "position": position, "strength": strength}))
+	sfx.start_recording()
+	for _tick in 90:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "strip_boost")
+	var last: Dictionary = _sfx_last(sfx, "strip_boost")
+	for _tick in 90:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "strip_boost") - first
+	var again: int = await _strip_boost_drop(player, strip, sfx)
+	var quick: int = await _strip_boost_drop(player, strip, sfx)
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _strip_boost_drop(player, strip, sfx)
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _strip_boost_drop(player, strip, sfx)
+	sfx.stop_recording()
+	print("      whooshes: entry %d, staying %d, quick re-entry %d, later re-entry %d, dead %d" % [first, stayed, quick, later, dead])
+	if first != 1:
+		failures.append("stepping onto the strip played strip_boost %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("strip_boost was not positional")
+	if stayed != 0:
+		failures.append("staying on the strip played %d more whooshes" % stayed)
+	if again != 1:
+		failures.append("re-entering after more than 1 s (first drop) played %d whooshes, want 1" % again)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d whooshes" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s played %d whooshes, want 1" % later)
+	if dead != 0:
+		failures.append("a dead fighter played %d whooshes" % dead)
+	# Online parity: the same event, encoded into the snapshot trailer and
+	# split back out, keeps its name and position (no second path).
+	var trailer: PackedByteArray = SnapshotCaptureScript251.encode_sound_trailer(heard, "")
+	var split: Dictionary = SnapshotCaptureScript251.split_sound_trailer(SnapshotScript251.encode(_rc_world_241(0, 1)) + trailer)
+	var strip_events: Array = []
+	for ev: Dictionary in split["events"]:
+		if ev["name"] == "strip_boost":
+			strip_events.append(ev)
+	if strip_events.size() != 3:
+		failures.append("the trailer carried %d strip_boost events, want 3" % strip_events.size())
+	elif not (strip_events[0]["position"] is Vector2) or (strip_events[0]["position"] as Vector2).distance_to(heard[0]["position"]) > 1.0:
+		failures.append("the trailer's strip_boost position %s differs from the host's %s" % [strip_events[0]["position"], heard[0]["position"]])
+	await _teardown(stage)
+	return failures
 func _scenario_stage_speed_strips_placed() -> Array[String]:
 	var failures: Array[String] = []
 	var floors: Dictionary = {"Flatlands": 720.0, "Switchyard": 1100.0}
