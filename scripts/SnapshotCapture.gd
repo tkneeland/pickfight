@@ -169,6 +169,7 @@ static func _players(rm: Node, state: int) -> Array:
 				"head_position": p.weapon_head_position(),
 				"head_rotation": head.global_rotation if head != null else 0.0,
 				"head_shape_index": _weapon_index(p.get("_stats")),
+				"loaded": p.has_method("special_loaded") and p.special_loaded(),
 			},
 			"color": slot,
 			"name": rm.call("_slot_name", slot),

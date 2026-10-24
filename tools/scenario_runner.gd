@@ -770,6 +770,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_boomstick_ring_976",
 	"remote_pickup_spawn_ring_976",
 	"remote_night_stage_and_ink_976",
+	"remote_loaded_weapon_art_976",
 	"remote_client_removed_body_is_gone_after_one_snapshot",
 	"hud_top_gap_reclaimed_kill_feed_and_score_line",
 	"bot_stays_on_stage_over_jittered_starts",
@@ -3164,6 +3165,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_pickup_spawn_ring_976()
 		"remote_night_stage_and_ink_976":
 			return await _scenario_remote_night_stage_and_ink_976()
+		"remote_loaded_weapon_art_976":
+			return await _scenario_remote_loaded_weapon_art_976()
 		"remote_client_removed_body_is_gone_after_one_snapshot":
 			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
 		"hud_top_gap_reclaimed_kill_feed_and_score_line":
@@ -25902,7 +25905,7 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 			{
 				"player_id": 1,
 				"body": {"position": Vector2(50, 100), "rotation": 0.0, "linear_velocity": Vector2(10, -5)},
-				"weapon": {"head_position": Vector2(70, 80), "head_rotation": 1.5, "head_shape_index": 0},
+				"weapon": {"head_position": Vector2(70, 80), "head_rotation": 1.5, "head_shape_index": 0, "loaded": false},
 				"color": 1,
 				"name": "Alice",
 				"team": 0,
@@ -25912,7 +25915,7 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 			{
 				"player_id": 2,
 				"body": {"position": Vector2(150, 150), "rotation": 1.0, "linear_velocity": Vector2(-5, 10)},
-				"weapon": {"head_position": Vector2(170, 130), "head_rotation": 0.5, "head_shape_index": 1},
+				"weapon": {"head_position": Vector2(170, 130), "head_rotation": 0.5, "head_shape_index": 1, "loaded": true},
 				"color": 2,
 				"name": "Bob",
 				"team": 1,
@@ -26082,7 +26085,7 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 				"type": SnapshotScript.TYPE_PLAYER,
 				"id": 1,
 				"body": {"position": Vector2(100, 100), "rotation": 0.5, "linear_velocity": Vector2(10, -4)},
-				"weapon": {"head_position": Vector2(120, 80), "head_rotation": 0.3, "head_shape_index": 2},
+				"weapon": {"head_position": Vector2(120, 80), "head_rotation": 0.3, "head_shape_index": 2, "loaded": true},
 				"damage": 30,
 				"state": 1,
 			},
@@ -26115,7 +26118,7 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 	var want: Array = [
 		{"type": SnapshotScript.TYPE_PLAYER, "id": 1, "position": Vector2(100, 100), "rotation": 0.5,
 			"linear_velocity": Vector2(10, -4), "head_position": Vector2(120, 80), "head_rotation": 0.3,
-			"head_shape_index": 2, "damage": 30, "state": 1},
+			"head_shape_index": 2, "loaded": true, "damage": 30, "state": 1},
 		{"type": SnapshotScript.TYPE_PROJECTILE, "id": 1, "position": Vector2(200, 200), "velocity": Vector2(100, -20)},
 		{"type": SnapshotScript.TYPE_TIMER, "id": 0, "timer_ms": 30000},
 		{"type": SnapshotScript.TYPE_PICKUP, "id": 4, "position": Vector2(-30, 60)},
@@ -55530,4 +55533,65 @@ func _scenario_remote_night_stage_and_ink_976() -> Array[String]:
 	if client.stage_is_night():
 		failures.append("the next day stage stayed night on the joiner")
 	await _rc_close_241(rig)
+	return failures
+## A loaded grapple (or boomerang) shows its loaded art on the host
+## (`Player.special_loaded()`, the LoadedVisual); the snapshot carries that
+## bit with the weapon, full and delta, and the joiner's puppet draws it.
+func _scenario_remote_loaded_weapon_art_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	_add_bar(stage, Vector2(0, 0), Vector2(240, 24))
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	var grapple: int = SnapshotCaptureScript976._weapon_index(stats)
+	var stub_script := GDScript.new()
+	stub_script.source_code = "extends Node\nvar _players: Array = []\nvar _in_round: Array = [0]\nfunc _slot_name(_s: int) -> String:\n\treturn \"A\"\n"
+	stub_script.reload()
+	var rm: Node = stub_script.new()
+	rm.set("_players", [player])
+	if not player.special_loaded():
+		failures.append("the host's grapple is not drawn loaded")
+	var captured: Array = SnapshotCaptureScript976._players(rm, 1)
+	var weapon: Dictionary = captured[0]["weapon"] if captured.size() == 1 else {}
+	if grapple <= 0 or weapon.get("loaded") != true or weapon.get("head_shape_index") != grapple:
+		failures.append("the host captured the loaded grapple as %s" % [weapon])
+	rm.free()
+	await _teardown(stage, false)
+	var world: Dictionary = _rc_world_241(0, 1)
+	world["players"][0]["weapon"] = {"head_position": Vector2(60, 0), "head_rotation": 0.0, "head_shape_index": grapple, "loaded": true}
+	var full: Dictionary = _rc_codec_241(world)
+	var w0: Dictionary = full["players"][0]["weapon"]
+	var w1: Dictionary = full["players"][1]["weapon"]
+	if w0.get("loaded") != true or w0.get("head_shape_index") != grapple or w1.get("loaded") != false or w1.get("head_shape_index") != 1:
+		failures.append("the full snapshot round-trips the weapons as %s and %s" % [w0, w1])
+	var delta: Dictionary = SnapshotScript251.decode(SnapshotScript251.encode({"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript251.TYPE_PLAYER, "id": 1, "body": {"position": Vector2(100, 0)},
+			"weapon": {"head_position": Vector2(160, 0), "head_shape_index": grapple, "loaded": true}, "state": 1}]}))
+	var e: Dictionary = delta["delta_entities"][0] if delta.get("delta_entities", []).size() == 1 else {}
+	if e.get("loaded") != true or e.get("head_shape_index") != grapple:
+		failures.append("the delta round-trips the weapon as %s" % [e])
+	var merged: Dictionary = SnapshotScript251.apply_delta(full, delta)
+	if (merged["players"][1]["weapon"] as Dictionary).get("loaded") != true:
+		failures.append("apply_delta dropped the loaded bit")
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	client.apply_snapshot(full)
+	client._render()
+	var p0: Node2D = client.player_puppet(0)
+	var p1: Node2D = client.player_puppet(1)
+	if p0 == null or p1 == null or p0.loaded != true or p1.loaded != false:
+		failures.append("the joiner's puppets show loaded %s / %s, expected true / false" % [p0.loaded if p0 != null else null, p1.loaded if p1 != null else null])
+	elif (p0._stats_for(p0.weapon_index) as Resource).get("loaded_art").size() < 3:
+		failures.append("the joiner's grapple has no loaded art to draw")
+	var unload: Dictionary = SnapshotScript251.decode(SnapshotScript251.encode({"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript251.TYPE_PLAYER, "id": 0, "body": {"position": Vector2(0, 0)},
+			"weapon": {"head_position": Vector2(60, 0), "head_shape_index": grapple, "loaded": false}, "state": 1}]}))
+	client.apply_snapshot(unload)
+	client._render()
+	if p0 != null and p0.loaded:
+		failures.append("the fired grapple still shows loaded on the joiner")
+	await _rc_close_241(rig)
+	_scenario_completed = true
 	return failures

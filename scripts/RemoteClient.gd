@@ -819,6 +819,7 @@ func _apply_delta(entities: Array) -> void:
 				weapon["head_position"] = e.get("head_position", weapon.get("head_position", Vector2.ZERO))
 				weapon["head_rotation"] = e.get("head_rotation", weapon.get("head_rotation", 0.0))
 				weapon["head_shape_index"] = e.get("head_shape_index", weapon.get("head_shape_index", 0))
+				weapon["loaded"] = e.get("loaded", weapon.get("loaded", false))
 				p["weapon"] = weapon
 				p["damage"] = e.get("damage", p.get("damage", 0))
 				p["state"] = e.get("state", p.get("state", 1))
@@ -1060,6 +1061,7 @@ func _render() -> void:
 		if look.has("color"):
 			puppet.color = look["color"]
 		puppet.weapon_index = int((p.get("weapon", {}) as Dictionary).get("head_shape_index", 0))
+		puppet.loaded = bool((p.get("weapon", {}) as Dictionary).get("loaded", false))
 		puppet.set_look(str(look.get("hat", "none")), str(look.get("eyes", "round")), puppet.color)
 		puppet.damage = int(p.get("damage", 0))
 		puppet.phase = int(p.get("state", 1))
