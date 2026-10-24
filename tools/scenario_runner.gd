@@ -520,6 +520,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_part_kill_zone_rising_976",
 	"online_part_clocks_resync_976",
 	"online_stage_parts_found_by_host_id_976",
+	"online_unknown_part_ids_cached_976",
 	"online_soccer_ball_drawn_like_host_976",
 	"online_ctf_flags_drawn_like_host_976",
 	"online_hill_drawn_like_host_976",
@@ -2709,6 +2710,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_part_kill_zone_rising_976()
 		"online_part_clocks_resync_976":
 			return await _scenario_online_part_clocks_resync_976()
+		"online_unknown_part_ids_cached_976":
+			return await _scenario_online_unknown_part_ids_cached_976()
 		"online_stage_parts_found_by_host_id_976":
 			return await _scenario_online_stage_parts_found_by_host_id_976()
 		"online_soccer_ball_drawn_like_host_976":
@@ -30758,6 +30761,32 @@ func _scenario_online_stage_parts_found_by_host_id_976() -> Array[String]:
 	if client.part_node(NetSyncScript976.part_id(host_stage, platform)) != null and copy.is_physics_processing():
 		failures.append("the client's platform still runs its own motion")
 	holder.queue_free()
+	await _rc_close_241(rig)
+	return failures
+
+## A part id the client cannot find is looked for once, not on every frame:
+## the stage is walked again only for a new id, or once the stage gains a
+## node (a part one of the host's states builds).
+func _scenario_online_unknown_part_ids_cached_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _pf_client_976(rig, _pf_world_976())
+	var start: int = client.part_walks
+	_pf_feed_976(client, _pf_world_976({"parts": [{"part_id": 123456789, "state": []}]}))
+	var after_new: int = client.part_walks
+	for i in 30:
+		client._render()
+		client._sync_part_clocks()
+	if after_new - start != 1:
+		failures.append("a new unknown id walked the stage %d times, wanted 1" % (after_new - start))
+	if client.part_walks != after_new:
+		failures.append("the same unknown id walked the stage %d more times over 30 frames" % (client.part_walks - after_new))
+	var added := Node2D.new()
+	client._stage.add_child(added)
+	client._render()
+	client._render()
+	if client.part_walks != after_new + 1:
+		failures.append("a node added to the stage led to %d walks, wanted 1" % (client.part_walks - after_new))
 	await _rc_close_241(rig)
 	return failures
 
