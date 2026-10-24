@@ -159,6 +159,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomstick_own_head_never_blocks",
 	"world_stopped_head_blocks_arriving_head",
 	"conveyor_carries_player",
+	"conveyor_plays_sound_once",
 	"conveyor_flatlands_spawns_clear",
 	"conveyor_two_more_stages",
 	"teleporter_moves_player_to_twin",
@@ -2015,6 +2016,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_world_stopped_head_blocks_arriving_head()
 		"conveyor_carries_player":
 			return await _scenario_conveyor_carries_player()
+		"conveyor_plays_sound_once":
+			return await _scenario_conveyor_plays_sound_once()
 		"conveyor_flatlands_spawns_clear":
 			return await _scenario_conveyor_flatlands_spawns_clear()
 		"conveyor_two_more_stages":
@@ -11662,6 +11665,79 @@ func _scenario_stage_teleporters_pair_up() -> Array[String]:
 			failures.append("%s has %d teleporters, want 2" % [stage_name, ends.size()])
 		await _teardown(stage, false)
 	_scenario_completed = true
+	return failures
+## Issue #1060: stepping onto a conveyor belt plays belt_step once; staying is
+## silent; a second entry within 1 s is silent, after 1 s plays again; a dead
+## fighter (ghost) plays none. The sound reaches online joiners through the
+## Sfx `played` signal -> snapshot sound trailer, at the same position.
+func _belt_step_drop(player: RigidBody2D, belt: StaticBody2D, sfx: Node) -> int:
+	player.global_position = belt.position + Vector2(0, -60)
+	player.linear_velocity = Vector2.ZERO
+	var before: int = _sfx_count(sfx, "belt_step")
+	for _tick in 40:
+		await physics_frame
+	return _sfx_count(sfx, "belt_step") - before
+func _scenario_conveyor_plays_sound_once() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"belt_step"):
+		return ["belt_step is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var belt: StaticBody2D = ConveyorScene.instantiate() as StaticBody2D
+	belt.size = Vector2(6000, 10)
+	belt.position = PART_POSITION
+	stage.add_child(belt)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	var heard: Array = []
+	sfx.played.connect(func(sound: StringName, position: Variant, strength: float) -> void:
+		heard.append({"name": String(sound), "position": position, "strength": strength}))
+	sfx.start_recording()
+	for _tick in 90:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "belt_step")
+	var last: Dictionary = _sfx_last(sfx, "belt_step")
+	for _tick in 90:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "belt_step") - first
+	var again: int = await _belt_step_drop(player, belt, sfx)
+	var quick: int = await _belt_step_drop(player, belt, sfx)
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _belt_step_drop(player, belt, sfx)
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _belt_step_drop(player, belt, sfx)
+	sfx.stop_recording()
+	print("      clunks: entry %d, staying %d, quick re-entry %d, later re-entry %d, dead %d" % [first, stayed, quick, later, dead])
+	if first != 1:
+		failures.append("stepping onto the belt played belt_step %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("belt_step was not positional")
+	if stayed != 0:
+		failures.append("staying on the belt played %d more clunks" % stayed)
+	if again != 1:
+		failures.append("re-entering after more than 1 s (first drop) played %d clunks, want 1" % again)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d clunks" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s played %d clunks, want 1" % later)
+	if dead != 0:
+		failures.append("a dead fighter played %d clunks" % dead)
+	var trailer: PackedByteArray = SnapshotCaptureScript251.encode_sound_trailer(heard, "")
+	var split: Dictionary = SnapshotCaptureScript251.split_sound_trailer(SnapshotScript251.encode(_rc_world_241(0, 1)) + trailer)
+	var belt_events: Array = []
+	for ev: Dictionary in split["events"]:
+		if ev["name"] == "belt_step":
+			belt_events.append(ev)
+	if belt_events.size() != 3:
+		failures.append("the trailer carried %d belt_step events, want 3" % belt_events.size())
+	elif not (belt_events[0]["position"] is Vector2) or (belt_events[0]["position"] as Vector2).distance_to(heard[0]["position"]) > 1.0:
+		failures.append("the trailer's belt_step position %s differs from the host's %s" % [belt_events[0]["position"], heard[0]["position"]])
+	await _teardown(stage)
 	return failures
 ## Conveyor drift (#842): drops a player onto a belt (or plain ground), lets
 ## them settle, then returns how far they travelled along x in 90 ticks. The
