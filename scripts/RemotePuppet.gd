@@ -64,6 +64,8 @@ var head_rotation: float = 0.0
 var weapon_index: int = 0
 ## Player: the snapshot's PLAYER_* bits.
 var flags: int = 0
+## Whether the host shows its weapon's `loaded_art` (`Player.special_loaded()`).
+var loaded: bool = false
 ## Player: the host's propeller-hat phase (Hat.spin_byte()).
 var hat_spin: int = 0
 ## The host's face squash byte (PlayerFace.squash_byte()).
@@ -316,7 +318,7 @@ func _refresh_player() -> void:
 		_head_visual.rotation = head_rotation
 		_head_visual.modulate.a = PlayerScript.PHASED_HEAD_ALPHA if flags & SnapshotScript.PLAYER_HEAD_PHASED else 1.0
 	if _loaded_visual != null:
-		_loaded_visual.visible = flags & SnapshotScript.PLAYER_SPECIAL_LOADED != 0
+		_loaded_visual.visible = loaded
 
 # --- Pickup -------------------------------------------------------------------
 

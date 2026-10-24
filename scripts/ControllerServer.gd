@@ -411,7 +411,7 @@ const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 ## Issue #239: the remote-seat protocol version. A remote client's hello must
 ## carry `"proto": PROTOCOL_VERSION`; phones are exempt (the page comes from
 ## this host, so it always matches).
-const PROTOCOL_VERSION: int = 2 # 2: the effects block in the sound trailer (#976)
+const PROTOCOL_VERSION: int = 3 # 2: the effects block in the sound trailer; 3: the weapon loaded bit (#976)
 
 ## One remote client's seat over the relay (#239): quacks like the
 ## WebSocketPeer a phone slot holds, so the claim, input and text paths are

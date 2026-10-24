@@ -1108,6 +1108,8 @@ func _render() -> void:
 	var alpha: float = clampf(float(render_at - int(a["t"])) / float(span), 0.0, 1.0) if span > 0 else 1.0
 	var live: Dictionary = {}
 	var modifier: String = _modifier_id()
+	# The stage mood's ink is on every face and head outline, as on the host (#255).
+	var ink: Variant = (_stage.get("mood") as Dictionary).get("ink") if _stage != null and _stage.get("mood") is Dictionary else null
 	for p: Variant in _world.get("players", []):
 		if not p is Dictionary:
 			continue
@@ -1124,6 +1126,7 @@ func _render() -> void:
 		if look.has("color"):
 			puppet.color = look["color"]
 		puppet.weapon_index = int((p.get("weapon", {}) as Dictionary).get("head_shape_index", 0))
+		puppet.loaded = bool((p.get("weapon", {}) as Dictionary).get("loaded", false))
 		puppet.set_look(str(look.get("hat", "none")), str(look.get("eyes", "round")), puppet.color)
 		puppet.damage = int(p.get("damage", 0))
 		puppet.phase = int(p.get("state", 1))
@@ -1132,6 +1135,8 @@ func _render() -> void:
 		puppet.squash = int(p.get("squash", SnapshotScript.SQUASH_REST))
 		puppet.linear_velocity = (p.get("body", {}) as Dictionary).get("linear_velocity", Vector2.ZERO)
 		puppet.modifier = modifier
+		if ink is Color:
+			puppet.set_ink(ink)
 		puppet.set_pose((from_pose[0] as Vector2).lerp(to_pose[0], alpha),
 			lerp_angle(from_pose[1], to_pose[1], alpha),
 			(from_pose[2] as Vector2).lerp(to_pose[2], alpha),
@@ -1451,11 +1456,6 @@ func _track_heads() -> void:
 			players.append(puppet)
 	effects.track_heads(players)
 	_apply_pops()
-	# The stage mood's ink is on every face and head outline, as on the host (#255).
-	var ink: Variant = (_stage.get("mood") as Dictionary).get("ink") if _stage != null and _stage.get("mood") is Dictionary else null
-	for puppet: Node in _puppets.values():
-		if ink is Color and puppet.kind == PuppetScript.Kind.PLAYER:
-			puppet.set_ink(ink)
 	# The host's edge arrows follow each fighter as the snapshot has it.
 	var placed: Dictionary = {}
 	if _round_shown():

@@ -224,6 +224,7 @@ static func _players(rm: Node, state: int) -> Array:
 				# The weapon held, by its file (`_stats` is a modifier's copy
 				# with no path while Big heads or Tiny weapons run).
 				"head_shape_index": _weapon_index(p.weapon_stats if p.weapon_stats != null else p.get("_stats")),
+				"loaded": p.has_method("special_loaded") and p.special_loaded(),
 			},
 			"color": slot,
 			"name": rm.call("_slot_name", slot),
@@ -255,9 +256,6 @@ static func _player_flags(p: Node, head: Node2D) -> int:
 	var flags: int = 0
 	if head != null and is_instance_valid(head) and bool(head.get("phased")):
 		flags |= SnapshotScript.PLAYER_HEAD_PHASED
-	var loaded: Node2D = p.get("_loaded_visual")
-	if loaded != null and is_instance_valid(loaded) and loaded.visible:
-		flags |= SnapshotScript.PLAYER_SPECIAL_LOADED
 	if p.has_method("eye_state") and p.eye_state() == "blink":
 		flags |= SnapshotScript.PLAYER_BLINKING
 	if (p as CanvasItem).modulate.a < 1.0:

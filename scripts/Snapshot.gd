@@ -57,11 +57,11 @@ const TYPE_PROP: int = 0x0F
 ## A part's or prop's `state` larger than this is sent empty.
 const MAX_STATE_BYTES: int = 2048
 ## Player `flags` bits (issue #976).
+## (A loaded special's art is the weapon index's WEAPON_LOADED_BIT.)
 const PLAYER_HEAD_PHASED: int = 1
-const PLAYER_SPECIAL_LOADED: int = 2
-const PLAYER_BLINKING: int = 4
+const PLAYER_BLINKING: int = 2
 ## The spawn-protection blink is on its dim half (Respawn.BLINK_ALPHA).
-const PLAYER_DIMMED: int = 8
+const PLAYER_DIMMED: int = 4
 ## Projectile `flags`: the low two bits are the kind, bit 2 the boomerang's ghost.
 const PROJ_KIND_MASK: int = 3
 const PROJ_KIND_BULLET: int = 0
@@ -146,7 +146,8 @@ static func apply_delta(full: Dictionary, delta: Dictionary) -> Dictionary:
 					p["body"] = {"position": e["position"], "rotation": e["rotation"],
 						"linear_velocity": e["linear_velocity"]}
 					p["weapon"] = {"head_position": e["head_position"],
-						"head_rotation": e["head_rotation"], "head_shape_index": e["head_shape_index"]}
+						"head_rotation": e["head_rotation"], "head_shape_index": e["head_shape_index"],
+						"loaded": e.get("loaded", false)}
 					p["damage"] = e["damage"]
 					p["state"] = e["state"]
 					p["flags"] = e["flags"]
@@ -359,10 +360,15 @@ static func _encode_body_transform(bytes: PackedByteArray, body: Dictionary) -> 
 	_encode_rotation_u16(bytes, body.get("rotation", 0.0))
 	_encode_vector2_quantized(bytes, _vec(body.get("linear_velocity", Vector2.ZERO)))
 
+## The weapon index's top bit carries "loaded" (#976): the grapple's or
+## boomerang's loaded art (`Player.special_loaded()`) shows on its head.
+const WEAPON_LOADED_BIT: int = 0x8000
+
 static func _encode_weapon_segments(bytes: PackedByteArray, weapon: Dictionary) -> void:
 	_encode_vector2_quantized(bytes, _vec(weapon.get("head_position", Vector2.ZERO)))
 	_encode_rotation_u16(bytes, weapon.get("head_rotation", 0.0))
-	_append_u16(bytes, weapon.get("head_shape_index", 0))
+	var shape: int = _int(weapon.get("head_shape_index", 0), 0, WEAPON_LOADED_BIT - 1)
+	_append_u16(bytes, shape | (WEAPON_LOADED_BIT if bool(weapon.get("loaded", false)) else 0))
 
 static func _encode_all_projectiles(bytes: PackedByteArray, world: Dictionary) -> void:
 	var projectiles: Array = _arr(world.get("projectiles", []))
@@ -569,7 +575,8 @@ static func _decode_weapon_segments(r: _Reader) -> Dictionary:
 	var head_pos: Vector2 = r.vec2()
 	var head_rot: float = r.rotation()
 	var shape_idx: int = r.u16()
-	return {"head_position": head_pos, "head_rotation": head_rot, "head_shape_index": shape_idx}
+	return {"head_position": head_pos, "head_rotation": head_rot,
+		"head_shape_index": shape_idx & (WEAPON_LOADED_BIT - 1), "loaded": (shape_idx & WEAPON_LOADED_BIT) != 0}
 
 static func _decode_static_stage_bodies(r: _Reader) -> Array:
 	var bodies: Array = []

@@ -495,14 +495,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_puppet_spawn_blink_976",
 	"online_puppet_hidden_when_knocked_out_976",
 	"online_puppet_eyes_follow_host_976",
-	"online_puppet_team_rings_976",
 	"online_puppet_propeller_hat_in_step_976",
 	"online_puppet_squash_follows_host_976",
-	"online_puppet_night_ink_976",
-	"online_idle_hint_mirrors_host_976",
-	"online_boomstick_ring_follows_host_976",
-	"online_stock_pips_976",
-	"online_player_numbers_follow_host_976",
 	"online_bullet_drawn_like_host_976",
 	"online_boomerang_drawn_like_host_976",
 	"online_hook_and_rope_drawn_like_host_976",
@@ -510,7 +504,6 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_ghost_drawn_like_host_976",
 	"online_meteor_drawn_like_host_976",
 	"online_pickup_halo_follows_host_976",
-	"online_pickup_pop_in_976",
 	"online_part_bounce_pad_976",
 	"online_part_breakable_wall_976",
 	"online_part_breakable_wall_broken_976",
@@ -816,6 +809,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_boomstick_ring_976",
 	"remote_pickup_spawn_ring_976",
 	"remote_night_stage_and_ink_976",
+	"remote_loaded_weapon_art_976",
 	"remote_client_removed_body_is_gone_after_one_snapshot",
 	"hud_top_gap_reclaimed_kill_feed_and_score_line",
 	"bot_stays_on_stage_over_jittered_starts",
@@ -2667,22 +2661,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_puppet_hidden_when_knocked_out_976()
 		"online_puppet_eyes_follow_host_976":
 			return await _scenario_online_puppet_eyes_follow_host_976()
-		"online_puppet_team_rings_976":
-			return await _scenario_online_puppet_team_rings_976()
 		"online_puppet_propeller_hat_in_step_976":
 			return await _scenario_online_puppet_propeller_hat_in_step_976()
 		"online_puppet_squash_follows_host_976":
 			return await _scenario_online_puppet_squash_follows_host_976()
-		"online_puppet_night_ink_976":
-			return await _scenario_online_puppet_night_ink_976()
-		"online_idle_hint_mirrors_host_976":
-			return await _scenario_online_idle_hint_mirrors_host_976()
-		"online_boomstick_ring_follows_host_976":
-			return await _scenario_online_boomstick_ring_follows_host_976()
-		"online_stock_pips_976":
-			return await _scenario_online_stock_pips_976()
-		"online_player_numbers_follow_host_976":
-			return await _scenario_online_player_numbers_follow_host_976()
 		"online_bullet_drawn_like_host_976":
 			return await _scenario_online_bullet_drawn_like_host_976()
 		"online_boomerang_drawn_like_host_976":
@@ -2697,8 +2679,6 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_meteor_drawn_like_host_976()
 		"online_pickup_halo_follows_host_976":
 			return await _scenario_online_pickup_halo_follows_host_976()
-		"online_pickup_pop_in_976":
-			return await _scenario_online_pickup_pop_in_976()
 		"online_part_bounce_pad_976":
 			return await _scenario_online_part_bounce_pad_976()
 		"online_part_breakable_wall_976":
@@ -3303,6 +3283,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_pickup_spawn_ring_976()
 		"remote_night_stage_and_ink_976":
 			return await _scenario_remote_night_stage_and_ink_976()
+		"remote_loaded_weapon_art_976":
+			return await _scenario_remote_loaded_weapon_art_976()
 		"remote_client_removed_body_is_gone_after_one_snapshot":
 			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
 		"hud_top_gap_reclaimed_kill_feed_and_score_line":
@@ -26043,28 +26025,26 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 			{
 				"player_id": 1,
 				"body": {"position": Vector2(50, 100), "rotation": 0.0, "linear_velocity": Vector2(10, -5)},
-				"weapon": {"head_position": Vector2(70, 80), "head_rotation": 1.5, "head_shape_index": 0},
+				"weapon": {"head_position": Vector2(70, 80), "head_rotation": 1.5, "head_shape_index": 0, "loaded": false},
 				"color": 1,
 				"name": "Alice",
 				"team": 0,
 				"damage": 25,
 				"state": 0,
 				"flags": SnapshotScript.PLAYER_BLINKING | SnapshotScript.PLAYER_DIMMED,
-				"fire": SnapshotScript.FIRE_NONE,
 				"hat_spin": 64,
 				"squash": 40,
 			},
 			{
 				"player_id": 2,
 				"body": {"position": Vector2(150, 150), "rotation": 1.0, "linear_velocity": Vector2(-5, 10)},
-				"weapon": {"head_position": Vector2(170, 130), "head_rotation": 0.5, "head_shape_index": 1},
+				"weapon": {"head_position": Vector2(170, 130), "head_rotation": 0.5, "head_shape_index": 1, "loaded": true},
 				"color": 2,
 				"name": "Bob",
 				"team": 1,
 				"damage": 50,
 				"state": 1,
-				"flags": SnapshotScript.PLAYER_HEAD_PHASED | SnapshotScript.PLAYER_HINT | SnapshotScript.PLAYER_HINT_PAD,
-				"fire": 127,
+				"flags": SnapshotScript.PLAYER_HEAD_PHASED,
 				"hat_spin": 0,
 				"squash": 220,
 			},
@@ -26086,7 +26066,6 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 				"position": Vector2(300, 300),
 				"weapon_type": 2,
 				"halo": 200,
-				"pop": 1,
 			},
 		],
 		"flail": {
@@ -26110,13 +26089,12 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 		],
 		"kill_zone_height": 500,
 		"announcer_text": "Final round!",
-		# Version 2 (#976): flails, ghosts, meteors, stage flags, parts, props.
+		# Version 2 (#976): flails, ghosts, meteors, parts, props.
 		"flails": [{"owner": 1, "ball_position": Vector2(40, -60), "ball_rotation": 2.0,
 			"flags": SnapshotScript.FLAIL_PHASED,
 			"links": [{"position": Vector2(10, -20), "rotation": PI / 2.0}, {"position": Vector2(20, -40), "rotation": 0.0}]}],
 		"ghosts": [{"owner": 2, "position": Vector2(-100, 50), "alpha": 0.2, "puff": 1.0}],
 		"meteors": [{"meteor_id": 9, "position": Vector2(500, -900), "velocity": Vector2(-120, 600), "radius": 22}],
-		"stage_flags": SnapshotScript.STAGE_NIGHT | SnapshotScript.STAGE_PLAYER_NUMBERS,
 		"parts": [{"part_id": 3000000000, "state": [Vector2(4, 5), 1.25, Color(0.5, 0.25, 1.0), true, 7]}],
 		"props": [{"prop_id": 77, "kind": 3, "state": [Vector2(10, 20), 0.5]}],
 	}
@@ -26245,11 +26223,10 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 				"type": SnapshotScript.TYPE_PLAYER,
 				"id": 1,
 				"body": {"position": Vector2(100, 100), "rotation": 0.5, "linear_velocity": Vector2(10, -4)},
-				"weapon": {"head_position": Vector2(120, 80), "head_rotation": 0.3, "head_shape_index": 2},
+				"weapon": {"head_position": Vector2(120, 80), "head_rotation": 0.3, "head_shape_index": 2, "loaded": true},
 				"damage": 30,
 				"state": 1,
-				"flags": SnapshotScript.PLAYER_SPECIAL_LOADED,
-				"fire": 254,
+				"flags": SnapshotScript.PLAYER_BLINKING,
 				"hat_spin": 200,
 				"squash": 10,
 			},
@@ -26290,7 +26267,7 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 	var want: Array = [
 		{"type": SnapshotScript.TYPE_PLAYER, "id": 1, "position": Vector2(100, 100), "rotation": 0.5,
 			"linear_velocity": Vector2(10, -4), "head_position": Vector2(120, 80), "head_rotation": 0.3,
-			"head_shape_index": 2, "damage": 30, "state": 1, "flags": SnapshotScript.PLAYER_SPECIAL_LOADED, "fire": 254, "hat_spin": 200, "squash": 10},
+			"head_shape_index": 2, "loaded": true, "damage": 30, "state": 1, "flags": SnapshotScript.PLAYER_BLINKING, "hat_spin": 200, "squash": 10},
 		{"type": SnapshotScript.TYPE_PROJECTILE, "id": 1, "position": Vector2(200, 200), "velocity": Vector2(100, -20),
 			"rotation": 1.0, "flags": SnapshotScript.PROJ_KIND_HOOK},
 		{"type": SnapshotScript.TYPE_TIMER, "id": 0, "timer_ms": 30000},
@@ -29954,14 +29931,11 @@ const PlayerScript976 := preload("res://scripts/Player.gd")
 const FlailChainScript976 := preload("res://scripts/FlailChain.gd")
 const RoundModifiersScript976 := preload("res://scripts/RoundModifiers.gd")
 const RespawnScript976 := preload("res://scripts/Respawn.gd")
-const PickupDirectorScript976 := preload("res://scripts/PickupDirector.gd")
-const PickupSpawnRingScript976 := preload("res://scripts/PickupSpawnRing.gd")
 const SoccerScript976 := preload("res://scripts/Soccer.gd")
 const CtfScript976 := preload("res://scripts/CaptureTheFlag.gd")
 const KothScript976 := preload("res://scripts/KingOfTheHill.gd")
 const StageGustScript976 := preload("res://scripts/StageGust.gd")
 const FallingRockScene976: PackedScene = preload("res://scenes/parts/FallingRock.tscn")
-const NightLightingScript976 := preload("res://scripts/NightLighting.gd")
 const PaletteScript976 := preload("res://scripts/Palette.gd")
 const SnapshotScript976 := preload("res://scripts/Snapshot.gd")
 const PlayerFaceScript976 := preload("res://scripts/PlayerFace.gd")
@@ -30004,9 +29978,9 @@ func _pf_entry_976(p: RigidBody2D, slot: int) -> Dictionary:
 		"body": {"position": p.global_position, "rotation": p.global_rotation, "linear_velocity": p.linear_velocity},
 		"weapon": {"head_position": p.weapon_head_position(),
 			"head_rotation": SnapshotCaptureScript251._head_rotation(head, p.get("_head_visual")),
-			"head_shape_index": SnapshotCaptureScript251._weapon_index(p.weapon_stats)},
+			"head_shape_index": SnapshotCaptureScript251._weapon_index(p.weapon_stats), "loaded": p.special_loaded()},
 		"color": slot, "name": "P%d" % slot, "team": p.team, "damage": p.damage, "state": phase,
-		"flags": SnapshotCaptureScript251._player_flags(p, head), "fire": SnapshotCaptureScript251._fire_byte(p),
+		"flags": SnapshotCaptureScript251._player_flags(p, head),
 		"hat_spin": SnapshotCaptureScript251._hat_spin(p), "squash": SnapshotCaptureScript251._squash_byte(p)}
 
 ## A lone host player in `slot`'s palette colour holding `path`.
@@ -30286,8 +30260,6 @@ func _scenario_online_puppet_hidden_when_knocked_out_976() -> Array[String]:
 		failures.append("the knocked-out player's puppet is still drawn")
 	if client.player_puppet(0) == null or not client.player_puppet(0).visible:
 		failures.append("the living player's puppet is hidden")
-	if client.name_tags().name_tag(1).visible or not client.name_tags().name_tag(0).visible:
-		failures.append("name tags: dead shown %s, living shown %s" % [client.name_tags().name_tag(1).visible, client.name_tags().name_tag(0).visible])
 	await _rc_close_241(rig)
 	return failures
 
@@ -30316,32 +30288,6 @@ func _scenario_online_puppet_eyes_follow_host_976() -> Array[String]:
 	_pf_feed_976(client, world)
 	if face.eye_state() != "dead":
 		failures.append("a knocked-out puppet's eyes are '%s', not dead" % face.eye_state())
-	await _rc_close_241(rig)
-	return failures
-
-## Teams: the puppets' name tags take the host's team outline and ring; a
-## free-for-all has none.
-func _scenario_online_puppet_team_rings_976() -> Array[String]:
-	var failures: Array[String] = []
-	var rig: Dictionary = {"nodes": [], "relay": null}
-	var world: Dictionary = _pf_world_976()
-	world["players"][0]["team"] = 0
-	world["players"][1]["team"] = 1
-	var client: Node = await _pf_client_976(rig, world)
-	var rings: Array = client.name_tags().team_rings()
-	var teams: Array = []
-	for ring: Array in rings:
-		teams.append(ring[1])
-	teams.sort()
-	if teams != [0, 1]:
-		failures.append("team rings %s, wanted one for each team" % [teams])
-	if client.player_puppet(1).team != 1:
-		failures.append("puppet 1 is on team %d" % client.player_puppet(1).team)
-	world["players"][0]["team"] = -1
-	world["players"][1]["team"] = -1
-	_pf_feed_976(client, world)
-	if not client.name_tags().team_rings().is_empty() or client.player_puppet(0).team != -1:
-		failures.append("a free-for-all still draws team rings")
 	await _rc_close_241(rig)
 	return failures
 
@@ -30387,95 +30333,6 @@ func _scenario_online_puppet_squash_follows_host_976() -> Array[String]:
 		node.queue_free()
 	await _teardown(stage)
 	return failures
-
-## Night stages: the client loads the night variant and draws the puppets
-## with the night ink, as the host's players are.
-func _scenario_online_puppet_night_ink_976() -> Array[String]:
-	var failures: Array[String] = []
-	var rig: Dictionary = {"nodes": [], "relay": null}
-	var client: Node = await _pf_client_976(rig, _pf_world_976({"stage_flags": SnapshotScript976.STAGE_NIGHT}))
-	var ink: Color = PaletteScript976.ink_for(0, true)
-	if client.stage_node() == null or not bool(client.stage_node().get("night")):
-		failures.append("the client's stage is not the night variant")
-	var puppet: Node2D = client.player_puppet(0)
-	if _pf_col_off_976(puppet.face_node().ink, ink):
-		failures.append("the face ink %s is not the night ink %s" % [puppet.face_node().ink, ink])
-	var edge: Line2D = puppet.head_visual().get_node("HeadOutline")
-	if _pf_col_off_976(edge.default_color, ink):
-		failures.append("the weapon head's outline %s is not the night ink" % edge.default_color)
-	if not puppet.is_in_group(NightLightingScript976.LIT_PLAYERS_GROUP):
-		failures.append("the puppet is not lit by the night lighting")
-	_pf_feed_976(client, _pf_world_976({"stage_flags": 0}))
-	if bool(client.stage_node().get("night")) or _pf_col_off_976(client.player_puppet(0).face_node().ink, PaletteScript976.ink_for(0, false)):
-		failures.append("the day stage kept the night variant or ink")
-	await _rc_close_241(rig)
-	return failures
-
-## The idle hint (#826) the host shows over a player shows over its puppet,
-## with the same drag or gamepad line, and goes when the host's does.
-func _scenario_online_idle_hint_mirrors_host_976() -> Array[String]:
-	var failures: Array[String] = []
-	var rig: Dictionary = {"nodes": [], "relay": null}
-	var world: Dictionary = _pf_world_976()
-	world["players"][0]["flags"] = SnapshotScript976.PLAYER_HINT | SnapshotScript976.PLAYER_HINT_PAD
-	world["players"][1]["flags"] = SnapshotScript976.PLAYER_HINT
-	var client: Node = await _pf_client_976(rig, world)
-	var hint: Node = client.name_tags().idle_hint()
-	if hint.hint_kind(0) != 2 or hint.hint_kind(1) != 1:
-		failures.append("hint kinds %d / %d, wanted gamepad / drag" % [hint.hint_kind(0), hint.hint_kind(1)])
-	world["players"][0]["flags"] = 0
-	_pf_feed_976(client, world)
-	if hint.has_hint(0):
-		failures.append("the hint stayed after the host's went")
-	await _rc_close_241(rig)
-	return failures
-
-## The boomstick ring (#965) over a puppet fills as the host's fire clock runs.
-func _scenario_online_boomstick_ring_follows_host_976() -> Array[String]:
-	var failures: Array[String] = []
-	var rig: Dictionary = {"nodes": [], "relay": null}
-	var world: Dictionary = _pf_world_976()
-	world["players"][0]["weapon"]["head_shape_index"] = _widx_976(BOOMSTICK_PATH_976)
-	world["players"][0]["fire"] = 127
-	world["players"][1]["fire"] = SnapshotScript976.FIRE_NONE
-	var client: Node = await _pf_client_976(rig, world)
-	var ring: Node = client.name_tags().boomstick_ring()
-	if absf(ring.ring_fill(0) - 127.0 / 254.0) > 0.01:
-		failures.append("the ring is %.3f full, the host's clock %.3f" % [ring.ring_fill(0), 127.0 / 254.0])
-	if ring.has_ring(1):
-		failures.append("a weapon that never fires on its own has a ring")
-	await _rc_close_241(rig)
-	return failures
-
-## Stock: the lives pips under each name tag come from the host's mode.
-func _scenario_online_stock_pips_976() -> Array[String]:
-	var failures: Array[String] = []
-	var rig: Dictionary = {"nodes": [], "relay": null}
-	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
-	client.hud = JSON.parse_string(JSON.stringify({"mode": "stock", "m": {"lives": {0: 3, 1: 1}, "clock": ""}}))
-	_pf_feed_976(client, _pf_world_976())
-	var counts: Array = client.name_tags().pip_counts()
-	counts.sort()
-	if counts != [[0, 3], [1, 1]]:
-		failures.append("pips %s, wanted [[0, 3], [1, 1]]" % [counts])
-	await _rc_close_241(rig)
-	return failures
-
-## Player numbers (#809): the host's setting shows the seat numbers on the
-## client's name tags and edge arrows.
-func _scenario_online_player_numbers_follow_host_976() -> Array[String]:
-	var failures: Array[String] = []
-	var rig: Dictionary = {"nodes": [], "relay": null}
-	var client: Node = await _pf_client_976(rig, _pf_world_976({"stage_flags": SnapshotScript976.STAGE_PLAYER_NUMBERS}))
-	if client.name_tags().team_badge(1).number() != 2 or client.offscreen_indicators().numbers_override != 1:
-		failures.append("the seat numbers are not shown")
-	_pf_feed_976(client, _pf_world_976({"stage_flags": 0}))
-	if client.name_tags().team_badge(1).number() != 0 or client.offscreen_indicators().numbers_override != 0:
-		failures.append("the seat numbers stayed after the host turned them off")
-	await _rc_close_241(rig)
-	return failures
-
-# Shots, flails, ghosts, meteors ---------------------------------------------------
 
 ## The shot puppet for `kind` flags, owned by player 1.
 func _pf_shot_world_976(weapon: int, flags: int, rotation: float) -> Dictionary:
@@ -30615,7 +30472,7 @@ func _scenario_online_pickup_halo_follows_host_976() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = {"nodes": [], "relay": null}
 	var client: Node = await _pf_client_976(rig, _pf_world_976({"pickups": [{"pickup_id": 9, "position": Vector2(50, -40),
-		"weapon_type": 3, "halo": 192, "pop": 0}]}))
+		"weapon_type": 3, "halo": 192}]}))
 	var puppet: Node2D = client.thing_puppet("pick9")
 	var pickup: Node2D = puppet.pickup_node() if puppet != null else null
 	if pickup == null:
@@ -30625,8 +30482,6 @@ func _scenario_online_pickup_halo_follows_host_976() -> Array[String]:
 			failures.append("the halo is at %f, the host's at 0.75" % pickup.halo_phase())
 		if pickup.is_in_group("pickups") or pickup.monitoring:
 			failures.append("the client's pickup can be collected")
-		if not pickup.is_in_group(NightLightingScript976.LIT_PICKUPS_GROUP):
-			failures.append("the client's pickup is not lit at night")
 		var host: Node2D = PickupScene.instantiate() as Node2D
 		host.set_weapon(load(PickupWeaponsScript.WEAPON_PATHS[2]))
 		get_root().add_child(host)
@@ -30635,34 +30490,6 @@ func _scenario_online_pickup_halo_follows_host_976() -> Array[String]:
 		host.queue_free()
 	await _rc_close_241(rig)
 	return failures
-
-## A pickup that is still popping in on the host (#816) pops in on the
-## client with the same ring; one already in place does not.
-func _scenario_online_pickup_pop_in_976() -> Array[String]:
-	var failures: Array[String] = []
-	var rig: Dictionary = {"nodes": [], "relay": null}
-	var client: Node = await _pf_client_976(rig, _pf_world_976({"pickups": [
-		{"pickup_id": 9, "position": Vector2(50, -40), "weapon_type": 3, "halo": 0, "pop": 1},
-		{"pickup_id": 10, "position": Vector2(-50, -40), "weapon_type": 4, "halo": 0, "pop": 0}]}))
-	var popping: Node2D = client.thing_puppet("pick9").pickup_node()
-	var settled: Node2D = client.thing_puppet("pick10").pickup_node()
-	if absf(popping.scale.x - PickupDirectorScript976.POP_START_SCALE) > 0.01:
-		failures.append("the popping pickup starts at scale %f, the host's at %f" % [popping.scale.x, PickupDirectorScript976.POP_START_SCALE])
-	if settled.scale != Vector2.ONE:
-		failures.append("a settled pickup popped in again")
-	var rings: int = 0
-	for child: Node in client._puppet_holder.get_children():
-		if child.get_script() == PickupSpawnRingScript976:
-			rings += 1
-	if rings != 1:
-		failures.append("%d spawn rings, wanted 1" % rings)
-	await _await_msec(int(PickupDirectorScript976.POP_SEC * 1000.0) + 100)
-	if popping.scale.distance_to(Vector2.ONE) > 0.01:
-		failures.append("the pop never finished (scale %s)" % popping.scale)
-	await _rc_close_241(rig)
-	return failures
-
-# Stage parts -------------------------------------------------------------------
 
 ## One stage part's look carried host to client: the host's copy runs, the
 ## client's (in its own physics world, its logic stopped by NetSync) takes
@@ -56980,4 +56807,65 @@ func _scenario_remote_night_stage_and_ink_976() -> Array[String]:
 	if client.stage_is_night():
 		failures.append("the next day stage stayed night on the joiner")
 	await _rc_close_241(rig)
+	return failures
+## A loaded grapple (or boomerang) shows its loaded art on the host
+## (`Player.special_loaded()`, the LoadedVisual); the snapshot carries that
+## bit with the weapon, full and delta, and the joiner's puppet draws it.
+func _scenario_remote_loaded_weapon_art_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	_add_bar(stage, Vector2(0, 0), Vector2(240, 24))
+	var player: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(player, GRAPPLE_PATH)
+	await _await_ticks(20)
+	var grapple: int = SnapshotCaptureScript976._weapon_index(stats)
+	var stub_script := GDScript.new()
+	stub_script.source_code = "extends Node\nvar _players: Array = []\nvar _in_round: Array = [0]\nfunc _slot_name(_s: int) -> String:\n\treturn \"A\"\n"
+	stub_script.reload()
+	var rm: Node = stub_script.new()
+	rm.set("_players", [player])
+	if not player.special_loaded():
+		failures.append("the host's grapple is not drawn loaded")
+	var captured: Array = SnapshotCaptureScript976._players(rm, 1)
+	var weapon: Dictionary = captured[0]["weapon"] if captured.size() == 1 else {}
+	if grapple <= 0 or weapon.get("loaded") != true or weapon.get("head_shape_index") != grapple:
+		failures.append("the host captured the loaded grapple as %s" % [weapon])
+	rm.free()
+	await _teardown(stage, false)
+	var world: Dictionary = _rc_world_241(0, 1)
+	world["players"][0]["weapon"] = {"head_position": Vector2(60, 0), "head_rotation": 0.0, "head_shape_index": grapple, "loaded": true}
+	var full: Dictionary = _rc_codec_241(world)
+	var w0: Dictionary = full["players"][0]["weapon"]
+	var w1: Dictionary = full["players"][1]["weapon"]
+	if w0.get("loaded") != true or w0.get("head_shape_index") != grapple or w1.get("loaded") != false or w1.get("head_shape_index") != 1:
+		failures.append("the full snapshot round-trips the weapons as %s and %s" % [w0, w1])
+	var delta: Dictionary = SnapshotScript251.decode(SnapshotScript251.encode({"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript251.TYPE_PLAYER, "id": 1, "body": {"position": Vector2(100, 0)},
+			"weapon": {"head_position": Vector2(160, 0), "head_shape_index": grapple, "loaded": true}, "state": 1}]}))
+	var e: Dictionary = delta["delta_entities"][0] if delta.get("delta_entities", []).size() == 1 else {}
+	if e.get("loaded") != true or e.get("head_shape_index") != grapple:
+		failures.append("the delta round-trips the weapon as %s" % [e])
+	var merged: Dictionary = SnapshotScript251.apply_delta(full, delta)
+	if (merged["players"][1]["weapon"] as Dictionary).get("loaded") != true:
+		failures.append("apply_delta dropped the loaded bit")
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	client.apply_snapshot(full)
+	client._render()
+	var p0: Node2D = client.player_puppet(0)
+	var p1: Node2D = client.player_puppet(1)
+	if p0 == null or p1 == null or p0.loaded != true or p1.loaded != false:
+		failures.append("the joiner's puppets show loaded %s / %s, expected true / false" % [p0.loaded if p0 != null else null, p1.loaded if p1 != null else null])
+	elif (p0._stats_for(p0.weapon_index) as Resource).get("loaded_art").size() < 3:
+		failures.append("the joiner's grapple has no loaded art to draw")
+	var unload: Dictionary = SnapshotScript251.decode(SnapshotScript251.encode({"is_full_snapshot": false, "delta_entities": [
+		{"type": SnapshotScript251.TYPE_PLAYER, "id": 0, "body": {"position": Vector2(0, 0)},
+			"weapon": {"head_position": Vector2(60, 0), "head_shape_index": grapple, "loaded": false}, "state": 1}]}))
+	client.apply_snapshot(unload)
+	client._render()
+	if p0 != null and p0.loaded:
+		failures.append("the fired grapple still shows loaded on the joiner")
+	await _rc_close_241(rig)
+	_scenario_completed = true
 	return failures
