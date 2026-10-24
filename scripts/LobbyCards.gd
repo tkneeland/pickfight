@@ -160,7 +160,14 @@ func _new_card(slot: int) -> Control:
 	seat_card.body_clicked.connect(_screen._on_card_clicked)
 	seat_card.badge_pressed.connect(_screen._on_badge_pressed)
 	seat_card.kick_pressed.connect(_screen._on_kick_pressed)
+	seat_card.kick_armed.connect(_on_kick_armed)
 	return seat_card
+
+## Arming one card's Kick disarms any other armed card (#992).
+func _on_kick_armed(slot: int) -> void:
+	for other: Control in cards():
+		if other.slot != slot:
+			other.disarm_kick()
 
 func _set_order(order: Array[Control]) -> void:
 	for child: Node in _grid.get_children():

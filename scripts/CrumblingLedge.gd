@@ -34,6 +34,9 @@ extends StaticBody2D
 
 enum _LedgeState { SOLID, WARNING, AWAY }
 
+## Preloaded by path, never by `class_name` (CLAUDE.md).
+const PartKitScript := preload("res://scripts/PartKit.gd")
+
 const SOLID_COLOR: Color = Color(0.35, 0.35, 0.4, 1)
 ## Amber: visibly distinct from the terrain grey-blue above, read as
 ## "caution" rather than "danger" -- the ledge is still holding.
@@ -63,42 +66,18 @@ var _visual: Polygon2D
 var _detector: Area2D
 
 func _ready() -> void:
-	var half: Vector2 = size / 2.0
-
-	var rect := RectangleShape2D.new()
-	rect.size = size
-	_collision_shape = CollisionShape2D.new()
-	_collision_shape.name = "CollisionShape2D"
-	_collision_shape.shape = rect
-	add_child(_collision_shape)
+	_collision_shape = PartKitScript.add_rect_shape(self, size)
 
 	_visual = Polygon2D.new()
 	_visual.name = "Visual"
 	_visual.color = SOLID_COLOR
-	_visual.polygon = PackedVector2Array([
-		Vector2(-half.x, -half.y),
-		Vector2(half.x, -half.y),
-		Vector2(half.x, half.y),
-		Vector2(-half.x, half.y),
-	])
+	_visual.polygon = PartKitScript.rect_polygon(size)
 	add_child(_visual)
 
-	_detector = Area2D.new()
-	_detector.name = "Detector"
 	# Nothing needs to detect the detector, only monitor for bodies on the
 	# world layer every terrain `StaticBody2D` in this game already defaults
-	# to (`Player.LAYER_WORLD`, preloading Player.gd here would be a heavier
-	# coupling than a repo-wide constant is worth).
-	_detector.collision_layer = 0
-	_detector.collision_mask = 1
-	_detector.position = Vector2(0, -half.y - _DETECTOR_ABOVE / 2.0 + _DETECTOR_BELOW / 2.0)
-	var detector_rect := RectangleShape2D.new()
-	detector_rect.size = Vector2(size.x, _DETECTOR_ABOVE + _DETECTOR_BELOW)
-	var detector_shape := CollisionShape2D.new()
-	detector_shape.name = "DetectorShape"
-	detector_shape.shape = detector_rect
-	_detector.add_child(detector_shape)
-	add_child(_detector)
+	# to (`Player.LAYER_WORLD`).
+	_detector = PartKitScript.add_top_detector(self, size, _DETECTOR_ABOVE, _DETECTOR_BELOW)
 	_detector.body_entered.connect(_on_body_entered)
 
 ## The colour the ledge is currently showing -- an observable seam a

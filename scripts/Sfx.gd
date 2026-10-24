@@ -225,6 +225,9 @@ const SOUNDS: Dictionary = {
 	# A pickup appearing (#998): a soft short pluck where it pops in.
 	"pickup_spawn": {"files": [
 		"kenney_interface/pluck_001.ogg"], "db": -13.0, "overlap": 2, "max_sec": 0.35},
+	# A fighter coming back in a round (#1015): a soft rising chime at the spawn.
+	"respawn": {"files": [
+		"kenney_interface/confirmation_002.ogg"], "db": -10.0, "overlap": 2, "max_sec": 0.5},
 	# --- Round and UI -------------------------------------------------------
 	"countdown": {"files": [
 		"kenney_interface/tick_001.ogg"], "db": 0.0, "overlap": 1, "positional": false},
@@ -277,6 +280,8 @@ const SOUNDS: Dictionary = {
 	"announce_gale": {"files": ["kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},
 	# No recorded voice clip for Pickup Rush yet (#841): a UI chime stands in.
 	"announce_pickup_rush": {"files": ["kenney_interface/confirmation_002.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false},
+	# No recorded voice clip for Heavy gravity yet: a low thud stands in (#840).
+	"announce_heavy_gravity": {"files": ["kenney_scifi/lowFrequency_explosion_000.ogg"], "db": -8.0, "overlap": 1, "positional": false, "voice": false, "max_sec": 1.5},
 	# --- Player voice grunts (#290): one voice per slot, placeholder synthesis ---
 	# Kept well under the weapon sounds (their `db` is about 0, these -15/-13),
 	# and placed on the fighter. `voice` keeps each slot's pitch fixed, so a slot
@@ -321,6 +326,8 @@ const ATTENUATION: float = 0.5
 const FADE_SEC: float = 0.15
 ## How long `release()` waits for the audio server to free stopped playbacks.
 const RELEASE_SEC: float = 1.0
+## The floor a 0..1 bus volume is clamped to before it becomes dB.
+const SILENT_LINEAR: float = 0.0001
 ## Longest file decoded to PCM (see `_start_decoding`); anything longer stays
 ## compressed. Every file in the table is well under it.
 const MAX_DECODE_SEC: float = 10.0
@@ -333,6 +340,23 @@ const PCM_OPTIONS: Dictionary = {
 	"force/8_bit": false,
 	"force/mono": false,
 	"force/max_rate": false,
+}
+
+## Every on/off display option saved in the `display` section, by property
+## name, with its default. Load, save and `restore_defaults()` loop over it;
+## each has a `set_<name>()` wrapper over `set_flag()`. `fullscreen` is not
+## here: setting it also changes the window mode.
+const DISPLAY_FLAGS: Dictionary = {
+	&"screen_shake": true,
+	&"kill_feed": true,
+	&"damage_numbers": true,
+	&"edge_arrows": true,
+	&"match_point_plate": true,
+	&"stage_title_card": true,
+	&"hit_pause": true,
+	&"pickup_callouts": true,
+	&"reduce_flash": false,
+	&"hide_room_code": false,
 }
 
 ## The master volume, 0..1, and whether everything is muted. Set through
@@ -506,15 +530,20 @@ func release() -> void:
 			voice.stream = null
 	_streams.clear()
 	_last_variant.clear()
+	await wait_for_release(self, RELEASE_SEC)
+
+## Wait `wait_sec` of wall-clock time on `node`'s tree, so the audio server can
+## free stopped playbacks. `release()` here and in `Music` both await it.
+static func wait_for_release(node: Node, wait_sec: float) -> void:
 	# Out of the tree there is no SceneTree to wait on (issue #167).
-	if not is_inside_tree():
+	if not node.is_inside_tree():
 		return
 	# Wall clock, not a SceneTreeTimer (#182): the mix thread lets go in real
 	# time, and under `--fixed-fps` a timer counts frames, which can run far
 	# faster than that.
-	var until: int = Time.get_ticks_msec() + int(RELEASE_SEC * 1000.0)
+	var until: int = Time.get_ticks_msec() + int(wait_sec * 1000.0)
 	while Time.get_ticks_msec() < until:
-		await get_tree().process_frame
+		await node.get_tree().process_frame
 
 # --- Playing ----------------------------------------------------------------
 
@@ -708,65 +737,64 @@ func mix_gain_for(sound: StringName) -> float:
 		gain *= db_to_linear(AudioServer.get_bus_volume_db(AudioServer.get_bus_index(VOICE_BUS_NAME)))
 	return gain
 
+## Set the display flag `flag` (a key of `DISPLAY_FLAGS`) and remember the
+## choice. The `set_*` methods below are one-line wrappers over it.
+func set_flag(flag: StringName, value: bool) -> void:
+	if not DISPLAY_FLAGS.has(flag):
+		push_warning("Sfx: no display flag named '%s'" % flag)
+		return
+	set(flag, value)
+	_save_settings()
+
 ## Turn the camera shake (#256) on or off, and remember the choice.
 func set_screen_shake(value: bool) -> void:
-	screen_shake = value
-	_save_settings()
+	set_flag(&"screen_shake", value)
 
 ## Turn the floating damage numbers (#873) on or off, and remember the choice.
 func set_damage_numbers(value: bool) -> void:
-	damage_numbers = value
-	_save_settings()
+	set_flag(&"damage_numbers", value)
 
 ## Turn the edge arrows (#940) on or off, and remember the choice.
 func set_edge_arrows(value: bool) -> void:
-	edge_arrows = value
-	_save_settings()
+	set_flag(&"edge_arrows", value)
 
 ## Turn the MATCH POINT plate (#892) on or off, and remember the choice.
 func set_match_point_plate(value: bool) -> void:
-	match_point_plate = value
-	_save_settings()
+	set_flag(&"match_point_plate", value)
 
 ## Turn the stage title card (#942) on or off, and remember the choice.
 func set_stage_title_card(value: bool) -> void:
-	stage_title_card = value
-	_save_settings()
+	set_flag(&"stage_title_card", value)
 
 ## Turn the hit-stop freeze (#916) on or off, and remember the choice.
 func set_hit_pause(value: bool) -> void:
-	hit_pause = value
-	_save_settings()
+	set_flag(&"hit_pause", value)
 
 ## Turn the weapon-name pickup callouts (#882) on or off, and remember the choice.
 func set_pickup_callouts(value: bool) -> void:
-	pickup_callouts = value
-	_save_settings()
+	set_flag(&"pickup_callouts", value)
 
 ## Turn the KO ticker (#833) on or off, and remember the choice.
 func set_kill_feed(value: bool) -> void:
-	kill_feed = value
-	_save_settings()
+	set_flag(&"kill_feed", value)
 
 ## Turn the bright flashes (#317) off or on, and remember the choice.
 func set_reduce_flash(value: bool) -> void:
-	reduce_flash = value
-	_save_settings()
+	set_flag(&"reduce_flash", value)
 
 ## Hide the room code and join QR on the shared screen (#369), and remember it.
 func set_hide_room_code(value: bool) -> void:
-	hide_room_code = value
-	_save_settings()
+	set_flag(&"hide_room_code", value)
 
 ## Pick the name tag size (#317): snaps to the nearest of `UI_SCALES`.
 func set_ui_scale(value: float) -> void:
-	ui_scale = _nearest_ui_scale(value)
+	ui_scale = _nearest(UI_SCALES, value)
 	_save_settings()
 
 ## Pick the UI text size (#751): snaps to the nearest of TEXT_SCALES, applies it
 ## to the theme and every open screen, and remembers it.
 func set_text_scale(value: float) -> void:
-	text_scale = _nearest_text_scale(value)
+	text_scale = _nearest(TEXT_SCALES, value)
 	apply_text_scale()
 	_save_settings()
 
@@ -797,26 +825,20 @@ func fit_roots() -> Array[Control]:
 func _on_node_added(node: Node) -> void:
 	if node is Control and TextScaleScript.is_fit_root(node):
 		_fit.register(node as Control, text_scale)
-	if text_scale != 1.0 and node is Control:
+	# A control marked to keep its own size (the pooled damage numbers,
+	# re-added on every hit) costs no deferred call.
+	if text_scale != 1.0 and node is Control and not node.has_meta(TextScaleScript.META_SKIP):
 		# After the screen has set its own sizes.
 		(func() -> void:
 			if is_instance_valid(node):
 				TextScaleScript.apply_to_node(node, text_scale)).call_deferred()
 
-static func _nearest_text_scale(value: float) -> float:
+## The entry of `options` nearest `value`; 1.0 for a non-finite value.
+static func _nearest(options: Array[float], value: float) -> float:
 	var best: float = 1.0
 	if not is_finite(value):
 		return best
-	for option: float in TEXT_SCALES:
-		if absf(option - value) < absf(best - value):
-			best = option
-	return best
-
-static func _nearest_ui_scale(value: float) -> float:
-	var best: float = 1.0
-	if not is_finite(value):
-		return best
-	for option: float in UI_SCALES:
+	for option: float in options:
 		if absf(option - value) < absf(best - value):
 			best = option
 	return best
@@ -833,19 +855,11 @@ func restore_defaults() -> void:
 	sfx_volume = 1.0
 	voice_volume = 1.0
 	fullscreen = false
-	screen_shake = true
-	kill_feed = true
-	damage_numbers = true
-	edge_arrows = true
-	match_point_plate = true
-	stage_title_card = true
-	hit_pause = true
-	pickup_callouts = true
-	reduce_flash = false
+	for flag: StringName in DISPLAY_FLAGS:
+		set(flag, DISPLAY_FLAGS[flag])
 	ui_scale = 1.0
 	text_scale = 1.0
 	apply_text_scale()
-	hide_room_code = false
 	_apply_master()
 	_apply_sfx_volume()
 	_apply_voice_volume()
@@ -900,14 +914,11 @@ func _apply_master() -> void:
 	AudioServer.set_bus_mute(0, muted)
 
 func _apply_sfx_volume() -> void:
-	var index: int = AudioServer.get_bus_index(BUS_NAME)
-	if index != -1:
-		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(sfx_volume, 0.0001)))
+	set_bus_linear(BUS_NAME, sfx_volume)
 
 func _apply_voice_volume() -> void:
-	var index: int = AudioServer.get_bus_index(VOICE_BUS_NAME)
+	var index: int = set_bus_linear(VOICE_BUS_NAME, voice_volume)
 	if index != -1:
-		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(voice_volume, 0.0001)))
 		AudioServer.set_bus_mute(index, voice_volume <= 0.0)
 
 func _apply_window_mode() -> void:
@@ -949,18 +960,11 @@ func load_settings() -> void:
 		sfx_volume = clampf(_num(config.get_value("audio", "sfx_volume", 1.0), 1.0), 0.0, 1.0)
 		voice_volume = clampf(_num(config.get_value("audio", "voice_volume", 1.0), 1.0), 0.0, 1.0)
 		fullscreen = _flag(config.get_value("display", "fullscreen", false), false)
-		screen_shake = _flag(config.get_value("display", "screen_shake", true), true)
-		kill_feed = _flag(config.get_value("display", "kill_feed", true), true)
-		damage_numbers = _flag(config.get_value("display", "damage_numbers", true), true)
-		edge_arrows = _flag(config.get_value("display", "edge_arrows", true), true)
-		match_point_plate = _flag(config.get_value("display", "match_point_plate", true), true)
-		stage_title_card = _flag(config.get_value("display", "stage_title_card", true), true)
-		hit_pause = _flag(config.get_value("display", "hit_pause", true), true)
-		pickup_callouts = _flag(config.get_value("display", "pickup_callouts", true), true)
-		reduce_flash = _flag(config.get_value("display", "reduce_flash", false), false)
-		ui_scale = _nearest_ui_scale(_num(config.get_value("display", "ui_scale", 1.0), 1.0))
-		hide_room_code = _flag(config.get_value("display", "hide_room_code", false), false)
-		text_scale = _nearest_text_scale(_num(config.get_value("display", "text_scale", 1.0), 1.0))
+		for flag: StringName in DISPLAY_FLAGS:
+			var fallback: bool = DISPLAY_FLAGS[flag]
+			set(flag, _flag(config.get_value("display", flag, fallback), fallback))
+		ui_scale = _nearest(UI_SCALES, _num(config.get_value("display", "ui_scale", 1.0), 1.0))
+		text_scale = _nearest(TEXT_SCALES, _num(config.get_value("display", "text_scale", 1.0), 1.0))
 	elif err != ERR_FILE_NOT_FOUND:
 		push_warning("Sfx: could not read settings from %s (%s); using the defaults" % [settings_path, error_string(err)])
 	_apply_master()
@@ -973,29 +977,19 @@ func load_settings() -> void:
 func _save_settings() -> void:
 	if not persist_settings:
 		return
-	var config := ConfigFile.new()
-	var err: Error = config.load(settings_path)
-	if err != OK and err != ERR_FILE_NOT_FOUND:
-		push_warning("Sfx: not saving settings: %s would not load (%s)" % [settings_path, error_string(err)])
+	var config: ConfigFile = config_for_save(settings_path, "Sfx")
+	if config == null:
 		return
 	config.set_value("audio", "master_volume", master_volume)
 	config.set_value("audio", "muted", muted)
 	config.set_value("audio", "sfx_volume", sfx_volume)
 	config.set_value("audio", "voice_volume", voice_volume)
 	config.set_value("display", "fullscreen", fullscreen)
-	config.set_value("display", "screen_shake", screen_shake)
-	config.set_value("display", "kill_feed", kill_feed)
-	config.set_value("display", "damage_numbers", damage_numbers)
-	config.set_value("display", "edge_arrows", edge_arrows)
-	config.set_value("display", "match_point_plate", match_point_plate)
-	config.set_value("display", "stage_title_card", stage_title_card)
-	config.set_value("display", "hit_pause", hit_pause)
-	config.set_value("display", "pickup_callouts", pickup_callouts)
-	config.set_value("display", "reduce_flash", reduce_flash)
+	for flag: StringName in DISPLAY_FLAGS:
+		config.set_value("display", flag, bool(get(flag)))
 	config.set_value("display", "ui_scale", ui_scale)
-	config.set_value("display", "hide_room_code", hide_room_code)
 	config.set_value("display", "text_scale", text_scale)
-	err = config.save(settings_path)
+	var err: Error = config.save(settings_path)
 	if err != OK:
 		push_warning("Sfx: could not save settings to %s (%s)" % [settings_path, error_string(err)])
 
@@ -1112,16 +1106,37 @@ static func _decode_to_pcm(source: AudioStream, rate: int) -> AudioStreamWAV:
 	return AudioStreamWAV.load_from_buffer(wav, PCM_OPTIONS)
 
 func _ensure_bus() -> void:
-	if AudioServer.get_bus_index(BUS_NAME) == -1:
-		AudioServer.add_bus()
-		var index: int = AudioServer.bus_count - 1
-		AudioServer.set_bus_name(index, BUS_NAME)
-		AudioServer.set_bus_send(index, &"Master")
-	if AudioServer.get_bus_index(VOICE_BUS_NAME) == -1:
-		AudioServer.add_bus()
-		var voice_index: int = AudioServer.bus_count - 1
-		AudioServer.set_bus_name(voice_index, VOICE_BUS_NAME)
-		AudioServer.set_bus_send(voice_index, BUS_NAME)
+	ensure_bus(BUS_NAME, &"Master")
+	ensure_bus(VOICE_BUS_NAME, BUS_NAME)
+
+## Add a bus named `bus_name` that sends to `send`, unless the project already
+## has one by that name. `Music` makes its bus through this too.
+static func ensure_bus(bus_name: StringName, send: StringName) -> void:
+	if AudioServer.get_bus_index(bus_name) != -1:
+		return
+	AudioServer.add_bus()
+	var index: int = AudioServer.bus_count - 1
+	AudioServer.set_bus_name(index, bus_name)
+	AudioServer.set_bus_send(index, send)
+
+## Set bus `bus_name` to `linear` (0..1, floored at `SILENT_LINEAR` for the dB
+## maths). Returns the bus index, or -1 when there is no such bus.
+static func set_bus_linear(bus_name: StringName, linear: float) -> int:
+	var index: int = AudioServer.get_bus_index(bus_name)
+	if index != -1:
+		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(linear, SILENT_LINEAR)))
+	return index
+
+## The settings file at `path`, loaded so a save keeps the sections it does not
+## own; empty when the file is missing. Null, with a warning naming `who`, when
+## the file exists but will not load: it is then left alone (#195).
+static func config_for_save(path: String, who: String) -> ConfigFile:
+	var config := ConfigFile.new()
+	var err: Error = config.load(path)
+	if err != OK and err != ERR_FILE_NOT_FOUND:
+		push_warning("%s: not saving settings: %s would not load (%s)" % [who, path, error_string(err)])
+		return null
+	return config
 
 func _pick_stream(key: String) -> AudioStream:
 	if not _streams_decoded:

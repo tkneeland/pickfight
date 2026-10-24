@@ -1,18 +1,10 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/RotatingPlatform.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Fan.tscn" id="9"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_shoulder"]
-size = Vector2(220, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_hub"]
-size = Vector2(180, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; A fairground of moving footing (issue #54, #52's RotatingPlatform, both
 ; modes). Everything between the two edges tips or turns; only the shoulders
@@ -49,35 +41,17 @@ background_layers = PackedStringArray("clouds", "hills")
 
 ; Shoulders widened inward for issue #137 (x=+-590..+-790 ->
 ; +-570..+-790) to fit four spawns each; the gap to each see-saw is now 40 px.
-[node name="ShoulderLeft" type="StaticBody2D" parent="."]
+[node name="ShoulderLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-680, 320)
+size = Vector2(220, 40)
 
-[node name="ShoulderLeftShape" type="CollisionShape2D" parent="ShoulderLeft"]
-shape = SubResource("RectangleShape2D_shoulder")
-
-[node name="ShoulderLeftVisual" type="Polygon2D" parent="ShoulderLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-110, -20, 110, -20, 110, 20, -110, 20)
-
-[node name="ShoulderRight" type="StaticBody2D" parent="."]
+[node name="ShoulderRight" parent="." instance=ExtResource("platform")]
 position = Vector2(680, 320)
+size = Vector2(220, 40)
 
-[node name="ShoulderRightShape" type="CollisionShape2D" parent="ShoulderRight"]
-shape = SubResource("RectangleShape2D_shoulder")
-
-[node name="ShoulderRightVisual" type="Polygon2D" parent="ShoulderRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-110, -20, 110, -20, 110, 20, -110, 20)
-
-[node name="Hub" type="StaticBody2D" parent="."]
+[node name="Hub" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 320)
-
-[node name="HubShape" type="CollisionShape2D" parent="Hub"]
-shape = SubResource("RectangleShape2D_hub")
-
-[node name="HubVisual" type="Polygon2D" parent="Hub"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-90, -20, 90, -20, 90, 20, -90, 20)
+size = Vector2(180, 40)
 
 [node name="SeesawLeft" parent="." instance=ExtResource("3")]
 position = Vector2(-380, 300)
@@ -131,12 +105,8 @@ position = Vector2(-585, 250)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(585, 250)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 [node name="PickupSpawn0" type="Marker2D" parent="."]
 position = Vector2(0, 264)

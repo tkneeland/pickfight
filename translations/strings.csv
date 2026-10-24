@@ -90,6 +90,7 @@ HOST_JOIN_BLOCKED,Off while players are in your lobby,"Aus, solange Spieler in d
 HOST_JOIN_ONLINE,Join someone's game (J),Spiel beitreten (J),Rejoindre une partie (J),Unirse a una partida (J),Entrar no jogo de alguém (J),加入别人的游戏 (J),他の人のゲームに参加 (J),다른 사람 게임에 참가 (J),Зайти в чужую игру (J)
 HOST_JOIN_ONLINE_PAD,Join someone's game,Spiel beitreten,Rejoindre une partie,Unirse a una partida,Entrar no jogo de alguém,加入别人的游戏,他の人のゲームに参加,다른 사람 게임에 참가,Зайти в чужую игру
 HOST_KICK,Kick,Rauswerfen,Virer,Expulsar,Expulsar,踢出,キック,내보내기,Выгнать
+HOST_KICK_CONFIRM,Tap again to kick,Nochmal tippen zum Rauswerfen,Touche encore pour virer,Toca otra vez para expulsar,Toque de novo para expulsar,再点一次以踢出,もう一度押すとキック,한 번 더 누르면 내보내기,"Нажми ещё раз, чтобы выгнать"
 HOST_MODE,Mode (T),Modus (T),Mode (T),Modo (T),Modo (T),模式 (T),モード (T),모드 (T),Режим (T)
 HOST_MODE_STATE,Mode (T): %s,Modus (T): %s,Mode (T) : %s,Modo (T): %s,Modo (T): %s,模式 (T): %s,モード (T): %s,모드 (T): %s,Режим (T): %s
 HOST_BOTS_STATE,Bots (B): %d,Bots (B): %d,Bots (B) : %d,Bots (B): %d,Bots (B): %d,电脑 (B): %d,ボット (B): %d,봇 (B): %d,Боты (B): %d
@@ -174,6 +175,7 @@ MODIFIER_DOUBLE_DAMAGE,Double Damage,Doppelter Schaden,Dégâts doublés,Daño d
 MODIFIER_FAST_LAVA,Fast Lava,Schnelle Lava,Lave rapide,Lava veloz,Lava veloz,岩浆加速,急上昇ラヴァ,빠른 용암,Быстрая лава
 MODIFIER_GALE,Gale,Sturm,Tempête,Vendaval,Vendaval,狂风,強風,강풍,Шквал
 MODIFIER_PICKUP_RUSH,Pickup Rush,Waffenregen,Ruée sur les armes,Fiebre de armas,Corrida de armas,武器狂潮,武器ラッシュ,무기 러시,Оружейный ажиотаж
+MODIFIER_HEAVY_GRAVITY,Heavy Gravity,Hohe Schwerkraft,Forte gravité,Mucha gravedad,Gravidade pesada,高重力,高重力,고중력,Тяжёлая гравитация
 MODIFIER_HEAVY_WEAPONS,Heavy Weapons,Schwere Waffen,Armes lourdes,Armas pesadas,Armas pesadas,重型武器,重い武器,무거운 무기,Тяжёлое оружие
 MODIFIER_LOW_GRAVITY,Low Gravity,Wenig Schwerkraft,Faible gravité,Poca gravedad,Baixa gravidade,低重力,低重力,저중력,Низкая гравитация
 MODIFIER_METEOR_SHOWER,Meteor Shower,Meteoritenschauer,Pluie de météores,Lluvia de meteoros,Chuva de meteoros,流星雨,流星群,유성우,Метеоритный дождь
@@ -546,3 +548,5 @@ LOBBY_COPY_CODE_PAD,Copy code,Code kopieren,Copier le code,Copiar código,Copiar
 LOBBY_COPIED,Copied,Kopiert,Copié,Copiado,Copiado,已复制,コピーしました,복사됨,Скопировано
 JOIN_PASTE,Paste,Einfügen,Coller,Pegar,Colar,使用复制码,ペースト,가져오기,Вставить
 JOIN_NO_CODE_ON_CLIPBOARD,No room code on the clipboard,Kein Raumcode in der Zwischenablage,Aucun code de salle dans le presse-papiers,No hay ningún código de sala en el portapapeles,Nenhum código de sala na área de transferência,复制的内容里没有房间码,クリップボードにルームコードがありません,클립보드에 방 코드가 없습니다,В буфере обмена нет кода комнаты
+JOIN_LAST_ROOM,Last room: %s,Letzter Raum: %s,Dernière salle : %s,Última sala: %s,Última sala: %s,上次的房间：%s,前回のルーム: %s,지난 방: %s,Прошлая комната: %s
+JOIN_CODE_HINT,"Room codes use letters only, never I or O","Raumcodes bestehen nur aus Buchstaben, nie aus I oder O","Les codes de salle n'utilisent que des lettres, jamais I ni O",Los códigos de sala solo usan letras: nunca I ni O,Códigos de sala usam só letras: nunca I nem O,房间码不含 I 和 O，也没有数字,ルームコードは文字のみで、I と O は使いません,방 코드에는 I와 O와 숫자가 없습니다,"В коде комнаты только буквы, без I и O"

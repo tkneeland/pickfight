@@ -10,8 +10,10 @@ snap=$PF_STATE/usage-snapshot.json
 # Stamp the beacon with when the snapshot was taken, not now: if the status line stops running, the
 # beacon must look stale instead of republishing old numbers as fresh.
 sat=$(pf_mtime "$snap")
-body=$(jq -r --arg a "$PF_ACCOUNT" --argjson sat "$sat" '
-  "\($a) usage @ \($sat|todate)\n5h: \(.rate_limits.five_hour.used_percentage // "?")% (resets \(.rate_limits.five_hour.resets_at // 0|todate))\n7d: \(.rate_limits.seven_day.used_percentage // "?")% (resets \(.rate_limits.seven_day.resets_at // 0|todate))\n<!-- usage \({account:$a, at:$sat, posted:(now|floor), five_hour:.rate_limits.five_hour, seven_day:.rate_limits.seven_day}|tojson) -->"' "$snap") \
+# running worker agents = live worktrees on an issue branch (pf_live_agents; the status line counts them the same way)
+agents=$(pf_live_agents | wc -l | tr -d " ")
+body=$(jq -r --arg a "$PF_ACCOUNT" --argjson sat "$sat" --argjson ag "${agents:-0}" '
+  "\($a) usage @ \($sat|todate)\n5h: \(.rate_limits.five_hour.used_percentage // "?")% (resets \(.rate_limits.five_hour.resets_at // 0|todate))\n7d: \(.rate_limits.seven_day.used_percentage // "?")% (resets \(.rate_limits.seven_day.resets_at // 0|todate))\nagents: \($ag)\n<!-- usage \({account:$a, at:$sat, posted:(now|floor), agents:$ag, five_hour:.rate_limits.five_hour, seven_day:.rate_limits.seven_day}|tojson) -->"' "$snap") \
   || { log "bad snapshot"; exit 1; }
 idf=$PF_STATE/.beacon-comment-id; id=$(cat "$idf" 2>/dev/null)
 if [ -z "$id" ]; then
@@ -25,5 +27,6 @@ else
   id=$(gh api "repos/$REPO/issues/432/comments" -f body="$body" -q .id 2>>"$PF_STATE/beacon.log") || { log "POST failed"; exit 1; }
   echo "$id" > "$idf"
 fi
-# best effort: also tell the private channel (doorbell for the other machine); never fails the beacon
-bash "$PF_DIR/pf-msg.sh" send USAGE "$(jq -r '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate)"' "$snap")" >/dev/null 2>&1 || true
+# Also send it on the private channel: the triagemaster's status line reads the newest USAGE message first and falls
+# back to this #432 comment. Format: "<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n>". Never fails the beacon.
+bash "$PF_DIR/pf-msg.sh" send USAGE "$(jq -r --arg ag "${agents:-0}" '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate) r5=\(.rate_limits.five_hour.resets_at // 0|floor|todate) agents=\($ag)"' "$snap")" >/dev/null 2>&1 || true

@@ -5,7 +5,9 @@ extends RefCounted
 ## this script by path; never reference it by `class_name` (CLAUDE.md).
 ##
 ## Keys the live game has no source for are filled with a default:
-## - `modifiers[].modifier_id`: always 1 (the name carries the identity).
+## - `modifiers[].modifier_id`: 1 for the round modifier (the name carries the
+##   identity); 2, named "night", while the stage is its night variant (#332,
+##   so the Online joiner builds the same night stage, #976).
 ## - `timer_ms`: the lobby countdown's time left, else 0 (rounds are untimed).
 ## - `announcer_text`: the on-screen modifier banner while it shows, else "".
 ## - `color`: the slot number (the client picks the palette).
@@ -14,11 +16,12 @@ extends RefCounted
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const GameClockScript := preload("res://scripts/GameClock.gd")
 const SnapshotScript := preload("res://scripts/Snapshot.gd")
-const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const BoomerangScript := preload("res://scripts/Boomerang.gd")
 const GrappleHookScript := preload("res://scripts/GrappleHook.gd")
 const MeteorScript := preload("res://scripts/Meteor.gd")
 const NetSyncScript := preload("res://scripts/NetSync.gd")
+## The `modifiers` entry that marks a night stage (#976).
+const NIGHT_MODIFIER_ID: int = 2
 
 ## Frames captured since boot; scenarios read it to prove a phones-only game
 ## captures nothing.
@@ -57,7 +60,6 @@ static func capture(round_manager: Node) -> Dictionary:
 		"flails": _flails(rm, players),
 		"ghosts": _ghosts(rm),
 		"meteors": _meteors(rm),
-		"stage_flags": _stage_flags(rm),
 		"parts": _parts(rm.get("_current_stage")),
 		"props": _props(rm),
 	}
@@ -94,7 +96,7 @@ static func delta(world: Dictionary, previous: Dictionary) -> Dictionary:
 		if before.get(p["player_id"]) != p:
 			entities.append({"type": 0x01, "id": p["player_id"], "body": p["body"],
 				"weapon": p["weapon"], "damage": p["damage"], "state": p["state"],
-				"flags": p.get("flags", 0), "fire": p.get("fire", SnapshotScript.FIRE_NONE),
+				"flags": p.get("flags", 0),
 				"hat_spin": p.get("hat_spin", 0), "squash": p.get("squash", SnapshotScript.SQUASH_REST)})
 	before = _by_key(previous.get("projectiles", []), "projectile_id")
 	for p: Dictionary in world.get("projectiles", []):
@@ -166,8 +168,6 @@ static func structure_changed(world: Dictionary, previous: Dictionary) -> bool:
 		return true
 	if world.get("round_phase") != previous.get("round_phase") or world.get("stage_id") != previous.get("stage_id"):
 		return true
-	if world.get("stage_flags", 0) != previous.get("stage_flags", 0):
-		return true
 	for pair: Array in [["players", "player_id"], ["projectiles", "projectile_id"], ["pickups", "pickup_id"],
 			["flails", "owner"], ["ghosts", "owner"], ["meteors", "meteor_id"], ["parts", "part_id"],
 			["props", "prop_id"]]:
@@ -230,8 +230,7 @@ static func _players(rm: Node, state: int) -> Array:
 			"team": p.team,
 			"damage": p.damage,
 			"state": phase,
-			"flags": _player_flags(p, head) | _hint_flags(rm, slot),
-			"fire": _fire_byte(p),
+			"flags": _player_flags(p, head),
 			"hat_spin": _hat_spin(p),
 			"squash": _squash_byte(p),
 		})
@@ -264,30 +263,6 @@ static func _player_flags(p: Node, head: Node2D) -> int:
 	if (p as CanvasItem).modulate.a < 1.0:
 		flags |= SnapshotScript.PLAYER_DIMMED
 	return flags
-
-## The idle hint's bits (#826) for `slot`: up, and whether it reads the
-## gamepad line.
-static func _hint_flags(rm: Node, slot: int) -> int:
-	var tags: Variant = rm.get("_name_tags")
-	if tags == null or not is_instance_valid(tags) or not (tags as Object).has_method("idle_hint"):
-		return 0
-	var hint: Node = tags.idle_hint()
-	if hint == null:
-		return 0
-	match int(hint.hint_kind(slot)):
-		1:
-			return SnapshotScript.PLAYER_HINT
-		2:
-			return SnapshotScript.PLAYER_HINT | SnapshotScript.PLAYER_HINT_PAD
-	return 0
-
-## How far the fire clock has run, 0..FIRE_FULL, or FIRE_NONE.
-static func _fire_byte(p: Node) -> int:
-	var ready_in: float = p.fire_ready_in()
-	var stats: Resource = p.get("_stats")
-	if not is_finite(ready_in) or stats == null or float(stats.fire_interval) <= 0.0:
-		return SnapshotScript.FIRE_NONE
-	return clampi(roundi((1.0 - ready_in / float(stats.fire_interval)) * SnapshotScript.FIRE_FULL), 0, SnapshotScript.FIRE_FULL)
 
 static func _stage_bodies(stage: Node) -> Array:
 	var out: Array = []
@@ -423,15 +398,6 @@ static func _meteors(rm: Node) -> Array:
 			"velocity": node.velocity, "radius": node.radius})
 	return out
 
-static func _stage_flags(rm: Node) -> int:
-	var flags: int = 0
-	var stage: Node = rm.get("_current_stage")
-	if stage != null and is_instance_valid(stage) and bool(stage.get("night")):
-		flags |= SnapshotScript.STAGE_NIGHT
-	if HostSettingsScript.shared().player_numbers:
-		flags |= SnapshotScript.STAGE_PLAYER_NUMBERS
-	return flags
-
 static func _pickups(rm: Node) -> Array:
 	var out: Array = []
 	for node: Node in rm.get_tree().get_nodes_in_group("pickups"):
@@ -440,14 +406,16 @@ static func _pickups(rm: Node) -> Array:
 			"position": node.global_position,
 			"weapon_type": _weapon_index(node.weapon_stats),
 			"halo": node.halo_phase_byte(),
-			# Still popping in (#816): the client plays the same pop for it.
-			"pop": 1 if (node as Node2D).scale.x < 1.0 else 0,
 		})
 	return out
 
 static func _modifiers(rm: Node) -> Array:
 	var id: String = rm.active_modifier_id()
-	return [] if id.is_empty() else [{"modifier_id": 1, "name": id}]
+	var out: Array = [] if id.is_empty() else [{"modifier_id": 1, "name": id}]
+	var stage: Variant = rm.get("_current_stage")
+	if stage is Node and is_instance_valid(stage) and stage.get("night") == true:
+		out.append({"modifier_id": NIGHT_MODIFIER_ID, "name": "night"})
+	return out
 
 static func _timer_ms(rm: Node, state: int) -> int:
 	if state != 4: # State.COUNTDOWN
@@ -485,7 +453,10 @@ static func _announcer_text(rm: Node) -> String:
 #               u8 has_position (0/1), if 1: i16 x, i16 y (world px, truncated),
 #               u8 strength (0..255 = 0.0..1.0)
 #     track:  u8 length, UTF-8 key of the playing music track ("" = silence)
-#     size:   u16, the byte count of events + track
+#     effects (optional, issue #976): u16 length, then `EffectStream.encode()`
+#             bytes -- the host's one-shot effects since the previous frame.
+#             Absent (the track ends the body) when there were none.
+#     size:   u16, the byte count of events + track + effects
 #     magic:  2 bytes, 0x53 0x58 ("SX")
 #
 # Events are the sounds played since the previous frame. A client reads the
@@ -496,8 +467,11 @@ static func _announcer_text(rm: Node) -> String:
 const MAX_SOUND_EVENTS: int = 32
 const TRAILER_MAGIC: PackedByteArray = [0x53, 0x58]
 
-## `events` as [{"name": String, "position": Vector2 or null, "strength": float}].
-static func encode_sound_trailer(events: Array, track: String) -> PackedByteArray:
+const EffectStreamScript: GDScript = preload("res://scripts/EffectStream.gd")
+
+## `events` as [{"name": String, "position": Vector2 or null, "strength": float}];
+## `effects` as `EffectStream` events (#976), none by default.
+static func encode_sound_trailer(events: Array, track: String, effects: Array = []) -> PackedByteArray:
 	var body := PackedByteArray()
 	var count: int = mini(events.size(), MAX_SOUND_EVENTS)
 	body.append(count)
@@ -517,6 +491,11 @@ static func encode_sound_trailer(events: Array, track: String) -> PackedByteArra
 	var track_bytes: PackedByteArray = track.to_utf8_buffer().slice(0, 255)
 	body.append(track_bytes.size())
 	body.append_array(track_bytes)
+	var fx: PackedByteArray = EffectStreamScript.encode(effects)
+	if not fx.is_empty():
+		body.append(fx.size() >> 8)
+		body.append(fx.size() & 0xFF)
+		body.append_array(fx)
 	var out := body.duplicate()
 	out.append(body.size() >> 8)
 	out.append(body.size() & 0xFF)
@@ -525,10 +504,11 @@ static func encode_sound_trailer(events: Array, track: String) -> PackedByteArra
 
 ## Splits a streamed payload into {"snapshot": PackedByteArray for
 ## `Snapshot.decode()`, "events": Array (as `encode_sound_trailer()` takes),
-## "track": String}. No trailer: the whole packet is the snapshot, no events.
+## "track": String, "effects": Array of `EffectStream` events}. No trailer:
+## the whole packet is the snapshot, no events.
 static func split_sound_trailer(packet: PackedByteArray) -> Dictionary:
 	var n: int = packet.size()
-	var none: Dictionary = {"snapshot": packet, "events": [], "track": ""}
+	var none: Dictionary = {"snapshot": packet, "events": [], "track": "", "effects": []}
 	if n < 5 or packet[n - 2] != TRAILER_MAGIC[0] or packet[n - 1] != TRAILER_MAGIC[1]:
 		return none
 	var size: int = (packet[n - 4] << 8) | packet[n - 3]
@@ -567,10 +547,19 @@ static func split_sound_trailer(packet: PackedByteArray) -> Dictionary:
 	if at >= end:
 		return none
 	var track_len: int = packet[at]
-	if at + 1 + track_len != end:
+	if at + 1 + track_len > end:
 		return none
 	var track: String = packet.slice(at + 1, at + 1 + track_len).get_string_from_utf8()
-	return {"snapshot": packet.slice(0, start), "events": events, "track": track}
+	at += 1 + track_len
+	var effects: Array = []
+	if at != end:
+		if at + 2 > end:
+			return none
+		var fx_len: int = (packet[at] << 8) | packet[at + 1]
+		if at + 2 + fx_len != end:
+			return none
+		effects = EffectStreamScript.decode(packet.slice(at + 2, end))
+	return {"snapshot": packet.slice(0, start), "events": events, "track": track, "effects": effects}
 
 static func _i16(bytes: PackedByteArray, at: int) -> int:
 	var v: int = (bytes[at] << 8) | bytes[at + 1]

@@ -35,8 +35,13 @@ const CosmeticsPanelScript: GDScript = preload("res://scripts/OnlineCosmeticsPan
 const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 const NetSyncScript: GDScript = preload("res://scripts/NetSync.gd")
-const NameTagsScript: GDScript = preload("res://scripts/NameTags.gd")
-const OffscreenIndicatorsScript: GDScript = preload("res://scripts/OffscreenIndicators.gd")
+## Issue #976: the host's effects, screens and HUD, drawn by the host's scripts.
+const RemoteEffectsScript: GDScript = preload("res://scripts/RemoteEffects.gd")
+const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
+const RemoteHudScript: GDScript = preload("res://scripts/RemoteHud.gd")
+const UiMirrorScript: GDScript = preload("res://scripts/UiMirror.gd")
+const ModifierBannerScript: GDScript = preload("res://scripts/ModifierBanner.gd")
+const HostHudScene: PackedScene = preload("res://scenes/HostHud.tscn")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
 ## Room-code alphabet and length: Relay.CODE_LETTERS (no I and no O) / CODE_LENGTH.
@@ -82,6 +87,8 @@ var protocol_version: int = ControllerServerScript.PROTOCOL_VERSION
 ## A scenario sets it to try the other build against the same host.
 var demo_build: bool = DemoBuildScript.is_active()
 var room_code: String = ""
+## #907: the last room this client got a seat in ("" when none, or once it was found dead).
+var last_room_code: String = ""
 var slot: int = -1
 var peer_id: int = 0
 var menu_open: bool = false
@@ -117,19 +124,17 @@ var _samples: Array[Dictionary] = []
 var _stage_id: int = -1
 var _stage: Node = null
 var _puppets: Dictionary = {} # key (String) -> RemotePuppet
-## Issue #976: the stage is the night variant; stage part id -> node, and the
-## state each was last given; host prop id -> the client's copy.
-var _stage_night: bool = false
+## Issue #976: stage part id -> node, and the state each was last given;
+## the part ids the host named that the last walk of the stage did not find,
+## and whether the stage gained nodes since (only then is it walked again);
+## host prop id -> the client's copy.
 var _part_nodes: Dictionary = {}
 var _part_shown: Dictionary = {}
-var _part_map_msec: int = 0
-const PART_REMAP_MSEC: int = 500
+var _part_missing: Dictionary = {}
+var _parts_dirty: bool = false
+## How many times the stage was walked for its parts (scenarios).
+var part_walks: int = 0
 var _prop_nodes: Dictionary = {}
-## The host's 8 seats as the name tags see them: each slot's puppet, or null.
-const TAG_SLOTS: int = 8
-var _tag_players: Array = []
-var _name_tags: Node2D
-var _offscreen: CanvasLayer
 var _hud_signature: String = ""
 ## Issue #459: after a dropped connection mid-match the client rejoins by
 ## itself, every REJOIN_RETRY_MSEC, until the host's seat hold would have run
@@ -151,6 +156,8 @@ var _ui: CanvasLayer
 var _join_panel: Control
 var _room_edit: LineEdit
 var _paste_button: Button
+var _last_room_button: Button
+var _code_hint: Label
 ## The clipboard read, a seam so the scenarios never touch the real clipboard (#906).
 var clipboard_getter: Callable = func() -> String: return DisplayServer.clipboard_get()
 var _name_edit: LineEdit
@@ -159,12 +166,21 @@ var _join_button: Button
 var _cancel_button: Button
 var _update_link: LinkButton
 var _hud: Control
-var _score_box: VBoxContainer
-var _feed_label: Label
-var _banner_label: Label
-var _mode_label: Label
-var _result_label: Label
-var _podium_label: Label
+## Issue #976: the host's own HUD scene (scores, scoreboard, join corner, kill
+## feed), its modifier banner, and the effects player with its screens.
+var _host_hud: CanvasLayer
+var _modifier_label: Label
+var effects: Node2D
+var _last_round_phase: int = 0
+var _ui_text: String = ""
+var _stage_night: bool = false
+## Pickup snapshot ids the host just popped in -> give-up time (msec).
+var _pending_pops: Dictionary = {}
+const POP_WAIT_MSEC: int = 1000
+const NIGHT_PLAYER_GROUP: StringName = &"remote_players"
+const NIGHT_PICKUP_GROUP: StringName = &"remote_pickups"
+var _screens: Dictionary = {}
+var _victory_text: String = ""
 var _leave_button: Button
 var _wait_label: Label
 var _lobby_panel: Control
@@ -191,6 +207,17 @@ static func normalize_code(text: String) -> String:
 		if CODE_LETTERS.contains(ch) and out.length() < CODE_LENGTH:
 			out += ch
 	return out
+
+## #922: whether typing `text` into the room field dropped a character the
+## player meant as part of the code (I, O, a digit, punctuation). Case, spaces
+## and dashes are fine, and so is running past CODE_LENGTH letters.
+static func code_text_drops_a_letter(text: String) -> bool:
+	for ch: String in text.to_upper():
+		if ch == " " or ch == "-":
+			continue
+		if not CODE_LETTERS.contains(ch):
+			return true
+	return false
 
 ## #906: the room code inside pasted `text` ("" when there is none). Takes the
 ## first whole word that is exactly CODE_LENGTH letters of the relay alphabet
@@ -304,6 +331,8 @@ func _exit_tree() -> void:
 		_socket.close()
 		_socket = null
 	_set_captured(false)
+	if get_tree().node_added.is_connected(_on_node_added):
+		get_tree().node_added.disconnect(_on_node_added)
 
 func _process(_delta: float) -> void:
 	if _socket != null:
@@ -312,6 +341,7 @@ func _process(_delta: float) -> void:
 	_watch_snapshots()
 	if state == State.PLAYING:
 		_render()
+		_track_heads()
 
 func _physics_process(_delta: float) -> void:
 	if state == State.PLAYING:
@@ -389,6 +419,9 @@ func _input(event: InputEvent) -> void:
 			if not idle: # an idle back swaps the scene; do not starve a host sharing this tree of its Esc
 				get_viewport().set_input_as_handled()
 		return
+	if _victory_input(event) or _replay_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	var pad_button := event as InputEventJoypadButton
 	if pad_button != null and pad_button.pressed and not menu_open and (pad_button.button_index == JOY_BUTTON_A or pad_button.button_index == JOY_BUTTON_START) and _ready_button != null and _ready_button.is_visible_in_tree():
 		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
@@ -428,6 +461,29 @@ func _input(event: InputEvent) -> void:
 		toggle_menu()
 		get_viewport().set_input_as_handled()
 
+## Issue #976: on the host's victory screen, Space, A or a left click is
+## Continue, as on the host (#337, #640): this seat's Ready.
+func _victory_input(event: InputEvent) -> bool:
+	if menu_open or not victory_visible():
+		return false
+	var key := event as InputEventKey
+	var pad := event as InputEventJoypadButton
+	var click := event as InputEventMouseButton
+	var go: bool = (key != null and key.pressed and not key.echo and key.physical_keycode == KEY_SPACE) \
+		or (pad != null and pad.pressed and pad.button_index == JOY_BUTTON_A) \
+		or (click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT)
+	if go:
+		_send_json({"t": "ready", "v": true})
+	return go
+
+## F9 saves this screen's last ~10 s as a clip, as on the host (#329, #976).
+func _replay_input(event: InputEvent) -> bool:
+	var key := event as InputEventKey
+	if effects == null or key == null or not key.pressed or key.echo or key.physical_keycode != KEY_F9:
+		return false
+	effects.replay.save_and_toast()
+	return true
+
 ## A non-shoulder action button went down or came up: a tap counts on key-up.
 func _action_edge(id: int, pressed: bool) -> void:
 	if pressed:
@@ -446,6 +502,7 @@ func _action_edge(id: int, pressed: bool) -> void:
 func join(code: String, display_name: String) -> bool:
 	if state != State.JOIN:
 		return false
+	_code_hint.visible = false # #922
 	code = normalize_code(code)
 	if not code_is_complete(code):
 		_set_status(tr("JOIN_ENTER_CODE") % CODE_LENGTH)
@@ -537,6 +594,7 @@ func _on_relay_text(text: String) -> void:
 			_set_status(tr("JOIN_WAITING_HOST") % room_code)
 			_send_json({"id": client_id, "proto": protocol_version, "demo": demo_build})
 		"error":
+			_forget_dead_room(str(msg.get("reason", "")))
 			_return_to_join(reason_text(str(msg.get("reason", "unknown"))), str(msg.get("reason", "")) == "version")
 
 ## A binary frame: `[kind][payload]`.
@@ -557,6 +615,7 @@ func _on_host_text(text: String) -> void:
 	if msg.has("slot") and msg.get("slot") is float and state == State.CONNECTING:
 		slot = int(msg["slot"])
 		_rejoin_until_msec = 0
+		_remember_room(room_code) # #907
 		_set_state(State.PLAYING)
 		_send_json({"t": "name", "v": player_name})
 		for pick: Dictionary in CosmeticsPickerScript.pick_messages(saved_pick):
@@ -588,6 +647,7 @@ func _on_host_text(text: String) -> void:
 				_keep_rejoining(Time.get_ticks_msec() + ControllerServerScript.REMOTE_SEAT_HOLD_MSEC)
 		"error":
 			var reason: String = str(msg.get("reason", "unknown"))
+			_forget_dead_room(reason)
 			_return_to_join(reason_text(reason), reason == "version")
 
 static func _parse_object(text: String) -> Dictionary:
@@ -720,6 +780,8 @@ func receive_snapshot_packet(payload: PackedByteArray) -> void:
 	if decoded is Dictionary and not (decoded as Dictionary).is_empty():
 		apply_snapshot(decoded)
 	_play_sounds(split.get("events", []), str(split.get("track", "")))
+	if effects != null:
+		effects.queue(split.get("effects", []))
 
 ## Applies a decoded snapshot: a full one becomes the new world (and snaps the
 ## puppets only when a round starts or the stage changes; mid-round fulls, which
@@ -836,15 +898,17 @@ func _round_shown() -> bool:
 ## when a round is on screen and frees it when not.
 func _sync_stage() -> void:
 	var want: int = int(_world.get("stage_id", 0)) if _round_shown() else -1
-	var night: bool = int(_world.get("stage_flags", 0)) & SnapshotScript.STAGE_NIGHT != 0
-	if want == _stage_id and (want < 0 or night == _stage_night):
+	var night: bool = want >= 0 and _night_in(_world)
+	if want == _stage_id and night == _stage_night:
 		return
+	_stage_night = night
 	if _stage != null:
 		_stage_holder.remove_child(_stage)
 		_stage.queue_free()
 		_stage = null
 	_part_nodes.clear()
 	_part_shown.clear()
+	_part_missing.clear()
 	_stage_id = want
 	_stage_night = night
 	if want < 0:
@@ -857,8 +921,12 @@ func _sync_stage() -> void:
 		return
 	_stage = scene.instantiate()
 	_stage.set("stage_index", want)
+	# Issue #976: the host's night variant (#332), lighting the puppets.
 	_stage.set("night", night)
+	_stage.set("night_light_groups", PackedStringArray([String(NIGHT_PLAYER_GROUP), String(NIGHT_PICKUP_GROUP)]))
 	_stage_holder.add_child(_stage)
+	if not get_tree().node_added.is_connected(_on_node_added):
+		get_tree().node_added.connect(_on_node_added)
 	_map_parts()
 	_fit_camera()
 
@@ -866,12 +934,52 @@ func _sync_stage() -> void:
 ## sides give it, with its own logic stopped where the host's state drives it.
 func _map_parts() -> void:
 	_part_nodes.clear()
-	_part_map_msec = Time.get_ticks_msec()
+	_parts_dirty = false
 	if _stage == null:
 		return
+	part_walks += 1
 	for node: Node in NetSyncScript.parts_of(_stage):
 		_part_nodes[NetSyncScript.part_id(_stage, node)] = node
 		NetSyncScript.freeze_part(node)
+
+## Walks the stage for its parts again only when the host names a part id
+## this client has not looked for yet, or the stage gained nodes since the
+## last walk (a part one of its states builds, the rising lava's art): a part
+## the client cannot find is remembered, not looked for again while the stage
+## is unchanged.
+func _ensure_parts(ids: Array) -> void:
+	if _stage == null:
+		return
+	var look: bool = false
+	for id: Variant in ids:
+		var node: Variant = _part_nodes.get(id)
+		if node != null and is_instance_valid(node):
+			continue
+		if _parts_dirty or not _part_missing.has(id):
+			look = true
+			break
+	if not look:
+		return
+	_map_parts()
+	for id: Variant in ids:
+		if not _part_nodes.has(id):
+			_part_missing[id] = true
+
+func _on_node_added(node: Node) -> void:
+	if not _parts_dirty and _stage != null and _stage.is_ancestor_of(node):
+		_parts_dirty = true
+
+## Whether the host's stage in `world` is its night variant (#332): the
+## snapshot's "night" modifier entry (`SnapshotCapture.NIGHT_MODIFIER_ID`).
+static func _night_in(world: Dictionary) -> bool:
+	for mod: Variant in world.get("modifiers", []):
+		if mod is Dictionary and int(mod.get("modifier_id", 0)) == SnapshotCaptureScript.NIGHT_MODIFIER_ID and str(mod.get("name", "")) == "night":
+			return true
+	return false
+
+## Whether the stage on screen is its night variant (scenarios).
+func stage_is_night() -> bool:
+	return _stage != null and _stage.get("night") == true
 
 func _fit_camera() -> void:
 	if _camera == null:
@@ -892,10 +1000,21 @@ func _clear_world() -> void:
 		_puppets[key].queue_free()
 	_puppets.clear()
 	_clear_props()
-	for i in _tag_players.size():
-		_tag_players[i] = null
 	_hud_signature = ""
 	hud = {}
+	_last_round_phase = 0
+	_ui_text = ""
+	_screens = {}
+	_pending_pops.clear()
+	_victory_text = ""
+	if effects != null:
+		effects.round_left()
+		effects.show_victory({})
+		effects.apply_mode_hud("", {})
+	if _host_hud != null:
+		_host_hud.visible = false
+	if _modifier_label != null:
+		_modifier_label.visible = false
 	if _puppet_holder != null:
 		for child in _puppet_holder.get_children():
 			_puppet_holder.remove_child(child)
@@ -928,13 +1047,6 @@ func prop_count() -> int:
 func part_node(part_id: int) -> Node:
 	return _part_nodes.get(part_id)
 
-## The name tags drawn over the puppets (the host's own NameTags.gd).
-func name_tags() -> Node2D:
-	return _name_tags
-
-func offscreen_indicators() -> CanvasLayer:
-	return _offscreen
-
 func has_stage() -> bool:
 	return _stage != null
 
@@ -949,20 +1061,22 @@ func _puppet(key: String, kind: int) -> Node2D:
 	if puppet == null:
 		puppet = PuppetScript.new()
 		puppet.kind = kind
+		# In the night lighting's groups before it enters the tree (#976).
+		if kind == PuppetScript.Kind.PLAYER:
+			puppet.add_to_group(NIGHT_PLAYER_GROUP)
+		elif kind == PuppetScript.Kind.PICKUP:
+			puppet.add_to_group(NIGHT_PICKUP_GROUP)
 		_puppet_holder.add_child(puppet)
 		_puppets[key] = puppet
 	return puppet
 
-## The round's modifier id ("" for none), which changes how some weapons look.
+## The round's modifier id ("" for none), which changes how some weapons look
+## (not the night stage's entry, SnapshotCapture.NIGHT_MODIFIER_ID).
 func _modifier_id() -> String:
 	for m: Variant in _world.get("modifiers", []):
-		if m is Dictionary:
+		if m is Dictionary and int(m.get("modifier_id", 0)) != SnapshotCaptureScript.NIGHT_MODIFIER_ID:
 			return str(m.get("name", ""))
 	return ""
-
-## The stage's ink, as the host's players take it.
-func _ink() -> Color:
-	return PaletteScript.ink_for(_stage_id, _stage_night)
 
 ## Draws the newest state INTERP_MSEC late, blending the two samples around that
 ## moment so the 30 Hz stream moves smoothly.
@@ -970,7 +1084,6 @@ func _render() -> void:
 	if _samples.is_empty() or not _round_shown():
 		_hide_puppets_except({})
 		_clear_props()
-		_tick_tags()
 		return
 	var render_at: int = Time.get_ticks_msec() - INTERP_MSEC
 	var after: int = -1
@@ -995,7 +1108,6 @@ func _render() -> void:
 	var alpha: float = clampf(float(render_at - int(a["t"])) / float(span), 0.0, 1.0) if span > 0 else 1.0
 	var live: Dictionary = {}
 	var modifier: String = _modifier_id()
-	var ink: Color = _ink()
 	for p: Variant in _world.get("players", []):
 		if not p is Dictionary:
 			continue
@@ -1013,18 +1125,13 @@ func _render() -> void:
 			puppet.color = look["color"]
 		puppet.weapon_index = int((p.get("weapon", {}) as Dictionary).get("head_shape_index", 0))
 		puppet.set_look(str(look.get("hat", "none")), str(look.get("eyes", "round")), puppet.color)
-		puppet.label = str(p.get("name", ""))
 		puppet.damage = int(p.get("damage", 0))
 		puppet.phase = int(p.get("state", 1))
 		puppet.flags = int(p.get("flags", 0))
-		puppet.fire = int(p.get("fire", SnapshotScript.FIRE_NONE))
 		puppet.hat_spin = int(p.get("hat_spin", 0))
 		puppet.squash = int(p.get("squash", SnapshotScript.SQUASH_REST))
-		var team: int = int(p.get("team", 255))
-		puppet.team = team if team < 2 else -1
 		puppet.linear_velocity = (p.get("body", {}) as Dictionary).get("linear_velocity", Vector2.ZERO)
 		puppet.modifier = modifier
-		puppet.ink = ink
 		puppet.set_pose((from_pose[0] as Vector2).lerp(to_pose[0], alpha),
 			lerp_angle(from_pose[1], to_pose[1], alpha),
 			(from_pose[2] as Vector2).lerp(to_pose[2], alpha),
@@ -1049,13 +1156,12 @@ func _render() -> void:
 		if not p is Dictionary:
 			continue
 		var key: String = "pick%d" % int(p.get("pickup_id", 0))
-		var fresh: bool = not _puppets.has(key)
 		var pickup: Node2D = _place_thing(key, PuppetScript.Kind.PICKUP, a, b, alpha, live)
 		if pickup == null:
 			continue
 		pickup.weapon_index = int(p.get("weapon_type", 0))
 		pickup.halo = int(p.get("halo", 0))
-		pickup.show_pickup(fresh and int(p.get("pop", 0)) == 1)
+		pickup.show_pickup()
 	for f: Variant in _world.get("flails", []):
 		if not f is Dictionary:
 			continue
@@ -1095,7 +1201,6 @@ func _render() -> void:
 	_hide_puppets_except(live)
 	_render_parts(a, b, alpha)
 	_render_props(a, b, alpha)
-	_tick_tags()
 
 ## Places the puppet for `key` between samples `a` and `b`; null when the
 ## newest snapshot no longer holds it.
@@ -1139,11 +1244,10 @@ static func _flail_index() -> int:
 func _render_parts(a: Dictionary, b: Dictionary, alpha: float) -> void:
 	if _stage == null:
 		return
-	var unknown: bool = false
+	_ensure_parts(b["parts"].keys())
 	for id: int in b["parts"]:
 		var node: Node = _part_nodes.get(id)
 		if node == null or not is_instance_valid(node):
-			unknown = true
 			continue
 		var to_state: Array = b["parts"][id]
 		var from_state: Array = a["parts"].get(id, to_state)
@@ -1153,17 +1257,15 @@ func _render_parts(a: Dictionary, b: Dictionary, alpha: float) -> void:
 			continue
 		_part_shown[id] = state
 		NetSyncScript.apply_part(node, state, false)
-	# A part the stage added at runtime gets its id once it is in the tree.
-	if unknown and Time.get_ticks_msec() - _part_map_msec > PART_REMAP_MSEC:
-		_map_parts()
 
 func _sync_part_clocks() -> void:
 	# A part built by an earlier state (the rising lava's art) is mapped
 	# before its clock is set.
+	var ids: Array = []
 	for part: Variant in _world.get("parts", []):
-		if part is Dictionary and _stage != null and not _part_nodes.has(int(part.get("part_id", 0))):
-			_map_parts()
-			break
+		if part is Dictionary:
+			ids.append(int(part.get("part_id", 0)))
+	_ensure_parts(ids)
 	for part: Variant in _world.get("parts", []):
 		if not part is Dictionary:
 			continue
@@ -1210,35 +1312,6 @@ func _clear_props() -> void:
 	for id: int in _prop_nodes.keys():
 		_free_prop(id)
 
-## The host's name tags, team rings, stock pips, idle hints, boomstick rings
-## and edge arrows, run on the puppets (issue #976).
-func _tick_tags() -> void:
-	for slot in _tag_players.size():
-		var puppet: Node2D = player_puppet(slot)
-		_tag_players[slot] = puppet if puppet != null and not puppet.is_queued_for_deletion() else null
-	var numbers: int = 1 if int(_world.get("stage_flags", 0)) & SnapshotScript.STAGE_PLAYER_NUMBERS else 0
-	_name_tags.numbers_override = numbers
-	_offscreen.numbers_override = numbers
-	_name_tags.tick()
-
-func _tag_colour(slot: int) -> Color:
-	var puppet: Node2D = player_puppet(slot)
-	return puppet.color if puppet != null else Color.WHITE
-
-## Stock lives from the host's HUD frame (the mode's `lives_of`), -1 without.
-func _lives_of(slot: int) -> int:
-	if str(hud.get("mode", "")) != "stock":
-		return -1
-	var lives: Dictionary = (hud.get("m", {}) as Dictionary).get("lives", {}) if hud.get("m") is Dictionary else {}
-	return int(lives.get(str(slot), lives.get(slot, -1)))
-
-## The idle hint the host shows over `slot` (IdleHint.hint_kind: 0 none, 1 drag, 2 pad).
-func _hint_kind(slot: int) -> int:
-	var puppet: Node2D = player_puppet(slot)
-	if puppet == null or not puppet.flags & SnapshotScript.PLAYER_HINT:
-		return 0
-	return 2 if puppet.flags & SnapshotScript.PLAYER_HINT_PAD else 1
-
 func _hide_puppets_except(live: Dictionary) -> void:
 	for key: String in _puppets.keys():
 		if not live.has(key):
@@ -1276,6 +1349,8 @@ func _load_settings() -> void:
 		player_name = ControllerServerScript.clean_name(str(config.get_value(SECTION, "name", "")))
 	saved_pick = CosmeticsPickerScript.read_pick(config, SECTION)
 	client_id = str(config.get_value(SECTION, "id", ""))
+	var last: String = normalize_code(str(config.get_value(SECTION, "last_room", "")))
+	last_room_code = last if code_is_complete(last) else ""
 	var sens: Variant = config.get_value(SECTION, "sensitivity", 1.0)
 	if (sens is float or sens is int) and is_finite(float(sens)):
 		_mouse.sensitivity = clampf(float(sens), 0.1, 5.0)
@@ -1295,6 +1370,7 @@ func _save_settings() -> void:
 	config.load(settings_path)
 	config.set_value(SECTION, "name", player_name)
 	config.set_value(SECTION, "id", client_id)
+	config.set_value(SECTION, "last_room", last_room_code)
 	config.set_value(SECTION, "sensitivity", _mouse.sensitivity)
 	CosmeticsPickerScript.write_pick(config, SECTION, saved_pick)
 	config.save(settings_path)
@@ -1320,24 +1396,87 @@ func _build_world() -> void:
 	_puppet_holder = Node2D.new()
 	_puppet_holder.name = "Puppets"
 	_world_root.add_child(_puppet_holder)
-	_tag_players.resize(TAG_SLOTS)
-	_name_tags = NameTagsScript.new(_tag_players, _name_of, _tag_colour)
-	_name_tags.lives_of = _lives_of
-	_name_tags.hint_mirror = _hint_kind
-	_world_root.add_child(_name_tags)
-	_name_tags.build()
-	_offscreen = OffscreenIndicatorsScript.new(_tag_players, _tag_colour)
-	add_child(_offscreen)
-	_offscreen.build()
+	effects = RemoteEffectsScript.new()
+	effects.delay_msec = INTERP_MSEC
+	_world_root.add_child(effects)
 	_camera = Camera2D.new()
 	_camera.name = "Camera"
 	add_child(_camera)
 	_camera.make_current()
+	effects.camera = _camera
+	effects.round_playing = func() -> bool: return int(_world.get("round_phase", 0)) == PHASE_ROUND_ACTIVE
+	effects.name_tag_of = _name_tag
+	effects.lives_of = _lives_of
+	effects.pop_pickup = _pop_pickup
+	effects.screen.pad_check = func() -> bool: return _pad_driving
 	_fit_camera()
+
+## The joiner's name tag Label for `slot`, or null (MATCH POINT dots, #976).
+func _name_tag(slot: int) -> Label:
+	return effects.name_tags.name_tag(slot) if effects != null and effects.name_tags != null else null
+
+## Stock lives for the name tags' pips (#354), from the host's `hud` frame; -1
+## outside a Stock round.
+func _lives_of(slot: int) -> int:
+	var m: Variant = hud.get("m")
+	if str(hud.get("mode", "")) != "stock" or not m is Dictionary or not (m as Dictionary).get("lives") is Dictionary:
+		return -1
+	var lives: Dictionary = m["lives"]
+	return int(lives.get(str(slot), lives.get(slot, -1)))
+
+## The host popped pickup `id` in (#816): the puppet pops the same way, now or
+## as soon as it shows up.
+func _pop_pickup(id: int) -> void:
+	_pending_pops[id] = Time.get_ticks_msec() + POP_WAIT_MSEC
+
+func _apply_pops() -> void:
+	if _pending_pops.is_empty():
+		return
+	var now: int = Time.get_ticks_msec()
+	for id: int in _pending_pops.keys():
+		var puppet: Node2D = _puppets.get("pick%d" % id)
+		if puppet != null:
+			PickupDirectorScript.pop_scale(puppet)
+			_pending_pops.erase(id)
+		elif now > int(_pending_pops[id]):
+			_pending_pops.erase(id)
+
+## Issue #976: head trails follow each shown player puppet's weapon head.
+func _track_heads() -> void:
+	if effects == null:
+		return
+	var players: Array = []
+	for puppet: Node in _puppets.values():
+		if puppet.kind == PuppetScript.Kind.PLAYER:
+			players.append(puppet)
+	effects.track_heads(players)
+	_apply_pops()
+	# The stage mood's ink is on every face and head outline, as on the host (#255).
+	var ink: Variant = (_stage.get("mood") as Dictionary).get("ink") if _stage != null and _stage.get("mood") is Dictionary else null
+	for puppet: Node in _puppets.values():
+		if ink is Color and puppet.kind == PuppetScript.Kind.PLAYER:
+			puppet.set_ink(ink)
+	# The host's edge arrows follow each fighter as the snapshot has it.
+	var placed: Dictionary = {}
+	if _round_shown():
+		for p: Variant in _world.get("players", []):
+			if p is Dictionary:
+				var id: int = int(p.get("player_id", 0))
+				var puppet: Node2D = player_puppet(id)
+				placed[id] = true
+				effects.place_fighter(id, puppet, int(p.get("state", 1)) != SnapshotCaptureScript.STATE_DEAD,
+					int(p.get("team", -1)), puppet.color if puppet != null else Color.WHITE,
+					str(p.get("name", "")), int((p.get("weapon", {}) as Dictionary).get("head_shape_index", 0)) if p.get("weapon") is Dictionary else 0)
+	for id in RemoteEffectsScript.MAX_SLOTS:
+		if not placed.has(id):
+			effects.place_fighter(id, null, false, -1, Color.WHITE)
 
 func _build_ui() -> void:
 	_ui = CanvasLayer.new()
 	_ui.name = "UI"
+	# Over the host's screens (#976: HUD 1, victory 5, cards 10-12, flash 50):
+	# the joiner's own lobby, menu and join panels stay on top.
+	_ui.layer = 60
 	add_child(_ui)
 	_build_hud()
 	_build_lobby_panel()
@@ -1401,6 +1540,15 @@ func _build_join_panel() -> void:
 	_paste_button.text = tr("JOIN_PASTE")
 	_paste_button.pressed.connect(_on_paste_pressed)
 	room_row.add_child(_paste_button)
+	_last_room_button = Button.new() # #907: one tap puts the last joined room's code in the field; joins nothing
+	_last_room_button.name = "LastRoom"
+	_last_room_button.pressed.connect(_on_last_room_pressed)
+	box.add_child(_last_room_button)
+	_code_hint = _label(tr("JOIN_CODE_HINT"), 16, UiThemeScript.VERMILION, UiThemeScript.INK_LABEL) # #922
+	_code_hint.name = "CodeHint"
+	_code_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_code_hint.visible = false
+	box.add_child(_code_hint)
 	box.add_child(_label(tr("JOIN_YOUR_NAME"), 20, Color.WHITE, UiThemeScript.INK_LABEL))
 	_name_edit = LineEdit.new()
 	_name_edit.name = "PlayerName"
@@ -1435,6 +1583,7 @@ func _build_join_panel() -> void:
 	box.add_child(_update_link)
 
 func _on_room_text_changed(text: String) -> void:
+	_code_hint.visible = code_text_drops_a_letter(text) # #922: say why a typed letter did not stay; any edit re-decides
 	var cleaned: String = normalize_code(text)
 	if cleaned != text:
 		_room_edit.text = cleaned
@@ -1449,44 +1598,75 @@ func _on_paste_pressed() -> void:
 		return
 	_room_edit.text = code
 	_room_edit.caret_column = code.length()
+	_code_hint.visible = false
+	_set_status("")
+
+## #907: a seat was granted in `code`: keep it for next time.
+func _remember_room(code: String) -> void:
+	if not code_is_complete(code) or code == last_room_code:
+		return
+	last_room_code = code
+	_save_settings()
+	_refresh_last_room()
+
+## #907: the relay or host said the room is gone ("bad_room", "host_left"): a
+## remembered code for it is stale, so forget it.
+func _forget_dead_room(reason: String) -> void:
+	if (reason == "bad_room" or reason == "host_left") and not last_room_code.is_empty() and last_room_code == room_code:
+		last_room_code = ""
+		_save_settings()
+		_refresh_last_room()
+
+func _refresh_last_room() -> void:
+	if _last_room_button == null:
+		return
+	_last_room_button.visible = not last_room_code.is_empty()
+	_last_room_button.text = tr("JOIN_LAST_ROOM") % last_room_code
+
+func _on_last_room_pressed() -> void:
+	if last_room_code.is_empty():
+		return
+	_room_edit.text = last_room_code
+	_room_edit.caret_column = last_room_code.length()
+	_code_hint.visible = false
 	_set_status("")
 
 func _on_join_pressed() -> void:
 	join(_room_edit.text, _name_edit.text)
 
 func _build_hud() -> void:
+	# Issue #976: the host's own HUD scene, its kill feed played from the
+	# host's recorded events (mirror: it records nothing itself).
+	_host_hud = HostHudScene.instantiate() as CanvasLayer
+	_host_hud.name = "HostHud"
+	var feed: Control = _host_hud.get_node("KillFeed") as Control
+	feed.mirror = true
+	# The scene's placeholder texts are the host's own start-up lines, in
+	# English; every label shows the host's text once its first frame lands.
+	for label: Node in _host_hud.find_children("*", "Label", true, false):
+		(label as Label).text = ""
+	_host_hud.visible = false
+	add_child(_host_hud)
+	if effects != null:
+		effects.kill_feed = feed
+	_modifier_label = ModifierBannerScript.build(self)
 	_hud = Control.new()
 	_hud.name = "Hud"
 	_hud.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ui.add_child(_hud)
-	_score_box = VBoxContainer.new()
-	_score_box.position = Vector2(16, 12)
-	_hud.add_child(_score_box)
-	_feed_label = _label("", 18)
-	_feed_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_feed_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_feed_label.position = Vector2(-16, 12)
-	_feed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_hud.add_child(_feed_label)
-	_banner_label = _label("", 36, UiThemeScript.YELLOW, UiThemeScript.HEADING_LABEL)
-	_banner_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_banner_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_banner_label.position = Vector2(0, 12)
-	_hud.add_child(_banner_label)
-	_mode_label = _label("", 22, UiThemeScript.SKY, UiThemeScript.HEADING_LABEL)
-	_mode_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_mode_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_mode_label.position = Vector2(0, 58)
-	_hud.add_child(_mode_label)
-	_result_label = _label("", 40, UiThemeScript.YELLOW, UiThemeScript.HEADING_LABEL)
-	_result_label.set_anchors_preset(Control.PRESET_CENTER)
-	_result_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_hud.add_child(_result_label)
 	_wait_label = _label(tr("JOIN_WAITING"), 28, Color.WHITE, UiThemeScript.HEADING_LABEL)
 	_wait_label.set_anchors_preset(Control.PRESET_CENTER)
 	_wait_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_hud.add_child(_wait_label)
+
+## The joiner's copy of the host's HUD scene (#976).
+func host_hud() -> CanvasLayer:
+	return _host_hud
+
+## The joiner's modifier banner, `ModifierBanner.gd`'s like the host's (#976).
+func modifier_label() -> Label:
+	return _modifier_label
 
 func _build_lobby_panel() -> void:
 	_lobby_panel = Control.new()
@@ -1545,9 +1725,6 @@ func _build_lobby_panel() -> void:
 	up.text = "+"
 	up.pressed.connect(func() -> void: _send_json({"t": "target", "n": int(lobby.get("target", 5)) + 1}))
 	_host_row.add_child(up)
-	_podium_label = _label("", 22)
-	_podium_label.name = "Podium"
-	box.add_child(_podium_label)
 	_leave_button = Button.new()
 	_leave_button.name = "LeaveLobby"
 	_leave_button.text = tr("JOIN_LEAVE_MATCH")
@@ -1603,6 +1780,7 @@ func _set_status(text: String) -> void:
 		_join_button.disabled = busy
 		_room_edit.editable = not busy
 		_paste_button.disabled = busy
+		_last_room_button.disabled = busy
 		_name_edit.editable = not busy
 
 func _show_join_screen() -> void:
@@ -1611,6 +1789,7 @@ func _show_join_screen() -> void:
 	_lobby_panel.visible = false
 	_menu_panel.visible = false
 	_update_link.visible = false
+	_refresh_last_room()
 	if _name_edit.text.is_empty():
 		_name_edit.text = player_name
 
@@ -1668,7 +1847,8 @@ func _refresh_lobby() -> void:
 	if _lobby_panel == null or state != State.PLAYING:
 		return
 	var phase: String = str(lobby.get("phase", ""))
-	_lobby_panel.visible = phase == "lobby" or phase == "countdown" or phase == "victory"
+	# Issue #976: on victory the host's own victory screen shows instead.
+	_lobby_panel.visible = phase == "lobby" or phase == "countdown" or (phase == "victory" and not victory_visible())
 	if phase == "countdown":
 		_lobby_title.text = tr("JOIN_ROOM_STARTING") % [room_code, int(lobby.get("count", 0))]
 	elif phase == "victory":
@@ -1705,111 +1885,52 @@ func _refresh_hud() -> void:
 	if _hud == null:
 		return
 	_wait_label.visible = false
-	var scores: Dictionary = _world.get("scores", {})
-	var names: Dictionary = {}
-	var colors: Dictionary = {}
-	for p: Variant in _world.get("players", []):
-		if p is Dictionary:
-			names[int(p.get("player_id", 0))] = str(p.get("name", ""))
-			colors[int(p.get("player_id", 0))] = PaletteScript.PLAYERS[int(p.get("color", 0)) % PaletteScript.PLAYERS.size()]
-	var signature: String = str(scores) + str(names)
-	if signature != _hud_signature:
-		_hud_signature = signature
-		for child in _score_box.get_children():
-			_score_box.remove_child(child)
-			child.queue_free()
-		for id: int in names:
-			var shown: String = names[id] if not (names[id] as String).is_empty() else "P%d" % (id + 1)
-			_score_box.add_child(_label("%s  %d" % [shown, int(scores.get(id, 0))], 20, colors[id]))
-	var feed: PackedStringArray = PackedStringArray()
-	for entry: Variant in _world.get("kill_feed", []):
-		if entry is Dictionary:
-			feed.append(str(entry.get("text", "")))
-	_feed_label.text = "\n".join(feed)
+	# The modifier banner shows while the host's does (the snapshot's
+	# announcer text), in the same ModifierBanner label.
 	var banner: String = str(_world.get("announcer_text", ""))
-	if banner.is_empty() and int(_world.get("timer_ms", 0)) > 0:
-		banner = str(ceili(int(_world["timer_ms"]) / 1000.0))
-	_banner_label.text = banner
+	_modifier_label.text = banner
+	_modifier_label.visible = not banner.is_empty()
+	var phase: int = int(_world.get("round_phase", 0))
+	if phase != _last_round_phase and effects != null:
+		if phase == PHASE_ROUND_ACTIVE:
+			effects.round_started()
+		elif phase != PHASE_ROUND_END:
+			effects.round_left()
+	_last_round_phase = phase
 	_refresh_extras()
 
-## The parts of the host screen that come from the `hud` frame (issue #436).
-## Plain text built here with `tr()`, so it follows the player's locale.
+## The parts of the host screen that come from the `hud` frame (issues #436,
+## #976): the host's HUD scene and mode HUD in the host's state, and the
+## host's victory screen with every award.
 func _refresh_extras() -> void:
-	if _hud == null:
+	if _hud == null or _host_hud == null:
 		return
-	var state: int = int(hud.get("state", 0))
-	var banner: Array = hud.get("banner", [])
-	if not banner.is_empty() and str(_banner_label.text).is_empty():
-		_banner_label.text = ("%s %s" % banner).strip_edges()
-	_mode_label.text = mode_text()
-	_result_label.text = round_result_text() if state == PHASE_ROUND_END else ""
-	_podium_label.text = podium_text()
-	_podium_label.visible = not _podium_label.text.is_empty()
+	# Unpacked and applied only when the host's frame changed it.
+	var ui_text: String = str(hud.get("ui", ""))
+	if ui_text != _ui_text:
+		_ui_text = ui_text
+		_screens = RemoteHudScript.unpack(ui_text, {})
+		UiMirrorScript.apply(_host_hud, _screens.get("main", {}) if _screens.get("main") is Dictionary else {})
+	var screens: Dictionary = _screens
+	var phase: String = str(lobby.get("phase", ""))
+	# The host's lobby screen covers its HUD; the joiner's lobby panel is here.
+	_host_hud.visible = phase != "lobby" and phase != "countdown" and state == State.PLAYING
+	if effects == null:
+		return
+	var mode_state: Dictionary = screens.get("mode", {}) if screens.get("mode") is Dictionary else {}
+	effects.apply_mode_hud(str(screens.get("mode_script", "")), mode_state)
+	effects.set_numbers(screens.get("numbers"))
+	if effects.mode_hud != null:
+		effects.mode_hud.visible = _host_hud.visible
+	var victory_text: String = str(hud.get("victory", "")) if int(hud.get("state", 0)) == RemoteHudScript.STATE_VICTORY else ""
+	if victory_text != _victory_text:
+		_victory_text = victory_text
+		effects.show_victory(RemoteHudScript.unpack(victory_text, {}))
+	_refresh_lobby()
 
-func _name_of(slot: int) -> String:
-	for row: Variant in hud.get("board", []):
-		if int(row[0]) == slot:
-			return str(row[1]) if not str(row[1]).is_empty() else "P%d" % (slot + 1)
-	return "P%d" % (slot + 1)
-
-## The round's result line, or "" (the host's round-end banner).
-func round_result_text() -> String:
-	var team: int = int(hud.get("round_winner_team", -1))
-	if team >= 0:
-		return tr("HUD_TEAM_TAKES_ROUND") % TeamsScript.team_name(team)
-	var winner: int = int(hud.get("round_winner", -1))
-	if winner >= 0:
-		return tr("HUD_TAKES_ROUND") % _name_of(winner)
-	return tr("HUD_ROUND_DRAWN") if hud.has("round_winner") else ""
-
-## The match podium once the match is over: places, names, scores.
-func podium_text() -> String:
-	if str(lobby.get("phase", "")) != "victory" or int(hud.get("state", 0)) != 5:
-		return ""
-	var lines: PackedStringArray = PackedStringArray()
-	var team: int = int(lobby.get("winner_team", -1))
-	var winner: int = int(lobby.get("winner", -1))
-	if team >= 0:
-		lines.append(tr("HUD_TEAM_WINS_MATCH") % TeamsScript.team_name(team))
-	elif winner >= 0:
-		lines.append(tr("HUD_WINS_MATCH") % _name_of(winner))
-	var place: int = 0
-	for row: Variant in hud.get("board", []):
-		place += 1
-		lines.append(tr("HUD_PODIUM_ROW") % [place, _name_of(int(row[0])), int(row[2])])
-	return "\n".join(lines)
-
-## The game mode's own HUD line, or "" (Classic has none).
-func mode_text() -> String:
-	var m: Dictionary = hud.get("m", {})
-	if m.is_empty():
-		return ""
-	match str(hud.get("mode", "")):
-		"king_of_the_hill":
-			var parts: PackedStringArray = PackedStringArray()
-			var hold: Dictionary = m.get("hold", {})
-			for key: Variant in hold:
-				parts.append(tr("HUD_HOLD") % [_name_of(int(key)), int(hold[key]), int(m.get("win", 0))])
-			if bool(m.get("moving", false)):
-				parts.append(tr("HUD_HILL_MOVING"))
-			return "  ".join(parts)
-		"capture_the_flag":
-			var sc: Array = m.get("score", [0, 0])
-			var fl: Array = m.get("flag", [0, 0])
-			return tr("HUD_CTF") % [int(sc[0]), int(sc[1]), tr("HUD_FLAG_%d" % int(fl[0])), tr("HUD_FLAG_%d" % int(fl[1]))]
-		"soccer":
-			var sc2: Array = m.get("score", [0, 0])
-			return tr("HUD_SOCCER") % [int(sc2[0]), int(sc2[1]), int(m.get("win", 0))]
-		"hot_potato":
-			return tr("HUD_POTATO") % [_name_of(int(m.get("it", -1))), int(m.get("fuse", 0))] if int(m.get("it", -1)) >= 0 else ""
-		"stock":
-			var lives: Dictionary = m.get("lives", {})
-			var bits: PackedStringArray = PackedStringArray()
-			for key2: Variant in lives:
-				bits.append(tr("HUD_LIVES") % [_name_of(int(key2)), int(lives[key2])])
-			var clock: String = str(m.get("clock", ""))
-			return ("%s  " % clock if not clock.is_empty() else "") + "  ".join(bits)
-	return ""
+## Whether the host's victory screen is up on this joiner (#976).
+func victory_visible() -> bool:
+	return effects != null and effects.victory_visible()
 
 # --- Cosmetics picker (issue #441) ------------------------------------------------
 

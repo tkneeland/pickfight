@@ -34,6 +34,10 @@ extends Node
 ## boots clean. The scenario runner awaits `release()` before it quits, so no
 ## playback is left for the audio server to free after exit.
 
+## Its bus, headless-run and settings-file helpers are `Sfx`'s statics.
+const SfxScript := preload("res://scripts/Sfx.gd")
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
+
 const BUS_NAME: StringName = &"Music"
 const SETTINGS_PATH: String = "user://audio.cfg"
 const SECTION: String = "music"
@@ -130,12 +134,12 @@ var _switches: PackedStringArray = []
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_ensure_bus()
-	if get_tree().get_script() != null:
+	if SfxScript.is_script_main_loop(get_tree()):
 		# A `-s` run (the scenario runner, a probe; #195): never read or
 		# write the owner's settings. Start at the default volume, saving
-		# off, on a temp file (the same test as `Sfx.is_script_main_loop()`).
+		# off, on a temp file (the same one `Sfx` uses).
 		persist_settings = false
-		settings_path = OS.get_temp_dir().path_join("pickfight_headless_audio_%d.cfg" % OS.get_process_id())
+		settings_path = SfxScript.headless_settings_path()
 		_apply_volume()
 	else:
 		load_settings()
@@ -145,8 +149,7 @@ func _ready() -> void:
 		voice.bus = BUS_NAME
 		add_child(voice)
 		_voices.append(voice)
-	get_tree().node_added.connect(_on_node_added)
-	_watch_subtree(get_tree().root)
+	HookUtilScript.watch_tree(get_tree(), _on_node_added)
 	# The game's own scene is only current once all the autoloads are ready.
 	# The scenario runner never has one, so it starts in silence.
 	_start_if_in_game.call_deferred()
@@ -155,9 +158,11 @@ func _ready() -> void:
 ## the audio server a moment to free the playbacks, then quit. Quitting at
 ## once would report them as "ObjectDB instances leaked at exit". This only
 ## applies in the game (`_start_if_in_game`); scripts quit as they like.
+## Through the `_quitting` guard, so a second close click or a menu Quit
+## during the wait does not start a second release-and-quit.
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and not get_tree().auto_accept_quit:
-		_quit_cleanly()
+		quit_cleanly()
 
 var _quitting: bool = false
 
@@ -273,15 +278,7 @@ func release(wait_sec: float = RELEASE_SEC) -> void:
 		_levels[i] = 0.0
 		_targets[i] = 0.0
 	_streams.clear()
-	# Out of the tree there is no SceneTree to wait on (issue #167).
-	if not is_inside_tree():
-		return
-	# Wall clock, not a SceneTreeTimer (#182): the mix thread lets go in real
-	# time, and under `--fixed-fps` a timer counts frames, which can run far
-	# faster than that.
-	var until: int = Time.get_ticks_msec() + int(wait_sec * 1000.0)
-	while Time.get_ticks_msec() < until:
-		await get_tree().process_frame
+	await SfxScript.wait_for_release(self, wait_sec)
 
 # --- Volume -------------------------------------------------------------------
 
@@ -321,9 +318,7 @@ func load_settings() -> void:
 	_apply_volume()
 
 func _apply_volume() -> void:
-	var index: int = AudioServer.get_bus_index(BUS_NAME)
-	if index != -1:
-		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(volume, SILENT)))
+	SfxScript.set_bus_linear(BUS_NAME, volume)
 
 ## Load, change and save, so `Sfx`'s sections in the same file are kept. Only a
 ## missing file starts from an empty config: a file that exists but will not
@@ -331,14 +326,12 @@ func _apply_volume() -> void:
 func _save_settings() -> void:
 	if not persist_settings:
 		return
-	var config := ConfigFile.new()
-	var err: Error = config.load(settings_path)
-	if err != OK and err != ERR_FILE_NOT_FOUND:
-		push_warning("Music: not saving settings: %s would not load (%s)" % [settings_path, error_string(err)])
+	var config: ConfigFile = SfxScript.config_for_save(settings_path, "Music")
+	if config == null:
 		return
 	config.set_value(SECTION, "volume", volume)
 	config.set_value(SECTION, "config_version", CONFIG_VERSION)
-	err = config.save(settings_path)
+	var err: Error = config.save(settings_path)
 	if err != OK:
 		push_warning("Music: could not save settings to %s (%s)" % [settings_path, error_string(err)])
 
@@ -352,11 +345,6 @@ func _start_if_in_game() -> void:
 		await get_tree().process_frame
 	if _current == "":
 		play_lobby()
-
-func _watch_subtree(node: Node) -> void:
-	_on_node_added(node)
-	for child in node.get_children():
-		_watch_subtree(child)
 
 func _on_node_added(node: Node) -> void:
 	if node.has_meta(META_WATCHED):
@@ -431,12 +419,7 @@ func _step_duck(delta: float) -> void:
 		_duck_db = move_toward(_duck_db, 0.0, absf(DUCK_DB) * delta / DUCK_RELEASE_SEC)
 
 func _ensure_bus() -> void:
-	if AudioServer.get_bus_index(BUS_NAME) != -1:
-		return
-	AudioServer.add_bus()
-	var index: int = AudioServer.bus_count - 1
-	AudioServer.set_bus_name(index, BUS_NAME)
-	AudioServer.set_bus_send(index, &"Master")
+	SfxScript.ensure_bus(BUS_NAME, &"Master")
 
 func _stream_for(track: String) -> AudioStream:
 	if _streams.has(track):

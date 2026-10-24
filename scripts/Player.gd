@@ -55,6 +55,7 @@ const DEFAULT_WEAPON_STATS := preload("res://resources/pickaxe.tres")
 ## What a firing weapon shoots (issue #55, ADR-0014). See `_tick_fire()`.
 const ProjectileScene: PackedScene = preload("res://scenes/Projectile.tscn")
 const DeathBurstScript := preload("res://scripts/DeathBurst.gd")
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 const GameClockScript := preload("res://scripts/GameClock.gd")
 const HatScript := preload("res://scripts/Hat.gd")
 const PlayerFaceScript := preload("res://scripts/PlayerFace.gd")
@@ -637,6 +638,7 @@ func _spawn_death_burst() -> void:
 	var host: Node = get_parent()
 	if host == null:
 		return
+	EffectStreamScript.record("ko", {"p": global_position, "c": identity_color}, self) # the joiner's burst (#976)
 	var burst: Node2D = DeathBurstScript.new()
 	burst.colour = identity_color
 	host.add_child.call_deferred(burst)

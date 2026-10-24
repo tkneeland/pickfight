@@ -67,6 +67,8 @@ extends Node2D
 
 ## Every rock, wherever it was parented (Stock's overtime rain is not under the stage), for bots (#611).
 const GROUP: StringName = &"falling_rocks"
+## Preloaded by path, never by `class_name` (CLAUDE.md).
+const PartKitScript := preload("res://scripts/PartKit.gd")
 
 ## Seconds between drops: from the part entering the round to the first
 ## warning, and from each rock's landing to the next warning.
@@ -252,7 +254,7 @@ func _begin_warning() -> void:
 	_timer_remaining = warning_sec
 	_warning_elapsed = 0.0
 	_landing = _find_landing()
-	_sfx(&"rock_warning", _landing)
+	PartKitScript.sfx(self, &"rock_warning", _landing)
 	_rock.global_position = global_position
 	_rock_visual.modulate.a = 1.0
 	_rock.visible = true
@@ -313,34 +315,19 @@ func _strike(victim: Node) -> void:
 	var victim_body := victim as Node2D
 	var to_victim: Vector2 = victim_body.global_position - _rock.global_position
 	var point: Vector2 = _rock.global_position + to_victim.normalized() * rock_radius
-	# Report what the hit actually took off (issue #162): a spawn-protected
-	# player takes nothing, and a report of the full damage would put a
-	# phantom number on screen and buzz their phone. Nothing dealt, nothing
-	# reported; a protected fighter is not shoved either (#991).
-	var before: Variant = victim.get("damage")
-	if victim.has_method("mark_hazard"):
-		victim.mark_hazard("rock")  # achievements (#689)
-	victim.take_damage(damage, point)
-	var after: Variant = victim.get("damage")
-	var dealt: float = damage
-	if before != null and after != null:
-		dealt = float(after) - float(before)
-	if dealt > 0.0 and victim.has_signal("strike_landed"):
-		victim.emit_signal("strike_landed", victim, dealt, point, not victim.alive)
-	if not victim.alive or victim.get("spawn_protected") == true:
-		return
 	var side: float = signf(victim_body.global_position.x - global_position.x)
 	if side == 0.0:
 		side = 1.0
-	var direction: Vector2 = Vector2(side, -SHOVE_LIFT).normalized()
-	var body := victim as RigidBody2D
-	if body != null:
-		body.apply_central_impulse(direction * shove_speed * body.mass)
+	# Only what the hit actually took off is reported (issue #162): a
+	# spawn-protected player takes nothing, and a report of the full damage
+	# would put a phantom number on screen and buzz their phone. The shove
+	# lands on anyone left standing who is not protected (#991).
+	PartKitScript.hazard_strike(victim, damage, point, "rock", side, SHOVE_LIFT, shove_speed)
 
 func _shatter() -> void:
 	_state = _RockState.SHATTERED
 	_timer_remaining = SHATTER_SEC
-	_sfx(&"rock_impact", _rock.global_position)
+	PartKitScript.sfx(self, &"rock_impact", _rock.global_position)
 
 func _rest() -> void:
 	_state = _RockState.IDLE
@@ -411,10 +398,3 @@ func _build_marker() -> Node2D:
 		line.points = segment
 		marker.add_child(line)
 	return marker
-
-## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
-## name, so this part still works in a tree without the autoload.
-func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
-	if sfx != null:
-		sfx.play(sound, at, strength)

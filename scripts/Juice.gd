@@ -31,6 +31,9 @@ extends Node2D
 
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
+const EventCooldownScript := preload("res://scripts/EventCooldown.gd")
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 
 enum Kind { DUST, SPARK, CATCH }
 
@@ -119,8 +122,6 @@ const HITSTOP_DAMAGE_MIN: float = 40.0
 const HITSTOP_FRAMES: int = 3
 
 const META_WATCHED: StringName = &"_juice_watched"
-const PRUNE_AT: int = 256
-const PRUNE_AFTER_FRAMES: int = 600
 
 ## Particle pool, struct-of-arrays. `_p_life <= 0` is a free slot.
 var _p_pos := PackedVector2Array()
@@ -148,11 +149,10 @@ var _t_next := PackedInt32Array()
 ## a head is added to the tree, never per tick or per strike.
 var _t_waiting: Array = []
 
-var _players: Array[Node] = []
-## instance id -> linear velocity at the start of this physics step.
-var _velocity_before: Dictionary = {}
-## instance id -> physics frame the source last made an effect on.
-var _last_frame: Dictionary = {}
+## Players' velocity going into each physics step, for landings.
+var _velocity := EventCooldownScript.VelocityTracker.new()
+## Per-source repeat guard: the physics frame each source last made an effect on.
+var _cooldown := EventCooldownScript.new()
 var _rng := RandomNumberGenerator.new()
 ## Seconds since start, for trail point ages.
 var _clock: float = 0.0
@@ -168,6 +168,10 @@ var _shake_intensity: float = 0.0
 var _shaken_camera: Camera2D = null
 ## Ticks of freeze still to serve; > 0 only while this node holds the pause.
 var _hitstop_frames: int = 0
+## Issue #976: the Online joiner's copy watches nothing in its tree; the host's
+## dust, sparks and shakes reach it as recorded events, played through the
+## public methods below, and its trails follow `track_trail()` anchors.
+var mirror: bool = false
 ## Whether this node, not anyone else, set `SceneTree.paused` for a hit-stop.
 ## It only ever lifts a pause it set itself.
 var _froze: bool = false
@@ -200,8 +204,9 @@ func _ready() -> void:
 	_t_next.resize(MAX_TRAILS)
 	_t_pts.resize(MAX_TRAILS * TRAIL_POINTS)
 	_t_born.resize(MAX_TRAILS * TRAIL_POINTS)
-	get_tree().node_added.connect(_on_node_added)
-	_watch_subtree(get_tree().root)
+	if mirror:
+		return
+	HookUtilScript.watch_tree(get_tree(), _on_node_added)
 
 ## Restore everything this node changes outside itself, so a scene change or
 ## a removed Juice never leaves the game paused or the camera off-centre.
@@ -237,11 +242,6 @@ func holds_trail(head: Node) -> bool:
 
 # --- Watching -----------------------------------------------------------------
 
-func _watch_subtree(node: Node) -> void:
-	_on_node_added(node)
-	for child in node.get_children():
-		_watch_subtree(child)
-
 func _on_node_added(node: Node) -> void:
 	# A lobby how-to-play demo's puppets (#219) make no sparks or shakes.
 	if node.has_meta(META_WATCHED) or HowToPlayDemoScript.is_demo_node(node):
@@ -253,7 +253,7 @@ func _on_node_added(node: Node) -> void:
 		# comes: no bind, the handler takes exactly those four.
 		node.connect("strike_landed", _on_strike_landed)
 		node.connect("eliminated", _on_player_eliminated.bind(node))
-		_players.append(node)
+		_velocity.track(node)
 	elif node.has_signal("round_started") and node.has_signal("round_won"):
 		# The round loop: a new round or a finished one is a cut, so any
 		# shake or freeze in flight ends with it (a stage change).
@@ -281,6 +281,15 @@ func _on_node_added(node: Node) -> void:
 func _slot_held(s: int) -> bool:
 	var head: Variant = _t_head[s]
 	return is_instance_valid(head) and not (head as Node).is_queued_for_deletion()
+
+## Issue #976: gives `head` (any Node2D that moves like a weapon head, such as
+## the Online joiner's anchor on a puppet's head) a trail, as a watched head
+## gets one. Queued when every slot is held.
+func track_trail(head: Node2D) -> void:
+	if head == null or _t_head.has(head) or _t_waiting.has(head):
+		return
+	if not _claim_trail(head):
+		_t_waiting.append(head)
 
 ## Gives `head` the first free slot. False when every slot is held: the
 ## caller queues it in `_t_waiting` for the next slot to come free.
@@ -327,16 +336,7 @@ func _physics_process(delta: float) -> void:
 			return
 		_end_hitstop()
 
-	if _velocity_before.size() > _players.size() * 4 + 16:
-		_velocity_before.clear()
-	var i: int = _players.size() - 1
-	while i >= 0:
-		var player: Node = _players[i]
-		if is_instance_valid(player) and player.is_inside_tree():
-			_velocity_before[player.get_instance_id()] = player.get("linear_velocity")
-		elif not is_instance_valid(player):
-			_players.remove_at(i)
-		i -= 1
+	_velocity.step()
 	var fast_sq: float = TRAIL_MIN_SPEED * TRAIL_MIN_SPEED
 	var jump_sq: float = TRAIL_MAX_JUMP * TRAIL_MAX_JUMP
 	for s in MAX_TRAILS:
@@ -447,13 +447,16 @@ func _live_points(slot: int) -> int:
 ## enough to be a hard landing. Judged on the velocity going into the step,
 ## as `SfxHooks` does: by the time contact is reported, it has stopped.
 func _on_player_touched(other: Node, player: Node) -> void:
-	if other.is_in_group("players") or not bool(player.get("alive")):
+	var down: float = _velocity.landing_speed(other, player, DUST_MIN_SPEED)
+	if down < 0.0 or not _cooldown.ready(player, LAND_COOLDOWN_FRAMES):
 		return
-	var before: Vector2 = _velocity_before.get(player.get_instance_id(), Vector2.ZERO)
-	if before.y < DUST_MIN_SPEED or not _off_cooldown(player, LAND_COOLDOWN_FRAMES):
-		return
-	var strength: float = clampf((before.y - DUST_MIN_SPEED) / (DUST_FULL_SPEED - DUST_MIN_SPEED), 0.0, 1.0)
+	var strength: float = clampf((down - DUST_MIN_SPEED) / (DUST_FULL_SPEED - DUST_MIN_SPEED), 0.0, 1.0)
 	var feet: Vector2 = (player as Node2D).global_position + Vector2(0.0, BODY_RADIUS)
+	EffectStreamScript.record("dust", {"p": feet, "s": strength}, player) # #976
+	land_puff(feet, strength)
+
+## A landing's dust puff at `feet`, `strength` 0..1 (#976: the joiner's too).
+func land_puff(feet: Vector2, strength: float) -> void:
 	for i in DUST_PER_PUFF:
 		# Half left, half right, low along the floor with a little lift.
 		var side: float = -1.0 if i % 2 == 0 else 1.0
@@ -466,9 +469,14 @@ func _on_player_touched(other: Node, player: Node) -> void:
 ## Two heads meeting at speed. `WeaponHead` reports a clash once, from the
 ## head that corrects the pair.
 func _on_head_clashed(speed: float, point: Vector2, head: Node) -> void:
-	if speed < SPARK_MIN_SPEED or not _off_cooldown(head, HEAD_COOLDOWN_FRAMES):
+	if speed < SPARK_MIN_SPEED or not _cooldown.ready(head, HEAD_COOLDOWN_FRAMES):
 		return
 	var strength: float = clampf((speed - SPARK_MIN_SPEED) / (SPARK_FULL_SPEED - SPARK_MIN_SPEED), 0.0, 1.0)
+	EffectStreamScript.record("clash", {"p": point, "s": strength}, head) # #976
+	clash_sparks(point, strength)
+
+## A clash's sparks at `point`, `strength` 0..1 (#976: the joiner's too).
+func clash_sparks(point: Vector2, strength: float) -> void:
 	var count: int = roundi(lerpf(SPARKS_MIN, SPARKS_MAX, strength))
 	for i in count:
 		var angle: float = TAU * float(i) / float(count) + _rng.randf_range(-0.35, 0.35)
@@ -478,8 +486,13 @@ func _on_head_clashed(speed: float, point: Vector2, head: Node) -> void:
 ## A boomerang caught in the thrower's hand (#862): a small white burst. With
 ## "Reduce flashes" on the burst is skipped (the sound still plays).
 func _on_boomerang_caught(point: Vector2) -> void:
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	if sfx != null and bool(sfx.get("reduce_flash")):
+	EffectStreamScript.record("catch", {"p": point}) # #976
+	catch_burst(point)
+
+## The catch burst at `point`, unless this machine has Reduce flashes on (#976:
+## the joiner's own setting decides for its screen).
+func catch_burst(point: Vector2) -> void:
+	if HookUtilScript.sfx_flag(self, &"reduce_flash", false):
 		return
 	for i in CATCH_SPARKS:
 		var angle: float = TAU * float(i) / float(CATCH_SPARKS) + _rng.randf_range(-0.3, 0.3)
@@ -487,15 +500,29 @@ func _on_boomerang_caught(point: Vector2) -> void:
 		_emit(Kind.CATCH, point, vel, CATCH_LIFETIME * _rng.randf_range(0.8, 1.1))
 
 ## Strike landed: apply screen shake and hit-stop based on damage.
-func _on_strike_landed(_victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
+func _on_strike_landed(victim: Node, amount: float, _point: Vector2, _lethal: bool) -> void:
+	if amount >= SHAKE_DAMAGE_MIN:
+		EffectStreamScript.record("jolt", {"a": amount}, victim) # #976
+	strike_jolt(amount)
+
+## A strike's shake (and, with `freeze`, its hit-stop) for `amount` damage,
+## under this machine's Screen shake and Hit pause settings. The Online joiner
+## (#976) plays it without the freeze: its world is the host's stream, which
+## already holds still through the host's hit-stop.
+func strike_jolt(amount: float, freeze: bool = true) -> void:
 	if _shake_enabled() and amount >= SHAKE_DAMAGE_MIN:
 		var strength: float = clampf((amount - SHAKE_DAMAGE_MIN) / (SHAKE_DAMAGE_MAX - SHAKE_DAMAGE_MIN), 0.0, 1.0)
 		_apply_shake(SHAKE_INTENSITY_MAX * strength, SHAKE_DURATION)
-	if amount >= HITSTOP_DAMAGE_MIN and _hit_pause_enabled():
+	if freeze and amount >= HITSTOP_DAMAGE_MIN and _hit_pause_enabled():
 		_apply_hitstop(HITSTOP_FRAMES)
 
 ## Player eliminated: apply strong screen shake.
-func _on_player_eliminated(_player: Node) -> void:
+func _on_player_eliminated(player: Node) -> void:
+	EffectStreamScript.record("ko_jolt", {}, player) # #976
+	elimination_jolt()
+
+## An elimination's strong shake, under this machine's Screen shake setting.
+func elimination_jolt() -> void:
 	if _shake_enabled():
 		_apply_shake(SHAKE_INTENSITY_ELIMINATION, SHAKE_DURATION_ELIMINATION)
 
@@ -503,14 +530,12 @@ func _on_player_eliminated(_player: Node) -> void:
 ## `user://audio.cfg` like the other display settings, #256). On when there is
 ## no `Sfx` autoload to ask.
 func _shake_enabled() -> bool:
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	return sfx == null or bool(sfx.get("screen_shake"))
+	return HookUtilScript.sfx_flag(self, &"screen_shake", true)
 
 ## The saved "Hit pause" setting (`Sfx.hit_pause`, #916). On when there is no
 ## `Sfx` autoload to ask. Off, no strike or KO freezes the tree.
 func _hit_pause_enabled() -> bool:
-	var sfx: Node = get_node_or_null("/root/Sfx")
-	return sfx == null or bool(sfx.get("hit_pause"))
+	return HookUtilScript.sfx_flag(self, &"hit_pause", true)
 
 ## Apply screen shake effect. A new shake never shortens or weakens one still
 ## running; it keeps the longer of the two, with that one's own duration.
@@ -582,17 +607,6 @@ func _emit(kind: int, pos: Vector2, vel: Vector2, life: float) -> void:
 	_p_kind[i] = kind
 	_p_active = mini(_p_active + 1, MAX_PARTICLES)
 
-func _off_cooldown(source: Node, frames: int) -> bool:
-	var id: int = source.get_instance_id()
-	var now: int = Engine.get_physics_frames()
-	if _last_frame.has(id) and now - int(_last_frame[id]) < frames:
-		return false
-	if _last_frame.size() > PRUNE_AT:
-		for key: int in _last_frame.keys():
-			if now - int(_last_frame[key]) > PRUNE_AFTER_FRAMES:
-				_last_frame.erase(key)
-	_last_frame[id] = now
-	return true
 
 # --- Drawing --------------------------------------------------------------------
 

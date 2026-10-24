@@ -1,21 +1,10 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Teleporter.tscn" id="tele960"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
-size = Vector2(1440, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_ledge"]
-size = Vector2(240, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_summit"]
-size = Vector2(240, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; A tall climb: four narrow ledges staggered left/right above a short
 ; ground strip, topped by a wider summit. Rewards vertical swing play
@@ -65,35 +54,17 @@ background_layers = PackedStringArray("clouds", "city", "city")
 ; Widened for issue #137: the ground strip was 800 px (x=+-400); it now runs
 ; +-720, so the climb starts from a floor that is hard to be knocked off
 ; rather than a short strip. The rungs above are untouched.
-[node name="Ground" type="StaticBody2D" parent="."]
+[node name="Ground" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 400)
+size = Vector2(1440, 40)
 
-[node name="GroundShape" type="CollisionShape2D" parent="Ground"]
-shape = SubResource("RectangleShape2D_ground")
-
-[node name="GroundVisual" type="Polygon2D" parent="Ground"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)
-
-[node name="Ledge1" type="StaticBody2D" parent="."]
+[node name="Ledge1" parent="." instance=ExtResource("platform")]
 position = Vector2(-190, 240)
+size = Vector2(240, 24)
 
-[node name="Ledge1Shape" type="CollisionShape2D" parent="Ledge1"]
-shape = SubResource("RectangleShape2D_ledge")
-
-[node name="Ledge1Visual" type="Polygon2D" parent="Ledge1"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
-
-[node name="Ledge2" type="StaticBody2D" parent="."]
+[node name="Ledge2" parent="." instance=ExtResource("platform")]
 position = Vector2(170, 160)
-
-[node name="Ledge2Shape" type="CollisionShape2D" parent="Ledge2"]
-shape = SubResource("RectangleShape2D_ledge")
-
-[node name="Ledge2Visual" type="Polygon2D" parent="Ledge2"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
+size = Vector2(240, 24)
 
 ; Same footprint and position as the other rungs' spacing asks for (240x24
 ; since issue #59, nudged 10 px toward the middle), so only its permanence
@@ -106,25 +77,13 @@ polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
 position = Vector2(-170, 40)
 size = Vector2(240, 24)
 
-[node name="Ledge4" type="StaticBody2D" parent="."]
+[node name="Ledge4" parent="." instance=ExtResource("platform")]
 position = Vector2(170, -90)
+size = Vector2(240, 24)
 
-[node name="Ledge4Shape" type="CollisionShape2D" parent="Ledge4"]
-shape = SubResource("RectangleShape2D_ledge")
-
-[node name="Ledge4Visual" type="Polygon2D" parent="Ledge4"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
-
-[node name="Summit" type="StaticBody2D" parent="."]
+[node name="Summit" parent="." instance=ExtResource("platform")]
 position = Vector2(0, -242)
-
-[node name="SummitShape" type="CollisionShape2D" parent="Summit"]
-shape = SubResource("RectangleShape2D_summit")
-
-[node name="SummitVisual" type="Polygon2D" parent="Summit"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-120, -12, 120, -12, 120, 12, -120, 12)
+size = Vector2(240, 24)
 
 ; Both spawns on the ground, level with each other. They used to sit at y=100,
 ; which dropped Spawn0 onto Ledge1 (top y=268) and Spawn1 onto Ledge2 (top
@@ -158,12 +117,8 @@ position = Vector2(-560, 340)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(560, 340)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 560)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spawn points (issue #14, ADR-0009). One on each lower rung and one on the summit: the climb pays out on the way up.
 [node name="PickupSpawn0" type="Marker2D" parent="."]

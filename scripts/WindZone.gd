@@ -56,6 +56,8 @@ enum Phase { CALM, TELL, GUST, STEADY }
 @export var cycle_offset_sec: float = 0.0
 
 ## Pale sky blue: air, not ground and not danger. Alpha carries the phase.
+## Preloaded by path, never by `class_name` (CLAUDE.md).
+const PartKitScript := preload("res://scripts/PartKit.gd")
 const WIND_COLOR: Color = Color(0.7, 0.85, 1.0, 1)
 const CALM_ALPHA: float = 0.08
 const GUST_ALPHA: float = 0.32
@@ -168,9 +170,9 @@ func _physics_process(delta: float) -> void:
 	if now != _last_phase:
 		_last_phase = now
 		if now == Phase.TELL:
-			_sfx(&"wind_tell", global_position)
+			PartKitScript.sfx(self, &"wind_tell", global_position)
 		elif now == Phase.GUST:
-			_sfx(&"wind_gust", global_position)
+			PartKitScript.sfx(self, &"wind_gust", global_position)
 	_scroll += streak_speed() * delta
 	if is_pushing():
 		var push: Vector2 = world_direction() * strength
@@ -211,10 +213,3 @@ func _draw() -> void:
 			var tip: float = length * 0.3
 			draw_line(head, head - dir * tip + perp * tip * 0.6, streak_color, width)
 			draw_line(head, head - dir * tip - perp * tip * 0.6, streak_color, width)
-
-## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
-## name, so this part still works in a tree without the autoload.
-func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
-	if sfx != null:
-		sfx.play(sound, at, strength)

@@ -1,18 +1,10 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="kz"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_620x40"]
-size = Vector2(620, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_340x24"]
-size = Vector2(340, 24)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_kill"]
-size = Vector2(8000, 40)
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 ; Orbit (issue #373, a large Hot Potato stage for five to eight players):
 ; two floors facing each other across a 960 px void, and the only way across is
@@ -35,46 +27,22 @@ view_size = Vector2(2240, 1260)
 mode_weights = {"hot_potato": 4.0, "_other": 0.3}
 
 ; The two floors; spawns on their outer ends.
-[node name="FloorLeft" type="StaticBody2D" parent="."]
+[node name="FloorLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-790, 420)
+size = Vector2(620, 40)
 
-[node name="FloorLeftShape" type="CollisionShape2D" parent="FloorLeft"]
-shape = SubResource("RectangleShape2D_620x40")
-
-[node name="FloorLeftVisual" type="Polygon2D" parent="FloorLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-310, -20, 310, -20, 310, 20, -310, 20)
-
-[node name="FloorRight" type="StaticBody2D" parent="."]
+[node name="FloorRight" parent="." instance=ExtResource("platform")]
 position = Vector2(790, 420)
-
-[node name="FloorRightShape" type="CollisionShape2D" parent="FloorRight"]
-shape = SubResource("RectangleShape2D_620x40")
-
-[node name="FloorRightVisual" type="Polygon2D" parent="FloorRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-310, -20, 310, -20, 310, 20, -310, 20)
+size = Vector2(620, 40)
 
 ; Perches over the outer ends, 260 px above the floor.
-[node name="PerchLeft" type="StaticBody2D" parent="."]
+[node name="PerchLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-930, 152)
+size = Vector2(340, 24)
 
-[node name="PerchLeftShape" type="CollisionShape2D" parent="PerchLeft"]
-shape = SubResource("RectangleShape2D_340x24")
-
-[node name="PerchLeftVisual" type="Polygon2D" parent="PerchLeft"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-170, -12, 170, -12, 170, 12, -170, 12)
-
-[node name="PerchRight" type="StaticBody2D" parent="."]
+[node name="PerchRight" parent="." instance=ExtResource("platform")]
 position = Vector2(930, 152)
-
-[node name="PerchRightShape" type="CollisionShape2D" parent="PerchRight"]
-shape = SubResource("RectangleShape2D_340x24")
-
-[node name="PerchRightVisual" type="Polygon2D" parent="PerchRight"]
-color = Color(0.35, 0.35, 0.4, 1)
-polygon = PackedVector2Array(-170, -12, 170, -12, 170, 12, -170, 12)
+size = Vector2(340, 24)
 
 ; A pad beside each perch throws you up onto it.
 [node name="PadLeft" parent="." instance=ExtResource("pad")]
@@ -123,12 +91,8 @@ position = Vector2(-820, 340)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(820, 340)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)
-script = ExtResource("kz")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_kill")
 
 ; Pickup spots: on each perch and over the middle of the orbit.
 [node name="PickupSpawn0" type="Marker2D" parent="."]

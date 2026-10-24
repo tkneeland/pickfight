@@ -17,6 +17,7 @@ const WIDTH: float = 4.0
 const GAP_ABOVE_TAG: float = 16.0
 const FLASH_SEC: float = 0.1
 const GameClockScript := preload("res://scripts/GameClock.gd")
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 
 var _players: Array = []
 var _slot_color: Callable
@@ -29,6 +30,9 @@ var _last_ready: Dictionary = {}
 ## slot -> game msec the white flash ends.
 var _flash_until: Dictionary = {}
 var _scale: float = 1.0
+## Issue #976: the Online joiner's copy, fed by the host's fire-clock events;
+## it records nothing.
+var mirror: bool = false
 
 func _init(players: Array = [], slot_color: Callable = Callable()) -> void:
 	name = "BoomstickRing"
@@ -66,6 +70,8 @@ func tick(anchor: Callable, scale_by: float) -> void:
 			continue
 		var ready_in: float = player.fire_ready_in()
 		if is_inf(ready_in):
+			if _last_ready.has(slot) and not mirror:
+				EffectStreamScript.record("fire_clock", {"s": slot, "i": 0.0, "r": 0.0}, self) # #976
 			_last_ready.erase(slot)
 			_flash_until.erase(slot)
 			continue
@@ -74,8 +80,12 @@ func tick(anchor: Callable, scale_by: float) -> void:
 		if interval <= 0.0:
 			continue
 		# The clock wraps back to nearly a full interval as the shot goes off.
-		if _last_ready.has(slot) and ready_in > float(_last_ready[slot]) + 0.001 and not reduce:
+		var wrapped: bool = _last_ready.has(slot) and ready_in > float(_last_ready[slot]) + 0.001
+		if wrapped and not reduce:
 			_flash_until[slot] = now + int(FLASH_SEC * 1000.0)
+		# Issue #976: the joiner's clock, set where it starts and at every shot.
+		if (wrapped or not _last_ready.has(slot)) and not mirror:
+			EffectStreamScript.record("fire_clock", {"s": slot, "i": interval, "r": ready_in}, self)
 		_last_ready[slot] = ready_in
 		_fill[slot] = clampf(1.0 - ready_in / interval, 0.0, 1.0)
 		if anchor.is_valid():

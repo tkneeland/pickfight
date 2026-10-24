@@ -34,6 +34,7 @@ extends RefCounted
 ## `Meteor.gd` nodes on the stage, cleared on `undo()` too.
 
 const LOW_GRAVITY: String = "low_gravity"
+const HEAVY_GRAVITY: String = "heavy_gravity"
 const HEAVY_WEAPONS: String = "heavy_weapons"
 const BIG_HEADS: String = "big_heads"
 const FAST_LAVA: String = "fast_lava"
@@ -55,12 +56,16 @@ const StageGustScene: PackedScene = preload("res://scenes/parts/StageGust.tscn")
 ## Every modifier a round can roll, in a fixed order so a seeded roll picks
 ## the same one every run.
 const IDS: PackedStringArray = [LOW_GRAVITY, HEAVY_WEAPONS, BIG_HEADS, FAST_LAVA, SLIPPERY_FLOOR,
-	TINY_WEAPONS, WEAPON_ROULETTE, METEOR_SHOWER, BOUNCY, DOUBLE_DAMAGE, GALE, PICKUP_RUSH]
+	TINY_WEAPONS, WEAPON_ROULETTE, METEOR_SHOWER, BOUNCY, DOUBLE_DAMAGE, GALE, PICKUP_RUSH, HEAVY_GRAVITY]
 
 ## Low gravity: players and their weapons fall at this fraction of their
 ## usual gravity. Half, not less: a swing still has to come back down onto
 ## something, and the kill zone is only ever below.
 const LOW_GRAVITY_SCALE: float = 0.5
+
+## Heavy gravity (issue #840): the opposite of low gravity. Jumps are short,
+## falls are fast, weapons hit the floor sooner.
+const HEAVY_GRAVITY_SCALE: float = 1.5
 
 ## Heavy weapons: every weapon's mass, and the force its drive can push with.
 ## Force is scaled less than mass, so a heavy weapon answers the input a
@@ -174,6 +179,8 @@ static func title_of(id: String) -> String:
 	match id:
 		LOW_GRAVITY:
 			return "Low Gravity"
+		HEAVY_GRAVITY:
+			return "Heavy Gravity"
 		HEAVY_WEAPONS:
 			return "Heavy Weapons"
 		BIG_HEADS:
@@ -216,6 +223,8 @@ static func create(id: String) -> RoundModifier:
 	match id:
 		LOW_GRAVITY:
 			modifier = LowGravity.new()
+		HEAVY_GRAVITY:
+			modifier = HeavyGravity.new()
 		HEAVY_WEAPONS:
 			modifier = HeavyWeapons.new()
 		BIG_HEADS:
@@ -329,6 +338,20 @@ class LowGravity extends RoundModifier:
 		for player: Variant in _live_players():
 			_saved[player] = player.gravity_scale
 			player.gravity_scale = player.gravity_scale * LOW_GRAVITY_SCALE
+
+	func _undo() -> void:
+		for player: Variant in _live_players():
+			if _saved.has(player):
+				player.gravity_scale = _saved[player]
+		_saved.clear()
+
+class HeavyGravity extends RoundModifier:
+	var _saved: Dictionary = {}
+
+	func _apply() -> void:
+		for player: Variant in _live_players():
+			_saved[player] = player.gravity_scale
+			player.gravity_scale = player.gravity_scale * HEAVY_GRAVITY_SCALE
 
 	func _undo() -> void:
 		for player: Variant in _live_players():

@@ -51,6 +51,7 @@ extends StaticBody2D
 
 ## Preloaded for its palette only; see the header.
 const LedgeType := preload("res://scripts/CrumblingLedge.gd")
+const PartKitScript := preload("res://scripts/PartKit.gd")
 
 enum _FloorState { SOLID, WARNING, GONE }
 
@@ -83,22 +84,12 @@ var _detector: Area2D
 func _ready() -> void:
 	var half: Vector2 = size / 2.0
 
-	var rect := RectangleShape2D.new()
-	rect.size = size
-	_collision_shape = CollisionShape2D.new()
-	_collision_shape.name = "CollisionShape2D"
-	_collision_shape.shape = rect
-	add_child(_collision_shape)
+	_collision_shape = PartKitScript.add_rect_shape(self, size)
 
 	_visual = Polygon2D.new()
 	_visual.name = "Visual"
 	_visual.color = SOLID_COLOR
-	_visual.polygon = PackedVector2Array([
-		Vector2(-half.x, -half.y),
-		Vector2(half.x, -half.y),
-		Vector2(half.x, half.y),
-		Vector2(-half.x, half.y),
-	])
+	_visual.polygon = PartKitScript.rect_polygon(size)
 	add_child(_visual)
 	# Seams across the slab, so it reads as sections that can come apart
 	# rather than as the permanent grey ground it shares a colour with.
@@ -111,20 +102,9 @@ func _ready() -> void:
 		seam.points = PackedVector2Array([Vector2(x - 4.0, -half.y), Vector2(x + 4.0, half.y)])
 		_visual.add_child(seam)
 
-	_detector = Area2D.new()
-	_detector.name = "Detector"
 	# Monitors the world layer (`Player.LAYER_WORLD`) for player bodies,
 	# exactly as CrumblingLedge's detector does.
-	_detector.collision_layer = 0
-	_detector.collision_mask = 1
-	_detector.position = Vector2(0, -half.y - _DETECTOR_ABOVE / 2.0 + _DETECTOR_BELOW / 2.0)
-	var detector_rect := RectangleShape2D.new()
-	detector_rect.size = Vector2(size.x, _DETECTOR_ABOVE + _DETECTOR_BELOW)
-	var detector_shape := CollisionShape2D.new()
-	detector_shape.name = "DetectorShape"
-	detector_shape.shape = detector_rect
-	_detector.add_child(detector_shape)
-	add_child(_detector)
+	_detector = PartKitScript.add_top_detector(self, size, _DETECTOR_ABOVE, _DETECTOR_BELOW)
 
 # --- Observable seams for scenarios -----------------------------------------
 
@@ -170,13 +150,13 @@ func _player_standing() -> bool:
 func _begin_warning(seconds: float) -> void:
 	_state = _FloorState.WARNING
 	_warn_remaining = maxf(seconds, 0.0)
-	_sfx(&"floor_warning", global_position)
+	PartKitScript.sfx(self, &"floor_warning", global_position)
 	_warn_elapsed = 0.0
 	_visual.color = WARNING_COLOR
 
 func _give_way() -> void:
 	_state = _FloorState.GONE
-	_sfx(&"floor_collapse", global_position)
+	PartKitScript.sfx(self, &"floor_collapse", global_position)
 	_visual.position = Vector2.ZERO
 	_visual.visible = false
 	# Deferred, as in CrumblingLedge: toggling collision mid-physics-step is
@@ -185,10 +165,3 @@ func _give_way() -> void:
 	_detector.set_deferred("monitoring", false)
 	# Nothing left to count or animate for the rest of the round.
 	set_physics_process(false)
-
-## Asks the Sfx autoload for `sound` (issue #76). Looked up by path, never by
-## name, so this part still works in a tree without the autoload.
-func _sfx(sound: StringName, at: Vector2, strength: float = 1.0) -> void:
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
-	if sfx != null:
-		sfx.play(sound, at, strength)

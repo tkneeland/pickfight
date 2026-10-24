@@ -35,10 +35,9 @@ var _alpha: Array[float] = []
 ## Per slot: [tip position, unit direction toward the fighter] while an arrow is wanted.
 var _aim: Array = []
 var _wanted: Array[bool] = []
-
-## Issue #976: the Online client shows the host's player-numbers setting: 1
-## on, 0 off, -1 (the host) reads HostSettings.
-var numbers_override: int = -1
+## Issue #976: the Online joiner shows the seat numbers by the HOST's "Player
+## numbers" setting, sent in the `hud` frame; null asks this machine's.
+var numbers_override: Variant = null
 
 func _init(players: Array = [], slot_color: Callable = Callable()) -> void:
 	name = "OffscreenIndicators"
@@ -114,7 +113,7 @@ func update_targets() -> void:
 	var to_screen: Transform2D = viewport.get_canvas_transform()
 	var screen := Rect2(Vector2.ZERO, size)
 	var inner := Rect2(Vector2.ONE * EDGE_MARGIN, size - Vector2.ONE * EDGE_MARGIN * 2.0)
-	var numbers_on: bool = HostSettingsScript.shared().player_numbers if numbers_override < 0 else numbers_override == 1
+	var numbers_on: bool = bool(numbers_override) if numbers_override is bool else HostSettingsScript.shared().player_numbers
 	var arrows_on: bool = _settings_allow_arrows()
 	for slot in _players.size():
 		var player: Variant = _players[slot]

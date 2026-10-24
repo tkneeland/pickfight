@@ -15,14 +15,13 @@
 ##
 ## Version 2 (issue #976) carries what an Online joiner needs to draw every
 ## in-world thing exactly as the host does: per player `flags` (PLAYER_*),
-## `fire` (the boomstick's fire clock) and `hat_spin` (where a propeller hat's
+## `hat_spin` (where a propeller hat's
 ## blades are, Hat.spin_byte()), `squash` (the face's landing or hit squash,
 ## PlayerFace.squash_byte(), 128 at rest), per projectile `owner`, `rotation`
 ## and `flags` (the shot's kind, PROJ_KIND_*, and the boomerang's ghost bit),
-## per pickup `halo` (where its breathing halo is) and `pop` (1 while its
-## spawn pop-in, #816, is still playing), and after the round state
+## per pickup `halo` (where its breathing halo is), and after the round state
 ## `flails` (every flail's ball and links), `ghosts` (every KO'd player's
-## ghost), `meteors` and `stage_flags` (STAGE_*), then `parts` (every stage
+## ghost) and `meteors`, then `parts` (every stage
 ## part's look, by `NetSync.part_id`) and `props` (every runtime prop the host
 ## marked: the soccer ball, CTF flags, the hill, tiebreaker rocks, the gale),
 ## whose `state` arrays travel as `var_to_bytes` (no objects).
@@ -61,15 +60,8 @@ const MAX_STATE_BYTES: int = 2048
 const PLAYER_HEAD_PHASED: int = 1
 const PLAYER_SPECIAL_LOADED: int = 2
 const PLAYER_BLINKING: int = 4
-## The idle hint (#826) is up over the player; it reads the gamepad line.
-const PLAYER_HINT: int = 8
-const PLAYER_HINT_PAD: int = 16
 ## The spawn-protection blink is on its dim half (Respawn.BLINK_ALPHA).
-const PLAYER_DIMMED: int = 32
-## Player `fire` byte: 0..FIRE_FULL is how far the fire clock has run (FIRE_FULL
-## ready to fire); FIRE_NONE is a weapon that never fires on its own.
-const FIRE_FULL: int = 254
-const FIRE_NONE: int = 255
+const PLAYER_DIMMED: int = 8
 ## Projectile `flags`: the low two bits are the kind, bit 2 the boomerang's ghost.
 const PROJ_KIND_MASK: int = 3
 const PROJ_KIND_BULLET: int = 0
@@ -78,9 +70,6 @@ const PROJ_KIND_HOOK: int = 2
 const PROJ_GHOST: int = 4
 ## Flail `flags`: the ball is phased (drawn see-through).
 const FLAIL_PHASED: int = 1
-## `stage_flags` bits: the stage is the night variant; the host shows player numbers.
-const STAGE_NIGHT: int = 1
-const STAGE_PLAYER_NUMBERS: int = 2
 ## The owner byte for "no player".
 const NO_OWNER: int = 255
 ## Counts are one byte (255 max); `encode()` clamps the count and the loop together.
@@ -104,7 +93,6 @@ static func encode(world: Dictionary) -> PackedByteArray:
 		_encode_flails(bytes, world)
 		_encode_ghosts(bytes, world)
 		_encode_meteors(bytes, world)
-		_append_u8(bytes, world.get("stage_flags", 0))
 		_encode_parts(bytes, world)
 		_encode_props(bytes, world)
 	else:
@@ -135,7 +123,6 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 		snapshot["flails"] = _decode_flails(r)
 		snapshot["ghosts"] = _decode_ghosts(r)
 		snapshot["meteors"] = _decode_meteors(r)
-		snapshot["stage_flags"] = r.u8()
 		snapshot["parts"] = _decode_parts(r)
 		snapshot["props"] = _decode_props(r)
 	else:
@@ -163,7 +150,6 @@ static func apply_delta(full: Dictionary, delta: Dictionary) -> Dictionary:
 					p["damage"] = e["damage"]
 					p["state"] = e["state"]
 					p["flags"] = e["flags"]
-					p["fire"] = e["fire"]
 					p["hat_spin"] = e["hat_spin"]
 					p["squash"] = e["squash"]
 			TYPE_PROJECTILE:
@@ -365,7 +351,6 @@ static func _encode_player(bytes: PackedByteArray, player: Dictionary) -> void:
 	_append_u16(bytes, _floor(player.get("damage", 0)))
 	_append_u8(bytes, player.get("state", 0))
 	_append_u8(bytes, player.get("flags", 0))
-	_append_u8(bytes, player.get("fire", FIRE_NONE))
 	_append_u8(bytes, player.get("hat_spin", 0))
 	_append_u8(bytes, player.get("squash", SQUASH_REST))
 
@@ -407,7 +392,6 @@ static func _encode_pickup(bytes: PackedByteArray, pickup: Dictionary) -> void:
 	_encode_vector2_quantized(bytes, _vec(pickup.get("position", Vector2.ZERO)))
 	_append_u16(bytes, pickup.get("weapon_type", 0))
 	_append_u8(bytes, pickup.get("halo", 0))
-	_append_u8(bytes, pickup.get("pop", 0))
 
 static func _encode_flail(bytes: PackedByteArray, world: Dictionary) -> void:
 	var flail: Dictionary = _dict(world.get("flail", {}))
@@ -536,7 +520,6 @@ static func _encode_delta_entities(bytes: PackedByteArray, world: Dictionary) ->
 				_append_u16(bytes, _floor(entity.get("damage", 0)))
 				_append_u8(bytes, entity.get("state", 0))
 				_append_u8(bytes, entity.get("flags", 0))
-				_append_u8(bytes, entity.get("fire", FIRE_NONE))
 				_append_u8(bytes, entity.get("hat_spin", 0))
 				_append_u8(bytes, entity.get("squash", SQUASH_REST))
 			TYPE_PROJECTILE:
@@ -596,7 +579,7 @@ static func _decode_static_stage_bodies(r: _Reader) -> Array:
 
 static func _decode_all_players(r: _Reader) -> Array:
 	var players: Array = []
-	for i in r.count(r.u8(), 30):
+	for i in r.count(r.u8(), 29):
 		var player_id: int = r.u16()
 		var body: Dictionary = _decode_body_transform(r)
 		var weapon: Dictionary = _decode_weapon_segments(r)
@@ -606,7 +589,6 @@ static func _decode_all_players(r: _Reader) -> Array:
 		var damage: int = r.u16()
 		var state: int = r.u8()
 		var flags: int = r.u8()
-		var fire: int = r.u8()
 		var hat_spin: int = r.u8()
 		var squash: int = r.u8()
 		players.append({
@@ -619,7 +601,6 @@ static func _decode_all_players(r: _Reader) -> Array:
 			"damage": damage,
 			"state": state,
 			"flags": flags,
-			"fire": fire,
 			"hat_spin": hat_spin,
 			"squash": squash,
 		})
@@ -648,14 +629,12 @@ static func _decode_all_projectiles(r: _Reader) -> Array:
 
 static func _decode_all_pickups(r: _Reader) -> Array:
 	var pickups: Array = []
-	for i in r.count(r.u8(), 10):
+	for i in r.count(r.u8(), 9):
 		var pickup_id: int = r.u16()
 		var position: Vector2 = r.vec2()
 		var weapon_type: int = r.u16()
 		var halo: int = r.u8()
-		var pop: int = r.u8()
-		pickups.append({"pickup_id": pickup_id, "position": position, "weapon_type": weapon_type, "halo": halo,
-			"pop": pop})
+		pickups.append({"pickup_id": pickup_id, "position": position, "weapon_type": weapon_type, "halo": halo})
 	return pickups
 
 static func _decode_flail(r: _Reader) -> Dictionary:
@@ -767,7 +746,6 @@ static func _decode_delta_entities(r: _Reader) -> Array:
 				entity["damage"] = r.u16()
 				entity["state"] = r.u8()
 				entity["flags"] = r.u8()
-				entity["fire"] = r.u8()
 				entity["hat_spin"] = r.u8()
 				entity["squash"] = r.u8()
 			TYPE_PROJECTILE:

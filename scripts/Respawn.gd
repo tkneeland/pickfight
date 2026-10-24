@@ -73,7 +73,13 @@ func respawn_now(slot: int) -> void:
 	var player: Node2D = watched[slot]
 	if not is_instance_valid(player) or not _still_claimed(slot):
 		return
-	player.start_round(farthest_spawn(slot), false)
+	var spot: Vector2 = farthest_spawn(slot)
+	player.start_round(spot, false)
+	# Issue #1015: a soft chime at the spawn. Host only; online clients hear it
+	# through the generic Sfx snapshot trailer. Kicked slots returned above.
+	var sfx: Node = round_manager.get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(&"respawn", spot, 1.0)
 	var stats: Variant = round_manager.get("_stats")
 	if stats != null:
 		stats.resume_round(slot, GameClockScript.now_msec())

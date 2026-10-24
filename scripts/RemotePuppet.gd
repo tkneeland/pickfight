@@ -11,10 +11,10 @@ extends Node2D
 ## with `Projectile.draw_bullet`, `Boomerang.draw_boomerang` or
 ## `GrappleHook.draw_hook`; a pickup is a display-only `Pickup.tscn`; a flail
 ## is `FlailChain`'s ball and link visuals; a ghost `Ghost.draw_ghost`; a
-## meteor `Meteor.draw_meteor`. The puppet offers what the host's face, name
-## tags, boomstick ring and night lighting read off a `Player` (`alive`,
-## `linear_velocity`, `eye_look_dir()`, `hat_top()`, `weapon_head_position()`,
-## `fire_ready_in()`, `_stats`, `team`), so those run unchanged on it.
+## meteor `Meteor.draw_meteor`. The puppet offers what the host's face and
+## night lighting read off a `Player` (`alive`, `linear_velocity`,
+## `eye_look_dir()`, `hat_top()`, `weapon_head_position()`, `_stats`), so those
+## run unchanged on it; name tags and their rings run on `RemoteFighter.gd`.
 ## No `class_name`: consumers preload this by path.
 
 const PlayerScript: GDScript = preload("res://scripts/Player.gd")
@@ -22,7 +22,6 @@ const HatScript: GDScript = preload("res://scripts/Hat.gd")
 const PlayerFaceScript: GDScript = preload("res://scripts/PlayerFace.gd")
 const PickupScript: GDScript = preload("res://scripts/Pickup.gd")
 const PickupScene: PackedScene = preload("res://scenes/Pickup.tscn")
-const PickupDirectorScript: GDScript = preload("res://scripts/PickupDirector.gd")
 const PickupWeaponsScript: GDScript = preload("res://scripts/PickupWeapons.gd")
 const ProjectileScript: GDScript = preload("res://scripts/Projectile.gd")
 const BoomerangScript: GDScript = preload("res://scripts/Boomerang.gd")
@@ -34,7 +33,6 @@ const ShotSweepScript: GDScript = preload("res://scripts/ShotSweep.gd")
 const RespawnScript: GDScript = preload("res://scripts/Respawn.gd")
 const RoundModifiersScript: GDScript = preload("res://scripts/RoundModifiers.gd")
 const SnapshotScript: GDScript = preload("res://scripts/Snapshot.gd")
-const NightLightingScript: GDScript = preload("res://scripts/NightLighting.gd")
 const PLAYER_SCENE_PATH: String = "res://scenes/Player.tscn"
 
 enum Kind { PLAYER, PROJECTILE, PICKUP, FLAIL, GHOST, METEOR }
@@ -50,6 +48,8 @@ const METEOR_Z: int = 5
 var kind: int = Kind.PLAYER
 ## A player's (and its shots') identity colour.
 var color: Color = Color.WHITE
+## Unused for drawing: a player's name tag is the host's `NameTags.gd`, run by
+## `RemoteEffects.gd` (#976).
 var label: String = ""
 ## Player: world offset from the body to the weapon head.
 var head_offset: Vector2 = Vector2.ZERO
@@ -62,9 +62,8 @@ var phase: int = 1
 ## A shot: the weapon it came from.
 var head_rotation: float = 0.0
 var weapon_index: int = 0
-## Player: the snapshot's PLAYER_* bits and fire byte.
+## Player: the snapshot's PLAYER_* bits.
 var flags: int = 0
-var fire: int = 255
 ## Player: the host's propeller-hat phase (Hat.spin_byte()).
 var hat_spin: int = 0
 ## The host's face squash byte (PlayerFace.squash_byte()).
@@ -73,11 +72,7 @@ var squash: int = SnapshotScript.SQUASH_REST
 var modifier: String = ""
 ## The stage's ink for outlines and pupils (Palette.ink_for).
 var ink: Color = PlayerFaceScript.OUTLINE_COLOR
-## Player: the team (-1 none), for the name tags' rings.
-var team: int = -1
 var linear_velocity: Vector2 = Vector2.ZERO
-## Never driven here; the idle hint reads it on a Player.
-var input_vector: Vector2 = Vector2.ZERO
 ## Player: the effective weapon stats (the boomstick ring reads `_stats`).
 var _stats: Resource = null
 var alive: bool:
@@ -120,8 +115,6 @@ static var _body_polygon_cache: PackedVector2Array = PackedVector2Array()
 
 func _ready() -> void:
 	match kind:
-		Kind.PLAYER:
-			add_to_group(NightLightingScript.LIT_PLAYERS_GROUP)
 		Kind.PROJECTILE:
 			z_index = BULLET_Z
 		Kind.GHOST:
@@ -170,6 +163,15 @@ func set_look(hat_id_in: String, eyes_id_in: String, tint: Color) -> void:
 	if _face.eyes_style != eyes_id_in:
 		_face.set_eyes(eyes_id_in)
 
+## Issue #976: as `Player.set_ink()`: the stage mood's ink on the face and the
+## weapon head's outline.
+func set_ink(colour: Color) -> void:
+	if colour == ink:
+		return
+	ink = colour
+	if kind == Kind.PLAYER and _figure != null:
+		_refresh_player()
+
 func hat_id() -> String:
 	return _hat.hat_id if _hat != null else HatScript.NONE
 
@@ -213,12 +215,6 @@ func hat_top() -> float:
 
 func weapon_head_position() -> Vector2:
 	return global_position + head_offset
-
-## As `Player.fire_ready_in()`, from the host's fire byte.
-func fire_ready_in() -> float:
-	if _stats == null or float(_stats.get("fire_interval")) <= 0.0 or fire >= SnapshotScript.FIRE_NONE:
-		return INF
-	return maxf(float(_stats.fire_interval) * (1.0 - float(fire) / float(SnapshotScript.FIRE_FULL)), 0.0)
 
 ## The weapon resource for a snapshot weapon index (0 is the pickaxe), or null.
 func _stats_for(index: int) -> Resource:
@@ -324,9 +320,9 @@ func _refresh_player() -> void:
 
 # --- Pickup -------------------------------------------------------------------
 
-## Builds (or rebuilds, for a new weapon) the display-only `Pickup.tscn`;
-## `pop` plays its spawn pop-in (#816) as the host's director does.
-func show_pickup(pop: bool) -> void:
+## Builds (or rebuilds, for a new weapon) the display-only `Pickup.tscn`. Its
+## spawn pop-in (#816) is the host's `pickup_ring` event (RemoteEffects.gd).
+func show_pickup() -> void:
 	if _pickup == null or _pickup_weapon != weapon_index:
 		if _pickup != null:
 			_pickup.free()
@@ -336,8 +332,6 @@ func show_pickup(pop: bool) -> void:
 		_pickup.set_weapon(_stats_for(weapon_index))
 		add_child(_pickup)
 		_pickup_weapon = weapon_index
-		if pop and get_parent() != null:
-			PickupDirectorScript.pop_in(_pickup, get_parent(), global_position)
 	_pickup.set_halo_phase(halo)
 
 func pickup_node() -> Node2D:

@@ -1,13 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/KillZone.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_1440x40"]
 size = Vector2(1440, 40)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_8000x40"]
-size = Vector2(8000, 40)
 
 ; Competitive (issue #376): one flat floor, no platforms, no hazards, nothing that
 ; moves. Left-right mirror symmetric about x=0. The only way out of the round
@@ -55,12 +52,8 @@ position = Vector2(-350, 0)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(350, 0)
 
-[node name="KillZone" type="Area2D" parent="."]
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)
-script = ExtResource("2")
-
-[node name="KillZoneShape" type="CollisionShape2D" parent="KillZone"]
-shape = SubResource("RectangleShape2D_8000x40")
 
 [node name="PickupSpawn0" type="Marker2D" parent="."]
 position = Vector2(-200, 250)

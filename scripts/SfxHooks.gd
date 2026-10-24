@@ -18,6 +18,8 @@ extends Node
 
 ## Lobby how-to-play demo nodes (#219) are left alone: `is_demo_node()`.
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
+const HookUtilScript := preload("res://scripts/HookUtil.gd")
+const EventCooldownScript := preload("res://scripts/EventCooldown.gd")
 
 ## Damage that plays a weapon's hit at full strength. A committed swing does
 ## 34-60 depending on the weapon (Player._strike_damage), so a full-speed
@@ -43,8 +45,6 @@ const LAND_COOLDOWN_FRAMES: int = 10
 ## gap between one victim's hit grunts.
 const VOICE_COUNT: int = 8
 const GRUNT_HIT_COOLDOWN_FRAMES: int = 30
-const PRUNE_AT: int = 256
-const PRUNE_AFTER_FRAMES: int = 600
 ## Where a landing sounds from: the bottom of the body, not its middle.
 const BODY_RADIUS: float = 24.0
 ## Marks a node already connected, so one re-added to the tree is not
@@ -53,34 +53,20 @@ const META_WATCHED: StringName = &"_sfx_watched"
 
 var sfx: Node
 
-## Players whose pre-step velocity is tracked for landings.
-var _players: Array[Node] = []
-## instance id -> linear velocity at the start of this physics step.
-var _velocity_before: Dictionary = {}
-## instance id -> the physics frame that source last made a sound on.
-var _last_frame: Dictionary = {}
+## Players whose pre-step velocity is tracked for landings. A player stays
+## tracked while it exists, even out of the tree, as in `Juice`.
+var _velocity := EventCooldownScript.VelocityTracker.new()
+## Per-source repeat guard: the physics frame each source last made a sound on.
+var _cooldown := EventCooldownScript.new()
 
 func _ready() -> void:
 	# Before every game node in the tree order, so `_physics_process` reads
 	# each body's velocity before the step that may land it.
 	process_physics_priority = -100
-	get_tree().node_added.connect(_on_node_added)
-	_watch_subtree(get_tree().root)
+	HookUtilScript.watch_tree(get_tree(), _on_node_added)
 
 func _physics_process(_delta: float) -> void:
-	if _velocity_before.size() > _players.size() * 4 + 16:
-		_velocity_before.clear()
-	var still: Array[Node] = []
-	for player in _players:
-		if is_instance_valid(player) and player.is_inside_tree():
-			_velocity_before[player.get_instance_id()] = player.linear_velocity
-			still.append(player)
-	_players = still
-
-func _watch_subtree(node: Node) -> void:
-	_on_node_added(node)
-	for child in node.get_children():
-		_watch_subtree(child)
+	_velocity.step()
 
 func _on_node_added(node: Node) -> void:
 	# A lobby how-to-play demo's puppets (#219) make no sound.
@@ -115,7 +101,7 @@ func _watch_player(player: Node) -> void:
 		player.connect("weapon_picked_up", _on_weapon_picked_up.bind(player))
 	if player.has_signal("body_entered"):
 		player.connect("body_entered", _on_player_touched.bind(player))
-	_players.append(player)
+	_velocity.track(player)
 
 ## Every strike that dealt damage, sword swing or bullet, sounds as the
 ## attacker's weapon. A 0-damage contact is silent: it is a nudge, and a head
@@ -150,7 +136,7 @@ func _grunt(prefix: StringName, victim: Node, point: Vector2, frames: int) -> vo
 	var sound := StringName("%s%d" % [prefix, voice_slot(victim)])
 	if not sfx.has_sound(sound):
 		return
-	if frames > 0 and not _off_cooldown(victim, frames, "grunt"):
+	if frames > 0 and not _cooldown.ready(victim, frames, "grunt"):
 		return
 	sfx.play(sound, point, 1.0)
 
@@ -161,19 +147,17 @@ func voice_slot(player: Node) -> int:
 	var name_text: String = String(player.name)
 	if name_text.begins_with("Player") and name_text.substr(6).is_valid_int():
 		return posmod(name_text.substr(6).to_int() - 1, VOICE_COUNT)
-	var index: int = _players.find(player)
+	var index: int = _velocity.players.find(player)
 	return posmod(index if index != -1 else 0, VOICE_COUNT)
 
 ## A body meeting anything that is not another player, moving down fast
 ## enough to be a landing. Judged on the velocity it had going into the step:
 ## by the time the contact is reported, the solver has already stopped it.
 func _on_player_touched(other: Node, player: Node) -> void:
-	if other.is_in_group("players") or not bool(player.get("alive")):
+	var down: float = _velocity.landing_speed(other, player, LAND_MIN_SPEED)
+	if down < 0.0 or not _cooldown.ready(player, LAND_COOLDOWN_FRAMES):
 		return
-	var before: Vector2 = _velocity_before.get(player.get_instance_id(), Vector2.ZERO)
-	if before.y < LAND_MIN_SPEED or not _off_cooldown(player, LAND_COOLDOWN_FRAMES):
-		return
-	var strength: float = (before.y - LAND_MIN_SPEED) / (LAND_FULL_SPEED - LAND_MIN_SPEED)
+	var strength: float = (down - LAND_MIN_SPEED) / (LAND_FULL_SPEED - LAND_MIN_SPEED)
 	sfx.play(&"land", player.global_position + Vector2(0.0, BODY_RADIUS), strength)
 
 # --- Weapon heads -----------------------------------------------------------
@@ -188,7 +172,7 @@ func _on_head_struck_world(collider: Object, speed: float, point: Vector2, head:
 	var node: Node = collider as Node
 	if node != null and node.is_in_group("players"):
 		return
-	if speed < TERRAIN_MIN_SPEED or not _off_cooldown(head, HEAD_COOLDOWN_FRAMES):
+	if speed < TERRAIN_MIN_SPEED or not _cooldown.ready(head, HEAD_COOLDOWN_FRAMES):
 		return
 	var strength: float = (speed - TERRAIN_MIN_SPEED) / (TERRAIN_FULL_SPEED - TERRAIN_MIN_SPEED)
 	sfx.play(&"head_terrain", point, strength)
@@ -196,7 +180,7 @@ func _on_head_struck_world(collider: Object, speed: float, point: Vector2, head:
 ## Two heads meeting. `WeaponHead` reports it from the one head that corrects
 ## the pair, so a clash is one sound.
 func _on_head_clashed(speed: float, point: Vector2, head: Node) -> void:
-	if speed < CLASH_MIN_SPEED or not _off_cooldown(head, HEAD_COOLDOWN_FRAMES):
+	if speed < CLASH_MIN_SPEED or not _cooldown.ready(head, HEAD_COOLDOWN_FRAMES):
 		return
 	sfx.play(&"clash", point, speed / CLASH_FULL_SPEED)
 
@@ -288,16 +272,3 @@ func _sound_set(player: Variant) -> String:
 				return String(set_name)
 	return "pickaxe"
 
-func _off_cooldown(source: Node, frames: int, channel: String = "") -> bool:
-	# A separate `channel` keeps a source's grunt from muting its other sounds.
-	var id: int = source.get_instance_id() if channel == "" else hash([source.get_instance_id(), channel])
-	var now: int = Engine.get_physics_frames()
-	if _last_frame.has(id) and now - int(_last_frame[id]) < frames:
-		return false
-	if _last_frame.size() > PRUNE_AT:
-		# Heads are rebuilt every round; forget the ones long gone quiet.
-		for key: int in _last_frame.keys():
-			if now - int(_last_frame[key]) > PRUNE_AFTER_FRAMES:
-				_last_frame.erase(key)
-	_last_frame[id] = now
-	return true

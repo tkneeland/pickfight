@@ -19,6 +19,8 @@ extends Node2D
 ##
 ## Preloaded by path, never named by `class_name` (CLAUDE.md).
 
+const PartKitScript := preload("res://scripts/PartKit.gd")
+
 ## Mirrors `Player.LAYER_WORLD`, as `FallingRock` does.
 const _WORLD_LAYER: int = 1
 const _PLAYERS_GROUP: StringName = &"players"
@@ -117,36 +119,18 @@ func _strike(victim: Node) -> void:
 	if away == Vector2.ZERO:
 		away = Vector2.UP
 	var point: Vector2 = global_position + away * radius
-	# Report what the hit actually took off (issue #162): a spawn-protected
-	# player takes nothing, and a report of the full damage would put a
-	# phantom number on screen and buzz their phone. Nothing dealt, nothing
-	# reported; a protected fighter is not knocked either (#991).
-	var before: Variant = victim.get("damage")
-	if victim.has_method("mark_hazard"):
-		victim.mark_hazard("meteor")  # achievements (#689)
-	victim.take_damage(damage, point)
-	var after: Variant = victim.get("damage")
-	var dealt: float = damage
-	if before != null and after != null:
-		dealt = float(after) - float(before)
-	if dealt > 0.0 and victim.has_signal("strike_landed"):
-		victim.emit_signal("strike_landed", victim, dealt, point, not victim.alive)
-	if not victim.alive or victim.get("spawn_protected") == true:
-		return
-	# Sideways away from where the meteor came down, with some lift: a meteor
-	# landing square on a player's crown would otherwise drive them into the
-	# floor, which reads as nothing happening.
+	# The knock goes sideways away from where the meteor came down, with some
+	# lift: a meteor landing square on a player's crown would otherwise drive
+	# them into the floor, which reads as nothing happening.
 	var side: float = signf(victim_body.global_position.x - global_position.x)
 	if side == 0.0:
 		side = signf(velocity.x) if velocity.x != 0.0 else 1.0
-	var direction: Vector2 = Vector2(side, -KNOCK_LIFT).normalized()
-	var body := victim as RigidBody2D
-	if body != null:
-		body.apply_central_impulse(direction * knock_speed * body.mass)
+	# Only what the hit actually took off is reported (issue #162), as for a
+	# falling rock; the knock lands on anyone left standing who is not
+	# protected (#991).
+	PartKitScript.hazard_strike(victim, damage, point, "meteor", side, KNOCK_LIFT, knock_speed)
 
 func _impact() -> void:
 	_done = true
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
-	if sfx != null:
-		sfx.play(&"rock_impact", global_position, 0.6)
+	PartKitScript.sfx(self, &"rock_impact", global_position, 0.6)
 	queue_free()
