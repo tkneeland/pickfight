@@ -5,7 +5,9 @@ extends RefCounted
 ## this script by path; never reference it by `class_name` (CLAUDE.md).
 ##
 ## Keys the live game has no source for are filled with a default:
-## - `modifiers[].modifier_id`: always 1 (the name carries the identity).
+## - `modifiers[].modifier_id`: 1 for the round modifier (the name carries the
+##   identity); 2, named "night", while the stage is its night variant (#332,
+##   so the Online joiner builds the same night stage, #976).
 ## - `timer_ms`: the lobby countdown's time left, else 0 (rounds are untimed).
 ## - `announcer_text`: the on-screen modifier banner while it shows, else "".
 ## - `color`: the slot number (the client picks the palette).
@@ -13,6 +15,8 @@ extends RefCounted
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const GameClockScript := preload("res://scripts/GameClock.gd")
+## The `modifiers` entry that marks a night stage (#976).
+const NIGHT_MODIFIER_ID: int = 2
 
 ## Frames captured since boot; scenarios read it to prove a phones-only game
 ## captures nothing.
@@ -210,7 +214,11 @@ static func _pickups(rm: Node) -> Array:
 
 static func _modifiers(rm: Node) -> Array:
 	var id: String = rm.active_modifier_id()
-	return [] if id.is_empty() else [{"modifier_id": 1, "name": id}]
+	var out: Array = [] if id.is_empty() else [{"modifier_id": 1, "name": id}]
+	var stage: Variant = rm.get("_current_stage")
+	if stage is Node and is_instance_valid(stage) and stage.get("night") == true:
+		out.append({"modifier_id": NIGHT_MODIFIER_ID, "name": "night"})
+	return out
 
 static func _timer_ms(rm: Node, state: int) -> int:
 	if state != 4: # State.COUNTDOWN

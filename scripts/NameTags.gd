@@ -47,6 +47,9 @@ var _idle_hint: Node2D
 const TEAM_BADGE_PX: float = 26.0
 const TEAM_BADGE_GAP: float = 4.0
 var _team_badges: Array[Control] = []
+## Issue #976: the host's Player numbers setting, on the Online joiner (null:
+## this machine's own setting).
+var numbers_override: Variant = null
 
 ## RoundManager's `_players`, one entry (or null) per slot.
 var _players: Array = []
@@ -114,7 +117,7 @@ func tick() -> void:
 	var sfx: Node = get_node_or_null("/root/Sfx")
 	if sfx != null:
 		tag_scale *= float(sfx.get("ui_scale"))
-	var numbers: bool = HostSettingsScript.shared().player_numbers  # #809
+	var numbers: bool = numbers_override if numbers_override is bool else HostSettingsScript.shared().player_numbers  # #809
 	var had_rings: bool = not _rings.is_empty() or not _pips.is_empty()
 	_rings.clear()
 	_pips.clear()
@@ -197,6 +200,9 @@ func _tick_idle_hint(tag_scale: float) -> void:
 		return
 	var rm: Node = get_parent()
 	var ctx: Dictionary = {"scale": tag_scale}
+	ctx["anchor"] = func(slot: int) -> Vector2:
+		var tag: Label = _name_tags[slot]
+		return tag.position + Vector2(tag.get_minimum_size().x * 0.5 * tag_scale, 0.0)
 	if rm != null and rm.get("_state") != null and rm.get("_round_number") != null:
 		var state: int = int(rm.get("_state"))
 		ctx["active"] = state == 1 # RoundManager.State.ROUND_ACTIVE
@@ -211,9 +217,6 @@ func _tick_idle_hint(tag_scale: float) -> void:
 				if int(server.pad_slot(device)) == slot:
 					return true
 			return false
-		ctx["anchor"] = func(slot: int) -> Vector2:
-			var tag: Label = _name_tags[slot]
-			return tag.position + Vector2(tag.get_minimum_size().x * 0.5 * tag_scale, 0.0)
 	_idle_hint.tick(ctx)
 
 ## The boomstick ring (#965), for the scenarios.

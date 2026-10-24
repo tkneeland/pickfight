@@ -43,6 +43,8 @@ const UiMirrorScript: GDScript = preload("res://scripts/UiMirror.gd")
 const HostSettingsScript: GDScript = preload("res://scripts/HostSettings.gd")
 const OffscreenIndicatorsScript: GDScript = preload("res://scripts/OffscreenIndicators.gd")
 const RemoteFighterScript: GDScript = preload("res://scripts/RemoteFighter.gd")
+const NameTagsScript: GDScript = preload("res://scripts/NameTags.gd")
+const PickupSpawnRingScript: GDScript = preload("res://scripts/PickupSpawnRing.gd")
 const MAX_SLOTS: int = 8
 
 ## How long after arrival an event plays: the joiner's interpolation delay.
@@ -51,8 +53,14 @@ var delay_msec: int = 100
 var camera: Camera2D = null
 ## The joiner's copy of the host's kill feed (inside its `HostHud.tscn`).
 var kill_feed: Control = null
-## Maps a slot to the joiner's name tag Label, or null (MATCH POINT dots).
+## Maps a slot to the joiner's name tag Label, or null (MATCH POINT dots);
+## unset, the joiner's own `NameTags` copy answers.
 var name_tag_of: Callable = Callable()
+## Stock lives per slot (-1 none) for the name tags' pips; set by `RemoteClient`.
+var lives_of: Callable = Callable()
+## Called with a pickup's snapshot id when the host pops it in (#816), so the
+## joiner's pickup puppet pops the same way; set by `RemoteClient`.
+var pop_pickup: Callable = Callable()
 ## Whether the joiner's world shows a round in play (MATCH POINT dots last
 ## while it does).
 var round_playing: Callable = Callable()
@@ -80,6 +88,9 @@ var _anchors: Dictionary = {} # puppet instance id -> Node2D at its weapon head
 var edge_arrows: CanvasLayer
 var _fighters: Array = []
 var _fighter_colors: Array[Color] = []
+## The host's name tags (`NameTags.gd`, with its team badges, team rings,
+## stock pips, idle hint #826 and boomstick ring #965), over the stand-ins.
+var name_tags: Node2D
 
 func _ready() -> void:
 	name = "RemoteEffects"
@@ -107,10 +118,19 @@ func _ready() -> void:
 	edge_arrows = OffscreenIndicatorsScript.new(_fighters, func(slot: int) -> Color: return _fighter_colors[slot])
 	add_child(edge_arrows)
 	edge_arrows.build()
+	name_tags = NameTagsScript.new(_fighters,
+		func(slot: int) -> String: return str(_fighters[slot].display_name),
+		func(slot: int) -> Color: return _fighter_colors[slot])
+	name_tags.lives_of = func(slot: int) -> int: return int(lives_of.call(slot)) if lives_of.is_valid() else -1
+	add_child(name_tags)
+	name_tags.build()
+	name_tags.idle_hint().mirror = true
+	name_tags.boomstick_ring().mirror = true
 
 ## Puts slot `slot`'s stand-in where its puppet is (`puppet` null: gone).
-## `alive` and `team` are the snapshot's; `colour` the puppet's.
-func place_fighter(slot: int, puppet: Node2D, alive: bool, team: int, colour: Color) -> void:
+## `alive`, `team`, `display_name` and `weapon` (the head shape index) are the
+## snapshot's; `colour` and the hat the puppet's.
+func place_fighter(slot: int, puppet: Node2D, alive: bool, team: int, colour: Color, display_name: String = "", weapon: int = 0) -> void:
 	if slot < 0 or slot >= _fighters.size():
 		return
 	var fighter: Node2D = _fighters[slot]
@@ -121,10 +141,18 @@ func place_fighter(slot: int, puppet: Node2D, alive: bool, team: int, colour: Co
 	_fighter_colors[slot] = colour
 	if shown:
 		fighter.global_position = puppet.global_position
+		fighter.display_name = display_name if not display_name.is_empty() else "P%d" % (slot + 1)
+		fighter.hat_id = str(puppet.call("hat_id")) if puppet.has_method("hat_id") else "none"
+		fighter.set_weapon(weapon)
+
+## Slot `slot`'s stand-in (scenarios).
+func fighter_at(slot: int) -> Node2D:
+	return _fighters[slot] if slot >= 0 and slot < _fighters.size() else null
 
 ## The host's "Player numbers" setting for the arrows' seat numbers.
 func set_numbers(on: Variant) -> void:
 	edge_arrows.numbers_override = on if on is bool else null
+	name_tags.numbers_override = on if on is bool else null
 
 ## The MATCH POINT dot's round test (`MatchPointDot.gd`).
 func lobby_phase() -> String:
@@ -146,6 +174,7 @@ func queued_count() -> int:
 	return _queue.size()
 
 func _process(_delta: float) -> void:
+	name_tags.tick()
 	if _queue.is_empty():
 		return
 	var now: int = Time.get_ticks_msec()
@@ -215,8 +244,20 @@ func play(ev: Dictionary) -> void:
 				if line is Dictionary:
 					found.append(line)
 			var tags: Callable = func(slot: int) -> Label:
-				return name_tag_of.call(slot) if name_tag_of.is_valid() else null
+				return name_tag_of.call(slot) if name_tag_of.is_valid() else name_tags.name_tag(slot)
 			MatchPointPlateScript.present(self, found, tags, self, _round_number)
+		"pickup_ring":
+			PickupSpawnRingScript.spawn_at(self, _v2(ev, "p"))
+			if pop_pickup.is_valid():
+				pop_pickup.call(int(ev.get("id", -1)))
+		"idle_hint":
+			name_tags.idle_hint().show_hint(int(ev.get("s", -1)), bool(ev.get("pad", false)))
+		"idle_hint_end":
+			name_tags.idle_hint().hide_hint(int(ev.get("s", -1)))
+		"fire_clock":
+			var who: Node2D = fighter_at(int(ev.get("s", -1)))
+			if who != null:
+				who.sync_fire(float(ev.get("i", 0.0)), float(ev.get("r", 0.0)))
 		"final_ko":
 			final_ko.start(camera, self, _v2(ev, "p"))
 		"final_ko_end":

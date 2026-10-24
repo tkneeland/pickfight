@@ -19,6 +19,7 @@ const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const WeaponThemesScript := preload("res://scripts/WeaponThemes.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const PickupSpawnRingScript := preload("res://scripts/PickupSpawnRing.gd")
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
 
 ## Which pickup weapons the host switched off (#294); a scenario hands in its own.
 var settings: RefCounted = HostSettingsScript.shared()
@@ -171,17 +172,23 @@ func _spawn_pickup() -> void:
 ## The spawn cue (#816): the pickup scales up with an overshoot and a one-shot
 ## ring expands from its spot. Added here so Pickup.gd is untouched.
 func _pop_in(pickup: Node2D, parent: Node, spot: Vector2) -> void:
-	pickup.scale = Vector2.ONE * POP_START_SCALE
-	var tween: Tween = pickup.create_tween()
-	tween.tween_property(pickup, "scale", Vector2.ONE, POP_SEC).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	var ring: Node2D = PickupSpawnRingScript.new()
-	parent.add_child(ring)
-	ring.global_position = spot
+	pop_scale(pickup)
+	PickupSpawnRingScript.spawn_at(parent, spot)
+	# Issue #976: the joiner plays the same ring and pop on its pickup puppet
+	# (the id is the snapshot's `pickup_id`).
+	EffectStreamScript.record("pickup_ring", {"p": spot, "id": pickup.get_instance_id() & 0xFFFF}, pickup)
 	# Issue #998: a soft cue at the spot; online clients hear it through the
 	# generic Sfx snapshot trailer.
 	var sfx: Node = pickup.get_node_or_null(^"/root/Sfx")
 	if sfx != null:
 		sfx.play(&"pickup_spawn", spot, 1.0)
+
+## The pop-in scale (#816) on `node`, shared with the Online joiner's pickup
+## puppet (#976).
+static func pop_scale(node: Node2D) -> void:
+	node.scale = Vector2.ONE * POP_START_SCALE
+	var tween: Tween = node.create_tween()
+	tween.tween_property(node, "scale", Vector2.ONE, POP_SEC).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 ## `offered` without the weapons the host switched off (#294). Left whole if
 ## that would leave nothing, which the settings do not allow anyway.

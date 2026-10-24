@@ -12,6 +12,13 @@ const END_RADIUS: float = 80.0
 const RING_WIDTH: float = 4.0
 const RING_COLOR: Color = Color(1.0, 0.85, 0.3, 1.0)
 
+## One ring at `at` under `parent` (host spawn and the Online joiner, #976).
+static func spawn_at(parent: Node, at: Vector2) -> Node2D:
+	var ring: Node2D = (load("res://scripts/PickupSpawnRing.gd") as GDScript).new()
+	parent.add_child(ring)
+	ring.global_position = at
+	return ring
+
 func _init() -> void:
 	name = "PickupSpawnRing"
 	z_index = -1

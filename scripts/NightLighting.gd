@@ -38,6 +38,10 @@ var head_glows: Dictionary = {}
 var _attached_glows: Array[Node] = []
 var _texture: GradientTexture2D
 var _time: float = 0.0
+## The groups lit with a glow: the host's fighters and pickups, or on the
+## Online joiner (#976) its puppets of them (`Stage.night_light_groups`).
+var player_group: StringName = &"players"
+var pickup_group: StringName = &"pickups"
 ## The players and pickups this node lights, found once when it enters the
 ## tree and then as each one is added, never by a per-frame group scan:
 ## instance ids, whether each is a player, and the glow hung on each (re-hung
@@ -87,9 +91,9 @@ func _enter_tree() -> void:
 	var tree: SceneTree = get_tree()
 	if not tree.node_added.is_connected(_on_node_added):
 		tree.node_added.connect(_on_node_added)
-	for player: Node in tree.get_nodes_in_group("players"):
+	for player: Node in tree.get_nodes_in_group(player_group):
 		_consider(player)
-	for pickup: Node in tree.get_nodes_in_group("pickups"):
+	for pickup: Node in tree.get_nodes_in_group(pickup_group):
 		_consider(pickup)
 
 func _exit_tree() -> void:
@@ -110,8 +114,8 @@ func _on_node_added(node: Node) -> void:
 func _consider(node: Node) -> void:
 	if not is_instance_valid(node) or not node.is_inside_tree():
 		return
-	var is_player: bool = node.is_in_group("players")
-	if not is_player and not node.is_in_group("pickups"):
+	var is_player: bool = node.is_in_group(player_group)
+	if not is_player and not node.is_in_group(pickup_group):
 		return
 	if is_player and not node is Node2D:
 		return
@@ -157,7 +161,7 @@ func _process(delta: float) -> void:
 			_lit_ids.remove_at(k)
 			_lit_is_player.remove_at(k)
 			_lit_glows.remove_at(k)
-		elif holder.is_inside_tree() and holder.is_in_group("players" if _lit_is_player[k] else "pickups"):
+		elif holder.is_inside_tree() and holder.is_in_group(player_group if _lit_is_player[k] else pickup_group):
 			var glow: Variant = _lit_glows[k]
 			if not is_instance_valid(glow) or (glow as Node).get_parent() != holder:
 				_lit_glows[k] = _hang_glow(holder, _lit_is_player[k])
