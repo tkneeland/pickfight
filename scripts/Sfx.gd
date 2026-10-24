@@ -225,6 +225,9 @@ const SOUNDS: Dictionary = {
 	# A pickup appearing (#998): a soft short pluck where it pops in.
 	"pickup_spawn": {"files": [
 		"kenney_interface/pluck_001.ogg"], "db": -13.0, "overlap": 2, "max_sec": 0.35},
+	# A fighter coming back in a round (#1015): a soft rising chime at the spawn.
+	"respawn": {"files": [
+		"kenney_interface/confirmation_002.ogg"], "db": -10.0, "overlap": 2, "max_sec": 0.5},
 	# --- Round and UI -------------------------------------------------------
 	"countdown": {"files": [
 		"kenney_interface/tick_001.ogg"], "db": 0.0, "overlap": 1, "positional": false},

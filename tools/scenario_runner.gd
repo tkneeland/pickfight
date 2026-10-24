@@ -915,6 +915,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pause_gates_pad_clicks_and_sticks_599",
 	"remote_client_menu_clears_held_release_599",
 	"burst_of_action_taps_counts_each_press_601",
+	"respawn_plays_sound_once_per_return",
 	"respawn_skips_spawns_with_no_floor_605",
 	"respawn_stays_on_own_half_605",
 	"respawn_avoids_hazard_adjacent_spawn",
@@ -3454,6 +3455,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_menu_clears_held_release_599()
 		"burst_of_action_taps_counts_each_press_601":
 			return await _scenario_burst_of_action_taps_counts_each_press_601()
+		"respawn_plays_sound_once_per_return":
+			return await _scenario_respawn_plays_sound_once_per_return()
 		"respawn_skips_spawns_with_no_floor_605":
 			return await _scenario_respawn_skips_spawns_with_no_floor_605()
 		"respawn_stays_on_own_half_605":
@@ -43393,6 +43396,55 @@ func _respawn_rig_605(points: Array[Vector2], floors: Array[float]) -> Dictionar
 	var watched: Dictionary = {0: rig["players"][0], 1: rig["players"][1]}
 	rig["respawn"] = RespawnScript605.new(rm, watched, 1.5)
 	return rig
+## Issue #1015: a KO'd fighter coming back plays one `respawn` at the spawn
+## point; the round-start placement and a slot kicked while waiting play none.
+## The count of 1 after the return is the control: 0 without the sound.
+func _scenario_respawn_plays_sound_once_per_return() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null or not sfx.has_sound(&"respawn"):
+		return ["respawn is not in the sound table"]
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	sfx.start_recording()
+	if not await _mode_started(rig):
+		sfx.stop_recording()
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	await _await_ticks(30)
+	var at_start: int = _sfx_count(sfx, "respawn")
+	var mode: Node = rm.game_mode_node()
+	var blue: RigidBody2D = rig["players"][1]
+	blue.eliminate()
+	await _await_ticks(2)
+	var waiting: int = _sfx_count(sfx, "respawn")
+	var back: bool = await _await_condition(func() -> bool: return blue.alive, 6000)
+	await _await_ticks(30)
+	var returned: int = _sfx_count(sfx, "respawn")
+	var last: Dictionary = _sfx_last(sfx, "respawn")
+	var kicked: RigidBody2D = rig["players"][2]
+	kicked.eliminate()
+	await _await_ticks(2)
+	(rig["roster"].slots as Array).erase(2)
+	rm.call("_on_host_command", "kick", 2)
+	await _await_ticks(int(mode.respawn_sec * 60.0) + 30)
+	var after_kick: int = _sfx_count(sfx, "respawn")
+	sfx.stop_recording()
+	print("      respawn: start %d, waiting %d, returned %d, after kick %d" % [at_start, waiting, returned, after_kick])
+	if at_start != 0:
+		failures.append("round-start placement played respawn %d times" % at_start)
+	if waiting != 0:
+		failures.append("a KO'd player waiting played respawn %d times" % waiting)
+	if not back:
+		failures.append("the KO'd player never respawned")
+	if returned != 1:
+		failures.append("a respawn played respawn %d times, want 1" % returned)
+	elif not (last["position"] is Vector2 and (last["position"] as Vector2).distance_to(blue.global_position) < 80.0):
+		failures.append("the respawn sound was not at the spawn point: %s" % str(last.get("position")))
+	if after_kick != returned:
+		failures.append("a slot kicked while waiting played respawn")
+	await _teardown(rig["stage"])
+	return failures
 const RespawnScript605 := preload("res://scripts/Respawn.gd")
 func _scenario_respawn_skips_spawns_with_no_floor_605() -> Array[String]:
 	var failures: Array[String] = []
