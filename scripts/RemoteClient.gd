@@ -33,6 +33,7 @@ const StageScript: GDScript = preload("res://scripts/Stage.gd")
 const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.gd")
 const CosmeticsPanelScript: GDScript = preload("res://scripts/OnlineCosmeticsPanel.gd")
 const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
+const CopyCodeScript: GDScript = preload("res://scripts/CopyCode.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 const NetSyncScript: GDScript = preload("res://scripts/NetSync.gd")
 ## Issue #976: the host's effects, screens and HUD, drawn by the host's scripts.
@@ -196,6 +197,10 @@ var _lobby_title: Label
 var _career_button: Button
 var _lobby_list: VBoxContainer
 var _ready_button: Button
+var _copy_button: Button # #1033: the joiner's Copy code, shared logic with the host's (#863)
+var _copied_until_msec: int = 0
+## The clipboard write, a seam so scenarios never touch the real clipboard.
+var clipboard_setter: Callable = func(text: String) -> void: DisplayServer.clipboard_set(text)
 var _pad_active: bool = false # the last input was a gamepad's: no "(Enter)" on Ready (#1035)
 var _ready_want: int = -1 # the clicked Ready (0/1) awaiting the host's echo, else -1 (#550)
 var _ready_want_msec: int = 0
@@ -433,7 +438,8 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	var pad_button := event as InputEventJoypadButton
-	if pad_button != null and pad_button.pressed and not menu_open and (pad_button.button_index == JOY_BUTTON_A or pad_button.button_index == JOY_BUTTON_START) and _ready_button != null and _ready_button.is_visible_in_tree():
+	if pad_button != null and pad_button.pressed and not menu_open and (pad_button.button_index == JOY_BUTTON_A or pad_button.button_index == JOY_BUTTON_START) and _ready_button != null and _ready_button.is_visible_in_tree() \
+			and not (pad_button.button_index == JOY_BUTTON_A and _copy_button != null and _copy_button.has_focus()):
 		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
 		get_viewport().set_input_as_handled() # else a focused Ready also takes it as ui_accept and flips back (#550)
 		return
@@ -1719,6 +1725,13 @@ func _build_lobby_panel() -> void:
 	var box: VBoxContainer = _centered_panel(_lobby_panel, 380, &"")
 	_lobby_title = _label(tr("JOIN_LOBBY_TITLE"), 28, Color.WHITE, UiThemeScript.HEADING_LABEL)
 	box.add_child(_lobby_title)
+	_copy_button = Button.new()
+	_copy_button.name = "CopyCode"
+	_copy_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_copy_button.visible = false
+	_copy_button.pressed.connect(copy_room_code)
+	box.add_child(_copy_button)
+	_sync_copy_button()
 	_career_button = Button.new()
 	_career_button.name = "Career"
 	_career_button.flat = true
@@ -1882,6 +1895,22 @@ func career_text() -> String:
 		tr("CAREER_FAVOURITE") % (favourite if not favourite.is_empty() else "-"),
 	])
 
+## Issue #1033: copies the room code and reads "Copied" for 1.5 s, exactly as
+## the host's Copy code does (#863). Client-side only; the host's Hide room
+## code setting is its own screen's.
+func copy_room_code() -> void:
+	if room_code.is_empty():
+		return
+	_copied_until_msec = CopyCodeScript.press(room_code, clipboard_setter, get_tree(), _sync_copy_button)
+	_sync_copy_button()
+
+func _sync_copy_button() -> void:
+	if _copy_button == null:
+		return
+	_copy_button.text = tr(CopyCodeScript.caption_key(_copied_until_msec, false))
+	# Only in the plain lobby: not through a countdown, a match or the podium.
+	_copy_button.visible = str(lobby.get("phase", "")) == "lobby" and not room_code.is_empty()
+
 func _refresh_career() -> void:
 	if _career_button != null:
 		_career_button.text = career_text()
@@ -1917,6 +1946,7 @@ func _refresh_lobby() -> void:
 	_pause_button.visible = host
 	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")
 	_ready_button.visible = phase != "playing" and phase != "round_end"
+	_sync_copy_button()
 	_cosmetics_panel.visible = (phase == "lobby" or phase == "countdown") and not _own_ready()
 	if _ready_want != -1 and (_own_ready() == (_ready_want == 1) or GameClockScript.now_msec() - _ready_want_msec > 3000):
 		_ready_want = -1 # the host's echo arrived (or never will): mirror again (#550)
