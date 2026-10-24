@@ -129,6 +129,16 @@ static func hud_pill(label_name: String, top: int, font_size: int = 44) -> Label
 	ScreenKitScript.style_hud_pill(label, font_size)
 	return label
 
+## The shown-clock rule shared by King of the Hill, Soccer and Capture the Flag:
+## "m:ss" (rounded up) in the last `shown_sec` seconds of a clock, else "".
+const CLOCK_SHOWN_SEC: float = 30.0
+
+static func clock_text(time_left: float, shown_sec: float) -> String:
+	if time_left > shown_sec:
+		return ""
+	var whole: int = ceili(time_left)
+	return "%d:%02d" % [whole / 60, whole % 60]
+
 ## "2 - 1": team 0's score, then team 1's.
 static func score_text(scores: Dictionary) -> String:
 	return "%d - %d" % [int(scores[0]), int(scores[1])]

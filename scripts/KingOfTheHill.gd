@@ -22,7 +22,7 @@ const NetSyncScript := preload("res://scripts/NetSync.gd")
 ## Seconds a knocked-out player waits before coming back (#662).
 const RESPAWN_SEC: float = 4.0
 ## The clock shows top centre for its last this-many seconds.
-const CLOCK_SHOWN_SEC: float = 30.0
+const CLOCK_SHOWN_SEC: float = ModeKitScript.CLOCK_SHOWN_SEC
 
 var round_manager: Node
 ## Where the hill is, in world space. Left at ZERO, `start_round()` puts it at
@@ -395,8 +395,7 @@ func clock_text() -> String:
 		return tr("OVERTIME")
 	if time_limit_sec <= 0.0 or time_left > CLOCK_SHOWN_SEC:
 		return ""
-	var whole: int = ceili(time_left)
-	return "%d:%02d" % [whole / 60, whole % 60]
+	return ModeKitScript.clock_text(time_left, CLOCK_SHOWN_SEC)
 
 func _build_hud() -> void:
 	if _hud != null and is_instance_valid(_hud):

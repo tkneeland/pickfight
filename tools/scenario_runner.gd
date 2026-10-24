@@ -733,6 +733,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_stuck_ball_control_touched_or_moving_never_resets",
 	"soccer_three_goals_end_the_round_for_that_team",
 	"soccer_clock_gives_leader_the_win",
+	"soccer_clock_pill_last_30s",
 	"soccer_level_at_time_goes_to_sudden_death",
 	"soccer_ko_respawns_the_player",
 	"soccer_stages_load_goals_and_weights",
@@ -752,6 +753,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ctf_a_capture_scores_and_resets_the_flag",
 	"ctf_two_captures_end_the_round",
 	"ctf_clock_gives_leader_the_win",
+	"ctf_clock_pill_last_30s",
 	"ctf_level_at_time_goes_to_sudden_death",
 	"ctf_a_ko_drops_the_flag_and_respawns_the_player",
 	"ctf_stages_load_bases_and_weights",
@@ -3141,6 +3143,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_soccer_three_goals_end_the_round_for_that_team()
 		"soccer_clock_gives_leader_the_win":
 			return await _scenario_soccer_clock_gives_leader_the_win()
+		"soccer_clock_pill_last_30s":
+			return await _scenario_soccer_clock_pill_last_30s()
 		"soccer_level_at_time_goes_to_sudden_death":
 			return await _scenario_soccer_level_at_time_goes_to_sudden_death()
 		"soccer_ko_respawns_the_player":
@@ -3169,6 +3173,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ctf_touching_the_enemy_flag_picks_it_up()
 		"ctf_clock_gives_leader_the_win":
 			return await _scenario_ctf_clock_gives_leader_the_win()
+		"ctf_clock_pill_last_30s":
+			return await _scenario_ctf_clock_pill_last_30s()
 		"ctf_level_at_time_goes_to_sudden_death":
 			return await _scenario_ctf_level_at_time_goes_to_sudden_death()
 		"ctf_a_hit_makes_the_carrier_drop_the_flag":
@@ -36761,6 +36767,77 @@ func _scenario_soccer_clock_gives_leader_the_win() -> Array[String]:
 		failures.append("the trailing team scored the round")
 	if rm.tiebreaker() != null:
 		failures.append("a clear lead went to Sudden Death")
+	await _teardown(rig["stage"])
+	return failures
+
+## #1040: the Soccer and CTF match clocks show top centre in their last 30 s
+## ("m:ss", as King of the Hill), on the host and, through the `hud` frame's
+## mirror, on the Online joiner. `mode` is the running mode node.
+func _clock_pill_checks_1040(mode: Node, mode_id: String, rm: Node, pill: String, failures: Array[String]) -> void:
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var path: String = str(mode.get_script().resource_path)
+	var host_label: Label = mode._clock_label
+	if host_label == null:
+		failures.append("%s: the host built no clock pill" % pill)
+	var cases: Array = [[31.0, ""], [30.0, "0:30"], [29.5, "0:30"], [1.0, "0:01"], [0.0, ""]]
+	for case: Array in cases:
+		mode.time_left = float(case[0])
+		mode._update_hud()
+		var want: String = str(case[1])
+		if mode.clock_text() != want:
+			failures.append("%s: clock_text at %.1f s is '%s', wanted '%s'" % [pill, case[0], mode.clock_text(), want])
+		if host_label != null and (host_label.visible != (want != "") or host_label.text != want):
+			failures.append("%s: host pill at %.1f s is %s '%s', wanted '%s'" % [pill, case[0], host_label.visible, host_label.text, want])
+		var frame: Dictionary = preload("res://scripts/RemoteHud.gd")._mode(mode_id, mode, rm)
+		if str(frame.get("clock", "missing")) != want:
+			failures.append("%s: the hud frame carries '%s' at %.1f s, wanted '%s'" % [pill, frame.get("clock", "missing"), case[0], want])
+		var state: Dictionary = RemoteHudScript976.unpack(RemoteHudScript976._pack(UiMirrorScript976.capture(mode._hud)), {})
+		client.effects.apply_mode_hud(path, state)
+		var mine: Label = null
+		if client.effects.mode_hud != null:
+			mine = client.effects.mode_hud.get_node_or_null(NodePath(pill)) as Label
+		if mine == null:
+			failures.append("%s: the joiner has no clock pill" % pill)
+		elif mine.visible != (want != "") or mine.text != want:
+			failures.append("%s: joiner pill at %.1f s is %s '%s', wanted '%s'" % [pill, case[0], mine.visible, mine.text, want])
+	client.effects.apply_mode_hud("", {})
+	await _rc_close_241(rig)
+
+func _scenario_soccer_clock_pill_last_30s() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	var mode: Node = rm.game_mode_node()
+	await _clock_pill_checks_1040(mode, GameModesType.SOCCER, rm, "SoccerClock", failures)
+	# Frozen during the goal pause with the clock.
+	mode.time_left = 20.0
+	mode.goal_pause_sec = 5.0
+	mode.score_goal(1)
+	await _await_ticks(30)
+	if mode.time_left != 20.0 or mode._clock_label.text != "0:20" or not mode._clock_label.visible:
+		failures.append("the pill did not hold 0:20 through the goal pause (%.2f '%s')" % [mode.time_left, mode._clock_label.text])
+	await _teardown(rig["stage"])
+	return failures
+
+func _scenario_ctf_clock_pill_last_30s() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var rm: Node = rig["rm"]
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	await _clock_pill_checks_1040(mode, GameModesType.CAPTURE_THE_FLAG, rm, "CtfClock", failures)
+	mode.time_left = 20.0
+	mode._pausing = true
+	mode._pause_left = 5.0
+	await _await_ticks(30)
+	mode._update_hud()
+	if mode.time_left != 20.0 or mode._clock_label.text != "0:20" or not mode._clock_label.visible:
+		failures.append("the pill did not hold 0:20 through the capture pause (%.2f '%s')" % [mode.time_left, mode._clock_label.text])
 	await _teardown(rig["stage"])
 	return failures
 
