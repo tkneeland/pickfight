@@ -217,6 +217,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 
 ## Online
 - Room-code relay server (#238, ADR-0019)
+- Taskbar attention (#1034): when the lobby countdown (or a round) starts while the PC client's window is not focused, the OS is asked once to flash the taskbar or bounce the dock icon; nothing changes on screen or in sound, never when focused or headless, and the host is unaffected.
 - Host goes online; remote seats send relative input (#239). Online only in an Online match since #435: a Couch match refuses remote seats (the PC client reads "That host is playing a Couch match, not Online.") and Solo has no relay at all
 - PC client takes a gamepad: the first pad's right stick drives the arm (same deadzone as a host gamepad seat), and the mouse takes over again once the stick centres (#435)
 - Online edges (#446): when the host's room closes (it quits or goes offline) every remote client lands on the join screen reading "Host left.", with no host migration. A remote seat that joins mid-match watches until the next round starts, then plays, taking a freed slot at 0 points exactly as a late phone does (#161). The host pings each remote seat about once a second over the seat channel; the round trip shows beside the player in the lobby (host screen and PC client) and on the scoreboard, in a warning colour above 150 ms, and a slow ping never kicks anyone
