@@ -593,6 +593,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_spawn_refused_plays_no_sound",
 	"pickup_draw_skips_weapon_already_on_stage",
 	"pickup_draw_with_live_weapons_is_seeded_repeatable_1038",
+	"pickup_bag_refill_no_back_to_back",
+	"pickup_bag_refill_is_seeded_repeatable_1042",
 	"replay_buffer_bounded_and_saves_clip",
 	"ghost_hidden_until_touch_then_fades",
 	"ghost_cannot_hurt_and_leaves_loose_pickups_alone",
@@ -1885,6 +1887,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_draw_skips_weapon_already_on_stage()
 		"pickup_draw_with_live_weapons_is_seeded_repeatable_1038":
 			return await _scenario_pickup_draw_with_live_weapons_is_seeded_repeatable_1038()
+		"pickup_bag_refill_no_back_to_back":
+			return await _scenario_pickup_bag_refill_no_back_to_back()
+		"pickup_bag_refill_is_seeded_repeatable_1042":
+			return await _scenario_pickup_bag_refill_is_seeded_repeatable_1042()
 		"pickup_appears_at_round_start":
 			return await _scenario_pickup_appears_at_round_start()
 		"pickup_of_held_weapon_is_left_on_stage":
@@ -31686,6 +31692,50 @@ func _scenario_pickup_draw_with_live_weapons_is_seeded_repeatable_1038() -> Arra
 		director.get_parent().queue_free()
 	if runs[0] != runs[1]:
 		failures.append("the same seed dealt a different sequence with a weapon live")
+	_scenario_completed = true
+	return failures
+## Issue #1042: the first weapon of a refilled bag is never the last of the old one.
+func _scenario_pickup_bag_refill_no_back_to_back() -> Array[String]:
+	var failures: Array[String] = []
+	var offered: Array[Resource] = WeaponThemePickupWeapons.available_weapons()
+	var director: Node = _weapon_theme_director(true, 1042)
+	var refills: int = 0
+	var previous: Resource = null
+	var bad: int = 0
+	while refills < 200:
+		var fresh: bool = director._bag.is_empty()
+		var drawn: Resource = director.draw_weapon(offered)
+		if fresh:
+			refills += 1
+			if previous != null and drawn == previous:
+				bad += 1
+		previous = drawn
+	if bad > 0:
+		failures.append("%d of 200 refills opened with the weapon that closed the last bag" % bad)
+	# One weapon offered: it repeats as before.
+	var only: Array[Resource] = [offered[0]]
+	var solo: Node = _weapon_theme_director(false, 1042)
+	for i in 5:
+		if solo.draw_weapon(only) != offered[0]:
+			failures.append("a one-weapon offer stopped repeating")
+			break
+	director.get_parent().queue_free()
+	solo.get_parent().queue_free()
+	_scenario_completed = true
+	return failures
+func _scenario_pickup_bag_refill_is_seeded_repeatable_1042() -> Array[String]:
+	var failures: Array[String] = []
+	var offered: Array[Resource] = WeaponThemePickupWeapons.available_weapons()
+	var runs: Array = []
+	for r in 2:
+		var director: Node = _weapon_theme_director(true, 1042)
+		var seq: Array[String] = []
+		for i in 80:
+			seq.append(director.draw_weapon(offered).resource_path)
+		runs.append(seq)
+		director.get_parent().queue_free()
+	if runs[0] != runs[1]:
+		failures.append("the same seed dealt a different sequence")
 	_scenario_completed = true
 	return failures
 func _scenario_themed_pool_keeps_every_enabled_weapon() -> Array[String]:
