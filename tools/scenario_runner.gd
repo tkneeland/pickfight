@@ -57930,6 +57930,8 @@ func _scenario_online_client_attention_on_countdown() -> Array[String]:
 	client.queue_free()
 	await process_frame
 	_scenario_completed = true
+	return failures
+
 ## #1035: Enter readies and un-readies in the client lobby, like the Ready button.
 ## Ignored with a text field focused or the Esc menu open; the "(Enter)" hint
 ## shows on Ready until a gamepad is the active input; a remote's Ready alone
