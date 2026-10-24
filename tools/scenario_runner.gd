@@ -1240,6 +1240,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
 	"online_client_lobby_copy_code",
+	"online_client_attention_on_countdown",
 	"online_client_enter_readies",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4150,6 +4151,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_review_fixes_refactor_phone()
 		"online_client_lobby_copy_code":
 			return await _scenario_online_client_lobby_copy_code()
+		"online_client_attention_on_countdown":
+			return await _scenario_online_client_attention_on_countdown()
 		"online_client_enter_readies":
 			return await _scenario_online_client_enter_readies()
 		_:
@@ -57889,6 +57892,10 @@ func _scenario_remote_loaded_weapon_art_976() -> Array[String]:
 ## timing and keys (#863): a press puts the room code on the clipboard, reads
 ## "Copied" for 1.5 s, then reverts; it hides during the countdown and a match.
 func _scenario_online_client_lobby_copy_code() -> Array[String]:
+## #1034: a countdown starting while the client window is unfocused asks the OS
+## for attention once; with focus none; a later round start does not ask again
+## for the same countdown. The real request is a no-op headless.
+func _scenario_online_client_attention_on_countdown() -> Array[String]:
 	var failures: Array[String] = []
 	var client: Node = RemoteClientScene241.instantiate()
 	client.settings_path = ""
@@ -57929,10 +57936,45 @@ func _scenario_online_client_lobby_copy_code() -> Array[String]:
 	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "playing", "players": [{"slot": 2, "ready": false}]}))
 	if button.is_visible_in_tree():
 		failures.append("Copy code shows during a match")
+	var asks: Array[int] = [0]
+	client.attention_requester = func() -> void: asks[0] += 1
+	var focused: Array[bool] = [false]
+	client.window_focused = func() -> bool: return focused[0]
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 2}))
+	var lobby_phase := func(phase: String, count: int) -> void:
+		client._on_host_text(JSON.stringify({"t": "lobby", "phase": phase, "count": count, "players": [{"slot": 2, "ready": true}]}))
+	lobby_phase.call("lobby", 0)
+	if asks[0] != 0:
+		failures.append("the lobby alone asked for attention")
+	lobby_phase.call("countdown", 3)
+	lobby_phase.call("countdown", 2)
+	lobby_phase.call("countdown", 1)
+	if asks[0] != 1:
+		failures.append("an unfocused countdown asked %d times, not once" % asks[0])
+	client._attention_on_round_start()
+	if asks[0] != 1:
+		failures.append("the round start asked again for the same countdown (%d)" % asks[0])
+	lobby_phase.call("lobby", 0)
+	lobby_phase.call("countdown", 3)
+	if asks[0] != 2:
+		failures.append("a second countdown did not ask (%d)" % asks[0])
+	client._attention_on_round_start()
+	lobby_phase.call("lobby", 0)
+	focused[0] = true
+	lobby_phase.call("countdown", 3)
+	client._attention_on_round_start()
+	if asks[0] != 2:
+		failures.append("a focused window asked for attention (%d)" % asks[0])
+	var fresh: Node = RemoteClientScene241.instantiate()
+	fresh.attention_requester.call() # headless: must not touch the window
+	fresh.free()
 	client.queue_free()
 	await process_frame
 	_scenario_completed = true
 	return failures
+	return failures
+
 ## #1035: Enter readies and un-readies in the client lobby, like the Ready button.
 ## Ignored with a text field focused or the Esc menu open; the "(Enter)" hint
 ## shows on Ready until a gamepad is the active input; a remote's Ready alone

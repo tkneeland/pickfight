@@ -173,6 +173,14 @@ var _host_hud: CanvasLayer
 var _modifier_label: Label
 var effects: Node2D
 var _last_round_phase: int = 0
+## Issue #1034: a countdown or round starting while the window is unfocused asks
+## the OS for attention (taskbar flash / dock bounce) once. Both are seams so a
+## scenario can count the request; headless never reaches the real window.
+var window_focused: Callable = func() -> bool: return DisplayServer.window_is_focused()
+var attention_requester: Callable = func() -> void:
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_request_attention()
+var _attention_asked_for_countdown: bool = false
 var _ui_text: String = ""
 var _stage_night: bool = false
 ## Pickup snapshot ids the host just popped in -> give-up time (msec).
@@ -664,6 +672,7 @@ func _on_host_text(text: String) -> void:
 		return
 	match str(msg.get("t", "")):
 		"lobby":
+			_attention_on_lobby(str(lobby.get("phase", "")), str(msg.get("phase", "")))
 			lobby = msg
 			_refresh_lobby()
 		"hud":
@@ -1945,6 +1954,22 @@ func _refresh_lobby() -> void:
 		_ready_button.set_pressed_no_signal(_own_ready()) # mirror the server: it clears ready at match start and victory (#518)
 	_sync_capture()
 
+## Issue #1034: the lobby countdown starting (from the lobby state the client
+## already gets) asks for attention once while the window is unfocused.
+func _attention_on_lobby(prev_phase: String, phase: String) -> void:
+	if phase != "countdown":
+		_attention_asked_for_countdown = false
+	elif prev_phase != "countdown" and not window_focused.call():
+		attention_requester.call()
+		_attention_asked_for_countdown = true
+
+## A round starting asks too, unless this countdown already did.
+func _attention_on_round_start() -> void:
+	if _attention_asked_for_countdown:
+		_attention_asked_for_countdown = false
+	elif not window_focused.call():
+		attention_requester.call()
+
 func _refresh_hud() -> void:
 	if _hud == null:
 		return
@@ -1958,6 +1983,7 @@ func _refresh_hud() -> void:
 	if phase != _last_round_phase and effects != null:
 		if phase == PHASE_ROUND_ACTIVE:
 			effects.round_started()
+			_attention_on_round_start()
 		elif phase != PHASE_ROUND_END:
 			effects.round_left()
 	_last_round_phase = phase
