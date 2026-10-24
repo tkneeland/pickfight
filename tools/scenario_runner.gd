@@ -33491,8 +33491,10 @@ func _scenario_ghost_boo_skips_spawn_protected() -> Array[String]:
 	var park: Vector2 = far.global_position
 	# The protected rival is nearest, an unprotected one 80 px out: the Boo goes to the latter.
 	ghost.global_position = near.global_position + Vector2(-20.0, 0.0)
-	far.global_position = ghost.global_position + Vector2(80.0, -40.0)
-	far.linear_velocity = Vector2.ZERO
+	# teleport_to carries the weapon rig along. A bare global_position write left it at the
+	# spawn, and the torn joints yanked `far` back in proportion to the distance it had been
+	# moved: a dvx of -3000 whenever the random spawn rotation put it far from `near` (#1066).
+	far.teleport_to(ghost.global_position + Vector2(80.0, -40.0))
 	var near_before: float = near.linear_velocity.x
 	var far_before: float = far.linear_velocity.x
 	players[0].push_ghost_action()
@@ -33503,8 +33505,7 @@ func _scenario_ghost_boo_skips_spawn_protected() -> Array[String]:
 		failures.append("the boo did not fall through to the unprotected rival (dvx %.1f)" % (far.linear_velocity.x - far_before))
 	# Only the protected rival in range: nothing happens and no cooldown starts.
 	ghost._boo_cooldown = 0.0
-	far.global_position = park
-	far.linear_velocity = Vector2.ZERO
+	far.teleport_to(park)
 	ghost.global_position = near.global_position + Vector2(-20.0, 0.0)
 	near_before = near.linear_velocity.x
 	players[0].push_ghost_action()
