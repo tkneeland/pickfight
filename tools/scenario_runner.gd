@@ -730,6 +730,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_stuck_ball_returns_to_centre",
 	"soccer_stuck_ball_control_touched_or_moving_never_resets",
 	"soccer_three_goals_end_the_round_for_that_team",
+	"soccer_clock_gives_leader_the_win",
+	"soccer_level_at_time_goes_to_sudden_death",
 	"soccer_ko_respawns_the_player",
 	"soccer_stages_load_goals_and_weights",
 	"soccer_top_scorer_award_and_goal_credit",
@@ -3131,6 +3133,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_soccer_stuck_ball(false)
 		"soccer_three_goals_end_the_round_for_that_team":
 			return await _scenario_soccer_three_goals_end_the_round_for_that_team()
+		"soccer_clock_gives_leader_the_win":
+			return await _scenario_soccer_clock_gives_leader_the_win()
+		"soccer_level_at_time_goes_to_sudden_death":
+			return await _scenario_soccer_level_at_time_goes_to_sudden_death()
 		"soccer_ko_respawns_the_player":
 			return await _scenario_soccer_ko_respawns_the_player()
 		"soccer_stages_load_goals_and_weights":
@@ -36650,6 +36656,84 @@ func _scenario_soccer_three_goals_end_the_round_for_that_team() -> Array[String]
 		failures.append("the round was not over after the third goal (phase '%s')" % rm.lobby_phase())
 	await _teardown(rig["stage"])
 	return failures
+## #1012: the 5-minute clock stops in the goal pause; at time the leader wins.
+## Control: with time left the same round goes on.
+func _scenario_soccer_clock_gives_leader_the_win() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	if absf(mode.time_left - 300.0) > 1.0:
+		failures.append("the clock started at %.1f s, wanted 300" % mode.time_left)
+	mode.goal_pause_sec = 1.0
+	mode.score_goal(1)
+	var frozen: float = mode.time_left
+	await _await_ticks(30)
+	if mode.time_left != frozen:
+		failures.append("the clock ran during the goal pause (%.2f -> %.2f)" % [frozen, mode.time_left])
+	await _await_msec(1500)
+	if not mode.time_left < frozen:
+		failures.append("the clock did not run again after the kick-off")
+	# Control: a goal ahead and time left is not a win.
+	if rm.lobby_phase() == "round_end":
+		failures.append("control: the round ended with time left")
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return rm.team_score(1) == 1, 3000):
+		failures.append("the leading team did not win when the clock ran out")
+	if rm.team_score(0) != 0:
+		failures.append("the trailing team scored the round")
+	if rm.tiebreaker() != null:
+		failures.append("a clear lead went to Sudden Death")
+	await _teardown(rig["stage"])
+	return failures
+
+## #1012: a level score at time plays the shared Sudden Death in place,
+## "Overtime!", with no golden goal: goals stop counting and a KO wins.
+## Control: before time is up there is no tiebreaker.
+func _scenario_soccer_level_at_time_goes_to_sudden_death() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	var announcer: Node = _callout_announcer()
+	await _await_ticks(20)
+	if rm.tiebreaker() != null or mode.overtime:
+		failures.append("control: Sudden Death began before the clock ran out")
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return mode.overtime, 3000):
+		failures.append("a level score at time did not start overtime")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(4)
+	if rm.tiebreaker() == null:
+		failures.append("overtime did not use the shared Sudden Death tiebreaker")
+	if rm.lobby_phase() == "round_end":
+		failures.append("a level score ended the round instead of playing on")
+	if announcer != null and not announcer.said.has("announce_overtime"):
+		failures.append("overtime was not announced: %s" % [announcer.said])
+	for player: RigidBody2D in players:
+		if not player.alive:
+			failures.append("a fighter was out at the start of overtime")
+	mode.score_goal(0)
+	if int(mode.scores[0]) != 0:
+		failures.append("a goal counted in overtime (a golden goal)")
+	players[0].strike_landed.emit(players[1], 5.0, Vector2.ZERO, false)
+	if not await _await_condition(func() -> bool: return rm.team_score(0) == 1, 3000):
+		failures.append("one hit in overtime did not decide the round")
+	if players[1].alive:
+		failures.append("the overtime victim came back")
+	await _teardown(rig["stage"])
+	return failures
+
 ## A knocked-out player is back in about 1.5 s with spawn protection, and the
 ## round has not ended even when a team is briefly empty.
 func _scenario_soccer_ko_respawns_the_player() -> Array[String]:
