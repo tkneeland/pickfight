@@ -103,6 +103,12 @@ func _apply_field(delta: float) -> bool:
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var seen: Dictionary = {}
 	var affected: bool = false
+	# A protected fighter's weapon head is dragged by the field too, and the haft
+	# takes the fighter with it, so the head is skipped as well (#1056).
+	var protected_heads: Dictionary = {}
+	for node: Node in get_tree().get_nodes_in_group("players"):
+		if node.get("spawn_protected") == true and node.has_method("weapon_head_rid"):
+			protected_heads[node.weapon_head_rid()] = true
 	for result: Dictionary in space.intersect_shape(query, MAX_RESULTS):
 		var body: RigidBody2D = result["collider"] as RigidBody2D
 		if body == null or not is_instance_valid(body) or seen.has(body.get_instance_id()):
@@ -110,6 +116,8 @@ func _apply_field(delta: float) -> bool:
 		seen[body.get_instance_id()] = true
 		if not _is_movable(body):
 			continue
+		if body.get("spawn_protected") == true or protected_heads.has(body.get_rid()):
+			continue  # just respawned: not hauled off its ledge (#1056)
 		var to_wielder: Vector2 = wielder.global_position - body.global_position
 		var distance: float = to_wielder.length()
 		if distance < MIN_DISTANCE or distance >= _range:
