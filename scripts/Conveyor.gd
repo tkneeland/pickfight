@@ -48,7 +48,18 @@ const _CHEVRON_SPACING: float = 40.0
 ## with the host's (NetSync.gd); within a few pixels is in step.
 const NET_CLOCKS: Array[String] = ["_scroll"]
 const NET_CLOCK_TOLERANCE: float = 4.0
+
+## Issue #1060: a low clunk when a living fighter first steps onto the belt, at
+## most once per fighter per second (the `SpeedStrip` whoosh pattern). Played on
+## the host only; online clients hear it through the generic Sfx snapshot
+## trailer, so nothing here is replicated.
+const CLUNK_INTERVAL_SEC: float = 1.0
+
 var _detector: Area2D
+## Instance ids of the fighters carried last tick.
+var _carried_last: Dictionary = {}
+## Instance id -> seconds until that fighter may clunk again.
+var _clunk_wait: Dictionary = {}
 var _chevrons: Node2D
 var _scroll: float = 0.0
 
@@ -87,9 +98,23 @@ func _rebuild_chevrons() -> void:
 		_chevrons.add_child(chevron)
 
 func _physics_process(delta: float) -> void:
+	for id: int in _clunk_wait.keys():
+		var left: float = float(_clunk_wait[id]) - delta
+		if left <= 0.0:
+			_clunk_wait.erase(id)
+		else:
+			_clunk_wait[id] = left
+	var now: Dictionary = {}
 	for body: Node2D in _detector.get_overlapping_bodies():
 		if body is RigidBody2D and body.is_in_group("players") and PartKitScript.touching(self, body):
 			_carry(body as RigidBody2D, delta)
+			if bool(body.get("alive")):
+				var id: int = body.get_instance_id()
+				now[id] = true
+				if not _carried_last.has(id) and not _clunk_wait.has(id):
+					_clunk_wait[id] = CLUNK_INTERVAL_SEC
+					PartKitScript.sfx(self, &"belt_step", body.global_position)
+	_carried_last = now
 	_animate(delta)
 
 ## The weapon (head and haft) moves with the body; see `BouncePad`'s note on

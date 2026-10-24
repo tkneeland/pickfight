@@ -77,6 +77,8 @@ var _free_numbers: Array[DamageNumber] = []
 ## `ZERO_SETTINGS_KEY` for the grey `0`.
 var _label_settings: Dictionary = {}
 const ZERO_SETTINGS_KEY: int = -1
+## Added to a font size to key its lethal (red) settings apart from the white.
+const LETHAL_SETTINGS_KEY_OFFSET: int = 1000
 
 func _ready() -> void:
 	z_index = 100
@@ -140,7 +142,7 @@ func show_strike(point: Vector2, amount: float, lethal: bool, colour: Color) -> 
 		var font_size: int = _number_font(amount)
 		var number: DamageNumber = _free_numbers.pop_back() if not _free_numbers.is_empty() else DamageNumber.new()
 		number.done = _retire
-		number.setup(point, amount, font_size, world_scale, _settings_for(amount, font_size))
+		number.setup(point, amount, font_size, world_scale, _settings_for(amount, font_size, lethal))
 		add_child(number)
 
 ## Settings > "Damage numbers" (#873); on when there is no Sfx autoload.
@@ -164,14 +166,19 @@ static func _number_font_face() -> Font:
 	var font: Font = load(UiThemeScript.HEADING_FONT_PATH) as Font
 	return font if font != null else ThemeDB.fallback_font
 
-## One shared LabelSettings per font size (and one for the grey `0`).
-func _settings_for(amount: float, font_size: int) -> LabelSettings:
-	var key: int = font_size if amount > 0.0 else ZERO_SETTINGS_KEY
+## One shared LabelSettings per font size and lethal-or-not (and one for the
+## grey `0`). A lethal number is LETHAL_COLOR (#1062); keys are font_size, or
+## font_size + LETHAL_SETTINGS_KEY_OFFSET for the lethal variant.
+func _settings_for(amount: float, font_size: int, lethal: bool = false) -> LabelSettings:
+	var damaging: bool = amount > 0.0
+	var key: int = ZERO_SETTINGS_KEY
+	if damaging:
+		key = font_size + LETHAL_SETTINGS_KEY_OFFSET if lethal else font_size
 	var settings: LabelSettings = _label_settings.get(key)
 	if settings == null:
 		settings = LabelSettings.new()
 		settings.font_size = font_size
-		settings.font_color = Color.WHITE if amount > 0.0 else ZERO_NUMBER_COLOR
+		settings.font_color = (LETHAL_COLOR if lethal else Color.WHITE) if damaging else ZERO_NUMBER_COLOR
 		settings.outline_size = maxi(4, font_size / 5)
 		settings.outline_color = UiThemeScript.INK
 		settings.font = _number_font_face()

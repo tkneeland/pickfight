@@ -159,6 +159,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"boomstick_own_head_never_blocks",
 	"world_stopped_head_blocks_arriving_head",
 	"conveyor_carries_player",
+	"conveyor_plays_sound_once",
 	"conveyor_flatlands_spawns_clear",
 	"conveyor_two_more_stages",
 	"teleporter_moves_player_to_twin",
@@ -172,6 +173,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mud_patch_overpass_spawns_clear",
 	"ice_patch_restores_when_stage_freed",
 	"speed_strip_boosts_run_distance",
+	"speed_strip_plays_sound_once",
 	"stage_speed_strips_placed",
 	"mud_patch_slows_player",
 	"mud_patch_plays_squelch_once_on_entry",
@@ -324,6 +326,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"magnet_ignores_wielder_dead_and_dropped",
 	"magnet_does_not_pull_through_solid_terrain",
 	"magnet_plays_pull_sound_rate_limited",
+	"magnet_skips_spawn_protected",
 	"launcher_circle_swing_does_not_fire",
 	"flail_whip_damage_scales_with_speed",
 	"flail_ball_does_not_tunnel_thin_platform",
@@ -602,6 +605,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ghost_grabs_carries_and_drops_one_pickup_at_a_time_660",
 	"ghost_boo_shoves_nearest_rival_on_cooldown_without_ko_credit_660",
 	"ghost_boo_skips_teammates_660",
+	"ghost_boo_skips_spawn_protected",
 	"ghost_round_end_drops_what_it_carries_660",
 	"ghost_phone_tap_and_pad_a_do_the_context_action_660",
 	"ghost_cleared_at_round_end_and_never_for_bots",
@@ -740,6 +744,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"soccer_ko_respawns_the_player",
 	"soccer_stages_load_goals_and_weights",
 	"soccer_top_scorer_award_and_goal_credit",
+	"soccer_goal_banner_names_scorer",
 	"bot_soccer_pushes_the_ball_toward_the_enemy_goal",
 	"announcer_calls_soccer_and_goal",
 	"bot_four_bots_finish_a_king_of_the_hill_round",
@@ -760,6 +765,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ctf_a_ko_drops_the_flag_and_respawns_the_player",
 	"ctf_stages_load_bases_and_weights",
 	"ctf_flag_runner_award",
+	"ctf_capture_banner_names_carrier",
 	"bot_ctf_attackers_defenders_and_carrier_chase",
 	"announcer_calls_capture_the_flag",
 	"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel",
@@ -819,6 +825,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_mode_huds_976",
 	"remote_client_victory_awards_976",
 	"remote_name_tags_and_match_point_dots_976",
+	"remote_last_life_pip_red_1064",
+	"stock_last_life_pip_red",
 	"remote_idle_hint_976",
 	"remote_boomstick_ring_976",
 	"remote_pickup_spawn_ring_976",
@@ -1136,6 +1144,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_slider_reset_by_restore_defaults_824",
 	"kill_feed_switch_833",
 	"damage_numbers_switch_873",
+	"damage_number_lethal_colour",
 	"match_point_plate_switch_off_shows_none",
 	"stage_title_card_switch_off_shows_none",
 	"juice_hit_pause_switch_off_never_pauses",
@@ -1231,6 +1240,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
 	"online_client_lobby_copy_code",
+	"online_client_enter_readies",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -2012,6 +2022,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_world_stopped_head_blocks_arriving_head()
 		"conveyor_carries_player":
 			return await _scenario_conveyor_carries_player()
+		"conveyor_plays_sound_once":
+			return await _scenario_conveyor_plays_sound_once()
 		"conveyor_flatlands_spawns_clear":
 			return await _scenario_conveyor_flatlands_spawns_clear()
 		"conveyor_two_more_stages":
@@ -2038,6 +2050,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_restores_when_stage_freed()
 		"speed_strip_boosts_run_distance":
 			return await _scenario_speed_strip_boosts_run_distance()
+		"speed_strip_plays_sound_once":
+			return await _scenario_speed_strip_plays_sound_once()
 		"stage_speed_strips_placed":
 			return await _scenario_stage_speed_strips_placed()
 		"mud_patch_slows_player":
@@ -2342,6 +2356,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_magnet_does_not_pull_through_solid_terrain()
 		"magnet_plays_pull_sound_rate_limited":
 			return await _scenario_magnet_plays_pull_sound_rate_limited()
+		"magnet_skips_spawn_protected":
+			return await _scenario_magnet_skips_spawn_protected()
 		"launcher_circle_swing_does_not_fire":
 			return await _scenario_launcher_circle_swing_does_not_fire()
 		"flail_whip_damage_scales_with_speed":
@@ -2890,6 +2906,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ghost_boo_shoves_nearest_rival_on_cooldown_without_ko_credit_660()
 		"ghost_boo_skips_teammates_660":
 			return await _scenario_ghost_boo_skips_teammates_660()
+		"ghost_boo_skips_spawn_protected":
+			return await _scenario_ghost_boo_skips_spawn_protected()
 		"ghost_round_end_drops_what_it_carries_660":
 			return await _scenario_ghost_round_end_drops_what_it_carries_660()
 		"ghost_phone_tap_and_pad_a_do_the_context_action_660":
@@ -3160,6 +3178,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_soccer_stages_load_goals_and_weights()
 		"soccer_top_scorer_award_and_goal_credit":
 			return await _scenario_soccer_top_scorer_award_and_goal_credit()
+		"soccer_goal_banner_names_scorer":
+			return await _scenario_soccer_goal_banner_names_scorer()
 		"bot_soccer_pushes_the_ball_toward_the_enemy_goal":
 			return await _scenario_bot_soccer_pushes_the_ball_toward_the_enemy_goal()
 		"announcer_calls_soccer_and_goal":
@@ -3200,6 +3220,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ctf_stages_load_bases_and_weights()
 		"ctf_flag_runner_award":
 			return await _scenario_ctf_flag_runner_award()
+		"ctf_capture_banner_names_carrier":
+			return await _scenario_ctf_capture_banner_names_carrier()
 		"bot_ctf_attackers_defenders_and_carrier_chase":
 			return await _scenario_bot_ctf_attackers_defenders_and_carrier_chase()
 		"announcer_calls_capture_the_flag":
@@ -3318,6 +3340,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_victory_awards_976()
 		"remote_name_tags_and_match_point_dots_976":
 			return await _scenario_remote_name_tags_and_match_point_dots_976()
+		"remote_last_life_pip_red_1064":
+			return await _scenario_remote_last_life_pip_red_1064()
+		"stock_last_life_pip_red":
+			return await _scenario_stock_last_life_pip_red()
 		"remote_idle_hint_976":
 			return await _scenario_remote_idle_hint_976()
 		"remote_boomstick_ring_976":
@@ -3942,6 +3968,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kill_feed_switch_833()
 		"damage_numbers_switch_873":
 			return await _scenario_damage_numbers_switch_873()
+		"damage_number_lethal_colour":
+			return await _scenario_damage_number_lethal_colour()
 		"match_point_plate_switch_off_shows_none":
 			return await _scenario_match_point_plate_switch_off_shows_none()
 		"stage_title_card_switch_off_shows_none":
@@ -4122,6 +4150,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_review_fixes_refactor_phone()
 		"online_client_lobby_copy_code":
 			return await _scenario_online_client_lobby_copy_code()
+		"online_client_enter_readies":
+			return await _scenario_online_client_enter_readies()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -4606,7 +4636,7 @@ func _new_stage() -> Node2D:
 func _spawn_player(stage: Node2D, pos: Vector2) -> RigidBody2D:
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	stage.add_child(player)
-	player.global_position = pos
+	player.global_position = pos  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	player.bind_controller()
 	return player
 ## Frees a scenario's stage and marks the scenario complete. A teardown with
@@ -5520,12 +5550,12 @@ func _scenario_damage_reddens_fill_identity_persists() -> Array[String]:
 	var a: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	a.identity_color = IDENTITY_A_COLOR
 	stage.add_child(a)
-	a.global_position = DEEP_PARK_POSITION
+	a.global_position = DEEP_PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	a.bind_controller()
 	var b: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	b.identity_color = IDENTITY_B_COLOR
 	stage.add_child(b)
-	b.global_position = DEEP_PARK_POSITION + Vector2(200.0, 0.0)
+	b.global_position = DEEP_PARK_POSITION + Vector2(200.0, 0.0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	b.bind_controller()
 	await physics_frame
 	_brace(a)
@@ -5808,12 +5838,12 @@ func _scenario_stage_rotates_each_round() -> Array[String]:
 	var p1: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	p1.name = "P1"
 	stage.add_child(p1)
-	p1.global_position = DEEP_PARK_POSITION
+	p1.global_position = DEEP_PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	p1.bind_controller()
 	var p2: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	p2.name = "P2"
 	stage.add_child(p2)
-	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)
+	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	p2.bind_controller()
 	var roster := _FakeRoster.new()
 	roster.name = "Roster"
@@ -8799,12 +8829,12 @@ func _collect_stage_rotation(stage_names: PackedStringArray, seed_value: int, ro
 	var p1: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	p1.name = "P1"
 	stage.add_child(p1)
-	p1.global_position = DEEP_PARK_POSITION
+	p1.global_position = DEEP_PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	p1.bind_controller()
 	var p2: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	p2.name = "P2"
 	stage.add_child(p2)
-	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)
+	p2.global_position = DEEP_PARK_POSITION + Vector2(300, 0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	p2.bind_controller()
 	var roster := _FakeRoster.new()
 	roster.name = "Roster"
@@ -11568,7 +11598,7 @@ func _scenario_teleporter_moves_player_to_twin() -> Array[String]:
 		var ticks_ignored: int = 0
 		var sent_again: bool = false
 		for tick in 120:
-			player.global_position = TELEPORTER_A
+			player.teleport_to(TELEPORTER_A)
 			player.linear_velocity = Vector2.ZERO
 			await physics_frame
 			if player.global_position.x > 400.0:
@@ -11586,7 +11616,7 @@ func _scenario_teleporter_moves_player_to_twin() -> Array[String]:
 	var ghost: RigidBody2D = _spawn_player(stage, TELEPORTER_A)
 	ghost.alive = false
 	for _tick in 20:
-		ghost.global_position = TELEPORTER_A
+		ghost.teleport_to(TELEPORTER_A)
 		ghost.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if ghost.global_position.distance_to(TELEPORTER_A) > 40.0:
@@ -11616,7 +11646,7 @@ func _scenario_teleporter_plays_own_sound() -> Array[String]:
 		failures.append("the teleporter still plays wind_gust")
 	# Held on the exit portal inside the 1 s window: ignored, so silent.
 	for _tick in 30:
-		player.global_position = TELEPORTER_B
+		player.teleport_to(TELEPORTER_B)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if _sfx_count(sfx, "teleport") != played:
@@ -11653,6 +11683,79 @@ func _scenario_stage_teleporters_pair_up() -> Array[String]:
 			failures.append("%s has %d teleporters, want 2" % [stage_name, ends.size()])
 		await _teardown(stage, false)
 	_scenario_completed = true
+	return failures
+## Issue #1060: stepping onto a conveyor belt plays belt_step once; staying is
+## silent; a second entry within 1 s is silent, after 1 s plays again; a dead
+## fighter (ghost) plays none. The sound reaches online joiners through the
+## Sfx `played` signal -> snapshot sound trailer, at the same position.
+func _belt_step_drop(player: RigidBody2D, belt: StaticBody2D, sfx: Node) -> int:
+	player.teleport_to(belt.position + Vector2(0, -60))
+	player.linear_velocity = Vector2.ZERO
+	var before: int = _sfx_count(sfx, "belt_step")
+	for _tick in 40:
+		await physics_frame
+	return _sfx_count(sfx, "belt_step") - before
+func _scenario_conveyor_plays_sound_once() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"belt_step"):
+		return ["belt_step is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var belt: StaticBody2D = ConveyorScene.instantiate() as StaticBody2D
+	belt.size = Vector2(6000, 10)
+	belt.position = PART_POSITION
+	stage.add_child(belt)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	var heard: Array = []
+	sfx.played.connect(func(sound: StringName, position: Variant, strength: float) -> void:
+		heard.append({"name": String(sound), "position": position, "strength": strength}))
+	sfx.start_recording()
+	for _tick in 90:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "belt_step")
+	var last: Dictionary = _sfx_last(sfx, "belt_step")
+	for _tick in 90:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "belt_step") - first
+	var again: int = await _belt_step_drop(player, belt, sfx)
+	var quick: int = await _belt_step_drop(player, belt, sfx)
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _belt_step_drop(player, belt, sfx)
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _belt_step_drop(player, belt, sfx)
+	sfx.stop_recording()
+	print("      clunks: entry %d, staying %d, quick re-entry %d, later re-entry %d, dead %d" % [first, stayed, quick, later, dead])
+	if first != 1:
+		failures.append("stepping onto the belt played belt_step %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("belt_step was not positional")
+	if stayed != 0:
+		failures.append("staying on the belt played %d more clunks" % stayed)
+	if again != 1:
+		failures.append("re-entering after more than 1 s (first drop) played %d clunks, want 1" % again)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d clunks" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s played %d clunks, want 1" % later)
+	if dead != 0:
+		failures.append("a dead fighter played %d clunks" % dead)
+	var trailer: PackedByteArray = SnapshotCaptureScript251.encode_sound_trailer(heard, "")
+	var split: Dictionary = SnapshotCaptureScript251.split_sound_trailer(SnapshotScript251.encode(_rc_world_241(0, 1)) + trailer)
+	var belt_events: Array = []
+	for ev: Dictionary in split["events"]:
+		if ev["name"] == "belt_step":
+			belt_events.append(ev)
+	if belt_events.size() != 3:
+		failures.append("the trailer carried %d belt_step events, want 3" % belt_events.size())
+	elif not (belt_events[0]["position"] is Vector2) or (belt_events[0]["position"] as Vector2).distance_to(heard[0]["position"]) > 1.0:
+		failures.append("the trailer's belt_step position %s differs from the host's %s" % [belt_events[0]["position"], heard[0]["position"]])
+	await _teardown(stage)
 	return failures
 ## Conveyor drift (#842): drops a player onto a belt (or plain ground), lets
 ## them settle, then returns how far they travelled along x in 90 ticks. The
@@ -11846,7 +11949,7 @@ func _scenario_ice_patch_slides_player_and_restores() -> Array[String]:
 ## Issue #993: stepping onto ice plays ice_skid once; staying is silent; a
 ## re-entry within 1 s is silent, after 1 s plays again; a ghost plays none.
 func _ice_skid_drop(player: RigidBody2D, ice: StaticBody2D, sfx: Node) -> int:
-	player.global_position = ice.position + Vector2(0, -60)
+	player.teleport_to(ice.position + Vector2(0, -60))
 	player.linear_velocity = Vector2.ZERO
 	var before: int = _sfx_count(sfx, "ice_skid")
 	for _tick in 40:
@@ -12117,6 +12220,81 @@ func _scenario_speed_strip_boosts_run_distance() -> Array[String]:
 ## Speed strips on two more stages (#961): Flatlands carries one on its floor
 ## and Switchyard a mirrored pair, each inside the floor's width, at least 100 px
 ## from either floor edge, with no spawn, pickup spot or hill spot over it.
+## Issue #1058: stepping onto a speed strip plays strip_boost once; staying is
+## silent; a second entry within 1 s is silent, after 1 s plays again; a dead
+## fighter (ghost) plays none. The sound reaches online joiners through the
+## Sfx `played` signal -> snapshot sound trailer, at the same position.
+func _strip_boost_drop(player: RigidBody2D, strip: StaticBody2D, sfx: Node) -> int:
+	player.teleport_to(strip.position + Vector2(0, -60))
+	player.linear_velocity = Vector2.ZERO
+	var before: int = _sfx_count(sfx, "strip_boost")
+	for _tick in 40:
+		await physics_frame
+	return _sfx_count(sfx, "strip_boost") - before
+func _scenario_speed_strip_plays_sound_once() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"strip_boost"):
+		return ["strip_boost is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var strip: StaticBody2D = SpeedStripScene.instantiate() as StaticBody2D
+	strip.size = Vector2(1600, 10)
+	strip.position = PART_POSITION
+	stage.add_child(strip)
+	var player: RigidBody2D = _spawn_player(stage, PART_POSITION + Vector2(0, -10.0 / 2.0 - PLAYER_RADIUS - 4.0))
+	player.set_input_vector(Vector2.UP)
+	var heard: Array = []
+	sfx.played.connect(func(sound: StringName, position: Variant, strength: float) -> void:
+		heard.append({"name": String(sound), "position": position, "strength": strength}))
+	sfx.start_recording()
+	for _tick in 90:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "strip_boost")
+	var last: Dictionary = _sfx_last(sfx, "strip_boost")
+	for _tick in 90:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "strip_boost") - first
+	var again: int = await _strip_boost_drop(player, strip, sfx)
+	var quick: int = await _strip_boost_drop(player, strip, sfx)
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _strip_boost_drop(player, strip, sfx)
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _strip_boost_drop(player, strip, sfx)
+	sfx.stop_recording()
+	print("      whooshes: entry %d, staying %d, quick re-entry %d, later re-entry %d, dead %d" % [first, stayed, quick, later, dead])
+	if first != 1:
+		failures.append("stepping onto the strip played strip_boost %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("strip_boost was not positional")
+	if stayed != 0:
+		failures.append("staying on the strip played %d more whooshes" % stayed)
+	if again != 1:
+		failures.append("re-entering after more than 1 s (first drop) played %d whooshes, want 1" % again)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d whooshes" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s played %d whooshes, want 1" % later)
+	if dead != 0:
+		failures.append("a dead fighter played %d whooshes" % dead)
+	# Online parity: the same event, encoded into the snapshot trailer and
+	# split back out, keeps its name and position (no second path).
+	var trailer: PackedByteArray = SnapshotCaptureScript251.encode_sound_trailer(heard, "")
+	var split: Dictionary = SnapshotCaptureScript251.split_sound_trailer(SnapshotScript251.encode(_rc_world_241(0, 1)) + trailer)
+	var strip_events: Array = []
+	for ev: Dictionary in split["events"]:
+		if ev["name"] == "strip_boost":
+			strip_events.append(ev)
+	if strip_events.size() != 3:
+		failures.append("the trailer carried %d strip_boost events, want 3" % strip_events.size())
+	elif not (strip_events[0]["position"] is Vector2) or (strip_events[0]["position"] as Vector2).distance_to(heard[0]["position"]) > 1.0:
+		failures.append("the trailer's strip_boost position %s differs from the host's %s" % [strip_events[0]["position"], heard[0]["position"]])
+	await _teardown(stage)
+	return failures
 func _scenario_stage_speed_strips_placed() -> Array[String]:
 	var failures: Array[String] = []
 	var floors: Dictionary = {"Flatlands": 720.0, "Switchyard": 1100.0}
@@ -12252,7 +12430,7 @@ func _scenario_mud_patch_slows_player() -> Array[String]:
 ## (ghost) plays none.
 func _mud_squelch_drop(stage: Node2D, player: RigidBody2D, mud: StaticBody2D, sfx: Node) -> int:
 	# Lift the player clear of the strip, then drop it back on.
-	player.global_position = mud.position + Vector2(0, -60)
+	player.teleport_to(mud.position + Vector2(0, -60))
 	player.linear_velocity = Vector2.ZERO
 	var before: int = _sfx_count(sfx, "mud_squelch")
 	for _tick in 40:
@@ -14230,11 +14408,11 @@ func _scenario_sfx_hazard_hit_plays_once_per_hit() -> Array[String]:
 	var made: Array = _hazard_spikes_with_player(stage, 0.0)
 	var spikes: Area2D = made[0]
 	var player: RigidBody2D = made[1]
-	player.global_position = PART_POSITION
+	player.teleport_to(PART_POSITION)
 	sfx.start_recording()
 	var ticks_held: int = int(spikes.hit_cooldown_sec * 60.0 * 0.5)
 	for tick in ticks_held:
-		player.global_position = PART_POSITION
+		player.teleport_to(PART_POSITION)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	var played: int = _sfx_count(sfx, "hazard_hit")
@@ -14244,7 +14422,7 @@ func _scenario_sfx_hazard_hit_plays_once_per_hit() -> Array[String]:
 	player.set("spawn_protected", true)
 	var before: int = _sfx_count(sfx, "hazard_hit")
 	for tick in int(spikes.hit_cooldown_sec * 60.0) + 10:
-		player.global_position = PART_POSITION
+		player.teleport_to(PART_POSITION)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if _sfx_count(sfx, "hazard_hit") != before:
@@ -17442,7 +17620,7 @@ func _scenario_phone_hat_choice_reaches_player() -> Array[String]:
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	player.name = "HatP0"
 	stage.add_child(player)
-	player.global_position = PARK_POSITION
+	player.global_position = PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	var server: Node = ControllerServerScript.new()
 	server.name = "HatServer"
 	_set_phone_ports(server)
@@ -18925,7 +19103,7 @@ func _round_flow_fixture(player_count: int, roster_slots: Array[int], scenes: Ar
 		player.name = "P%d" % i
 		player.start_in_round = false
 		holder.add_child(player)
-		player.global_position = DEEP_PARK_POSITION + Vector2(400.0 * i, 0.0)
+		player.global_position = DEEP_PARK_POSITION + Vector2(400.0 * i, 0.0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		players.append(player)
 		paths.append(NodePath("../P%d" % i))
 	var roster := _FakeRoster.new()
@@ -21616,11 +21794,11 @@ func _scenario_bots_survive_hazard_stages() -> Array[String]:
 		holder.add_child(stage)
 		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 		holder.add_child(player)
-		player.global_position = case["at"]
+		player.global_position = case["at"]  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		player.bind_controller()
 		var rival: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 		holder.add_child(rival)
-		rival.global_position = case["rival"]
+		rival.global_position = case["rival"]  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		var bot: Node = BotScript.new()
 		bot.rng.seed = HAZARD_BOT_SEED
 		bot.player = player
@@ -22080,6 +22258,84 @@ func _scenario_magnet_plays_pull_sound_rate_limited() -> Array[String]:
 		failures.append("a rival behind a wall still played magnet_pull %d times" % wall_n)
 	_scenario_completed = true
 	return failures
+## Issue #1056: a spawn-protected fighter in the field is not pulled and does
+## not make the pull sound; an unprotected one in the same field is; and the
+## protected one is pulled as before the moment protection ends. Read against
+## a pickaxe control, so a magnet that ignores protection fails the first check.
+func _scenario_magnet_skips_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	var stats: Resource = load(MAGNET_PATH)
+	var control: Array[float] = await _magnet_protect_trial(sfx, load(PICKAXE_PATH_MAGNET_CONTROL), true, false)
+	var run: Array[float] = await _magnet_protect_trial(sfx, stats, true, false)
+	var sound_n: int = int(run[3])
+	var after: Array[float] = await _magnet_protect_trial(sfx, stats, true, true)
+	var sound_only_protected: int = int(await _magnet_protect_only_sound(sfx, stats))
+	print("      protected %.1f (control %.1f), unprotected %.1f (control %.1f), released %.1f, sounds only-protected %d" % [run[0], control[0], run[1], control[1], after[0], sound_only_protected])
+	if run[0] - control[0] < -3.0:
+		failures.append("a spawn-protected fighter was pulled %.1f px against the control" % (run[0] - control[0]))
+	if run[1] - control[1] < 3.0:
+		failures.append("the unprotected fighter in the same field was not pulled (%.1f against control)" % (run[1] - control[1]))
+	if after[0] - control[0] > -3.0:
+		failures.append("the fighter was not pulled once protection ended (%.1f against control)" % (after[0] - control[0]))
+	if sound_n < 1:
+		failures.append("the field with an unprotected fighter in it made no pull sound")
+	if sound_only_protected != 0:
+		failures.append("a field holding only a protected fighter played magnet_pull %d times" % sound_only_protected)
+	_scenario_completed = true
+	return failures
+## One trial: wielder at the park, a victim at MAGNET_NEAR (protected, unless
+## `release` drops protection after 5 ticks) and an unprotected victim at the
+## far offset. Returns [near dx, far dx, 0, pull sounds].
+func _magnet_protect_trial(sfx: Node, wielder_stats: Resource, protect: bool, release: bool) -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var near: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + MAGNET_NEAR)
+	var far: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + MAGNET_FAR)
+	near.spawn_protected = protect  # before the magnet is raised, so nothing slips in
+	await _await_ticks(2)
+	sfx.start_recording()
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	near.linear_velocity = Vector2.ZERO
+	far.linear_velocity = Vector2.ZERO
+	near.spawn_protected = protect
+	var near_start: float = near.global_position.x
+	var far_start: float = far.global_position.x
+	if release:
+		await _await_ticks(5)
+		near.spawn_protected = false
+		near_start = near.global_position.x
+		near.linear_velocity = Vector2.ZERO
+		await _await_ticks(MAGNET_TRIAL_TICKS - 5)
+	else:
+		await _await_ticks(MAGNET_TRIAL_TICKS)
+	var out: Array[float] = [near.global_position.x - near_start, far.global_position.x - far_start, 0.0, float(_sfx_count(sfx, "magnet_pull"))]
+	sfx.stop_recording()
+	await _teardown(stage, false)
+	return out
+## Pull sounds over 200 ticks with only a protected fighter in the field.
+func _magnet_protect_only_sound(sfx: Node, wielder_stats: Resource) -> int:
+	var stage: Node2D = _new_stage()
+	var wielder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + MAGNET_NEAR)
+	victim.spawn_protected = true
+	await _await_ticks(2)
+	sfx.start_recording()
+	wielder.set_weapon_stats(wielder_stats)
+	await _await_ticks(ROSTER_SWAP_TICKS)
+	_brace(wielder)
+	victim.linear_velocity = Vector2.ZERO
+	for i in 200:
+		victim.spawn_protected = true
+		await _await_ticks(1)
+	var played: int = _sfx_count(sfx, "magnet_pull")
+	sfx.stop_recording()
+	await _teardown(stage, false)
+	return played
 ## Counts magnet_pull plays over 200 ticks with one victim at `offset`.
 func _magnet_sound_trial(sfx: Node, wielder_stats: Resource, offset: Vector2, wall: bool) -> int:
 	var stage: Node2D = _new_stage()
@@ -22217,7 +22473,7 @@ func _scenario_flail_whip_damage_scales_with_speed() -> Array[String]:
 		# the ball is.
 		var from_body: Vector2 = ball.global_position - attacker.global_position
 		var ahead: float = from_body.angle() - PI * 0.5
-		victim.global_position = attacker.global_position + Vector2.from_angle(ahead) * from_body.length()
+		victim.teleport_to(attacker.global_position + Vector2.from_angle(ahead) * from_body.length())
 		var fastest: float = 0.0
 		for i in 120:
 			angle -= rate / 60.0
@@ -27174,7 +27430,7 @@ func _scenario_eyes_squash_is_visual_and_capped() -> Array[String]:
 	if player.scale != scale0 or player.mass != mass0 or (shape.shape as CircleShape2D).radius != radius0:
 		failures.append("squash touched the physics body (scale/mass/collision radius changed)")
 	# A landing: drop from height and see a squash on arrival.
-	player.global_position = Vector2(0.0, -1200.0)
+	player.teleport_to(Vector2(0.0, -1200.0))
 	player.linear_velocity = Vector2.ZERO
 	var landed_peak: float = 0.0
 	for i: int in 240:
@@ -28673,10 +28929,10 @@ func _scenario_hazard_contact_hits_once_per_cooldown() -> Array[String]:
 	var made: Array = _hazard_spikes_with_player(stage, 0.0)
 	var spikes: Area2D = made[0]
 	var player: RigidBody2D = made[1]
-	player.global_position = PART_POSITION
+	player.teleport_to(PART_POSITION)
 	var ticks_held: int = int(spikes.hit_cooldown_sec * 60.0 * 0.5)
 	for tick in ticks_held:
-		player.global_position = PART_POSITION
+		player.teleport_to(PART_POSITION)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if spikes.hit_count() != 1:
@@ -28685,7 +28941,7 @@ func _scenario_hazard_contact_hits_once_per_cooldown() -> Array[String]:
 		failures.append("damage %.1f after one contact, expected %.1f" % [player.damage, HAZARD_DAMAGE])
 	var past_cooldown: int = int(spikes.hit_cooldown_sec * 60.0) + 10
 	for tick in past_cooldown:
-		player.global_position = PART_POSITION
+		player.teleport_to(PART_POSITION)
 		player.linear_velocity = Vector2.ZERO
 		await physics_frame
 	if spikes.hit_count() < 2:
@@ -28754,7 +29010,7 @@ func _scenario_eye_styles_render_and_track_aim() -> Array[String]:
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	player.name = "EyeP0"
 	stage.add_child(player)
-	player.global_position = PARK_POSITION
+	player.global_position = PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	await _await_ticks(5)
 	var face: Node2D = player.face_node()
 	if face == null:
@@ -28799,7 +29055,7 @@ func _scenario_phone_eye_style_reaches_player_and_survives_reconnect() -> Array[
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	player.name = "EyeSP0"
 	stage.add_child(player)
-	player.global_position = PARK_POSITION
+	player.global_position = PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	var server: Node = ControllerServerScript.new()
 	server.name = "EyeServer"
 	_set_phone_ports(server)
@@ -32478,7 +32734,7 @@ func _scenario_night_keeps_key_nodes_lit() -> Array[String]:
 	var night: Node2D = _night_stage(true, "Gauntlet")
 	var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 	get_root().add_child(player)
-	player.global_position = DEEP_PARK_POSITION
+	player.global_position = DEEP_PARK_POSITION  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 	player.bind_controller()
 	var pickup := Node2D.new()
 	pickup.add_to_group("pickups")
@@ -33009,6 +33265,8 @@ func _ghost_round() -> Dictionary:
 	await _await_ticks(4)
 	players[0].eliminate()
 	await _await_ticks(4)
+	for p: RigidBody2D in players:
+		p.spawn_protected = false  # round-start protection would make a Boo skip them (#1053)
 	return loop
 func _scenario_ghost_hidden_until_touch_then_fades() -> Array[String]:
 	var failures: Array[String] = []
@@ -33222,6 +33480,56 @@ func _scenario_ghost_boo_skips_teammates_660() -> Array[String]:
 	dv = await _boo_660(ghost, players[0], players[2], Vector2(-20.0, 0.0))
 	if dv < 100.0:
 		failures.append("a boo at a rival on the other team did not shove (dvx %.1f)" % dv)
+	await _teardown(loop["stage"])
+	return failures
+## Issue #1053: a Boo skips a spawn-protected rival and falls to the next nearest one.
+func _scenario_ghost_boo_skips_spawn_protected() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	ghost.bounds = Rect2(-100000.0, -100000.0, 200000.0, 200000.0)
+	var near: RigidBody2D = players[1]
+	var far: RigidBody2D = players[2]
+	near.spawn_protected = true
+	var park: Vector2 = far.global_position
+	# The protected rival is nearest, an unprotected one 80 px out: the Boo goes to the latter.
+	ghost.global_position = near.global_position + Vector2(-20.0, 0.0)
+	# teleport_to carries the weapon rig along. A bare global_position write left it at the
+	# spawn, and the torn joints yanked `far` back in proportion to the distance it had been
+	# moved: a dvx of -3000 whenever the random spawn rotation put it far from `near` (#1066).
+	far.teleport_to(ghost.global_position + Vector2(80.0, -40.0))
+	var near_before: float = near.linear_velocity.x
+	var far_before: float = far.linear_velocity.x
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if absf(near.linear_velocity.x - near_before) > 20.0:
+		failures.append("a boo shoved a spawn-protected rival (dvx %.1f)" % (near.linear_velocity.x - near_before))
+	if far.linear_velocity.x - far_before < 100.0:
+		failures.append("the boo did not fall through to the unprotected rival (dvx %.1f)" % (far.linear_velocity.x - far_before))
+	# Only the protected rival in range: nothing happens and no cooldown starts.
+	ghost._boo_cooldown = 0.0
+	far.teleport_to(park)
+	ghost.global_position = near.global_position + Vector2(-20.0, 0.0)
+	near_before = near.linear_velocity.x
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if absf(near.linear_velocity.x - near_before) > 20.0:
+		failures.append("a boo shoved the only rival in range while protected")
+	if ghost.boo_cooldown_left() > 0.0:
+		failures.append("a boo at nothing spent the cooldown (%.2f)" % ghost.boo_cooldown_left())
+	# Protection over: the same rival can be Booed.
+	near.spawn_protected = false
+	near_before = near.linear_velocity.x
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if near.linear_velocity.x - near_before < 100.0:
+		failures.append("the rival was not Booed once protection ended (dvx %.1f)" % (near.linear_velocity.x - near_before))
 	await _teardown(loop["stage"])
 	return failures
 ## Issue #660: the ghost going away at round end lets go of what it carries.
@@ -36122,12 +36430,12 @@ func _scenario_shield_blocks_a_hit_on_its_face() -> Array[String]:
 		var before: float = player.damage
 		player.take_damage(20.0, point, attacker)
 		return player.damage - before
-	attacker.global_position = player.global_position + Vector2(150, 0)
+	attacker.teleport_to(player.global_position + Vector2(150, 0))
 	attacker.linear_velocity = Vector2.ZERO
 	var on_face: float = damage_taken.call(player.global_position + Vector2.RIGHT * 40.0)
 	await physics_frame
 	var pushed_face: float = attacker.linear_velocity.x
-	attacker.global_position = player.global_position + Vector2(-150, 0)
+	attacker.teleport_to(player.global_position + Vector2(-150, 0))
 	attacker.linear_velocity = Vector2.ZERO
 	var behind: float = damage_taken.call(player.global_position + Vector2.LEFT * 40.0)
 	await physics_frame
@@ -37009,6 +37317,74 @@ func _scenario_soccer_stages_load_goals_and_weights() -> Array[String]:
 ## "Top Scorer" goes to the player with most goals, only in Soccer; a goal is
 ## credited to the last player of the scoring team to touch the ball, not to the
 ## other team (an own goal credits nobody).
+## #1070: the GOAL! banner names the scorer under it, in their colour, on the
+## host and (through the mode HUD mirror) on the Online joiner; an own goal shows
+## GOAL! alone and the name is gone at kick-off.
+func _scenario_soccer_goal_banner_names_scorer() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	var mode: Node = rm.game_mode_node()
+	var mirror_rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(mirror_rig)
+	var path: String = str(mode.get_script().resource_path)
+	mode.goal_pause_sec = 0.4
+	var red_player: RigidBody2D = rig["players"][0]
+	rig["players"][1].teleport_to(Vector2(600.0, 240.0))
+	rig["players"][2].teleport_to(Vector2(400.0, 240.0))
+	red_player.teleport_to(Vector2(-300.0, 240.0))
+	mode.ball.global_position = Vector2(-300.0, 240.0)
+	await _await_ticks(2)
+	mode.score_goal(0)
+	var host_name: Label = mode._hud.get_node_or_null("SoccerGoalName") as Label
+	if host_name == null:
+		failures.append("the host built no SoccerGoalName label")
+	else:
+		var want: String = str(rm._slot_name(0))
+		if not host_name.visible or host_name.text != want:
+			failures.append("credited goal: host name line is %s '%s', wanted '%s'" % [host_name.visible, host_name.text, want])
+		if host_name.get_theme_color("font_color") != (rm._slot_color(0) as Color):
+			failures.append("credited goal: the name is not in the scorer's colour")
+		if host_name.get_theme_font_size("font_size") != 56:
+			failures.append("credited goal: the name line is not 56 px")
+	var goal: Label = mode._hud.get_node("SoccerGoal") as Label
+	if not goal.visible or goal.text != "GOAL!":
+		failures.append("the GOAL! line is %s '%s'" % [goal.visible, goal.text])
+	var state: Dictionary = RemoteHudScript976.unpack(RemoteHudScript976._pack(UiMirrorScript976.capture(mode._hud)), {})
+	client.effects.apply_mode_hud(path, state)
+	var mine: Label = null
+	if client.effects.mode_hud != null:
+		mine = client.effects.mode_hud.get_node_or_null("SoccerGoalName") as Label
+	if mine == null:
+		failures.append("the joiner has no name line")
+	elif host_name != null and (not mine.visible or mine.text != host_name.text):
+		failures.append("joiner name line is %s '%s', wanted '%s'" % [mine.visible, mine.text, host_name.text])
+	await _await_msec(900)
+	if host_name != null and host_name.visible:
+		failures.append("the name line stayed after kick-off")
+	# Own goal: the ball last touched by a Blue player scores for Red.
+	var blue_player: RigidBody2D = rig["players"][1]
+	red_player.teleport_to(Vector2(-600.0, 240.0))
+	mode.ball.global_position = blue_player.global_position
+	await _await_ticks(2)
+	mode.score_goal(0)
+	if host_name != null and host_name.visible:
+		failures.append("own goal: the name line showed '%s'" % host_name.text)
+	if not goal.visible:
+		failures.append("own goal: the GOAL! line was hidden")
+	state = RemoteHudScript976.unpack(RemoteHudScript976._pack(UiMirrorScript976.capture(mode._hud)), {})
+	client.effects.apply_mode_hud(path, state)
+	mine = client.effects.mode_hud.get_node_or_null("SoccerGoalName") as Label if client.effects.mode_hud != null else null
+	if mine != null and mine.visible:
+		failures.append("own goal: the joiner showed '%s'" % mine.text)
+	client.effects.apply_mode_hud("", {})
+	await _rc_close_241(mirror_rig)
+	await _teardown(rig["stage"])
+	return failures
+
 func _scenario_soccer_top_scorer_award_and_goal_credit() -> Array[String]:
 	var failures: Array[String] = []
 	var stats: RefCounted = MatchStatsScript.new()
@@ -37494,6 +37870,78 @@ func _scenario_ctf_a_defender_touch_returns_the_flag() -> Array[String]:
 	var home: Vector2 = rig["rm"]._current_stage.get_flag_home(1)
 	if int(mode.state[1]) != mode.HOME or mode.flag_position[1].distance_to(home) > 1.0:
 		failures.append("a defender's touch did not return the flag (state %d)" % int(mode.state[1]))
+	await _teardown(rig["stage"])
+	return failures
+## #1072: a capture short of the target shows CAPTURED! in the capturing team's colour
+## with the carrier's name under it for the pause, on the host and (through the mode HUD
+## mirror) on the Online joiner; both go when the next hall starts; the winning capture
+## and a rejected capture show nothing.
+func _scenario_ctf_capture_banner_names_carrier() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var rm: Node = rig["rm"]
+	var mirror_rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(mirror_rig)
+	var path: String = str(mode.get_script().resource_path)
+	mode.captures_to_win = 2
+	mode.capture_pause_sec = 0.4
+	var head: Label = mode._hud.get_node_or_null("CtfCaptured") as Label
+	var who: Label = mode._hud.get_node_or_null("CtfCapturedName") as Label
+	if head == null or who == null:
+		failures.append("the host built no CtfCaptured / CtfCapturedName labels")
+		await _rc_close_241(mirror_rig)
+		await _teardown(rig["stage"])
+		return failures
+	# A capture with nobody carrying is rejected and shows nothing.
+	mode.capture(0, 0)
+	if head.visible or who.visible:
+		failures.append("a rejected capture showed a banner")
+	# Red slot 2 carries Blue's flag home: a capture short of the target.
+	mode.carrier[1] = 2
+	mode.state[1] = mode.CARRIED
+	mode.capture(0, 2)
+	if int(mode.scores[0]) != 1:
+		failures.append("the capture did not score")
+	if not head.visible or head.text != "CAPTURED!":
+		failures.append("host banner is %s '%s', wanted visible 'CAPTURED!'" % [head.visible, head.text])
+	if head.get_theme_color("font_color") != mode.FLAG_COLOURS[0]:
+		failures.append("the banner is not in the capturing team's colour")
+	if head.get_theme_font_size("font_size") != 120:
+		failures.append("the banner is not 120 px")
+	var want: String = str(rm._slot_name(2))
+	if not who.visible or who.text != want:
+		failures.append("host name line is %s '%s', wanted '%s'" % [who.visible, who.text, want])
+	if who.get_theme_color("font_color") != (rm._slot_color(2) as Color):
+		failures.append("the name is not in the carrier's colour")
+	var state: Dictionary = RemoteHudScript976.unpack(RemoteHudScript976._pack(UiMirrorScript976.capture(mode._hud)), {})
+	client.effects.apply_mode_hud(path, state)
+	var mine_head: Label = null
+	var mine_who: Label = null
+	if client.effects.mode_hud != null:
+		mine_head = client.effects.mode_hud.get_node_or_null("CtfCaptured") as Label
+		mine_who = client.effects.mode_hud.get_node_or_null("CtfCapturedName") as Label
+	if mine_head == null or mine_who == null:
+		failures.append("the joiner has no banner labels")
+	else:
+		if not mine_head.visible or mine_head.text != "CAPTURED!":
+			failures.append("joiner banner is %s '%s'" % [mine_head.visible, mine_head.text])
+		if not mine_who.visible or mine_who.text != want:
+			failures.append("joiner name line is %s '%s', wanted '%s'" % [mine_who.visible, mine_who.text, want])
+	await _await_msec(900)
+	if head.visible or who.visible:
+		failures.append("the banner stayed after the next hall started")
+	# The winning capture (Red's second) shows no banner.
+	_ctf_quiet(rig)
+	mode.carrier[1] = 0
+	mode.state[1] = mode.CARRIED
+	mode.capture(0, 0)
+	if head.visible or who.visible:
+		failures.append("the winning capture showed a banner")
+	client.effects.apply_mode_hud("", {})
+	await _rc_close_241(mirror_rig)
 	await _teardown(rig["stage"])
 	return failures
 ## Carrying the enemy flag into your own base is a capture: a point, the flag home.
@@ -42236,7 +42684,7 @@ func _scenario_shield_ranged_hit_does_not_recoil_and_reports_real_damage() -> Ar
 	await _await_ticks(SETTLE_TICKS)
 	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, -400))
 	shooter.gravity_scale = 0.0
-	shooter.global_position = player.global_position + Vector2(150, 0)
+	shooter.teleport_to(player.global_position + Vector2(150, 0))
 	shooter.linear_velocity = Vector2.ZERO
 	var reported: Array[float] = []
 	shooter.strike_landed.connect(func(_v: Node, amount: float, _p: Vector2, _l: bool) -> void:
@@ -45142,7 +45590,7 @@ func _scenario_respawn_skips_spawns_with_no_floor_605() -> Array[String]:
 	var rig: Dictionary = await _respawn_rig_605(points, [500.0])
 	if rig.is_empty():
 		return ["the round never started"]
-	rig["players"][1].global_position = Vector2(500.0, 400.0)
+	rig["players"][1].teleport_to(Vector2(500.0, 400.0))
 	var got: Vector2 = rig["respawn"].farthest_spawn(0)
 	if got != points[1]:
 		failures.append("respawned at %s, over the void; want the grounded %s" % [got, points[1]])
@@ -45159,7 +45607,7 @@ func _scenario_respawn_stays_on_own_half_605() -> Array[String]:
 	var rig: Dictionary = await _respawn_rig_605(points, [-300.0, 300.0])
 	if rig.is_empty():
 		return ["the round never started"]
-	rig["players"][1].global_position = Vector2(-300.0, 400.0)
+	rig["players"][1].teleport_to(Vector2(-300.0, 400.0))
 	var respawn: RefCounted = rig["respawn"]
 	if respawn.farthest_spawn(0) != points[1]:
 		failures.append("the unfiltered pick was not the far spawn")
@@ -45189,12 +45637,12 @@ func _scenario_respawn_avoids_hazard_adjacent_spawn() -> Array[String]:
 	var rig: Dictionary = await _respawn_rig_605(points, [-300.0, 300.0, 900.0])
 	if rig.is_empty():
 		return ["the round never started"]
-	rig["players"][1].global_position = Vector2(-300.0, 400.0)
+	rig["players"][1].teleport_to(Vector2(-300.0, 400.0))
 	var respawn: RefCounted = rig["respawn"]
 	var stage: Node = rig["stage"]
 	# The rig's fighter drifts between ticks; pin it where the scenario wants it.
 	var _pick := func(slot: int) -> Vector2:
-		rig["players"][1].global_position = Vector2(-300.0, 400.0)
+		rig["players"][1].teleport_to(Vector2(-300.0, 400.0))
 		return respawn.farthest_spawn(slot)
 	# Control: no hazard, the farthest spawn wins as before.
 	if _pick.call(0) != points[2]:
@@ -45234,10 +45682,10 @@ func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 		return ["the round never started"]
 	var respawn: RefCounted = rig["respawn"]
 	respawn.watched = {0: rig["players"][0]}
-	rig["players"][0].global_position = Vector2(0.0, 400.0)
+	rig["players"][0].teleport_to(Vector2(0.0, 400.0))
 	if respawn.farthest_spawn(0) != points[1]:
 		failures.append("alone, died at Spawn0, still respawned at Spawn0")
-	rig["players"][0].global_position = Vector2(500.0, 400.0)
+	rig["players"][0].teleport_to(Vector2(500.0, 400.0))
 	if respawn.farthest_spawn(0) != points[0]:
 		failures.append("alone, died at Spawn1, did not move to Spawn0")
 	await _teardown(rig["stage"])
@@ -46172,7 +46620,7 @@ func _rod_reel_trial(planted: bool, team_up: bool, ticks: int, force: float = -1
 			await _await_ticks(10)
 				# The planted victim stands on its head, its body well above the floor:
 		# the holder hangs level with that body, `gap` px off.
-		shooter.global_position = victim.global_position + Vector2(-gap, -4.0)
+		shooter.teleport_to(victim.global_position + Vector2(-gap, -4.0))
 	else:
 		victim.freeze = true
 	var start_x: float = victim.global_position.x
@@ -46653,7 +47101,7 @@ func _bot_drop_915(weapon_path: String) -> Dictionary:
 	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
 	await _await_ticks(2)
 	await _equip(player, weapon_path)
-	player.global_position = DEEP_PARK_POSITION
+	player.teleport_to(DEEP_PARK_POSITION)
 	player.linear_velocity = Vector2.ZERO
 	var bot: Node = BotScript.new()
 	bot.rng.seed = BOT_SEED
@@ -47141,7 +47589,7 @@ func _scenario_soccer_respawn_never_lands_in_a_goal_648() -> Array[String]:
 		rng.seed = 648
 		for i in 60:
 			var slot: int = i % 4
-			rig["players"][slot].global_position = Vector2(rng.randf_range(-900.0, 900.0), rng.randf_range(-300.0, 300.0))
+			rig["players"][slot].teleport_to(Vector2(rng.randf_range(-900.0, 900.0), rng.randf_range(-300.0, 300.0)))
 			var spot: Vector2 = respawner.farthest_spawn(slot)
 			for rect: Rect2 in rects:
 				if rect.has_point(spot):
@@ -51415,7 +51863,7 @@ func _scenario_player_numbers_badge_on_name_tags_809() -> Array[String]:
 		player.name = "NumP%d" % i
 		player.start_in_round = false
 		stage.add_child(player)
-		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		player.visible = true
 		player.alive = true
 		players.append(player)
@@ -53196,6 +53644,57 @@ func _scenario_kill_feed_switch_833() -> Array[String]:
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
+## A lethal strike's damage number is LETHAL_COLOR, a non-lethal one white, a
+## zero grey (#1062); the joiner's number, drawn from the recorded `hit`
+## effect through the same show_strike, is red too.
+func _scenario_damage_number_lethal_colour() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var log: Dictionary = _hit_feedback_fixture(stage, attacker)
+	var feedback: Node2D = log["feedback"]
+	feedback.show_strike(Vector2(0, 0), 30.0, true, Color.GREEN)
+	feedback.show_strike(Vector2(0, 0), 30.0, false, Color.GREEN)
+	feedback.show_strike(Vector2(0, 0), 0.0, false, Color.GREEN)
+	feedback.show_strike(Vector2(0, 0), 30.0, true, Color.GREEN)
+	var numbers: Array = []
+	for child: Node in feedback.get_children():
+		if child is Label:
+			numbers.append(child)
+	if numbers.size() != 4:
+		failures.append("expected 4 numbers, drew %d" % numbers.size())
+	else:
+		if numbers[0].label_settings.font_color != HitFeedbackType.LETHAL_COLOR or numbers[3].label_settings.font_color != HitFeedbackType.LETHAL_COLOR:
+			failures.append("a lethal number is %s, not LETHAL_COLOR" % numbers[0].label_settings.font_color)
+		if numbers[1].label_settings.font_color != Color.WHITE:
+			failures.append("a non-lethal number is %s, not white" % numbers[1].label_settings.font_color)
+		if numbers[2].label_settings.font_color != HitFeedbackType.ZERO_NUMBER_COLOR:
+			failures.append("a zero number is %s, not grey" % numbers[2].label_settings.font_color)
+		if numbers[0].label_settings.font_size != numbers[1].label_settings.font_size:
+			failures.append("lethal changed the number's size")
+		if numbers[0].label_settings.outline_color != numbers[1].label_settings.outline_color:
+			failures.append("lethal changed the outline")
+		if numbers[0].label_settings != numbers[3].label_settings:
+			failures.append("two lethal numbers at one size do not share settings")
+	await _teardown(stage)
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var hf: Node = client.effects.hit_feedback
+	_fx_play_976(client, [{"k": "hit", "p": Vector2(5, 5), "a": 40.0, "l": true, "c": Color.GREEN}, {"k": "hit", "p": Vector2(9, 9), "a": 40.0, "l": false, "c": Color.GREEN}])
+	await process_frame
+	var remote: Array = []
+	for child: Node in hf.get_children():
+		if child is Label:
+			remote.append(child)
+	if remote.size() != 2:
+		failures.append("joiner drew %d numbers, not 2" % remote.size())
+	else:
+		if remote[0].label_settings.font_color != HitFeedbackType.LETHAL_COLOR:
+			failures.append("the joiner's lethal number is %s, not LETHAL_COLOR" % remote[0].label_settings.font_color)
+		if remote[1].label_settings.font_color != Color.WHITE:
+			failures.append("the joiner's non-lethal number is not white")
+	await _rc_close_241(rig)
+	return failures
 ## Issue #873: Settings > Damage numbers feeds HitFeedback; saved; reset by Restore defaults.
 func _scenario_damage_numbers_switch_873() -> Array[String]:
 	var failures: Array[String] = []
@@ -54176,7 +54675,7 @@ func _idle_hint_fixture(count: int) -> Dictionary:
 		player.name = "HintP%d" % i
 		player.start_in_round = false
 		stage.add_child(player)
-		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)
+		player.global_position = Vector2(100.0 + 150.0 * i, 300.0)  # pre-round: no weapon rig built yet, so a bare write is safe (#1068)
 		player.visible = true
 		player.alive = true
 		players.append(player)
@@ -54184,7 +54683,7 @@ func _idle_hint_fixture(count: int) -> Dictionary:
 		func(slot: int) -> String: return "P%d" % (slot + 1), func(_slot: int) -> Color: return Color(0.9, 0.4, 0.2))
 	stage.add_child(tags)
 	tags.build()
-	return {"stage": stage, "players": players, "hint": tags.idle_hint()}
+	return {"stage": stage, "players": players, "hint": tags.idle_hint(), "tags": tags}
 
 ## Steps `frames` physics frames, ticking the hint each one with `ctx`.
 func _idle_hint_run(hint: Node2D, ctx: Dictionary, frames: int) -> void:
@@ -57083,6 +57582,56 @@ func _fx_puppet_976(client: Node, at: Vector2, colour: Color, hat: String = "non
 	puppet.color = colour
 	puppet.set_look(hat, "round", colour)
 	return puppet
+## Issue #1064: the pips draw in the fighter's colour from 2 lives up, in warning
+## red on exactly one, none on zero; gaining a life back returns the colour.
+func _scenario_stock_last_life_pip_red() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Dictionary = _idle_hint_fixture(3)
+	var tags: Node2D = fx["tags"]
+	var own := Color(0.9, 0.4, 0.2)
+	var lives: Array = [1, 2, 0]
+	tags.lives_of = func(slot: int) -> int: return int(lives[slot])
+	tags.tick()
+	if not tags.has_method("pip_color"):
+		failures.append("NameTags has no pip_color() helper")
+		await _teardown(fx["stage"])
+		return failures
+	var red: Color = Color(0.95, 0.1, 0.08, 1.0) # HitFeedback.LETHAL_COLOR by value
+	if tags.pip_color(0) != red:
+		failures.append("one life drew %s, want warning red" % [tags.pip_color(0)])
+	if tags.pip_color(1) != own:
+		failures.append("two lives drew %s, want the fighter's colour" % [tags.pip_color(1)])
+	if tags.pip_color(2) != Color.TRANSPARENT or tags.pip_counts().size() != 2:
+		failures.append("zero lives still showed pips: %s" % [tags.pip_counts()])
+	lives[1] = 1
+	lives[0] = 3
+	tags.tick()
+	if tags.pip_color(1) != red or tags.pip_color(0) != own:
+		failures.append("after a loss / a gain slot 1 drew %s and slot 0 %s" % [tags.pip_color(1), tags.pip_color(0)])
+	await _teardown(fx["stage"])
+	return failures
+
+## Issue #1064: the Online joiner runs the same NameTags.gd with the lives it
+## receives, so its last-life pip is red too.
+func _scenario_remote_last_life_pip_red_1064() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var puppet: Node2D = _fx_puppet_976(client, client._camera.global_position, Color.BLUE, "crown")
+	client.effects.place_fighter(2, puppet, true, 0, Color.BLUE, "Ann", 0)
+	client.hud = {"mode": "stock", "m": {"lives": {"2": 1}}}
+	client.effects.name_tags.tick()
+	if not client.effects.name_tags.has_method("pip_color"):
+		failures.append("the joiner's NameTags has no pip_color() helper")
+	elif client.effects.name_tags.pip_color(2) != Color(0.95, 0.1, 0.08, 1.0):
+		failures.append("the joiner's one-life pip drew %s, want warning red" % [client.effects.name_tags.pip_color(2)])
+	client.hud = {"mode": "stock", "m": {"lives": {"2": 2}}}
+	client.effects.name_tags.tick()
+	if client.effects.name_tags.has_method("pip_color") and client.effects.name_tags.pip_color(2) != Color.BLUE:
+		failures.append("the joiner's two-life pips drew %s, want the fighter's colour" % [client.effects.name_tags.pip_color(2)])
+	await _rc_close_241(rig)
+	return failures
+
 ## The joiner's name tags are the host's NameTags.gd: name, colour, team
 ## outline, team badge, seat number and Stock pips; MATCH POINT puts its gold
 ## dot on that tag; the puppet draws no name of its own.
@@ -57383,4 +57932,71 @@ func _scenario_online_client_lobby_copy_code() -> Array[String]:
 	client.queue_free()
 	await process_frame
 	_scenario_completed = true
+	return failures
+## #1035: Enter readies and un-readies in the client lobby, like the Ready button.
+## Ignored with a text field focused or the Esc menu open; the "(Enter)" hint
+## shows on Ready until a gamepad is the active input; a remote's Ready alone
+## never starts the countdown (#936).
+func _scenario_online_client_enter_readies() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bots_rig_445("online", true, failures)
+	if rig.is_empty():
+		return failures
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _bots_close_445(rig)
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	if not await _wait_for_239(func() -> bool: return client._ready_button.is_visible_in_tree(), 5000):
+		failures.append("the client lobby never showed Ready")
+		await _bots_close_445(rig)
+		return failures
+	var enter := InputEventKey.new()
+	enter.physical_keycode = KEY_ENTER
+	enter.keycode = KEY_ENTER
+	enter.pressed = true
+	if client._ready_button.text != "Ready (Enter)" and TranslationServer.get_locale().begins_with("en"):
+		failures.append("Ready lacks the (Enter) hint: '%s'" % client._ready_button.text)
+	client._input(enter)
+	if not client._ready_button.button_pressed:
+		failures.append("Enter did not press Ready")
+	if not await _wait_for_239(func() -> bool: return server.slot_pressed_ready(client.slot), 3000):
+		failures.append("the host never saw the Enter ready")
+	for i in 120:
+		await process_frame
+	if rm.lobby_phase() != "lobby":
+		failures.append("a remote's Ready alone moved the room to '%s'" % rm.lobby_phase())
+	client._input(enter)
+	if client._ready_button.button_pressed:
+		failures.append("a second Enter did not un-ready")
+	# A focused Ready must not double-toggle: the event is consumed.
+	client._ready_button.grab_focus()
+	client._input(enter)
+	if not client._ready_button.button_pressed:
+		failures.append("Enter on a focused Ready did not ready once")
+	client._ready_button.set_pressed_no_signal(false)
+	# Ignored with a text field focused.
+	var field := LineEdit.new()
+	client.add_child(field)
+	field.grab_focus()
+	client._input(enter)
+	if client._ready_button.button_pressed:
+		failures.append("Enter readied while a text field had focus")
+	field.queue_free()
+	await process_frame
+	# Ignored with the Esc menu open.
+	client.menu_open = true
+	client._input(enter)
+	client.menu_open = false
+	if client._ready_button.button_pressed:
+		failures.append("Enter readied with the menu open")
+	# A gamepad as the active input drops the hint.
+	var pad := InputEventJoypadButton.new()
+	pad.button_index = JOY_BUTTON_X
+	pad.pressed = true
+	client._input(pad)
+	if client._ready_button.text.contains("Enter"):
+		failures.append("Ready kept the key hint with a gamepad active: '%s'" % client._ready_button.text)
+	await _bots_close_445(rig)
 	return failures

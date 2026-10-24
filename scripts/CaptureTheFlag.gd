@@ -22,6 +22,7 @@ const RespawnScript := preload("res://scripts/Respawn.gd")
 const ModeKitScript := preload("res://scripts/ModeKit.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const NetSyncScript := preload("res://scripts/NetSync.gd")
+const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
 signal callout(sound: StringName)
@@ -95,6 +96,9 @@ var _flag_nodes: Dictionary = {}
 var _hud: CanvasLayer
 var _score_label: Label
 var _clock_label: Label
+## The CAPTURED! banner and the carrier's name under it (#1072), shown for the pause.
+var _captured_label: Label
+var _captured_name_label: Label
 ## The base rectangles `base_rect()` read last, and from which stage.
 var _bases_key: Array = [-1]
 var _base_rects: Array[Rect2] = [Rect2(), Rect2()]
@@ -151,6 +155,8 @@ func end_round() -> void:
 	_hud = null
 	_score_label = null
 	_clock_label = null
+	_captured_label = null
+	_captured_name_label = null
 
 ## Hands this round's captures to the match stats (issue #355).
 func report_stats(stats: RefCounted) -> void:
@@ -399,10 +405,12 @@ func capture(team: int, slot: int) -> void:
 		return
 	_pause_left = capture_pause_sec
 	_pausing = true
+	_show_captured(team, slot)
 
 ## After a capture short of the target (#646): another hall that is switched on,
 ## flags home, everyone back on their own side.
 func _next_hall() -> void:
+	_hide_captured()
 	round_manager.change_stage_mid_round()
 	_bases_key = [-1]
 	_damage_seen.clear()
@@ -509,7 +517,49 @@ func _build_hud() -> void:
 	_clock_label = ModeKitScript.hud_pill("CtfClock", 72)
 	_clock_label.visible = false
 	_hud.add_child(_clock_label)
+	_captured_label = Label.new()
+	_captured_label.name = "CtfCaptured"
+	_captured_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE, 0)
+	_captured_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_captured_label.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_captured_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_captured_label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL
+	_captured_label.add_theme_font_size_override("font_size", 120)
+	_captured_label.add_theme_constant_override("outline_size", 18)
+	_captured_label.text = tr("CTF_CAPTURED")
+	_captured_label.visible = false
+	_hud.add_child(_captured_label)
+	_captured_name_label = Label.new()
+	_captured_name_label.name = "CtfCapturedName"
+	_captured_name_label.set_anchors_preset(Control.PRESET_CENTER)
+	_captured_name_label.offset_left = -600.0
+	_captured_name_label.offset_right = 600.0
+	_captured_name_label.offset_top = 70.0
+	_captured_name_label.offset_bottom = 150.0
+	_captured_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_captured_name_label.theme_type_variation = UiThemeScript.HUD_HEADING_LABEL
+	_captured_name_label.add_theme_font_size_override("font_size", 56)
+	_captured_name_label.add_theme_constant_override("outline_size", 18)
+	_captured_name_label.visible = false
+	_hud.add_child(_captured_name_label)
 	add_child(_hud)
+
+## The CAPTURED! banner in the capturing team's colour and the carrier's name
+## under it in theirs (#1072), for the pause after a capture short of the target.
+func _show_captured(team: int, slot: int) -> void:
+	if _captured_label == null:
+		return
+	_captured_label.add_theme_color_override("font_color", FLAG_COLOURS[team])
+	_captured_label.visible = true
+	_captured_name_label.text = str(round_manager._slot_name(slot))
+	_captured_name_label.add_theme_color_override("font_color", round_manager._slot_color(slot) as Color)
+	_captured_name_label.visible = true
+
+func _hide_captured() -> void:
+	if _captured_label != null:
+		_captured_label.visible = false
+	if _captured_name_label != null:
+		_captured_name_label.visible = false
 
 ## The match clock's text (#1040): "m:ss" in its last 30 s, as King of the
 ## Hill shows its own; "" before that, once it has run out, or in Sudden Death.
