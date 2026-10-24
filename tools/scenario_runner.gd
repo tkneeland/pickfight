@@ -1242,6 +1242,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_client_lobby_copy_code",
 	"online_client_attention_on_countdown",
 	"online_client_enter_readies",
+	"online_client_lobby_title_names_host",
 	"title_online_shows_host_or_join_fork_1075",
 	"title_fork_host_a_room_goes_online_1075",
 	"title_fork_join_a_friend_skips_the_relay_1075",
@@ -4167,6 +4168,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_client_attention_on_countdown()
 		"online_client_enter_readies":
 			return await _scenario_online_client_enter_readies()
+		"online_client_lobby_title_names_host":
+			return await _scenario_online_client_lobby_title_names_host()
 		"title_online_shows_host_or_join_fork_1075":
 			return await _scenario_title_online_shows_host_or_join_fork_1075()
 		"title_fork_host_a_room_goes_online_1075":
@@ -58109,6 +58112,42 @@ func _scenario_online_client_enter_readies() -> Array[String]:
 	if client._ready_button.text.contains("Enter"):
 		failures.append("Ready kept the key hint with a gamepad active: '%s'" % client._ready_button.text)
 	await _bots_close_445(rig)
+	return failures
+## Issue #1054: the client lobby title names the host ("Room ABCD - hosted by
+## Sam"), plain "Room ABCD" until the host's seat is in the roster, and the
+## countdown and over titles keep their text.
+func _scenario_online_client_lobby_title_names_host() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": []}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	client.room_code = "ABCD"
+	client.slot = 1
+	client.state = RcState241.PLAYING
+	client.lobby = {"phase": "lobby", "host": 0, "mode": "ffa", "target": 5, "paused": false, "players": []}
+	client._refresh_lobby()
+	if client._lobby_title.text != "Room ABCD":
+		failures.append("before the roster the title reads '%s'" % client._lobby_title.text)
+	client.lobby["players"] = [
+		{"name": "Sam", "slot": 0, "ready": false, "color": "ff0000"},
+		{"name": "Ann", "slot": 1, "ready": false, "color": "00ff00"}]
+	client._refresh_lobby()
+	if client._lobby_title.text != "Room ABCD - hosted by Sam":
+		failures.append("with the host named the title reads '%s'" % client._lobby_title.text)
+	client.lobby["players"] = [{"name": "", "slot": 0, "color": "ff0000"}]
+	client._refresh_lobby()
+	if client._lobby_title.text != "Room ABCD":
+		failures.append("an unnamed host leaves the title '%s'" % client._lobby_title.text)
+	client.lobby["players"] = [{"name": "Sam", "slot": 0, "color": "ff0000"}]
+	client.lobby["phase"] = "countdown"
+	client.lobby["count"] = 3
+	client._refresh_lobby()
+	if client._lobby_title.text != "Room ABCD  starting in 3":
+		failures.append("countdown title reads '%s'" % client._lobby_title.text)
+	client.lobby["phase"] = "victory"
+	client._refresh_lobby()
+	if client._lobby_title.text != "Room ABCD  match over":
+		failures.append("over title reads '%s'" % client._lobby_title.text)
+	await _rc_close_241(rig)
 	return failures
 ## #1075: Online on the title screen asks Host a room or Join a friend first. Nothing goes online
 ## and no room is opened until a choice is made.
