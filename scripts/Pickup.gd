@@ -131,12 +131,25 @@ func _physics_process(delta: float) -> void:
 	if to.y - _fall_start_y > DROP_MAX_FALL:
 		queue_free()
 
+## Issue #976: the Online client's copy, drawn exactly as this pickup but
+## never picked up. Set before it enters the tree.
+var display_only: bool = false
+
+## The group the Online client's copies join instead of "pickups", which is
+## the host's live pickups only (night lighting glows both).
+const DISPLAY_GROUP: StringName = &"night_lit_pickups"
+
 func _ready() -> void:
-	add_to_group("pickups")
 	collision_layer = 0
 	collision_mask = LAYER_WORLD
 	monitorable = false
 	_build()
+	if display_only:
+		add_to_group(DISPLAY_GROUP)
+		monitoring = false
+		set_physics_process(false)
+		return
+	add_to_group("pickups")
 	body_entered.connect(_on_body_entered)
 
 ## The outline drawn for this pickup, in the art's own coordinates: exactly
@@ -262,6 +275,21 @@ func _process(delta: float) -> void:
 	_halo_t = fmod(_halo_t + delta / HALO_PERIOD_SEC, 1.0)
 	_halo.scale = Vector2.ONE * lerpf(1.0, HALO_REACH, _halo_t)
 	_halo.modulate.a = 1.0 - _halo_t
+
+## Issue #976: where the halo is in its breath, 0..255, for the snapshot.
+func halo_phase_byte() -> int:
+	return clampi(int(_halo_t * 256.0), 0, 255)
+
+## Issue #976: the Online client's copy breathes on its own clock, kept in
+## step with the host's: re-set when it is more than a tenth of a breath off.
+func set_halo_phase(byte: int) -> void:
+	var theirs: float = float(clampi(byte, 0, 255)) / 256.0
+	var off: float = absf(_halo_t - theirs)
+	if minf(off, 1.0 - off) > 0.1:
+		_halo_t = theirs
+
+func halo_phase() -> float:
+	return _halo_t
 
 ## A live player's body touched the pickup: hand the weapon over and leave.
 ## Eliminated players have no collision layer to enter with, and are refused

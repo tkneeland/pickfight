@@ -70,6 +70,9 @@ const CRACK_THRESHOLDS: PackedFloat32Array = [0.2, 0.45, 0.7]
 ## Runs before `Player` (priority 0), which clears `WeaponHead.swept_into`.
 const _BEFORE_PLAYERS: int = -10
 
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["_visual:color", "_visual:visible", "_hp_left", "_state"]
 var _state: _WallState = _WallState.STANDING
 var _hp_left: float = 0.0
 var _flash_remaining: float = 0.0
@@ -277,8 +280,17 @@ func _owner_stats(head: RigidBody2D) -> Resource:
 func _show_wear() -> void:
 	var lost: float = 1.0 - _hp_left / maxf(hp, 0.001)
 	_visual.color = INTACT_COLOR.lerp(WORN_COLOR, clampf(lost, 0.0, 1.0))
+	_show_cracks()
+
+## Each crack shows once the standing wall has lost its share of `hp`.
+func _show_cracks() -> void:
+	var lost: float = 1.0 - _hp_left / maxf(hp, 0.001)
 	for i in _cracks.size():
-		_cracks[i].visible = lost >= CRACK_THRESHOLDS[i]
+		_cracks[i].visible = _state == _WallState.STANDING and lost >= CRACK_THRESHOLDS[i]
+
+## Issue #976: on the Online client, after the host's state is copied in.
+func _net_refresh() -> void:
+	_show_cracks()
 
 ## A zig-zag crack across the wall. Fixed shapes, laid out along the wall's
 ## long axis so they spread over it whichever way it is authored.

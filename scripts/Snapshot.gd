@@ -12,12 +12,25 @@
 ## trailer of SnapshotCapture rides there). `encode()` clamps every value into
 ## its field's range, so NaN, floats, negatives and oversized counts cannot
 ## error or wrap.
+##
+## Version 2 (issue #976) carries what an Online joiner needs to draw every
+## in-world thing exactly as the host does: per player `flags` (PLAYER_*),
+## `hat_spin` (where a propeller hat's
+## blades are, Hat.spin_byte()), `squash` (the face's landing or hit squash,
+## PlayerFace.squash_byte(), 128 at rest), per projectile `owner`, `rotation`
+## and `flags` (the shot's kind, PROJ_KIND_*, and the boomerang's ghost bit),
+## per pickup `halo` (where its breathing halo is), and after the round state
+## `flails` (every flail's ball and links), `ghosts` (every KO'd player's
+## ghost) and `meteors`, then `parts` (every stage
+## part's look, by `NetSync.part_id`) and `props` (every runtime prop the host
+## marked: the soccer ball, CTF flags, the hill, tiebreaker rocks, the gale),
+## whose `state` arrays travel as `var_to_bytes` (no objects).
 
 ## Marker for a full snapshot (highest bit of type byte).
 const FULL_SNAPSHOT_MARKER: int = 0x80
 ## Wire format version, in the low 7 bits of the first byte (the top bit is
 ## the full-snapshot marker). `decode()` rejects any other version.
-const FORMAT_VERSION: int = 1
+const FORMAT_VERSION: int = 2
 const VERSION_MASK: int = 0x7F
 ## Type codes for different entity kinds in delta snapshots.
 const TYPE_PLAYER: int = 0x01
@@ -30,6 +43,35 @@ const TYPE_TIMER: int = 0x07
 const TYPE_SCORES: int = 0x08
 const TYPE_KILL_FEED: int = 0x09
 const TYPE_KILL_ZONE: int = 0x0A
+## Issue #976: one flail's ball and links, one ghost, one meteor (id = the
+## owner's slot for a flail or ghost, the meteor's own id for a meteor).
+const TYPE_CHAIN: int = 0x0B
+const TYPE_GHOST: int = 0x0C
+const TYPE_METEOR: int = 0x0D
+## Issue #976: one stage part's state (header id 0, the u32 part id in the
+## body) and one prop's (header id = the prop's id).
+const TYPE_PART: int = 0x0E
+## A player's `squash` byte at rest (PlayerFace.SQUASH_REST_BYTE).
+const SQUASH_REST: int = 128
+const TYPE_PROP: int = 0x0F
+## A part's or prop's `state` larger than this is sent empty.
+const MAX_STATE_BYTES: int = 2048
+## Player `flags` bits (issue #976).
+## (A loaded special's art is the weapon index's WEAPON_LOADED_BIT.)
+const PLAYER_HEAD_PHASED: int = 1
+const PLAYER_BLINKING: int = 2
+## The spawn-protection blink is on its dim half (Respawn.BLINK_ALPHA).
+const PLAYER_DIMMED: int = 4
+## Projectile `flags`: the low two bits are the kind, bit 2 the boomerang's ghost.
+const PROJ_KIND_MASK: int = 3
+const PROJ_KIND_BULLET: int = 0
+const PROJ_KIND_BOOMERANG: int = 1
+const PROJ_KIND_HOOK: int = 2
+const PROJ_GHOST: int = 4
+## Flail `flags`: the ball is phased (drawn see-through).
+const FLAIL_PHASED: int = 1
+## The owner byte for "no player".
+const NO_OWNER: int = 255
 ## Counts are one byte (255 max); `encode()` clamps the count and the loop together.
 const MAX_COUNT_U8: int = 255
 const MAX_COUNT_U16: int = 65535
@@ -48,6 +90,11 @@ static func encode(world: Dictionary) -> PackedByteArray:
 		_encode_grapple(bytes, world)
 		_encode_modifiers(bytes, world)
 		_encode_round_state(bytes, world)
+		_encode_flails(bytes, world)
+		_encode_ghosts(bytes, world)
+		_encode_meteors(bytes, world)
+		_encode_parts(bytes, world)
+		_encode_props(bytes, world)
 	else:
 		_encode_delta_entities(bytes, world)
 	return bytes
@@ -73,6 +120,11 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 		snapshot["grapple"] = _decode_grapple(r)
 		snapshot["modifiers"] = _decode_modifiers(r)
 		snapshot.merge(_decode_round_state(r))
+		snapshot["flails"] = _decode_flails(r)
+		snapshot["ghosts"] = _decode_ghosts(r)
+		snapshot["meteors"] = _decode_meteors(r)
+		snapshot["parts"] = _decode_parts(r)
+		snapshot["props"] = _decode_props(r)
 	else:
 		snapshot["delta_entities"] = _decode_delta_entities(r)
 	if not r.ok:
@@ -98,11 +150,16 @@ static func apply_delta(full: Dictionary, delta: Dictionary) -> Dictionary:
 						"loaded": e.get("loaded", false)}
 					p["damage"] = e["damage"]
 					p["state"] = e["state"]
+					p["flags"] = e["flags"]
+					p["hat_spin"] = e["hat_spin"]
+					p["squash"] = e["squash"]
 			TYPE_PROJECTILE:
 				var p: Dictionary = _find(out.get("projectiles", []), "projectile_id", id)
 				if not p.is_empty():
 					p["position"] = e["position"]
 					p["velocity"] = e["velocity"]
+					p["rotation"] = e["rotation"]
+					p["flags"] = e["flags"]
 			TYPE_PICKUP:
 				var p: Dictionary = _find(out.get("pickups", []), "pickup_id", id)
 				if not p.is_empty():
@@ -125,7 +182,36 @@ static func apply_delta(full: Dictionary, delta: Dictionary) -> Dictionary:
 				out["kill_feed"].append({"text": e["text"]})
 			TYPE_KILL_ZONE:
 				out["kill_zone_height"] = e["height"]
+			TYPE_CHAIN:
+				_upsert(out, "flails", "owner", id, chain_of(e))
+			TYPE_GHOST:
+				_upsert(out, "ghosts", "owner", id, {"owner": id, "position": e["position"],
+					"alpha": e["alpha"], "puff": e["puff"]})
+			TYPE_METEOR:
+				_upsert(out, "meteors", "meteor_id", id, {"meteor_id": id, "position": e["position"],
+					"velocity": e["velocity"], "radius": e["radius"]})
+			TYPE_PART:
+				_upsert(out, "parts", "part_id", e["part_id"], {"part_id": e["part_id"], "state": e["state"]})
+			TYPE_PROP:
+				_upsert(out, "props", "prop_id", id, {"prop_id": id, "kind": e["kind"], "state": e["state"]})
 	return out
+
+## A decoded TYPE_CHAIN delta entity as a `flails` entry.
+static func chain_of(e: Dictionary) -> Dictionary:
+	return {"owner": e.get("id", 0), "ball_position": e.get("ball_position", Vector2.ZERO),
+		"ball_rotation": e.get("ball_rotation", 0.0), "flags": e.get("flags", 0),
+		"links": e.get("links", [])}
+
+## Replaces the entry of `list_key` whose `key` is `id` with `entry`, or appends it.
+static func _upsert(out: Dictionary, list_key: String, key: String, id: int, entry: Dictionary) -> void:
+	var list: Array = out.get(list_key, [])
+	for i in list.size():
+		if list[i] is Dictionary and list[i].get(key) == id:
+			list[i] = entry
+			out[list_key] = list
+			return
+	list.append(entry)
+	out[list_key] = list
 
 static func _find(list: Array, key: String, id: int) -> Dictionary:
 	for entry: Dictionary in list:
@@ -265,6 +351,9 @@ static func _encode_player(bytes: PackedByteArray, player: Dictionary) -> void:
 	_append_team(bytes, player.get("team", 0))
 	_append_u16(bytes, _floor(player.get("damage", 0)))
 	_append_u8(bytes, player.get("state", 0))
+	_append_u8(bytes, player.get("flags", 0))
+	_append_u8(bytes, player.get("hat_spin", 0))
+	_append_u8(bytes, player.get("squash", SQUASH_REST))
 
 static func _encode_body_transform(bytes: PackedByteArray, body: Dictionary) -> void:
 	_encode_vector2_quantized(bytes, _vec(body.get("position", Vector2.ZERO)))
@@ -293,6 +382,9 @@ static func _encode_projectile(bytes: PackedByteArray, proj: Dictionary) -> void
 	_encode_vector2_quantized(bytes, _vec(proj.get("position", Vector2.ZERO)))
 	_encode_vector2_quantized(bytes, _vec(proj.get("velocity", Vector2.ZERO)))
 	_append_u8(bytes, proj.get("weapon_type", 0))
+	_append_owner(bytes, proj.get("owner", -1))
+	_encode_rotation_u16(bytes, proj.get("rotation", 0.0))
+	_append_u8(bytes, proj.get("flags", 0))
 
 static func _encode_all_pickups(bytes: PackedByteArray, world: Dictionary) -> void:
 	var pickups: Array = _arr(world.get("pickups", []))
@@ -305,6 +397,7 @@ static func _encode_pickup(bytes: PackedByteArray, pickup: Dictionary) -> void:
 	_append_u16(bytes, pickup.get("pickup_id", 0))
 	_encode_vector2_quantized(bytes, _vec(pickup.get("position", Vector2.ZERO)))
 	_append_u16(bytes, pickup.get("weapon_type", 0))
+	_append_u8(bytes, pickup.get("halo", 0))
 
 static func _encode_flail(bytes: PackedByteArray, world: Dictionary) -> void:
 	var flail: Dictionary = _dict(world.get("flail", {}))
@@ -352,6 +445,71 @@ static func _encode_round_state(bytes: PackedByteArray, world: Dictionary) -> vo
 	_append_u16(bytes, _floor(world.get("kill_zone_height", 0.0)))
 	_encode_string(bytes, world.get("announcer_text", ""))
 
+static func _encode_flails(bytes: PackedByteArray, world: Dictionary) -> void:
+	var flails: Array = _arr(world.get("flails", []))
+	var n: int = mini(flails.size(), MAX_COUNT_U8)
+	bytes.append(n)
+	for i in n:
+		var f: Dictionary = _dict(flails[i])
+		_append_owner(bytes, f.get("owner", -1))
+		_encode_chain(bytes, f)
+
+## A flail past its owner byte: ball position and rotation, flags, then each
+## link's position and rotation (one byte: a link is an 8-sided ring).
+static func _encode_chain(bytes: PackedByteArray, f: Dictionary) -> void:
+	_encode_vector2_quantized(bytes, _vec(f.get("ball_position", Vector2.ZERO)))
+	_encode_rotation_u16(bytes, f.get("ball_rotation", 0.0))
+	_append_u8(bytes, f.get("flags", 0))
+	var links: Array = _arr(f.get("links", []))
+	var n: int = mini(links.size(), MAX_COUNT_U8)
+	bytes.append(n)
+	for i in n:
+		var link: Dictionary = _dict(links[i])
+		_encode_vector2_quantized(bytes, _vec(link.get("position", Vector2.ZERO)))
+		_encode_rotation_u8(bytes, link.get("rotation", 0.0))
+
+static func _encode_ghosts(bytes: PackedByteArray, world: Dictionary) -> void:
+	var ghosts: Array = _arr(world.get("ghosts", []))
+	var n: int = mini(ghosts.size(), MAX_COUNT_U8)
+	bytes.append(n)
+	for i in n:
+		var g: Dictionary = _dict(ghosts[i])
+		_append_owner(bytes, g.get("owner", -1))
+		_encode_ghost(bytes, g)
+
+## A ghost past its owner byte: position, alpha (0..255) and how far its boo
+## puff has run (0..255, 255 done).
+static func _encode_ghost(bytes: PackedByteArray, g: Dictionary) -> void:
+	_encode_vector2_quantized(bytes, _vec(g.get("position", Vector2.ZERO)))
+	_append_unit(bytes, g.get("alpha", 0.0))
+	_append_unit(bytes, g.get("puff", 1.0))
+
+static func _encode_meteors(bytes: PackedByteArray, world: Dictionary) -> void:
+	var meteors: Array = _arr(world.get("meteors", []))
+	var n: int = mini(meteors.size(), MAX_COUNT_U8)
+	bytes.append(n)
+	for i in n:
+		var m: Dictionary = _dict(meteors[i])
+		_append_u16(bytes, m.get("meteor_id", 0))
+		_encode_meteor(bytes, m)
+
+static func _encode_meteor(bytes: PackedByteArray, m: Dictionary) -> void:
+	_encode_vector2_quantized(bytes, _vec(m.get("position", Vector2.ZERO)))
+	_encode_vector2_quantized(bytes, _vec(m.get("velocity", Vector2.ZERO)))
+	_append_u8(bytes, m.get("radius", 0))
+
+## A slot byte: NO_OWNER for none (-1); anything else clamps to 0..254.
+static func _append_owner(bytes: PackedByteArray, owner: Variant) -> void:
+	bytes.append(NO_OWNER if _num(owner) < 0.0 else _int(owner, 0, 254))
+
+static func _owner(r: _Reader) -> int:
+	var v: int = r.u8()
+	return -1 if v == NO_OWNER else v
+
+## A 0..1 value as one byte.
+static func _append_unit(bytes: PackedByteArray, v: Variant) -> void:
+	bytes.append(_int(clampf(_num(v), 0.0, 1.0) * 255.0, 0, 255))
+
 static func _encode_delta_entities(bytes: PackedByteArray, world: Dictionary) -> void:
 	var entities: Array = _arr(world.get("delta_entities", []))
 	var n: int = mini(entities.size(), MAX_COUNT_U8)
@@ -367,9 +525,14 @@ static func _encode_delta_entities(bytes: PackedByteArray, world: Dictionary) ->
 				_encode_weapon_segments(bytes, _dict(entity.get("weapon", {})))
 				_append_u16(bytes, _floor(entity.get("damage", 0)))
 				_append_u8(bytes, entity.get("state", 0))
+				_append_u8(bytes, entity.get("flags", 0))
+				_append_u8(bytes, entity.get("hat_spin", 0))
+				_append_u8(bytes, entity.get("squash", SQUASH_REST))
 			TYPE_PROJECTILE:
 				_encode_vector2_quantized(bytes, _vec(entity.get("position", Vector2.ZERO)))
 				_encode_vector2_quantized(bytes, _vec(entity.get("velocity", Vector2.ZERO)))
+				_encode_rotation_u16(bytes, entity.get("rotation", 0.0))
+				_append_u8(bytes, entity.get("flags", 0))
 			TYPE_PICKUP:
 				_encode_vector2_quantized(bytes, _vec(entity.get("position", Vector2.ZERO)))
 			TYPE_FLAIL, TYPE_GRAPPLE:
@@ -385,6 +548,18 @@ static func _encode_delta_entities(bytes: PackedByteArray, world: Dictionary) ->
 				_encode_string(bytes, entity.get("text", ""))
 			TYPE_KILL_ZONE:
 				_append_u16(bytes, _floor(entity.get("height", 0.0)))
+			TYPE_CHAIN:
+				_encode_chain(bytes, entity)
+			TYPE_GHOST:
+				_encode_ghost(bytes, entity)
+			TYPE_METEOR:
+				_encode_meteor(bytes, entity)
+			TYPE_PART:
+				_append_u32(bytes, entity.get("part_id", 0))
+				_encode_state(bytes, entity.get("state", []))
+			TYPE_PROP:
+				_append_u8(bytes, entity.get("kind", 0))
+				_encode_state(bytes, entity.get("state", []))
 
 # ============================================================================
 # DECODING HELPERS
@@ -411,7 +586,7 @@ static func _decode_static_stage_bodies(r: _Reader) -> Array:
 
 static func _decode_all_players(r: _Reader) -> Array:
 	var players: Array = []
-	for i in r.count(r.u8(), 26):
+	for i in r.count(r.u8(), 29):
 		var player_id: int = r.u16()
 		var body: Dictionary = _decode_body_transform(r)
 		var weapon: Dictionary = _decode_weapon_segments(r)
@@ -420,6 +595,9 @@ static func _decode_all_players(r: _Reader) -> Array:
 		var team: int = r.u8()
 		var damage: int = r.u16()
 		var state: int = r.u8()
+		var flags: int = r.u8()
+		var hat_spin: int = r.u8()
+		var squash: int = r.u8()
 		players.append({
 			"player_id": player_id,
 			"body": body,
@@ -429,31 +607,41 @@ static func _decode_all_players(r: _Reader) -> Array:
 			"team": team,
 			"damage": damage,
 			"state": state,
+			"flags": flags,
+			"hat_spin": hat_spin,
+			"squash": squash,
 		})
 	return players
 
 static func _decode_all_projectiles(r: _Reader) -> Array:
 	var projectiles: Array = []
-	for i in r.count(r.u8(), 11):
+	for i in r.count(r.u8(), 15):
 		var proj_id: int = r.u16()
 		var position: Vector2 = r.vec2()
 		var velocity: Vector2 = r.vec2()
 		var weapon_type: int = r.u8()
+		var owner: int = _owner(r)
+		var rotation: float = r.rotation()
+		var flags: int = r.u8()
 		projectiles.append({
 			"projectile_id": proj_id,
 			"position": position,
 			"velocity": velocity,
 			"weapon_type": weapon_type,
+			"owner": owner,
+			"rotation": rotation,
+			"flags": flags,
 		})
 	return projectiles
 
 static func _decode_all_pickups(r: _Reader) -> Array:
 	var pickups: Array = []
-	for i in r.count(r.u8(), 8):
+	for i in r.count(r.u8(), 9):
 		var pickup_id: int = r.u16()
 		var position: Vector2 = r.vec2()
 		var weapon_type: int = r.u16()
-		pickups.append({"pickup_id": pickup_id, "position": position, "weapon_type": weapon_type})
+		var halo: int = r.u8()
+		pickups.append({"pickup_id": pickup_id, "position": position, "weapon_type": weapon_type, "halo": halo})
 	return pickups
 
 static func _decode_flail(r: _Reader) -> Dictionary:
@@ -504,6 +692,55 @@ static func _decode_round_state(r: _Reader) -> Dictionary:
 		"announcer_text": announcer,
 	}
 
+static func _decode_flails(r: _Reader) -> Array:
+	var flails: Array = []
+	for i in r.count(r.u8(), 9):
+		var owner: int = _owner(r)
+		var f: Dictionary = _decode_chain(r)
+		f["owner"] = owner
+		flails.append(f)
+	return flails
+
+static func _decode_chain(r: _Reader) -> Dictionary:
+	var ball_position: Vector2 = r.vec2()
+	var ball_rotation: float = r.rotation()
+	var flags: int = r.u8()
+	var links: Array = []
+	for i in r.count(r.u8(), 5):
+		var position: Vector2 = r.vec2()
+		links.append({"position": position, "rotation": (r.u8() / 256.0) * TAU})
+	return {"ball_position": ball_position, "ball_rotation": ball_rotation, "flags": flags, "links": links}
+
+static func _decode_ghosts(r: _Reader) -> Array:
+	var ghosts: Array = []
+	for i in r.count(r.u8(), 7):
+		var owner: int = _owner(r)
+		var g: Dictionary = _decode_ghost(r)
+		g["owner"] = owner
+		ghosts.append(g)
+	return ghosts
+
+static func _decode_ghost(r: _Reader) -> Dictionary:
+	var position: Vector2 = r.vec2()
+	var alpha: float = r.u8() / 255.0
+	var puff: float = r.u8() / 255.0
+	return {"position": position, "alpha": alpha, "puff": puff}
+
+static func _decode_meteors(r: _Reader) -> Array:
+	var meteors: Array = []
+	for i in r.count(r.u8(), 11):
+		var meteor_id: int = r.u16()
+		var m: Dictionary = _decode_meteor(r)
+		m["meteor_id"] = meteor_id
+		meteors.append(m)
+	return meteors
+
+static func _decode_meteor(r: _Reader) -> Dictionary:
+	var position: Vector2 = r.vec2()
+	var velocity: Vector2 = r.vec2()
+	var radius: int = r.u8()
+	return {"position": position, "velocity": velocity, "radius": radius}
+
 static func _decode_delta_entities(r: _Reader) -> Array:
 	var entities: Array = []
 	for i in r.count(r.u8(), 3):
@@ -515,9 +752,14 @@ static func _decode_delta_entities(r: _Reader) -> Array:
 				entity.merge(_decode_weapon_segments(r))
 				entity["damage"] = r.u16()
 				entity["state"] = r.u8()
+				entity["flags"] = r.u8()
+				entity["hat_spin"] = r.u8()
+				entity["squash"] = r.u8()
 			TYPE_PROJECTILE:
 				entity["position"] = r.vec2()
 				entity["velocity"] = r.vec2()
+				entity["rotation"] = r.rotation()
+				entity["flags"] = r.u8()
 			TYPE_PICKUP:
 				entity["position"] = r.vec2()
 			TYPE_FLAIL, TYPE_GRAPPLE:
@@ -533,12 +775,81 @@ static func _decode_delta_entities(r: _Reader) -> Array:
 				entity["text"] = r.text()
 			TYPE_KILL_ZONE:
 				entity["height"] = r.u16()
+			TYPE_CHAIN:
+				entity.merge(_decode_chain(r))
+			TYPE_GHOST:
+				entity.merge(_decode_ghost(r))
+			TYPE_METEOR:
+				entity.merge(_decode_meteor(r))
+			TYPE_PART:
+				entity["part_id"] = r.u32()
+				entity["state"] = _decode_state(r)
+			TYPE_PROP:
+				entity["kind"] = r.u8()
+				entity["state"] = _decode_state(r)
 			_:
 				# Unknown type: its size is unknown, so nothing after it can be trusted.
 				r.ok = false
 				return []
 		entities.append(entity)
 	return entities
+
+# ============================================================================
+# PARTS AND PROPS (issue #976)
+# ============================================================================
+
+static func _encode_parts(bytes: PackedByteArray, world: Dictionary) -> void:
+	var parts: Array = _arr(world.get("parts", []))
+	var n: int = mini(parts.size(), MAX_COUNT_U8)
+	bytes.append(n)
+	for i in n:
+		var part: Dictionary = _dict(parts[i])
+		_append_u32(bytes, part.get("part_id", 0))
+		_encode_state(bytes, part.get("state", []))
+
+static func _encode_props(bytes: PackedByteArray, world: Dictionary) -> void:
+	var props: Array = _arr(world.get("props", []))
+	var n: int = mini(props.size(), MAX_COUNT_U8)
+	bytes.append(n)
+	for i in n:
+		var prop: Dictionary = _dict(props[i])
+		_append_u16(bytes, prop.get("prop_id", 0))
+		_append_u8(bytes, prop.get("kind", 0))
+		_encode_state(bytes, prop.get("state", []))
+
+## A state array as a u16 byte length then its `var_to_bytes` (never objects).
+static func _encode_state(bytes: PackedByteArray, state: Variant) -> void:
+	var data: PackedByteArray = var_to_bytes(_arr(state))
+	if data.size() > MAX_STATE_BYTES:
+		data = var_to_bytes([])
+	_append_u16(bytes, data.size())
+	bytes.append_array(data)
+
+static func _decode_parts(r: _Reader) -> Array:
+	var parts: Array = []
+	for i in r.count(r.u8(), 6):
+		var part_id: int = r.u32()
+		parts.append({"part_id": part_id, "state": _decode_state(r)})
+	return parts
+
+static func _decode_props(r: _Reader) -> Array:
+	var props: Array = []
+	for i in r.count(r.u8(), 5):
+		var prop_id: int = r.u16()
+		var kind: int = r.u8()
+		props.append({"prop_id": prop_id, "kind": kind, "state": _decode_state(r)})
+	return props
+
+## A state written by `_encode_state`: anything but an Array decodes as [].
+static func _decode_state(r: _Reader) -> Array:
+	var n: int = r.u16()
+	if n == 0 or n > MAX_STATE_BYTES or not r.need(n):
+		if n > MAX_STATE_BYTES:
+			r.ok = false
+		return []
+	r.pos += n
+	var value: Variant = bytes_to_var(r.bytes.slice(r.pos - n, r.pos))
+	return value if value is Array else []
 
 # ============================================================================
 # BINARY UTILITIES
@@ -568,6 +879,13 @@ static func _encode_rotation_u16(bytes: PackedByteArray, rotation: Variant) -> v
 	if normalized < 0:
 		normalized += TAU
 	_append_u16(bytes, roundi((normalized / TAU) * 65535.0))
+
+## A rotation as one byte (1/256 of a turn): enough for a chain link's ring.
+static func _encode_rotation_u8(bytes: PackedByteArray, rotation: Variant) -> void:
+	var normalized: float = fmod(_num(rotation), TAU)
+	if normalized < 0:
+		normalized += TAU
+	bytes.append(roundi((normalized / TAU) * 256.0) % 256)
 
 static func _encode_string(bytes: PackedByteArray, s: Variant) -> void:
 	var utf8_bytes: PackedByteArray = String(s).to_utf8_buffer() if s is String else PackedByteArray()

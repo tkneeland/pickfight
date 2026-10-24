@@ -72,6 +72,9 @@ const STREAK_AREA: float = 3000.0
 const STREAK_LENGTH_CALM: float = 14.0
 const STREAK_LENGTH_GUST: float = 60.0
 
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["_elapsed", "_scroll"]
 var _elapsed: float = 0.0
 ## How far the streak field has scrolled along the wind, integrated from the
 ## current speed each tick so a speed change never makes the streaks jump.

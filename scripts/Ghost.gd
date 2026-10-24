@@ -204,17 +204,27 @@ func _exit_tree() -> void:
 	_carried = null
 
 func _draw() -> void:
-	if _puff_age < BOO_PUFF_SEC:
-		var t: float = _puff_age / BOO_PUFF_SEC
-		draw_arc(Vector2.ZERO, lerpf(RADIUS, BOO_RADIUS, t), 0.0, TAU, 32, Color(colour.r, colour.g, colour.b, 0.6 * (1.0 - t)), 3.0)
-	if not is_shown():
+	draw_ghost(self, colour, _alpha, puff_progress())
+
+## How far through its boo puff the ghost is, 0..1; 1 (or more) when no puff shows.
+func puff_progress() -> float:
+	return _puff_age / BOO_PUFF_SEC
+
+## Issue #976: how a ghost is drawn on `canvas`, shared with the Online
+## client's puppet (RemotePuppet.gd) so both draw the same. `puff` is
+## `puff_progress()`; `alpha_in` the ghost's fade.
+static func draw_ghost(canvas: CanvasItem, colour_in: Color, alpha_in: float, puff: float) -> void:
+	if puff < 1.0:
+		var t: float = maxf(puff, 0.0)
+		canvas.draw_arc(Vector2.ZERO, lerpf(RADIUS, BOO_RADIUS, t), 0.0, TAU, 32, Color(colour_in.r, colour_in.g, colour_in.b, 0.6 * (1.0 - t)), 3.0)
+	if alpha_in <= 0.01:
 		return
-	var body := Color(colour.r, colour.g, colour.b, _alpha)
-	draw_circle(Vector2.ZERO, RADIUS, body)
+	var body := Color(colour_in.r, colour_in.g, colour_in.b, alpha_in)
+	canvas.draw_circle(Vector2.ZERO, RADIUS, body)
 	# A little tail so it reads as a ghost, not a ball.
-	draw_colored_polygon(PackedVector2Array([
+	canvas.draw_colored_polygon(PackedVector2Array([
 		Vector2(-RADIUS, 0.0), Vector2(RADIUS, 0.0), Vector2(RADIUS * 0.6, RADIUS * 1.3),
 		Vector2(0.0, RADIUS * 0.8), Vector2(-RADIUS * 0.6, RADIUS * 1.3)]), body)
-	var eye := Color(0.1, 0.1, 0.15, _alpha * 1.4)
-	draw_circle(Vector2(-5.0, -3.0), 2.5, eye)
-	draw_circle(Vector2(5.0, -3.0), 2.5, eye)
+	var eye := Color(0.1, 0.1, 0.15, alpha_in * 1.4)
+	canvas.draw_circle(Vector2(-5.0, -3.0), 2.5, eye)
+	canvas.draw_circle(Vector2(5.0, -3.0), 2.5, eye)

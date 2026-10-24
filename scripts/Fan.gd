@@ -31,6 +31,9 @@ const WindZoneScene: PackedScene = preload("res://scenes/parts/WindZone.tscn")
 @export var travel_sec: float = 6.0
 
 ## The housing's colour; `Stage` swaps in the mood's platform colour.
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["position", "rotation", "_elapsed"]
 var _body_color: Color = Color(0.35, 0.35, 0.4, 1)
 var _origin: Vector2 = Vector2.ZERO
 var _elapsed: float = 0.0

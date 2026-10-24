@@ -52,6 +52,11 @@ const MOODS: Array[Dictionary] = [DAYLIGHT, DUSK, PAPER]
 
 ## The mood for the stage at `stage_index` in the rotation. A negative or
 ## unknown index (a stage loaded outside the rotation) gets Daylight.
+## Issue #976: the ink (outlines, pupils) players are drawn with on the stage
+## at `stage_index`, by night or not. Shared by the host and the Online client.
+static func ink_for(stage_index: int, night: bool) -> Color:
+	return NIGHT["ink"] if night else mood_for_stage(stage_index)["ink"]
+
 static func mood_for_stage(stage_index: int) -> Dictionary:
 	if stage_index < 0:
 		return DAYLIGHT

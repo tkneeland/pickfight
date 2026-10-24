@@ -17,6 +17,7 @@ signal callout(sound: StringName)
 const RespawnScript := preload("res://scripts/Respawn.gd")
 const ModeKitScript := preload("res://scripts/ModeKit.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
+const NetSyncScript := preload("res://scripts/NetSync.gd")
 
 ## Seconds a knocked-out player waits before coming back (#662).
 const RESPAWN_SEC: float = 4.0
@@ -83,6 +84,7 @@ var _tick_frame: int = -1
 
 func setup(manager: Node) -> void:
 	round_manager = manager
+	NetSyncScript.mark_prop(self, NetSyncScript.PROP_HILL) # drawn on Online clients too (#976)
 
 func start_round(slots: Array[int]) -> void:
 	_slots = slots.duplicate()
@@ -431,51 +433,75 @@ func _send_hill(slot: int, seconds: int) -> void:
 		server.send_hill(slot, seconds, roundi(seconds_to_win))
 
 func _draw() -> void:
+	var shown: Array = _shown()
+	var state: StringName = shown[0]
+	var holder: int = shown[1]
+	var colour: Color = _colour_of(holder) if state == &"held" else Color(1.0, 0.85, 0.2)
+	var fraction: float = _fraction_of(holder) if state == &"held" else 0.0
+	draw_hill(self, to_local(hill_position), hill_radius, state, colour, fraction, hill_warning,
+		to_local(next_hill_position()), Time.get_ticks_msec())
+
+## [state, holder] as drawn: what this tick's physics already found on the
+## hill, rather than counting the occupants again; counted afresh when no
+## tick ran yet.
+func _shown() -> Array:
+	if not _active or round_manager == null:
+		return [&"empty", -1]
+	var inside: Array[int] = _tick_inside
+	var holder: int = _tick_holder
+	if _tick_frame != Engine.get_physics_frames():
+		inside = occupants()
+		holder = _solo_holder(inside, _teams_round())
+	return [_state_of(inside, holder), holder]
+
+## Issue #976: the hill as drawn on `canvas` (centred at `centre`, in its
+## frame): `state` &"empty", &"held" (by `colour`, its ring `fraction` full)
+## or &"contested", and the warning ring at `next_centre` while `warning`.
+## Shared with the Online client (NetSync.gd), so both draw the same hill.
+static func draw_hill(canvas: CanvasItem, centre: Vector2, radius: float, state: StringName, colour: Color,
+		fraction: float, warning: bool, next_centre: Vector2, now_msec: int) -> void:
 	var gold := Color(1.0, 0.85, 0.2)
-	var centre: Vector2 = to_local(hill_position)
-	var state: StringName = &"empty"
-	var holder: int = -1
-	if _active and round_manager != null:
-		# What this tick's physics already found on the hill, rather than
-		# counting the occupants again; counted afresh when no tick ran yet.
-		var inside: Array[int] = _tick_inside
-		holder = _tick_holder
-		if _tick_frame != Engine.get_physics_frames():
-			inside = occupants()
-			holder = _solo_holder(inside, _teams_round())
-		state = _state_of(inside, holder)
 	match state:
 		&"held":
-			var colour: Color = _colour_of(holder)
-			draw_circle(centre, hill_radius, Color(colour, 0.4))
-			draw_arc(centre, hill_radius, 0.0, TAU, 48, Color(colour, 0.5), 3.0)
-			var fraction: float = _fraction_of(holder)
+			canvas.draw_circle(centre, radius, Color(colour, 0.4))
+			canvas.draw_arc(centre, radius, 0.0, TAU, 48, Color(colour, 0.5), 3.0)
 			if fraction > 0.0:
-				draw_arc(centre, hill_radius - 7.0, -PI * 0.5, -PI * 0.5 + TAU * fraction, 64, colour, 12.0)
-			_draw_crown(centre + Vector2(0.0, -hill_radius - 50.0 + 6.0 * sin(float(Time.get_ticks_msec()) * 0.005)), colour)
+				canvas.draw_arc(centre, radius - 7.0, -PI * 0.5, -PI * 0.5 + TAU * fraction, 64, colour, 12.0)
+			draw_crown(canvas, centre + Vector2(0.0, -radius - 50.0 + 6.0 * sin(float(now_msec) * 0.005)), colour)
 		&"contested":
-			var flash: bool = int(float(Time.get_ticks_msec()) / 200.0) % 2 == 0
+			var flash: bool = int(float(now_msec) / 200.0) % 2 == 0
 			var colour2: Color = Color(1.0, 0.2, 0.2) if flash else Color.WHITE
-			draw_circle(centre, hill_radius, Color(colour2, 0.3))
-			draw_arc(centre, hill_radius, 0.0, TAU, 48, colour2, 5.0)
+			canvas.draw_circle(centre, radius, Color(colour2, 0.3))
+			canvas.draw_arc(centre, radius, 0.0, TAU, 48, colour2, 5.0)
 			var font: Font = ThemeDB.fallback_font
-			draw_string(font, centre + Vector2(-hill_radius, -hill_radius - 16.0), tr("HILL_CONTESTED"),
-				HORIZONTAL_ALIGNMENT_CENTER, hill_radius * 2.0, 36, colour2)
+			canvas.draw_string(font, centre + Vector2(-radius, -radius - 16.0), canvas.tr("HILL_CONTESTED"),
+				HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, 36, colour2)
 		_:
-			draw_circle(centre, hill_radius, Color(gold, 0.15))
-			draw_arc(centre, hill_radius, 0.0, TAU, 48, Color(gold, 0.45), 3.0)
-	if hill_warning:
-		var pulse: float = 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.012)
+			canvas.draw_circle(centre, radius, Color(gold, 0.15))
+			canvas.draw_arc(centre, radius, 0.0, TAU, 48, Color(gold, 0.45), 3.0)
+	if warning:
+		var pulse: float = 0.5 + 0.5 * sin(float(now_msec) * 0.012)
 		var warn := Color(1.0, 0.35, 0.2)
-		draw_arc(to_local(next_hill_position()), hill_radius, 0.0, TAU, 48, Color(warn, 0.4 + 0.5 * pulse), 4.0)
+		canvas.draw_arc(next_centre, radius, 0.0, TAU, 48, Color(warn, 0.4 + 0.5 * pulse), 4.0)
 
 ## A simple crown floating over the hill, in gold with the holder's outline.
-func _draw_crown(at: Vector2, outline: Color) -> void:
+static func draw_crown(canvas: CanvasItem, at: Vector2, outline: Color) -> void:
 	var pts := PackedVector2Array([Vector2(-32, 0), Vector2(-32, -32), Vector2(-16, -16), Vector2(0, -42),
 		Vector2(16, -16), Vector2(32, -32), Vector2(32, 0)])
 	for i in pts.size():
 		pts[i] += at
-	draw_colored_polygon(pts, Color(1.0, 0.85, 0.2))
+	canvas.draw_colored_polygon(pts, Color(1.0, 0.85, 0.2))
 	var loop: PackedVector2Array = pts.duplicate()
 	loop.append(pts[0])
-	draw_polyline(loop, outline, 4.0)
+	canvas.draw_polyline(loop, outline, 4.0)
+
+## Issue #976: what the Online client needs to draw the hill as `_draw()`
+## does: [hill centre, radius, state (0 empty, 1 held, 2 contested), holder
+## colour, ring fraction, warning, next centre], all in world space.
+func net_state() -> Array:
+	var shown: Array = _shown()
+	var state: StringName = shown[0]
+	var holder: int = shown[1]
+	var code: int = 1 if state == &"held" else (2 if state == &"contested" else 0)
+	return [hill_position, hill_radius, code, _colour_of(holder) if code == 1 else Color(1.0, 0.85, 0.2),
+		_fraction_of(holder) if code == 1 else 0.0, hill_warning, next_hill_position()]

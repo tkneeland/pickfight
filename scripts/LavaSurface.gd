@@ -20,6 +20,9 @@ const EMBER_SPAN: float = 2400.0
 const EMBER_RISE: float = 160.0
 const BLOBS: int = 3
 
+## Issue #976: a clock the Online client keeps in step with the host's
+## (NetSync.gd).
+const NET_CLOCKS: Array[String] = ["_time"]
 var _pool: bool = false
 var _left: float = 0.0
 var _right: float = 0.0

@@ -1262,16 +1262,7 @@ func _place_head_circles(layout: PackedVector2Array, facing: float) -> void:
 ## it again. This is what stays legible once the fill has reddened past the
 ## point of being recognisable as anyone in particular.
 func _build_identity_outline() -> void:
-	var outline := Line2D.new()
-	outline.name = "IdentityOutline"
-	var pts: PackedVector2Array = body_visual.polygon.duplicate()
-	if pts.size() > 0:
-		pts.append(pts[0])
-	outline.points = pts
-	outline.width = 4.0
-	outline.default_color = identity_color
-	outline.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	outline.end_cap_mode = Line2D.LINE_CAP_ROUND
+	var outline: Line2D = build_identity_outline_line(body_visual.polygon, identity_color)
 	add_child(outline)
 	# Just behind the haft in tree order (#91): same z_index, so the arm
 	# draws over the outline rather than under it. The weapon head lives in
@@ -1285,14 +1276,81 @@ func _build_identity_outline() -> void:
 ## Purely presentational -- the haft has no collision shape to derive a width
 ## from (it collides with nothing, per CONTEXT.md).
 func _style_haft() -> void:
-	weapon_line.default_color = HAFT_COLOR
-	weapon_line.width = HAFT_BASE_WIDTH
-	weapon_line.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	weapon_line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	style_haft_line(weapon_line)
+
+# --- Shared with the Online client (issue #976) -------------------------------
+#
+# The builders below make the nodes a player is drawn with, from data alone, so
+# the Online client's puppet (RemotePuppet.gd) builds the very same nodes rather
+# than a second copy of the drawing that could drift (the #930 lesson).
+
+## The identity outline traced round `polygon` (the body's), in `colour`.
+static func build_identity_outline_line(polygon: PackedVector2Array, colour: Color) -> Line2D:
+	var outline := Line2D.new()
+	outline.name = "IdentityOutline"
+	var pts: PackedVector2Array = polygon.duplicate()
+	if pts.size() > 0:
+		pts.append(pts[0])
+	outline.points = pts
+	outline.width = 4.0
+	outline.default_color = colour
+	outline.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	outline.end_cap_mode = Line2D.LINE_CAP_ROUND
+	return outline
+
+## Styles `line` as the haft: tapered from HAFT_BASE_WIDTH to HAFT_TIP_WIDTH, in HAFT_COLOR.
+static func style_haft_line(line: Line2D) -> void:
+	line.default_color = HAFT_COLOR
+	line.width = HAFT_BASE_WIDTH
+	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	line.end_cap_mode = Line2D.LINE_CAP_ROUND
 	var taper := Curve.new()
 	taper.add_point(Vector2(0.0, 1.0))
 	taper.add_point(Vector2(1.0, HAFT_TIP_WIDTH / HAFT_BASE_WIDTH))
-	weapon_line.width_curve = taper
+	line.width_curve = taper
+
+## The body's fill for a player of `colour` at `amount` damage.
+static func damage_fill(colour: Color, amount: float) -> Color:
+	return colour.lerp(DAMAGE_FILL_COLOR, clampf(amount / DEATH_DAMAGE, 0.0, 1.0))
+
+## The weapon head as drawn for `stats` (head-local, unrotated): its
+## `art_outline` in `colour`, or the circles' bounding box in
+## FALLBACK_HEAD_COLOR without art, with the dark `ink` outline as a child.
+static func build_head_visual_for(stats: Resource, colour: Color, ink: Color) -> Polygon2D:
+	var visual := Polygon2D.new()
+	visual.name = "HeadVisual"
+	if head_visual_is_fallback_for(stats):
+		visual.polygon = _rect_from_bounds(_head_circle_bounds(stats))
+		visual.color = FALLBACK_HEAD_COLOR
+	else:
+		visual.polygon = stats.art_outline
+		visual.color = colour
+	# Issue #360: a dark ink outline traced around the head, a child so it
+	# rides the head's rotation and fades with its modulate. Drawing only.
+	var edge := Line2D.new()
+	edge.name = "HeadOutline"
+	edge.points = visual.polygon
+	edge.closed = true
+	edge.width = 2.0
+	edge.default_color = ink
+	edge.joint_mode = Line2D.LINE_JOINT_ROUND
+	visual.add_child(edge)
+	return visual
+
+## Whether `stats` has no art of its own, so its head draws as the fallback box.
+static func head_visual_is_fallback_for(stats: Resource) -> bool:
+	return stats.art_outline.size() < 3
+
+## The grapple's hook or the boomerang drawn loaded on the head (issue #150),
+## or null for a weapon with no loaded art.
+static func build_loaded_visual(stats: Resource, colour: Color) -> Polygon2D:
+	if stats.loaded_art.size() < 3:
+		return null
+	var visual := Polygon2D.new()
+	visual.name = "LoadedVisual"
+	visual.polygon = stats.loaded_art
+	visual.color = colour
+	return visual
 
 ## Repaints the body fill from `identity_color` (at zero damage) toward
 ## `DAMAGE_FILL_COLOR` (at `DEATH_DAMAGE`). Runs every physics tick rather
@@ -1300,8 +1358,7 @@ func _style_haft() -> void:
 ## it changed -- a strike, `start_round()`'s reset, or a scenario setting it
 ## directly, which is how this suite's own scenarios read and drive it.
 func _update_damage_visual() -> void:
-	var t: float = clampf(damage / DEATH_DAMAGE, 0.0, 1.0)
-	var fill: Color = identity_color.lerp(DAMAGE_FILL_COLOR, t)
+	var fill: Color = damage_fill(identity_color, damage)
 	# Written only when it moved: setting it redraws the polygon every tick.
 	if body_visual.color != fill:
 		body_visual.color = fill
@@ -1317,28 +1374,10 @@ func _update_damage_visual() -> void:
 ## for the same reason: the failure being guarded is the drawing and the
 ## hitbox parting ways. See `weapon_head_visual_is_fallback()`.
 func _build_head_visual(stats: WeaponStatsType) -> Polygon2D:
-	var visual := Polygon2D.new()
-	visual.name = "HeadVisual"
-	if stats.art_outline.size() >= 3:
-		visual.polygon = stats.art_outline
-		visual.color = identity_color
-		_head_visual_is_fallback = false
-	else:
-		visual.polygon = _rect_from_bounds(_head_circle_bounds(stats))
-		visual.color = FALLBACK_HEAD_COLOR
-		_head_visual_is_fallback = true
+	_head_visual_is_fallback = head_visual_is_fallback_for(stats)
+	if _head_visual_is_fallback:
 		push_warning("Player: weapon stats carry no art outline (%d points); falling back to the head circles' bounding box" % stats.art_outline.size())
-	# Issue #360: a dark ink outline traced around the head, a child so it
-	# rides the head's rotation and fades with its modulate. Drawing only.
-	var edge := Line2D.new()
-	edge.name = "HeadOutline"
-	edge.points = visual.polygon
-	edge.closed = true
-	edge.width = 2.0
-	edge.default_color = face_ink()
-	edge.joint_mode = Line2D.LINE_JOINT_ROUND
-	visual.add_child(edge)
-	return visual
+	return build_head_visual_for(stats, identity_color, face_ink())
 
 ## The ink of the weapon head's dark outline (#360).
 func head_outline_color() -> Color:
@@ -1350,7 +1389,7 @@ func head_outline_color() -> Color:
 ## The box the head's collision circles occupy, in head-local space. Only the
 ## fallback needs it: a head with no art still has to be drawn as something,
 ## and the circles are the only statement of where the head is.
-func _head_circle_bounds(stats: WeaponStatsType) -> Rect2:
+static func _head_circle_bounds(stats: Resource) -> Rect2:
 	var bounds := Rect2()
 	for i in stats.head_circle_count():
 		var centre: Vector2 = stats.head_circle_offsets[i]
@@ -1359,7 +1398,7 @@ func _head_circle_bounds(stats: WeaponStatsType) -> Rect2:
 		bounds = circle if i == 0 else bounds.merge(circle)
 	return bounds
 
-func _rect_from_bounds(rect: Rect2) -> PackedVector2Array:
+static func _rect_from_bounds(rect: Rect2) -> PackedVector2Array:
 	return PackedVector2Array([
 		rect.position, Vector2(rect.end.x, rect.position.y),
 		rect.end, Vector2(rect.position.x, rect.end.y)])
@@ -2141,11 +2180,8 @@ func _build_special(axis: Vector2) -> void:
 			_magnet.setup(self, _stats)
 			add_child(_magnet)
 		&"grapple", &"boomerang":
-			if _stats.loaded_art.size() >= 3:
-				_loaded_visual = Polygon2D.new()
-				_loaded_visual.name = "LoadedVisual"
-				_loaded_visual.polygon = _stats.loaded_art
-				_loaded_visual.color = identity_color
+			_loaded_visual = build_loaded_visual(_stats, identity_color)
+			if _loaded_visual != null:
 				_head_visual.add_child(_loaded_visual)
 
 func _tick_special(delta: float) -> void:

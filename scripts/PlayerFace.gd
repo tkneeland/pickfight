@@ -73,7 +73,10 @@ func pupil_centers(look: Vector2) -> Array[Vector2]:
 			reach = 3.0
 	return [Vector2(-EYE_X, EYE_Y) + look * reach, Vector2(EYE_X, EYE_Y) + look * reach]
 
-var _player: RigidBody2D
+## The player the face belongs to: a `Player`, or the Online client's puppet
+## (issue #976), which offers the same `linear_velocity`, `alive` and
+## `eye_look_dir()`. Untyped so either fits.
+var _player = null
 var _squash_nodes: Array[Node2D] = []
 var _hat: Node2D
 var _rng := RandomNumberGenerator.new()
@@ -85,10 +88,18 @@ var _squash_left: float = 0.0
 var _squash_dir: float = 1.0
 var _prev_vy: float = 0.0
 var _flash_left: float = 0.0
+## Issue #976: -1 blinks on this face's own clock; 0 (open) or 1 (blinking)
+## is the host's blink, which the Online client's puppet copies.
+var blink_override: int = -1
+## Issue #976: -1 squashes on this face's own landings and hits; 0..255 is
+## the host's squash (`squash_byte()`), which the Online client's puppet copies.
+var squash_override: int = -1
+## The squash byte at rest.
+const SQUASH_REST_BYTE: int = 128
 
 ## `visuals` are the player's drawn nodes that squash with the face; `hat` is
 ## moved so it stays on the squashed head.
-func setup(player: RigidBody2D, visuals: Array[Node2D], hat: Node2D) -> void:
+func setup(player: Node2D, visuals: Array[Node2D], hat: Node2D) -> void:
 	_player = player
 	_squash_nodes = visuals
 	_hat = hat
@@ -146,9 +157,24 @@ func hit_flash_alpha() -> float:
 
 ## The current visual scale factor, for the scenario: Vector2.ONE at rest.
 func squash_scale() -> Vector2:
+	var s: float = _signed_squash()
+	return Vector2(1.0 + s, 1.0 - s)
+
+## How far the face is squashed now: + wide (a landing), - tall (a hit).
+func _signed_squash() -> float:
+	if squash_override >= 0:
+		return float(clampi(squash_override, 1, 255) - SQUASH_REST_BYTE) / 127.0 * MAX_SQUASH
 	var t: float = _squash_left / SQUASH_RECOVERY
-	var a: float = _squash * t * t
-	return Vector2(1.0 + a * _squash_dir, 1.0 - a * _squash_dir)
+	return _squash * t * t * _squash_dir
+
+## The squash right now as a byte for the snapshot (issue #976).
+func squash_byte() -> int:
+	return SQUASH_REST_BYTE + int(round(clampf(_signed_squash() / MAX_SQUASH, -1.0, 1.0) * 127.0))
+
+## Shows the host's squash `byte` at once (the Online client's puppet).
+func set_squash_byte(byte: int) -> void:
+	squash_override = clampi(byte, 0, 255)
+	_apply_squash()
 
 func _apply_squash() -> void:
 	var s: Vector2 = squash_scale()
@@ -168,7 +194,7 @@ func eye_state() -> String:
 		return "dead"
 	if _squint_left > 0.0:
 		return "squint"
-	if _blink_left > 0.0:
+	if (_blink_left > 0.0) if blink_override < 0 else blink_override == 1:
 		return "blink"
 	return "open"
 

@@ -12,6 +12,9 @@ extends "res://scripts/DamageHazard.gd"
 @export var travel: Vector2 = Vector2.ZERO
 @export var one_way_sec: float = 2.0
 
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["position", "_visual:rotation"]
 var _visual: Polygon2D
 var _origin: Vector2
 var _elapsed: float = 0.0

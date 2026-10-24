@@ -80,6 +80,9 @@ const _PLAYER_GRAVITY_SCALE: float = 1.5
 const _DETECTOR_MARGIN: float = 12.0
 
 ## The authored angle: SEESAW tilts about it, SPIN starts from it.
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["rotation"]
 var _rest_rotation: float = 0.0
 ## SEESAW state: tilt from rest, and its rate, in radians and rad/s.
 var _tilt: float = 0.0

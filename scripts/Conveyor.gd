@@ -44,6 +44,10 @@ const _DETECTOR_ABOVE: float = 6.0
 const _DETECTOR_BELOW: float = 2.0
 const _CHEVRON_SPACING: float = 40.0
 
+## Issue #976: the chevrons scroll on a clock the Online client keeps in step
+## with the host's (NetSync.gd); within a few pixels is in step.
+const NET_CLOCKS: Array[String] = ["_scroll"]
+const NET_CLOCK_TOLERANCE: float = 4.0
 var _detector: Area2D
 var _chevrons: Node2D
 var _scroll: float = 0.0

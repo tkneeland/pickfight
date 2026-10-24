@@ -28,6 +28,9 @@ const LAMP_ENERGY: float = 1.0
 const GLOW_ENERGY: float = 0.8
 const LIGHT_TEXTURE_SIZE: int = 256
 const GLOW_NAME: String = "NightGlow"
+## Issue #976: the lamp flicker clock, kept in step with the host's on the
+## Online client (NetSync.gd).
+const NET_CLOCKS: Array[String] = ["_time"]
 
 var modulate_node: CanvasModulate
 var lamps: Array[PointLight2D] = []

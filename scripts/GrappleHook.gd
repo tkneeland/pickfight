@@ -311,13 +311,29 @@ func _shooter_in_play() -> bool:
 func _draw() -> void:
 	if not is_instance_valid(shooter):
 		return
-	var from: Vector2 = to_local(shooter.weapon_head_position())
-	draw_line(from, Vector2.ZERO, OUTLINE_COLOR, ROPE_WIDTH + 1.5)
-	draw_line(from, Vector2.ZERO, ROPE_COLOR, ROPE_WIDTH)
-	if _art.size() >= 3:
-		draw_colored_polygon(_art, _colour)
-		var edge: PackedVector2Array = _art.duplicate()
-		edge.append(_art[0])
-		draw_polyline(edge, OUTLINE_COLOR, 1.0)
+	draw_hook(self, to_local(shooter.weapon_head_position()), _art, _colour, _shape.radius if _shape != null else 4.0)
+
+## Issue #976: the art in flight and its colour, for the scenarios that check
+## the Online puppet draws the same.
+func art() -> PackedVector2Array:
+	return _art
+
+func colour() -> Color:
+	return _colour
+
+## Issue #976: how a hook and its rope are drawn on `canvas`, shared with the
+## Online client's puppet (RemotePuppet.gd) so both draw the same. `rope_from`
+## is the shooter's weapon head in the hook's own frame; `art` is centred
+## (`ShotSweep.centred`), and with fewer than three points a circle of
+## `fallback_radius` stands in.
+static func draw_hook(canvas: CanvasItem, rope_from: Vector2, art_in: PackedVector2Array, colour_in: Color,
+		fallback_radius: float) -> void:
+	canvas.draw_line(rope_from, Vector2.ZERO, OUTLINE_COLOR, ROPE_WIDTH + 1.5)
+	canvas.draw_line(rope_from, Vector2.ZERO, ROPE_COLOR, ROPE_WIDTH)
+	if art_in.size() >= 3:
+		canvas.draw_colored_polygon(art_in, colour_in)
+		var edge: PackedVector2Array = art_in.duplicate()
+		edge.append(art_in[0])
+		canvas.draw_polyline(edge, OUTLINE_COLOR, 1.0)
 	else:
-		draw_circle(Vector2.ZERO, _shape.radius if _shape != null else 4.0, _colour)
+		canvas.draw_circle(Vector2.ZERO, fallback_radius, colour_in)

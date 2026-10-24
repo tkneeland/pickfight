@@ -18,6 +18,7 @@ extends Node
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
 const SuddenDeathScript := preload("res://scripts/SuddenDeath.gd")
+const NetSyncScript := preload("res://scripts/NetSync.gd")
 const FallingRockScene: PackedScene = preload("res://scenes/parts/FallingRock.tscn")
 
 ## Seconds of tiebreaker before the first rock.
@@ -145,6 +146,7 @@ func _drop_rock() -> void:
 	var rock: Node2D = FallingRockScene.instantiate()
 	rock.set("auto_drop", false)
 	rock.set("one_shot", true)
+	NetSyncScript.mark_prop(rock, NetSyncScript.PROP_ROCK) # drawn on Online clients too (#976)
 	add_child(rock)
 	rock.global_position = Vector2(x, view.position.y - RAIN_TOP_MARGIN)
 	if rock.drop_now():

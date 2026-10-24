@@ -22,6 +22,7 @@ const RespawnScript := preload("res://scripts/Respawn.gd")
 const ModeKitScript := preload("res://scripts/ModeKit.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const NetSyncScript := preload("res://scripts/NetSync.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
 signal callout(sound: StringName)
@@ -213,19 +214,25 @@ func _build_ball() -> void:
 	circle.radius = BALL_RADIUS
 	shape.shape = circle
 	ball.add_child(shape)
+	build_ball_visuals(ball)
+	ball.z_index = 5
+	NetSyncScript.mark_prop(ball, NetSyncScript.PROP_SOCCER_BALL) # drawn on Online clients too (#976)
+	add_child(ball)
+
+## Issue #976: the ball's drawing (a white disc with a dark seam), added to
+## `node`. Shared with the Online client (NetSync.gd) so both draw the same ball.
+static func build_ball_visuals(node: Node2D) -> void:
 	var disc := Polygon2D.new()
 	var points := PackedVector2Array()
 	for i in 24:
 		points.append(Vector2.RIGHT.rotated(TAU * float(i) / 24.0) * BALL_RADIUS)
 	disc.polygon = points
 	disc.color = Color(0.96, 0.96, 0.92)
-	ball.add_child(disc)
+	node.add_child(disc)
 	var seam := Polygon2D.new()
 	seam.polygon = PackedVector2Array([Vector2(-10, -4), Vector2(10, -4), Vector2(14, 8), Vector2(0, 16), Vector2(-14, 8)])
 	seam.color = Color(0.15, 0.15, 0.18)
-	ball.add_child(seam)
-	ball.z_index = 5
-	add_child(ball)
+	node.add_child(seam)
 
 func _place_ball() -> void:
 	if ball == null:
