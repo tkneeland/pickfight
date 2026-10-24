@@ -1140,6 +1140,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"voice_slider_reset_by_restore_defaults_824",
 	"kill_feed_switch_833",
 	"damage_numbers_switch_873",
+	"damage_number_lethal_colour",
 	"match_point_plate_switch_off_shows_none",
 	"stage_title_card_switch_off_shows_none",
 	"juice_hit_pause_switch_off_never_pauses",
@@ -3954,6 +3955,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kill_feed_switch_833()
 		"damage_numbers_switch_873":
 			return await _scenario_damage_numbers_switch_873()
+		"damage_number_lethal_colour":
+			return await _scenario_damage_number_lethal_colour()
 		"match_point_plate_switch_off_shows_none":
 			return await _scenario_match_point_plate_switch_off_shows_none()
 		"stage_title_card_switch_off_shows_none":
@@ -53484,6 +53487,57 @@ func _scenario_kill_feed_switch_833() -> Array[String]:
 	sfx.kill_feed = was["feed"]
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
+	return failures
+## A lethal strike's damage number is LETHAL_COLOR, a non-lethal one white, a
+## zero grey (#1062); the joiner's number, drawn from the recorded `hit`
+## effect through the same show_strike, is red too.
+func _scenario_damage_number_lethal_colour() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var log: Dictionary = _hit_feedback_fixture(stage, attacker)
+	var feedback: Node2D = log["feedback"]
+	feedback.show_strike(Vector2(0, 0), 30.0, true, Color.GREEN)
+	feedback.show_strike(Vector2(0, 0), 30.0, false, Color.GREEN)
+	feedback.show_strike(Vector2(0, 0), 0.0, false, Color.GREEN)
+	feedback.show_strike(Vector2(0, 0), 30.0, true, Color.GREEN)
+	var numbers: Array = []
+	for child: Node in feedback.get_children():
+		if child is Label:
+			numbers.append(child)
+	if numbers.size() != 4:
+		failures.append("expected 4 numbers, drew %d" % numbers.size())
+	else:
+		if numbers[0].label_settings.font_color != HitFeedbackType.LETHAL_COLOR or numbers[3].label_settings.font_color != HitFeedbackType.LETHAL_COLOR:
+			failures.append("a lethal number is %s, not LETHAL_COLOR" % numbers[0].label_settings.font_color)
+		if numbers[1].label_settings.font_color != Color.WHITE:
+			failures.append("a non-lethal number is %s, not white" % numbers[1].label_settings.font_color)
+		if numbers[2].label_settings.font_color != HitFeedbackType.ZERO_NUMBER_COLOR:
+			failures.append("a zero number is %s, not grey" % numbers[2].label_settings.font_color)
+		if numbers[0].label_settings.font_size != numbers[1].label_settings.font_size:
+			failures.append("lethal changed the number's size")
+		if numbers[0].label_settings.outline_color != numbers[1].label_settings.outline_color:
+			failures.append("lethal changed the outline")
+		if numbers[0].label_settings != numbers[3].label_settings:
+			failures.append("two lethal numbers at one size do not share settings")
+	await _teardown(stage)
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var hf: Node = client.effects.hit_feedback
+	_fx_play_976(client, [{"k": "hit", "p": Vector2(5, 5), "a": 40.0, "l": true, "c": Color.GREEN}, {"k": "hit", "p": Vector2(9, 9), "a": 40.0, "l": false, "c": Color.GREEN}])
+	await process_frame
+	var remote: Array = []
+	for child: Node in hf.get_children():
+		if child is Label:
+			remote.append(child)
+	if remote.size() != 2:
+		failures.append("joiner drew %d numbers, not 2" % remote.size())
+	else:
+		if remote[0].label_settings.font_color != HitFeedbackType.LETHAL_COLOR:
+			failures.append("the joiner's lethal number is %s, not LETHAL_COLOR" % remote[0].label_settings.font_color)
+		if remote[1].label_settings.font_color != Color.WHITE:
+			failures.append("the joiner's non-lethal number is not white")
+	await _rc_close_241(rig)
 	return failures
 ## Issue #873: Settings > Damage numbers feeds HitFeedback; saved; reset by Restore defaults.
 func _scenario_damage_numbers_switch_873() -> Array[String]:
