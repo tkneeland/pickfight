@@ -1230,6 +1230,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_platform_geometry_unchanged_refactor_platforms",
 	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
+	"online_client_lobby_copy_code",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4119,6 +4120,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patches_overlapping_keep_grip_off_refactor_modes()
 		"controller_page_review_fixes_refactor_phone":
 			return _scenario_controller_page_review_fixes_refactor_phone()
+		"online_client_lobby_copy_code":
+			return await _scenario_online_client_lobby_copy_code()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -57331,5 +57334,53 @@ func _scenario_remote_loaded_weapon_art_976() -> Array[String]:
 	if p0 != null and p0.loaded:
 		failures.append("the fired grapple still shows loaded on the joiner")
 	await _rc_close_241(rig)
+	_scenario_completed = true
+	return failures
+## #1033: the PC client's lobby has a Copy code button sharing the host's label,
+## timing and keys (#863): a press puts the room code on the clipboard, reads
+## "Copied" for 1.5 s, then reverts; it hides during the countdown and a match.
+func _scenario_online_client_lobby_copy_code() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	var clip: Array[String] = []
+	client.clipboard_setter = func(text: String) -> void: clip.append(text)
+	client.room_code = "WXYZ"
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 2}))
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "players": [{"slot": 2, "ready": false}]}))
+	var button: Button = client.find_child("CopyCode", true, false) as Button
+	if button == null or not button.is_visible_in_tree():
+		failures.append("the client lobby shows no Copy code button")
+		client.queue_free()
+		await process_frame
+		_scenario_completed = true
+		return failures
+	var normal: String = button.text
+	if normal != client.tr("LOBBY_COPY_CODE_PAD"):
+		failures.append("Copy code reads '%s', not the host's label '%s'" % [normal, client.tr("LOBBY_COPY_CODE_PAD")])
+	if button.focus_mode == Control.FOCUS_NONE:
+		failures.append("Copy code is outside the gamepad focus chain")
+	button.pressed.emit()
+	if clip != ["WXYZ"]:
+		failures.append("the clipboard holds %s, not the room code" % [clip])
+	if button.text != client.tr("LOBBY_COPIED"):
+		failures.append("after a press the button reads '%s', not Copied" % button.text)
+	var until_msec: int = Time.get_ticks_msec() + 1700 # the label runs on wall-clock msec
+	while Time.get_ticks_msec() < until_msec:
+		await process_frame
+	client._sync_copy_button()
+	if button.text != normal:
+		failures.append("Copied never reverted to '%s' (reads '%s')" % [normal, button.text])
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "countdown", "count": 3, "players": [{"slot": 2, "ready": true}]}))
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows during the countdown")
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "playing", "players": [{"slot": 2, "ready": false}]}))
+	if button.is_visible_in_tree():
+		failures.append("Copy code shows during a match")
+	client.queue_free()
+	await process_frame
 	_scenario_completed = true
 	return failures

@@ -36,7 +36,8 @@ const CONTROL_BUTTON_FONT_SIZE: int = 22 # was 26 (#425); still above DECK_MIN_F
 const ROOM_CODE_FONT_SIZE: int = 96
 const STEP_BUTTON_PX: float = 44.0
 ## How long Copy code reads "Copied" after a press (#863).
-const COPIED_MSEC: int = 1500
+const CopyCodeScript := preload("res://scripts/CopyCode.gd")
+const COPIED_MSEC: int = CopyCodeScript.COPIED_MSEC
 const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
 const MAIN_SCENE: String = "res://scenes/Main.tscn"
 ## How long Leave lobby stays armed after its first press, when others are seated (#716).
@@ -329,9 +330,7 @@ func press_control(id: String) -> void:
 			var code: String = server.online_room_code()
 			if not _copy_button.visible or code == "":
 				return # Couch, Solo or streamer mode: nothing to copy, so K does nothing
-			clipboard_setter.call(code)
-			_copied_until_msec = Time.get_ticks_msec() + COPIED_MSEC
-			_screen.get_tree().create_timer(COPIED_MSEC / 1000.0 + 0.05).timeout.connect(refresh)
+			_copied_until_msec = CopyCodeScript.press(code, clipboard_setter, _screen.get_tree(), refresh)
 		"join_help":
 			if not _screen.join_help_button().visible:
 				return # Online or Solo: no LAN join to help with, so H does nothing
@@ -434,10 +433,7 @@ func refresh() -> void:
 	_room_label.text = code
 	_room_label.visible = code != "" and not (server.has_method("room_code_hidden") and server.room_code_hidden())
 	_copy_button.visible = _room_label.visible and kind == "online"
-	if Time.get_ticks_msec() < _copied_until_msec:
-		_copy_button.text = _screen.tr("LOBBY_COPIED")
-	else:
-		_copy_button.text = _screen.tr("LOBBY_COPY_CODE_PAD" if _pad_active else "LOBBY_COPY_CODE")
+	_copy_button.text = _screen.tr(CopyCodeScript.caption_key(_copied_until_msec, not _pad_active))
 	# The code says "online" already; the status stays for connecting or a blip.
 	_online_status.visible = _online_status.text != "" and kind == "online"
 	_screen._apply_streamer_mode(server)
