@@ -128,6 +128,7 @@ JOIN_PAUSED,Paused,Pausiert,En pause,En pausa,Pausado,已暂停,一時停止中,
 JOIN_PAUSE_MATCH,Pause match,Match pausieren,Mettre en pause,Pausar partida,Pausar partida,暂停对局,マッチを一時停止,대전 일시정지,Поставить матч на паузу
 JOIN_PLAYER_READY,%s  ready,%s  bereit,%s  prêt,%s  listo,%s  pronto,%s  已准备,%s  準備OK,%s  준비 완료,%s  готов
 JOIN_READY,Ready,Bereit,Prêt,Listo,Pronto,准备,準備OK,준비,Готов
+JOIN_READY_KEY,Ready (Enter),Bereit (Enter),Prêt (Entrée),Listo (Enter),Pronto (Enter),准备 (Enter),準備OK (Enter),준비 (Enter),Готов (Enter)
 JOIN_RELAY_NO_ANSWER,Could not reach the relay at %s (no answer).,Relay unter %s nicht erreichbar (keine Antwort).,Relais injoignable à %s (pas de réponse).,No se pudo contactar el relay en %s (sin respuesta).,Não foi possível alcançar o relay em %s (sem resposta).,无法连接到 %s 的中继服务器(无响应)。,%s のリレーに届きません(応答なし)。,%s의 릴레이에 닿지 않아요 (응답 없음).,Не удалось связаться с ретранслятором %s (нет ответа).
 JOIN_RELAY_UNREACHABLE,Could not reach the relay at %s.,Relay unter %s nicht erreichbar.,Relais injoignable à %s.,No se pudo contactar el relay en %s.,Não foi possível alcançar o relay em %s.,无法连接到 %s 的中继服务器。,%s のリレーに届きません。,%s의 릴레이에 닿지 않아요.,Не удалось связаться с ретранслятором %s.
 JOIN_RESUME,Resume,Weiter,Reprendre,Seguir,Continuar,继续,再開,계속,Продолжить

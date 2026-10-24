@@ -188,6 +188,7 @@ var _lobby_title: Label
 var _career_button: Button
 var _lobby_list: VBoxContainer
 var _ready_button: Button
+var _pad_active: bool = false # the last input was a gamepad's: no "(Enter)" on Ready (#1035)
 var _ready_want: int = -1 # the clicked Ready (0/1) awaiting the host's echo, else -1 (#550)
 var _ready_want_msec: int = 0
 var _host_row: HBoxContainer
@@ -411,6 +412,7 @@ func input_released() -> bool:
 	return false
 
 func _input(event: InputEvent) -> void:
+	_track_pad_active(event)
 	if state != State.PLAYING:
 		var back := event as InputEventKey
 		if back != null and back.pressed and not back.echo and back.physical_keycode == KEY_ESCAPE and _join_panel != null and _join_panel.is_visible_in_tree():
@@ -426,6 +428,9 @@ func _input(event: InputEvent) -> void:
 	if pad_button != null and pad_button.pressed and not menu_open and (pad_button.button_index == JOY_BUTTON_A or pad_button.button_index == JOY_BUTTON_START) and _ready_button != null and _ready_button.is_visible_in_tree():
 		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
 		get_viewport().set_input_as_handled() # else a focused Ready also takes it as ui_accept and flips back (#550)
+		return
+	if enter_readies(event):
+		get_viewport().set_input_as_handled() # a focused Ready also takes Enter as ui_accept (#550)
 		return
 	if pad_button != null and not menu_open:
 		if pad_button.button_index == JOY_BUTTON_LEFT_SHOULDER or pad_button.button_index == JOY_BUTTON_RIGHT_SHOULDER:
@@ -460,6 +465,34 @@ func _input(event: InputEvent) -> void:
 	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
 		toggle_menu()
 		get_viewport().set_input_as_handled()
+
+## Issue #1035: Enter toggles Ready in the lobby, as the button and the pad's A /
+## Start do. Not while a text field has focus, the Esc menu is open, or Ready
+## is hidden (a match, the victory screen). Returns whether it acted.
+func enter_readies(event: InputEvent) -> bool:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo or (key.physical_keycode != KEY_ENTER and key.physical_keycode != KEY_KP_ENTER):
+		return false
+	if menu_open or _ready_button == null or not _ready_button.is_visible_in_tree():
+		return false
+	if get_viewport().gui_get_focus_owner() is LineEdit:
+		return false
+	_ready_button.button_pressed = not _ready_button.button_pressed
+	return true
+
+## Issue #1035: the last input decides whether Ready shows its "(Enter)" hint.
+func _track_pad_active(event: InputEvent) -> void:
+	var was: bool = _pad_active
+	if event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf((event as InputEventJoypadMotion).axis_value) > 0.5):
+		_pad_active = true
+	elif event is InputEventKey or event is InputEventMouseButton:
+		_pad_active = false
+	if was != _pad_active:
+		_sync_ready_caption()
+
+func _sync_ready_caption() -> void:
+	if _ready_button != null:
+		_ready_button.text = tr("JOIN_READY" if _pad_active else "JOIN_READY_KEY")
 
 ## Issue #976: on the host's victory screen, Space, A or a left click is
 ## Continue, as on the host (#337, #640): this seat's Ready.
@@ -1698,7 +1731,8 @@ func _build_lobby_panel() -> void:
 	_ready_button = Button.new()
 	_ready_button.name = "Ready"
 	_ready_button.toggle_mode = true
-	_ready_button.text = tr("JOIN_READY")
+	_pad_active = not Input.get_connected_joypads().is_empty()
+	_sync_ready_caption()
 	_ready_button.toggled.connect(func(on: bool) -> void:
 		_ready_want = 1 if on else 0
 		_ready_want_msec = GameClockScript.now_msec()

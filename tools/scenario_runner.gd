@@ -1230,6 +1230,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_platform_geometry_unchanged_refactor_platforms",
 	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
+	"online_client_enter_readies",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4119,6 +4120,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patches_overlapping_keep_grip_off_refactor_modes()
 		"controller_page_review_fixes_refactor_phone":
 			return _scenario_controller_page_review_fixes_refactor_phone()
+		"online_client_enter_readies":
+			return await _scenario_online_client_enter_readies()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -57332,4 +57335,71 @@ func _scenario_remote_loaded_weapon_art_976() -> Array[String]:
 		failures.append("the fired grapple still shows loaded on the joiner")
 	await _rc_close_241(rig)
 	_scenario_completed = true
+	return failures
+## #1035: Enter readies and un-readies in the client lobby, like the Ready button.
+## Ignored with a text field focused or the Esc menu open; the "(Enter)" hint
+## shows on Ready until a gamepad is the active input; a remote's Ready alone
+## never starts the countdown (#936).
+func _scenario_online_client_enter_readies() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _bots_rig_445("online", true, failures)
+	if rig.is_empty():
+		return failures
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures):
+		await _bots_close_445(rig)
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	if not await _wait_for_239(func() -> bool: return client._ready_button.is_visible_in_tree(), 5000):
+		failures.append("the client lobby never showed Ready")
+		await _bots_close_445(rig)
+		return failures
+	var enter := InputEventKey.new()
+	enter.physical_keycode = KEY_ENTER
+	enter.keycode = KEY_ENTER
+	enter.pressed = true
+	if client._ready_button.text != "Ready (Enter)" and TranslationServer.get_locale().begins_with("en"):
+		failures.append("Ready lacks the (Enter) hint: '%s'" % client._ready_button.text)
+	client._input(enter)
+	if not client._ready_button.button_pressed:
+		failures.append("Enter did not press Ready")
+	if not await _wait_for_239(func() -> bool: return server.slot_pressed_ready(client.slot), 3000):
+		failures.append("the host never saw the Enter ready")
+	for i in 120:
+		await process_frame
+	if rm.lobby_phase() != "lobby":
+		failures.append("a remote's Ready alone moved the room to '%s'" % rm.lobby_phase())
+	client._input(enter)
+	if client._ready_button.button_pressed:
+		failures.append("a second Enter did not un-ready")
+	# A focused Ready must not double-toggle: the event is consumed.
+	client._ready_button.grab_focus()
+	client._input(enter)
+	if not client._ready_button.button_pressed:
+		failures.append("Enter on a focused Ready did not ready once")
+	client._ready_button.set_pressed_no_signal(false)
+	# Ignored with a text field focused.
+	var field := LineEdit.new()
+	client.add_child(field)
+	field.grab_focus()
+	client._input(enter)
+	if client._ready_button.button_pressed:
+		failures.append("Enter readied while a text field had focus")
+	field.queue_free()
+	await process_frame
+	# Ignored with the Esc menu open.
+	client.menu_open = true
+	client._input(enter)
+	client.menu_open = false
+	if client._ready_button.button_pressed:
+		failures.append("Enter readied with the menu open")
+	# A gamepad as the active input drops the hint.
+	var pad := InputEventJoypadButton.new()
+	pad.button_index = JOY_BUTTON_X
+	pad.pressed = true
+	client._input(pad)
+	if client._ready_button.text.contains("Enter"):
+		failures.append("Ready kept the key hint with a gamepad active: '%s'" % client._ready_button.text)
+	await _bots_close_445(rig)
 	return failures
