@@ -14,6 +14,14 @@ extends Node
 ## nobody sits out; they still count as standing (`is_pending`) so the round
 ## goes on.
 ##
+## A match clock (#1012) of `TIME_LIMIT_SEC` (5 minutes) runs while the ball is
+## in play and stops during the goal pause and the kick-off. When it runs out
+## the team with more goals wins; a level score plays the shared Sudden Death
+## tiebreaker (`Tiebreaker.gd`, #554/#556) in place, announced "Overtime!", as
+## Stock's time-limit tie does (`RoundManager.begin_overtime`). There is no
+## golden goal: in overtime the ball goes and the first KO wins. The clock has
+## no display of its own.
+##
 ## Like every mode it never touches `RoundManager._scores`: the round ends by
 ## eliminating the losing team, and the normal last-team-standing rule scores
 ## it. Preloaded by path, never referenced by `class_name` (CLAUDE.md).
@@ -62,7 +70,15 @@ const STUCK_SEC: float = 8.0
 ## No fighter body or weapon head within this many px of the ball.
 const STUCK_REACH: float = 80.0
 
+## The match clock's length (#1012), seconds of play.
+const TIME_LIMIT_SEC: float = 300.0
+
 var goals_to_win: int = 3
+## Seconds of play left; a scenario sets it to drive the clock (#1012).
+var time_left: float = TIME_LIMIT_SEC
+## True once a level score at time went to Sudden Death: no ball, no goals, no
+## respawns, the next KO decides the round.
+var overtime: bool = false
 ## Seconds between a goal and the kick-off.
 var goal_pause_sec: float = 1.5
 var respawn_sec: float = RESPAWN_SEC
@@ -106,6 +122,8 @@ func start_round(slots: Array[int]) -> void:
 	scorers.clear()
 	_finished = false
 	_pause_left = 0.0
+	time_left = TIME_LIMIT_SEC
+	overtime = false
 	_stuck_sec = 0.0
 	_last_touch = -1
 	_geometry_key = [-1]
@@ -268,8 +286,8 @@ func _in_a_goal(point: Vector2) -> bool:
 # --- Play ----------------------------------------------------------------------
 
 func _on_eliminated(slot: int) -> void:
-	if not _active or _finished:
-		return
+	if not _active or _finished or overtime:
+		return # in overtime a KO is final (#1012)
 	_respawner.queue(slot)
 
 func _physics_process(delta: float) -> void:
@@ -284,6 +302,10 @@ func _physics_process(delta: float) -> void:
 		if _pause_left <= 0.0:
 			_kick_off()
 		return
+	time_left = maxf(time_left - delta, 0.0)
+	if time_left <= 0.0:
+		_time_up()
+		return
 	if ball.linear_velocity.length() > BALL_MAX_SPEED:
 		ball.linear_velocity = ball.linear_velocity.normalized() * BALL_MAX_SPEED
 	_check_thump(delta)
@@ -291,6 +313,26 @@ func _physics_process(delta: float) -> void:
 	_check_goals()
 	_check_out_of_play()
 	_check_stuck(delta)
+
+## The clock ran out (#1012): the team with more goals wins; level plays Sudden
+## Death in place, among everyone still in the round, as Stock does.
+func _time_up() -> void:
+	if int(scores[0]) != int(scores[1]):
+		ball.freeze = true
+		_win(0 if int(scores[0]) > int(scores[1]) else 1, false)
+		return
+	var tied: Array[int] = []
+	for slot: int in _watched.keys():
+		var player: Node2D = _watched[slot]
+		if is_instance_valid(player) and (bool(player.alive) or is_pending(slot)):
+			tied.append(slot)
+	tied.sort()
+	overtime = true
+	ball.queue_free()
+	ball = null
+	_stuck_sec = 0.0
+	round_manager.begin_overtime(tied)
+	callout.emit(&"announce_overtime")
 
 ## #988: a ball that stays nearly still with nobody in reach for `STUCK_SEC`
 ## goes back to the centre like a kick-off: no score change, no banner.
@@ -360,7 +402,7 @@ func _check_out_of_play() -> void:
 ## `team` scores. The player credited is the last of that team to have touched
 ## the ball (none for an own goal). Public so a scenario can drive it.
 func score_goal(team: int) -> void:
-	if not _active or _finished or _pause_left > 0.0:
+	if not _active or _finished or overtime or _pause_left > 0.0:
 		return
 	scores[team] = int(scores[team]) + 1
 	var scorer: int = _last_touch if _last_touch != -1 and team_of(_last_touch) == team else -1
@@ -391,9 +433,10 @@ func _kick_off() -> void:
 
 ## `team` has the goals: everyone on the other team is out, so the round
 ## manager's last-team-standing rule scores it.
-func _win(team: int) -> void:
+func _win(team: int, goal: bool = true) -> void:
 	_finished = true
-	_show_goal(true)
+	if goal:
+		_show_goal(true) # a clock win scored no goal, so no GOAL! banner (#1012)
 	ModeKitScript.eliminate_other_team(round_manager, _watched, _respawner, team_of, team)
 
 # --- Display -------------------------------------------------------------------
