@@ -49234,6 +49234,8 @@ class _Link689 extends Node:
 	var texts: Array[String] = []
 	func send_text_to(_peer: int, text: String) -> void:
 		texts.append(text)
+	func drop_peer(_peer: int) -> void:
+		pass
 func _ach_689() -> Node:
 	var ach: Node = get_root().get_node("Achievements")
 	ach.reset_for_test()

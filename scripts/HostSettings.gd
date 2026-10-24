@@ -214,28 +214,33 @@ func _stock_on_list() -> PackedStringArray:
 	return on if not on.is_empty() else pool
 
 func is_stage_enabled_for(mode_id: String, stage_name: String) -> bool:
+	return _is_enabled(mode_id, stage_name, _stock_list_for(mode_id))
+
+## The stock list when `mode_id` is Stock, built once for a whole pass over the stages.
+func _stock_list_for(mode_id: String) -> PackedStringArray:
+	return _stock_on_list() if mode_key(mode_id) == "stock" else PackedStringArray()
+
+func _is_enabled(mode_id: String, stage_name: String, stock_list: PackedStringArray) -> bool:
 	if not DemoBuildScript.stage_in_slice(stage_name) or not _mode_has_stage(mode_id, stage_name):
 		return false
 	var key: String = mode_key(mode_id)
 	if key == "stock":
-		return _stock_on_list().has(stage_name)
+		return stock_list.has(stage_name)
 	return not (disabled_stages_by_mode.get(key, PackedStringArray()) as PackedStringArray).has(stage_name)
 
 ## The stages `mode_id` plays, in rotation order. Never empty while the mode has
 ## a stage: with all of them off, every stage of that mode.
 func enabled_stages_for(mode_id: String) -> PackedStringArray:
-	var out := PackedStringArray()
-	for stage_name: String in stages_for_mode(mode_id):
-		if is_stage_enabled_for(mode_id, stage_name):
-			out.append(stage_name)
+	var out := on_stages_for(mode_id)
 	return out if not out.is_empty() else stages_for_mode(mode_id)
 
 ## The stages `mode_id` has switched on, with no fallback: empty when the host
 ## switched them all off (#647). The rotation draws from `enabled_stages_for`.
 func on_stages_for(mode_id: String) -> PackedStringArray:
 	var out := PackedStringArray()
+	var stock_list := _stock_list_for(mode_id)
 	for stage_name: String in stages_for_mode(mode_id):
-		if is_stage_enabled_for(mode_id, stage_name):
+		if _is_enabled(mode_id, stage_name, stock_list):
 			out.append(stage_name)
 	return out
 
