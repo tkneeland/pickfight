@@ -309,6 +309,7 @@ HUD_CTF,Red %d - Blue %d  Flags: red %s / blue %s,Rot %d - Blau %d  Flaggen: rot
 HUD_FLAG_0,home,zu Hause,au camp,en base,na base,在家,自陣,기지,на базе
 HUD_FLAG_1,carried,getragen,porté,llevada,carregada,被带走,運搬中,운반 중,несут
 HUD_FLAG_2,dropped,fallen gelassen,lâché,caída,caída,掉落,落下,떨어짐,брошен
+CTF_CAPTURED,CAPTURED!,EROBERT!,CAPTURÉ !,¡CAPTURADA!,CAPTURADA!,夺旗成功!,旗を奪取!,깃발 탈취!,ЗАХВАТ!
 HUD_SOCCER,Red %d - Blue %d (first to %d),Rot %d - Blau %d (erster bis %d),Rouge %d - Bleu %d (premier à %d),Rojo %d - Azul %d (primero a %d),Vermelho %d - Azul %d (primeiro a %d),红 %d - 蓝 %d(先到 %d),赤 %d - 青 %d(先取 %d),레드 %d - 블루 %d (선취 %d),Красные %d - Синие %d (до %d)
 HUD_POTATO,%s has the potato: %ds,%s hat die Kartoffel: %ds,%s a la patate : %ds,%s tiene la papa: %ds,%s está com a batata: %ds,%s 拿着山芋:%d 秒,%s がポテトを持ってる: %d秒,%s 감자를 들고 있어요: %d초,У %s картошка: %d с
 HUD_LIVES,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d,%s x%d

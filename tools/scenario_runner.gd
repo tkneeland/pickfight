@@ -765,6 +765,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ctf_a_ko_drops_the_flag_and_respawns_the_player",
 	"ctf_stages_load_bases_and_weights",
 	"ctf_flag_runner_award",
+	"ctf_capture_banner_names_carrier",
 	"bot_ctf_attackers_defenders_and_carrier_chase",
 	"announcer_calls_capture_the_flag",
 	"bot_four_bots_finish_a_king_of_the_hill_round_on_carousel",
@@ -3218,6 +3219,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ctf_stages_load_bases_and_weights()
 		"ctf_flag_runner_award":
 			return await _scenario_ctf_flag_runner_award()
+		"ctf_capture_banner_names_carrier":
+			return await _scenario_ctf_capture_banner_names_carrier()
 		"bot_ctf_attackers_defenders_and_carrier_chase":
 			return await _scenario_bot_ctf_attackers_defenders_and_carrier_chase()
 		"announcer_calls_capture_the_flag":
@@ -37864,6 +37867,78 @@ func _scenario_ctf_a_defender_touch_returns_the_flag() -> Array[String]:
 	var home: Vector2 = rig["rm"]._current_stage.get_flag_home(1)
 	if int(mode.state[1]) != mode.HOME or mode.flag_position[1].distance_to(home) > 1.0:
 		failures.append("a defender's touch did not return the flag (state %d)" % int(mode.state[1]))
+	await _teardown(rig["stage"])
+	return failures
+## #1072: a capture short of the target shows CAPTURED! in the capturing team's colour
+## with the carrier's name under it for the pause, on the host and (through the mode HUD
+## mirror) on the Online joiner; both go when the next hall starts; the winning capture
+## and a rejected capture show nothing.
+func _scenario_ctf_capture_banner_names_carrier() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var rm: Node = rig["rm"]
+	var mirror_rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(mirror_rig)
+	var path: String = str(mode.get_script().resource_path)
+	mode.captures_to_win = 2
+	mode.capture_pause_sec = 0.4
+	var head: Label = mode._hud.get_node_or_null("CtfCaptured") as Label
+	var who: Label = mode._hud.get_node_or_null("CtfCapturedName") as Label
+	if head == null or who == null:
+		failures.append("the host built no CtfCaptured / CtfCapturedName labels")
+		await _rc_close_241(mirror_rig)
+		await _teardown(rig["stage"])
+		return failures
+	# A capture with nobody carrying is rejected and shows nothing.
+	mode.capture(0, 0)
+	if head.visible or who.visible:
+		failures.append("a rejected capture showed a banner")
+	# Red slot 2 carries Blue's flag home: a capture short of the target.
+	mode.carrier[1] = 2
+	mode.state[1] = mode.CARRIED
+	mode.capture(0, 2)
+	if int(mode.scores[0]) != 1:
+		failures.append("the capture did not score")
+	if not head.visible or head.text != "CAPTURED!":
+		failures.append("host banner is %s '%s', wanted visible 'CAPTURED!'" % [head.visible, head.text])
+	if head.get_theme_color("font_color") != mode.FLAG_COLOURS[0]:
+		failures.append("the banner is not in the capturing team's colour")
+	if head.get_theme_font_size("font_size") != 120:
+		failures.append("the banner is not 120 px")
+	var want: String = str(rm._slot_name(2))
+	if not who.visible or who.text != want:
+		failures.append("host name line is %s '%s', wanted '%s'" % [who.visible, who.text, want])
+	if who.get_theme_color("font_color") != (rm._slot_color(2) as Color):
+		failures.append("the name is not in the carrier's colour")
+	var state: Dictionary = RemoteHudScript976.unpack(RemoteHudScript976._pack(UiMirrorScript976.capture(mode._hud)), {})
+	client.effects.apply_mode_hud(path, state)
+	var mine_head: Label = null
+	var mine_who: Label = null
+	if client.effects.mode_hud != null:
+		mine_head = client.effects.mode_hud.get_node_or_null("CtfCaptured") as Label
+		mine_who = client.effects.mode_hud.get_node_or_null("CtfCapturedName") as Label
+	if mine_head == null or mine_who == null:
+		failures.append("the joiner has no banner labels")
+	else:
+		if not mine_head.visible or mine_head.text != "CAPTURED!":
+			failures.append("joiner banner is %s '%s'" % [mine_head.visible, mine_head.text])
+		if not mine_who.visible or mine_who.text != want:
+			failures.append("joiner name line is %s '%s', wanted '%s'" % [mine_who.visible, mine_who.text, want])
+	await _await_msec(900)
+	if head.visible or who.visible:
+		failures.append("the banner stayed after the next hall started")
+	# The winning capture (Red's second) shows no banner.
+	_ctf_quiet(rig)
+	mode.carrier[1] = 0
+	mode.state[1] = mode.CARRIED
+	mode.capture(0, 0)
+	if head.visible or who.visible:
+		failures.append("the winning capture showed a banner")
+	client.effects.apply_mode_hud("", {})
+	await _rc_close_241(mirror_rig)
 	await _teardown(rig["stage"])
 	return failures
 ## Carrying the enemy flag into your own base is a capture: a point, the flag home.
