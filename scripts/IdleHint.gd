@@ -32,6 +32,7 @@ class Plate extends Node2D:
 	var born_msec: int = 0
 	var alpha: float = 0.0
 	var leaving: bool = false
+	var pad: bool = false
 	var size: Vector2 = Vector2.ZERO
 
 	func _draw() -> void:
@@ -87,6 +88,13 @@ func has_hint(slot: int) -> bool:
 	var plate: Variant = _plates.get(slot)
 	return plate != null and is_instance_valid(plate) and not (plate as Plate).leaving
 
+## Issue #976: 0 no plate up over `slot` (or it is fading out), 1 the drag
+## line, 2 the gamepad line. The snapshot carries it to Online clients.
+func hint_kind(slot: int) -> int:
+	if not has_hint(slot):
+		return 0
+	return 2 if (_plates[slot] as Plate).pad else 1
+
 ## The plate's text over `slot`, or "".
 func hint_text(slot: int) -> String:
 	var plate: Variant = _plates.get(slot)
@@ -111,11 +119,27 @@ func tick(ctx: Dictionary) -> void:
 		_rounds_seen += 1
 		_idle.clear()
 	var watching: bool = active and _rounds_seen == 1
+	# Issue #976: the Online client shows exactly the host's plates
+	# (`mirror`: slot -> hint_kind), rather than timing its own.
+	var mirror: Callable = ctx.get("mirror", Callable())
+	if mirror.is_valid():
+		watching = false
+		for slot in _players.size():
+			var kind: int = int(mirror.call(slot))
+			if kind == 0:
+				_dismiss(slot)
+			elif not has_hint(slot):
+				if _plates.has(slot):
+					(_plates[slot] as Plate).queue_free()
+					_plates.erase(slot)
+				_spawn(slot, kind == 2)
 	var is_bot: Callable = ctx.get("is_bot", Callable())
 	var is_pad: Callable = ctx.get("is_pad", Callable())
 	var anchor: Callable = ctx.get("anchor", Callable())
 	var scale_by: float = float(ctx.get("scale", 1.0))
 	for slot in _players.size():
+		if mirror.is_valid():
+			break
 		var player: Variant = _players[slot]
 		var eligible: bool = watching and player != null and is_instance_valid(player) and player.alive and player.visible \
 			and (not _done.has(slot) or _plates.has(slot)) and not (is_bot.is_valid() and bool(is_bot.call(slot)))
@@ -156,6 +180,7 @@ func _spawn(slot: int, pad: bool) -> void:
 	plate.name = "Plate%d" % slot
 	plate.text = tr("HINT_RIGHT_STICK" if pad else "HINT_DRAG_TO_SWING")
 	plate.font = _probe.get_theme_font("font")
+	plate.pad = pad
 	plate.colour = _slot_color.call(slot) if _slot_color.is_valid() else Color.WHITE
 	plate.born_msec = GameClockScript.now_msec()
 	var text_w: float = plate.font.get_string_size(plate.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, FONT_SIZE).x

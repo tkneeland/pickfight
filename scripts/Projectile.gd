@@ -167,9 +167,18 @@ func _exclusions() -> Array[RID]:
 			rids.append(head)
 	return rids
 
+## The colour the bullet is drawn in: its shooter's identity colour.
+func colour() -> Color:
+	return _colour
+
 func _draw() -> void:
-	var tail: Vector2 = -direction * radius * TRAIL_RADII
-	draw_line(tail, Vector2.ZERO, Color(_colour, 0.55), radius * 1.4)
-	draw_circle(Vector2.ZERO, radius + 1.5, OUTLINE_COLOR)
-	draw_circle(Vector2.ZERO, radius, _colour)
-	draw_circle(Vector2.ZERO, radius * 0.5, CORE_COLOR)
+	draw_bullet(self, direction, radius, _colour)
+
+## Issue #976: how a bullet flying along `flight` is drawn on `canvas`, shared
+## with the Online client's puppet (RemotePuppet.gd) so both draw the same.
+static func draw_bullet(canvas: CanvasItem, flight: Vector2, r: float, colour_in: Color) -> void:
+	var tail: Vector2 = -flight.normalized() * r * TRAIL_RADII
+	canvas.draw_line(tail, Vector2.ZERO, Color(colour_in, 0.55), r * 1.4)
+	canvas.draw_circle(Vector2.ZERO, r + 1.5, OUTLINE_COLOR)
+	canvas.draw_circle(Vector2.ZERO, r, colour_in)
+	canvas.draw_circle(Vector2.ZERO, r * 0.5, CORE_COLOR)

@@ -21,6 +21,7 @@ extends Node
 const RespawnScript := preload("res://scripts/Respawn.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const NetSyncScript := preload("res://scripts/NetSync.gd")
 
 ## An announcer line for the mode (#370); the Announcer listens for it.
 signal callout(sound: StringName)
@@ -455,23 +456,31 @@ func _build_flags() -> void:
 	_root.z_index = 6
 	add_child(_root)
 	for team: int in [0, 1]:
-		var flag := Node2D.new()
-		flag.name = "Flag%d" % team
-		var pole := Polygon2D.new()
-		pole.polygon = PackedVector2Array([Vector2(-2, 0), Vector2(2, 0), Vector2(2, -70), Vector2(-2, -70)])
-		pole.color = Color(0.85, 0.85, 0.88)
-		flag.add_child(pole)
-		var cloth := Polygon2D.new()
-		cloth.polygon = PackedVector2Array([Vector2(2, -70), Vector2(40, -58), Vector2(2, -44)])
-		cloth.color = FLAG_COLOURS[team]
-		flag.add_child(cloth)
-		var badge: Control = TeamBadgeScript.new(team, FLAG_BADGE_PX) # the letter on the cloth (#752)
-		badge.position = Vector2(8.0, -69.0)
-		flag.add_child(badge)
+		var flag: Node2D = build_flag(team)
+		NetSyncScript.mark_prop(flag, NetSyncScript.PROP_CTF_FLAG) # drawn on Online clients too (#976)
 		_root.add_child(flag)
 		_flag_nodes[team] = flag
 
 ## Draws each flag where it is: on its carrier's back, or on the ground.
+## Issue #976: team `team`'s flag as drawn (pole, cloth in the team's colour,
+## the team letter on it). Shared with the Online client (NetSync.gd).
+static func build_flag(team: int) -> Node2D:
+	var flag := Node2D.new()
+	flag.name = "Flag%d" % team
+	var pole := Polygon2D.new()
+	pole.polygon = PackedVector2Array([Vector2(-2, 0), Vector2(2, 0), Vector2(2, -70), Vector2(-2, -70)])
+	pole.color = Color(0.85, 0.85, 0.88)
+	flag.add_child(pole)
+	var cloth := Polygon2D.new()
+	cloth.polygon = PackedVector2Array([Vector2(2, -70), Vector2(40, -58), Vector2(2, -44)])
+	cloth.color = FLAG_COLOURS[team]
+	flag.add_child(cloth)
+	var badge: Control = TeamBadgeScript.new(team, FLAG_BADGE_PX) # the letter on the cloth (#752)
+	badge.position = Vector2(8.0, -69.0)
+	flag.add_child(badge)
+	flag.set_meta(&"team", team)
+	return flag
+
 func _refresh_flags() -> void:
 	for team: int in [0, 1]:
 		var flag: Node2D = _flag_nodes.get(team)

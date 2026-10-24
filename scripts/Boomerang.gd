@@ -224,14 +224,33 @@ func _hit_player(victim: Node, point: Vector2) -> void:
 var _shield_turned: Node = null
 
 func _draw() -> void:
-	var alpha: float = GHOST_ALPHA if ghost else 1.0
+	draw_boomerang(self, _art, _spin, _colour, ghost, _shape.radius if _shape != null else 6.0)
+
+## Issue #976: the art in flight, the spin it is drawn at and its colour, for
+## the scenarios that check the Online puppet draws the same.
+func art() -> PackedVector2Array:
+	return _art
+
+func spin() -> float:
+	return _spin
+
+func colour() -> Color:
+	return _colour
+
+## Issue #976: how a boomerang is drawn on `canvas`, shared with the Online
+## client's puppet (RemotePuppet.gd) so both draw the same. `art` is centred
+## (`ShotSweep.centred`); with fewer than three points a circle of
+## `fallback_radius` stands in.
+static func draw_boomerang(canvas: CanvasItem, art_in: PackedVector2Array, spin_in: float, colour_in: Color,
+		ghosted: bool, fallback_radius: float) -> void:
+	var alpha: float = GHOST_ALPHA if ghosted else 1.0
 	var shape: PackedVector2Array = PackedVector2Array()
-	for p: Vector2 in _art:
-		shape.append(p.rotated(_spin))
+	for p: Vector2 in art_in:
+		shape.append(p.rotated(spin_in))
 	if shape.size() >= 3:
-		draw_colored_polygon(shape, Color(_colour, alpha))
+		canvas.draw_colored_polygon(shape, Color(colour_in, alpha))
 		var edge: PackedVector2Array = shape.duplicate()
 		edge.append(shape[0])
-		draw_polyline(edge, Color(OUTLINE_COLOR, OUTLINE_COLOR.a * alpha), 1.0)
+		canvas.draw_polyline(edge, Color(OUTLINE_COLOR, OUTLINE_COLOR.a * alpha), 1.0)
 	else:
-		draw_circle(Vector2.ZERO, _shape.radius if _shape != null else 6.0, Color(_colour, alpha))
+		canvas.draw_circle(Vector2.ZERO, fallback_radius, Color(colour_in, alpha))

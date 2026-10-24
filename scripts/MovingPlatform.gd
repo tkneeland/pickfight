@@ -39,6 +39,9 @@ extends AnimatableBody2D
 ## current position -- doing so would let floating-point drift or an
 ## external nudge walk the patrol's endpoints away from what the stage
 ## author set.
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["position"]
 var _origin: Vector2
 var _moving: bool = false
 var _heading_to_far: bool = true

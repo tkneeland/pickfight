@@ -27,6 +27,12 @@ const GLOW_ENERGY: float = 0.8
 const LIGHT_TEXTURE_SIZE: int = 256
 const GLOW_NAME: String = "NightGlow"
 
+## Issue #976: a clock the Online client keeps in step with the host's
+## (NetSync.gd).
+const LIT_PLAYERS_GROUP: StringName = &"night_lit_players"
+const LIT_PICKUPS_GROUP: StringName = &"night_lit_pickups"
+
+const NET_CLOCKS: Array[String] = ["_time"]
 var modulate_node: CanvasModulate
 var lamps: Array[PointLight2D] = []
 ## Weapon-head glows keyed by player instance id, owned by this node.
@@ -79,9 +85,10 @@ func _process(delta: float) -> void:
 	for i in lamps.size():
 		var flicker: float = 0.0 if steady else 0.08 * sin(_time * 5.0 + i * 1.7)
 		lamps[i].energy = LAMP_ENERGY + flicker
-	for player in get_tree().get_nodes_in_group("players"):
+	# Issue #976: the Online client's player and pickup copies glow too.
+	for player in get_tree().get_nodes_in_group("players") + get_tree().get_nodes_in_group(LIT_PLAYERS_GROUP):
 		_light_player(player as Node2D)
-	for pickup in get_tree().get_nodes_in_group("pickups"):
+	for pickup in get_tree().get_nodes_in_group("pickups") + get_tree().get_nodes_in_group(LIT_PICKUPS_GROUP):
 		if pickup.get_node_or_null(GLOW_NAME) == null:
 			var glow: PointLight2D = _make_light(GLOW_COLOR, PICKUP_GLOW_SCALE, GLOW_ENERGY)
 			glow.name = GLOW_NAME

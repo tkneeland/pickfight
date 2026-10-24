@@ -34,6 +34,9 @@ const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.g
 const CosmeticsPanelScript: GDScript = preload("res://scripts/OnlineCosmeticsPanel.gd")
 const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
+const NetSyncScript: GDScript = preload("res://scripts/NetSync.gd")
+const NameTagsScript: GDScript = preload("res://scripts/NameTags.gd")
+const OffscreenIndicatorsScript: GDScript = preload("res://scripts/OffscreenIndicators.gd")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
 ## Room-code alphabet and length: Relay.CODE_LETTERS (no I and no O) / CODE_LENGTH.
@@ -114,6 +117,19 @@ var _samples: Array[Dictionary] = []
 var _stage_id: int = -1
 var _stage: Node = null
 var _puppets: Dictionary = {} # key (String) -> RemotePuppet
+## Issue #976: the stage is the night variant; stage part id -> node, and the
+## state each was last given; host prop id -> the client's copy.
+var _stage_night: bool = false
+var _part_nodes: Dictionary = {}
+var _part_shown: Dictionary = {}
+var _part_map_msec: int = 0
+const PART_REMAP_MSEC: int = 500
+var _prop_nodes: Dictionary = {}
+## The host's 8 seats as the name tags see them: each slot's puppet, or null.
+const TAG_SLOTS: int = 8
+var _tag_players: Array = []
+var _name_tags: Node2D
+var _offscreen: CanvasLayer
 var _hud_signature: String = ""
 ## Issue #459: after a dropped connection mid-match the client rejoins by
 ## itself, every REJOIN_RETRY_MSEC, until the host's seat hold would have run
@@ -130,6 +146,7 @@ var _camera: Camera2D
 var _world_root: Node2D
 var _stage_holder: Node2D
 var _puppet_holder: Node2D
+var _prop_holder: Node2D
 var _ui: CanvasLayer
 var _join_panel: Control
 var _room_edit: LineEdit
@@ -717,6 +734,7 @@ func apply_snapshot(snap: Dictionary) -> void:
 			_samples.clear()
 		full_frames_applied += 1
 		_sync_stage()
+		_sync_part_clocks()
 	else:
 		if _world.is_empty():
 			return
@@ -735,59 +753,20 @@ static func _find_by(list: Array, key: String, id: int) -> Dictionary:
 			return entry
 	return {}
 
+## Merges a delta frame onto the world through `Snapshot.apply_delta`, the
+## codec's own merge (issue #976: every field the host sends, flails, ghosts,
+## meteors, stage parts and props included). Kill-feed lines arrive in full
+## snapshots only, so delta feed entries are not appended here.
 func _apply_delta(entities: Array) -> void:
+	var kept: Array = []
 	for ent: Variant in entities:
-		if not ent is Dictionary:
-			continue
-		var e: Dictionary = ent
-		var id: int = int(e.get("id", 0))
-		match int(e.get("type", 0)):
-			SnapshotScript.TYPE_PLAYER:
-				var p: Dictionary = _find_by(_world.get("players", []), "player_id", id)
-				if p.is_empty():
-					continue
-				var body: Dictionary = p.get("body", {})
-				body["position"] = e.get("position", body.get("position", Vector2.ZERO))
-				body["rotation"] = e.get("rotation", body.get("rotation", 0.0))
-				body["linear_velocity"] = e.get("linear_velocity", body.get("linear_velocity", Vector2.ZERO))
-				p["body"] = body
-				var weapon: Dictionary = p.get("weapon", {})
-				weapon["head_position"] = e.get("head_position", weapon.get("head_position", Vector2.ZERO))
-				weapon["head_rotation"] = e.get("head_rotation", weapon.get("head_rotation", 0.0))
-				weapon["head_shape_index"] = e.get("head_shape_index", weapon.get("head_shape_index", 0))
-				p["weapon"] = weapon
-				p["damage"] = e.get("damage", p.get("damage", 0))
-				p["state"] = e.get("state", p.get("state", 1))
-			SnapshotScript.TYPE_PROJECTILE:
-				var pr: Dictionary = _find_by(_world.get("projectiles", []), "projectile_id", id)
-				if not pr.is_empty():
-					pr["position"] = e.get("position", pr.get("position", Vector2.ZERO))
-					pr["velocity"] = e.get("velocity", pr.get("velocity", Vector2.ZERO))
-			SnapshotScript.TYPE_PICKUP:
-				var pk: Dictionary = _find_by(_world.get("pickups", []), "pickup_id", id)
-				if not pk.is_empty():
-					pk["position"] = e.get("position", pk.get("position", Vector2.ZERO))
-			SnapshotScript.TYPE_FLAIL:
-				var flail: Dictionary = _world.get("flail", {})
-				if not flail.is_empty():
-					flail["ball_position"] = e.get("pos1", flail.get("ball_position", Vector2.ZERO))
-					flail["ball_velocity"] = e.get("pos2", flail.get("ball_velocity", Vector2.ZERO))
-			SnapshotScript.TYPE_GRAPPLE:
-				var grapple: Dictionary = _world.get("grapple", {})
-				if not grapple.is_empty():
-					grapple["hook_position"] = e.get("pos1", grapple.get("hook_position", Vector2.ZERO))
-					grapple["rope_end"] = e.get("pos2", grapple.get("rope_end", Vector2.ZERO))
-			SnapshotScript.TYPE_TIMER:
-				_world["timer_ms"] = e.get("timer_ms", 0)
-			SnapshotScript.TYPE_SCORES:
-				var scores: Dictionary = _world.get("scores", {})
-				scores[id] = e.get("score", 0)
-				_world["scores"] = scores
-			SnapshotScript.TYPE_KILL_ZONE:
-				_world["kill_zone_height"] = e.get("height", 0)
+		if ent is Dictionary and int((ent as Dictionary).get("type", 0)) != SnapshotScript.TYPE_KILL_FEED:
+			kept.append(ent)
+	if not kept.is_empty():
+		_world = SnapshotScript.apply_delta(_world, {"delta_entities": kept})
 
 func _push_sample() -> void:
-	var sample: Dictionary = {"t": Time.get_ticks_msec(), "players": {}, "things": {}}
+	var sample: Dictionary = {"t": Time.get_ticks_msec(), "players": {}, "things": {}, "parts": {}, "props": {}}
 	for p: Variant in _world.get("players", []):
 		if p is Dictionary:
 			var body: Dictionary = p.get("body", {})
@@ -797,16 +776,26 @@ func _push_sample() -> void:
 				weapon.get("head_rotation", 0.0)]
 	for p: Variant in _world.get("projectiles", []):
 		if p is Dictionary:
-			sample["things"]["proj%d" % int(p.get("projectile_id", 0))] = p.get("position", Vector2.ZERO)
+			sample["things"]["proj%d" % int(p.get("projectile_id", 0))] = [p.get("position", Vector2.ZERO), float(p.get("rotation", 0.0))]
 	for p: Variant in _world.get("pickups", []):
 		if p is Dictionary:
-			sample["things"]["pick%d" % int(p.get("pickup_id", 0))] = p.get("position", Vector2.ZERO)
-	var flail: Dictionary = _world.get("flail", {})
-	if not flail.is_empty():
-		sample["things"]["flail"] = flail.get("ball_position", Vector2.ZERO)
-	var grapple: Dictionary = _world.get("grapple", {})
-	if not grapple.is_empty():
-		sample["things"]["hook"] = grapple.get("hook_position", Vector2.ZERO)
+			sample["things"]["pick%d" % int(p.get("pickup_id", 0))] = [p.get("position", Vector2.ZERO), 0.0]
+	for f: Variant in _world.get("flails", []):
+		if f is Dictionary:
+			sample["things"]["flail%d" % int(f.get("owner", 0))] = [f.get("ball_position", Vector2.ZERO),
+				float(f.get("ball_rotation", 0.0)), f.get("links", [])]
+	for g: Variant in _world.get("ghosts", []):
+		if g is Dictionary:
+			sample["things"]["ghost%d" % int(g.get("owner", 0))] = [g.get("position", Vector2.ZERO), 0.0]
+	for m: Variant in _world.get("meteors", []):
+		if m is Dictionary:
+			sample["things"]["meteor%d" % int(m.get("meteor_id", 0))] = [m.get("position", Vector2.ZERO), 0.0]
+	for part: Variant in _world.get("parts", []):
+		if part is Dictionary:
+			sample["parts"][int(part.get("part_id", 0))] = part.get("state", [])
+	for prop: Variant in _world.get("props", []):
+		if prop is Dictionary:
+			sample["props"][int(prop.get("prop_id", 0))] = [int(prop.get("kind", 0)), prop.get("state", [])]
 	_samples.append(sample)
 	while _samples.size() > MAX_SAMPLES:
 		_samples.pop_front()
@@ -843,16 +832,21 @@ func _round_shown() -> bool:
 	var phase: int = int(_world.get("round_phase", 0))
 	return phase == PHASE_ROUND_ACTIVE or phase == PHASE_ROUND_END
 
-## Loads the host's stage by id when a round is on screen and frees it when not.
+## Loads the host's stage by id (and as its night variant when the host's is)
+## when a round is on screen and frees it when not.
 func _sync_stage() -> void:
 	var want: int = int(_world.get("stage_id", 0)) if _round_shown() else -1
-	if want == _stage_id:
+	var night: bool = int(_world.get("stage_flags", 0)) & SnapshotScript.STAGE_NIGHT != 0
+	if want == _stage_id and (want < 0 or night == _stage_night):
 		return
 	if _stage != null:
 		_stage_holder.remove_child(_stage)
 		_stage.queue_free()
 		_stage = null
+	_part_nodes.clear()
+	_part_shown.clear()
 	_stage_id = want
+	_stage_night = night
 	if want < 0:
 		return
 	var paths: PackedStringArray = stage_paths()
@@ -863,8 +857,21 @@ func _sync_stage() -> void:
 		return
 	_stage = scene.instantiate()
 	_stage.set("stage_index", want)
+	_stage.set("night", night)
 	_stage_holder.add_child(_stage)
+	_map_parts()
 	_fit_camera()
+
+## Issue #976: every stage part whose look the host sends, by the id both
+## sides give it, with its own logic stopped where the host's state drives it.
+func _map_parts() -> void:
+	_part_nodes.clear()
+	_part_map_msec = Time.get_ticks_msec()
+	if _stage == null:
+		return
+	for node: Node in NetSyncScript.parts_of(_stage):
+		_part_nodes[NetSyncScript.part_id(_stage, node)] = node
+		NetSyncScript.freeze_part(node)
 
 func _fit_camera() -> void:
 	if _camera == null:
@@ -884,6 +891,9 @@ func _clear_world() -> void:
 	for key: String in _puppets.keys():
 		_puppets[key].queue_free()
 	_puppets.clear()
+	_clear_props()
+	for i in _tag_players.size():
+		_tag_players[i] = null
 	_hud_signature = ""
 	hud = {}
 	if _puppet_holder != null:
@@ -895,6 +905,11 @@ func _clear_world() -> void:
 func player_puppet(slot_id: int) -> Node2D:
 	return _puppets.get("player%d" % slot_id) as Node2D
 
+## The puppet drawn under `key` ("proj12", "pick3", "flail0", "ghost2",
+## "meteor7"), or null.
+func thing_puppet(key: String) -> Node2D:
+	return _puppets.get(key) as Node2D
+
 func puppet_count(kind: int) -> int:
 	var n: int = 0
 	for puppet: Node in _puppets.values():
@@ -902,11 +917,32 @@ func puppet_count(kind: int) -> int:
 			n += 1
 	return n
 
+## The client's copy of the host's prop `prop_id` (issue #976), or null.
+func prop_node(prop_id: int) -> Node2D:
+	return _prop_nodes.get(prop_id) as Node2D
+
+func prop_count() -> int:
+	return _prop_nodes.size()
+
+## The stage part the host's `part_id` names, or null.
+func part_node(part_id: int) -> Node:
+	return _part_nodes.get(part_id)
+
+## The name tags drawn over the puppets (the host's own NameTags.gd).
+func name_tags() -> Node2D:
+	return _name_tags
+
+func offscreen_indicators() -> CanvasLayer:
+	return _offscreen
+
 func has_stage() -> bool:
 	return _stage != null
 
 func stage_id() -> int:
 	return _stage_id
+
+func stage_node() -> Node:
+	return _stage
 
 func _puppet(key: String, kind: int) -> Node2D:
 	var puppet: Node2D = _puppets.get(key)
@@ -917,11 +953,24 @@ func _puppet(key: String, kind: int) -> Node2D:
 		_puppets[key] = puppet
 	return puppet
 
+## The round's modifier id ("" for none), which changes how some weapons look.
+func _modifier_id() -> String:
+	for m: Variant in _world.get("modifiers", []):
+		if m is Dictionary:
+			return str(m.get("name", ""))
+	return ""
+
+## The stage's ink, as the host's players take it.
+func _ink() -> Color:
+	return PaletteScript.ink_for(_stage_id, _stage_night)
+
 ## Draws the newest state INTERP_MSEC late, blending the two samples around that
 ## moment so the 30 Hz stream moves smoothly.
 func _render() -> void:
 	if _samples.is_empty() or not _round_shown():
 		_hide_puppets_except({})
+		_clear_props()
+		_tick_tags()
 		return
 	var render_at: int = Time.get_ticks_msec() - INTERP_MSEC
 	var after: int = -1
@@ -945,6 +994,8 @@ func _render() -> void:
 	var span: int = int(b["t"]) - int(a["t"])
 	var alpha: float = clampf(float(render_at - int(a["t"])) / float(span), 0.0, 1.0) if span > 0 else 1.0
 	var live: Dictionary = {}
+	var modifier: String = _modifier_id()
+	var ink: Color = _ink()
 	for p: Variant in _world.get("players", []):
 		if not p is Dictionary:
 			continue
@@ -965,38 +1016,228 @@ func _render() -> void:
 		puppet.label = str(p.get("name", ""))
 		puppet.damage = int(p.get("damage", 0))
 		puppet.phase = int(p.get("state", 1))
+		puppet.flags = int(p.get("flags", 0))
+		puppet.fire = int(p.get("fire", SnapshotScript.FIRE_NONE))
+		puppet.hat_spin = int(p.get("hat_spin", 0))
+		puppet.squash = int(p.get("squash", SnapshotScript.SQUASH_REST))
+		var team: int = int(p.get("team", 255))
+		puppet.team = team if team < 2 else -1
+		puppet.linear_velocity = (p.get("body", {}) as Dictionary).get("linear_velocity", Vector2.ZERO)
+		puppet.modifier = modifier
+		puppet.ink = ink
 		puppet.set_pose((from_pose[0] as Vector2).lerp(to_pose[0], alpha),
 			lerp_angle(from_pose[1], to_pose[1], alpha),
 			(from_pose[2] as Vector2).lerp(to_pose[2], alpha),
 			lerp_angle(from_pose[3] if from_pose.size() > 3 else 0.0, to_pose[3] if to_pose.size() > 3 else 0.0, alpha))
 	for p: Variant in _world.get("projectiles", []):
-		if p is Dictionary:
-			var id: int = int(p.get("projectile_id", 0))
-			_place_thing("proj%d" % id, PuppetScript.Kind.PROJECTILE, a, b, alpha, Color(1, 0.9, 0.3), "", live)
+		if not p is Dictionary:
+			continue
+		var shot: Node2D = _place_thing("proj%d" % int(p.get("projectile_id", 0)), PuppetScript.Kind.PROJECTILE, a, b, alpha, live)
+		if shot == null:
+			continue
+		var owner: Node2D = player_puppet(int(p.get("owner", -1)))
+		shot.owner_puppet = owner
+		shot.color = owner.color if owner != null else Color.WHITE
+		shot.weapon_index = int(p.get("weapon_type", 0))
+		shot.modifier = modifier
+		shot.velocity = p.get("velocity", Vector2.ZERO)
+		shot.shot_flags = int(p.get("flags", 0))
+		shot.shot_rotation = _thing_rotation("proj%d" % int(p.get("projectile_id", 0)), a, b, alpha)
+		shot.refresh_shot()
+		shot.queue_redraw()
 	for p: Variant in _world.get("pickups", []):
-		if p is Dictionary:
-			var id: int = int(p.get("pickup_id", 0))
-			_place_thing("pick%d" % id, PuppetScript.Kind.PICKUP, a, b, alpha, Color(0.4, 0.9, 1.0), "", live, int(p.get("weapon_type", 0)))
-	if not _world.get("flail", {}).is_empty():
-		_place_thing("flail", PuppetScript.Kind.PROJECTILE, a, b, alpha, Color(0.8, 0.8, 0.8), "", live)
-	if not _world.get("grapple", {}).is_empty():
-		_place_thing("hook", PuppetScript.Kind.PROJECTILE, a, b, alpha, Color(0.6, 1.0, 0.6), "", live)
+		if not p is Dictionary:
+			continue
+		var key: String = "pick%d" % int(p.get("pickup_id", 0))
+		var fresh: bool = not _puppets.has(key)
+		var pickup: Node2D = _place_thing(key, PuppetScript.Kind.PICKUP, a, b, alpha, live)
+		if pickup == null:
+			continue
+		pickup.weapon_index = int(p.get("weapon_type", 0))
+		pickup.halo = int(p.get("halo", 0))
+		pickup.show_pickup(fresh and int(p.get("pop", 0)) == 1)
+	for f: Variant in _world.get("flails", []):
+		if not f is Dictionary:
+			continue
+		var key: String = "flail%d" % int(f.get("owner", 0))
+		var to_f: Variant = b["things"].get(key)
+		if to_f == null or not _samples.back()["things"].has(key):
+			continue
+		var from_f: Array = a["things"].get(key, to_f)
+		live[key] = true
+		var flail: Node2D = _puppet(key, PuppetScript.Kind.FLAIL)
+		var owner: Node2D = player_puppet(int(f.get("owner", -1)))
+		flail.color = owner.color if owner != null else Color.WHITE
+		flail.weapon_index = _flail_index()
+		flail.modifier = modifier
+		flail.show_flail((from_f[0] as Vector2).lerp(to_f[0], alpha), lerp_angle(from_f[1], to_f[1], alpha),
+			_lerp_links(from_f[2], to_f[2], alpha), int(f.get("flags", 0)) & SnapshotScript.FLAIL_PHASED != 0)
+	for g: Variant in _world.get("ghosts", []):
+		if not g is Dictionary:
+			continue
+		var ghost: Node2D = _place_thing("ghost%d" % int(g.get("owner", 0)), PuppetScript.Kind.GHOST, a, b, alpha, live)
+		if ghost == null:
+			continue
+		var owner: Node2D = player_puppet(int(g.get("owner", -1)))
+		ghost.color = owner.color if owner != null else Color.WHITE
+		ghost.ghost_alpha = float(g.get("alpha", 0.0))
+		ghost.puff = float(g.get("puff", 1.0))
+		ghost.queue_redraw()
+	for m: Variant in _world.get("meteors", []):
+		if not m is Dictionary:
+			continue
+		var meteor: Node2D = _place_thing("meteor%d" % int(m.get("meteor_id", 0)), PuppetScript.Kind.METEOR, a, b, alpha, live)
+		if meteor == null:
+			continue
+		meteor.velocity = m.get("velocity", Vector2.ZERO)
+		meteor.radius = float(m.get("radius", 0))
+		meteor.queue_redraw()
 	_hide_puppets_except(live)
+	_render_parts(a, b, alpha)
+	_render_props(a, b, alpha)
+	_tick_tags()
 
-func _place_thing(key: String, kind: int, a: Dictionary, b: Dictionary, alpha: float, color: Color, label: String, live: Dictionary, weapon_index: int = 0) -> void:
+## Places the puppet for `key` between samples `a` and `b`; null when the
+## newest snapshot no longer holds it.
+func _place_thing(key: String, kind: int, a: Dictionary, b: Dictionary, alpha: float, live: Dictionary) -> Node2D:
 	var to_pos: Variant = b["things"].get(key)
 	# Issue #429: a thing the newest snapshot no longer holds is gone now, not
 	# when the interpolation window moves past its last sample.
 	if to_pos == null or not _samples.back()["things"].has(key):
-		return
+		return null
 	var from_pos: Variant = a["things"].get(key, to_pos)
 	live[key] = true
 	var puppet: Node2D = _puppet(key, kind)
-	puppet.color = color
-	puppet.label = label
-	puppet.weapon_index = weapon_index
-	puppet.position = (from_pos as Vector2).lerp(to_pos, alpha)
-	puppet.queue_redraw()
+	puppet.position = (from_pos[0] as Vector2).lerp(to_pos[0], alpha)
+	return puppet
+
+func _thing_rotation(key: String, a: Dictionary, b: Dictionary, alpha: float) -> float:
+	var to_pos: Array = b["things"].get(key, [Vector2.ZERO, 0.0])
+	var from_pos: Array = a["things"].get(key, to_pos)
+	return lerp_angle(float(from_pos[1]), float(to_pos[1]), alpha)
+
+static func _lerp_links(from_links: Variant, to_links: Variant, alpha: float) -> Array:
+	var to_list: Array = to_links if to_links is Array else []
+	var from_list: Array = from_links if from_links is Array and (from_links as Array).size() == to_list.size() else to_list
+	var out: Array = []
+	for i in to_list.size():
+		var f: Dictionary = from_list[i] if from_list[i] is Dictionary else {}
+		var t: Dictionary = to_list[i] if to_list[i] is Dictionary else {}
+		out.append({"position": (f.get("position", Vector2.ZERO) as Vector2).lerp(t.get("position", Vector2.ZERO), alpha),
+			"rotation": lerp_angle(float(f.get("rotation", 0.0)), float(t.get("rotation", 0.0)), alpha)})
+	return out
+
+## The snapshot weapon index of the flail (its ball and links are drawn from it).
+static func _flail_index() -> int:
+	for i in PickupWeaponsScript.WEAPON_PATHS.size():
+		if PickupWeaponsScript.WEAPON_PATHS[i].get_file().get_basename() == "flail":
+			return i + 1
+	return 0
+
+## Issue #976: every stage part takes the host's look, blended between
+## samples; its clocks are re-set on full snapshots only (`_sync_part_clocks`).
+func _render_parts(a: Dictionary, b: Dictionary, alpha: float) -> void:
+	if _stage == null:
+		return
+	var unknown: bool = false
+	for id: int in b["parts"]:
+		var node: Node = _part_nodes.get(id)
+		if node == null or not is_instance_valid(node):
+			unknown = true
+			continue
+		var to_state: Array = b["parts"][id]
+		var from_state: Array = a["parts"].get(id, to_state)
+		var paths: Array = NetSyncScript.vars_of(node) + NetSyncScript.clocks_of(node)
+		var state: Array = NetSyncScript.lerp_state(paths, from_state, to_state, alpha)
+		if _part_shown.get(id) == state:
+			continue
+		_part_shown[id] = state
+		NetSyncScript.apply_part(node, state, false)
+	# A part the stage added at runtime gets its id once it is in the tree.
+	if unknown and Time.get_ticks_msec() - _part_map_msec > PART_REMAP_MSEC:
+		_map_parts()
+
+func _sync_part_clocks() -> void:
+	# A part built by an earlier state (the rising lava's art) is mapped
+	# before its clock is set.
+	for part: Variant in _world.get("parts", []):
+		if part is Dictionary and _stage != null and not _part_nodes.has(int(part.get("part_id", 0))):
+			_map_parts()
+			break
+	for part: Variant in _world.get("parts", []):
+		if not part is Dictionary:
+			continue
+		var node: Node = _part_nodes.get(int(part.get("part_id", 0)))
+		if node != null and is_instance_valid(node) and not NetSyncScript.clocks_of(node).is_empty():
+			NetSyncScript.apply_part(node, part.get("state", []), true)
+
+## Issue #976: the host's runtime props (soccer ball, CTF flags, the hill,
+## tiebreaker rocks, the gale), each built by the host's own builder.
+func _render_props(a: Dictionary, b: Dictionary, alpha: float) -> void:
+	var newest: Dictionary = _samples.back()["props"]
+	for id: int in _prop_nodes.keys():
+		if not newest.has(id):
+			_free_prop(id)
+	for id: int in b["props"]:
+		if not newest.has(id):
+			continue
+		var to_entry: Array = b["props"][id]
+		var kind: int = int(to_entry[0])
+		var to_state: Array = to_entry[1]
+		var from_entry: Array = a["props"].get(id, to_entry)
+		var from_state: Array = from_entry[1] if int(from_entry[0]) == kind else to_state
+		var node: Node2D = _prop_nodes.get(id)
+		if node != null and NetSyncScript.prop_kind(node) != kind:
+			_free_prop(id)
+			node = null
+		if node == null:
+			node = NetSyncScript.build_prop(kind, to_state)
+			if node == null:
+				continue
+			_prop_holder.add_child(node)
+			NetSyncScript.settle_prop(node)
+			_prop_nodes[id] = node
+		NetSyncScript.apply_prop(node, NetSyncScript.lerp_state(NetSyncScript.prop_paths(kind), from_state, to_state, alpha))
+
+func _free_prop(id: int) -> void:
+	var node: Node = _prop_nodes.get(id)
+	_prop_nodes.erase(id)
+	if node != null and is_instance_valid(node):
+		node.get_parent().remove_child(node)
+		node.queue_free()
+
+func _clear_props() -> void:
+	for id: int in _prop_nodes.keys():
+		_free_prop(id)
+
+## The host's name tags, team rings, stock pips, idle hints, boomstick rings
+## and edge arrows, run on the puppets (issue #976).
+func _tick_tags() -> void:
+	for slot in _tag_players.size():
+		var puppet: Node2D = player_puppet(slot)
+		_tag_players[slot] = puppet if puppet != null and not puppet.is_queued_for_deletion() else null
+	var numbers: int = 1 if int(_world.get("stage_flags", 0)) & SnapshotScript.STAGE_PLAYER_NUMBERS else 0
+	_name_tags.numbers_override = numbers
+	_offscreen.numbers_override = numbers
+	_name_tags.tick()
+
+func _tag_colour(slot: int) -> Color:
+	var puppet: Node2D = player_puppet(slot)
+	return puppet.color if puppet != null else Color.WHITE
+
+## Stock lives from the host's HUD frame (the mode's `lives_of`), -1 without.
+func _lives_of(slot: int) -> int:
+	if str(hud.get("mode", "")) != "stock":
+		return -1
+	var lives: Dictionary = (hud.get("m", {}) as Dictionary).get("lives", {}) if hud.get("m") is Dictionary else {}
+	return int(lives.get(str(slot), lives.get(slot, -1)))
+
+## The idle hint the host shows over `slot` (IdleHint.hint_kind: 0 none, 1 drag, 2 pad).
+func _hint_kind(slot: int) -> int:
+	var puppet: Node2D = player_puppet(slot)
+	if puppet == null or not puppet.flags & SnapshotScript.PLAYER_HINT:
+		return 0
+	return 2 if puppet.flags & SnapshotScript.PLAYER_HINT_PAD else 1
 
 func _hide_puppets_except(live: Dictionary) -> void:
 	for key: String in _puppets.keys():
@@ -1070,9 +1311,24 @@ func _build_world() -> void:
 	_stage_holder = Node2D.new()
 	_stage_holder.name = "Stage"
 	_world_root.add_child(_stage_holder)
+	# Puppets and parts move in _process from the host's samples, so the
+	# engine's physics interpolation (project-wide) must not smooth them again.
+	_world_root.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	_prop_holder = Node2D.new()
+	_prop_holder.name = "Props"
+	_world_root.add_child(_prop_holder)
 	_puppet_holder = Node2D.new()
 	_puppet_holder.name = "Puppets"
 	_world_root.add_child(_puppet_holder)
+	_tag_players.resize(TAG_SLOTS)
+	_name_tags = NameTagsScript.new(_tag_players, _name_of, _tag_colour)
+	_name_tags.lives_of = _lives_of
+	_name_tags.hint_mirror = _hint_kind
+	_world_root.add_child(_name_tags)
+	_name_tags.build()
+	_offscreen = OffscreenIndicatorsScript.new(_tag_players, _tag_colour)
+	add_child(_offscreen)
+	_offscreen.build()
 	_camera = Camera2D.new()
 	_camera.name = "Camera"
 	add_child(_camera)

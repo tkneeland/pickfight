@@ -49,6 +49,7 @@ const PICKUP_RUSH: String = "pickup_rush"
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const FallingRockScript := preload("res://scripts/FallingRock.gd")
 const MeteorScript := preload("res://scripts/Meteor.gd")
+const NetSyncScript := preload("res://scripts/NetSync.gd")
 const StageGustScene: PackedScene = preload("res://scenes/parts/StageGust.tscn")
 
 ## Every modifier a round can roll, in a fixed order so a seeded roll picks
@@ -197,6 +198,17 @@ static func title_of(id: String) -> String:
 		PICKUP_RUSH:
 			return "Pickup Rush"
 	return ""
+
+## Issue #976: `stats` as a player holds it while modifier `id` runs (Big
+## heads and Tiny weapons change what is drawn), or `stats` itself for any
+## other modifier, an unknown one, or none. The Online client draws with it.
+static func weapon_stats_under(id: String, stats: Resource) -> Resource:
+	if stats == null:
+		return stats
+	var modifier: RoundModifier = create(id)
+	if modifier is WeaponStatsModifier:
+		return (modifier as WeaponStatsModifier)._modified(stats)
+	return stats
 
 ## A fresh, unapplied modifier for `id`, or null for an unknown id.
 static func create(id: String) -> RoundModifier:
@@ -684,6 +696,7 @@ class Gale extends RoundModifier:
 		_gust.warning_sec = GALE_WARNING_SEC
 		_gust.gust_sec = GALE_GUST_SEC
 		_gust.cycle_offset_sec = GALE_START_OFFSET_SEC
+		NetSyncScript.mark_prop(_gust, NetSyncScript.PROP_GALE) # drawn on Online clients too (#976)
 		_stage.add_child(_gust)
 		_gust.global_position = center
 

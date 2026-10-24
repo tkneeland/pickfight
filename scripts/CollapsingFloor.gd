@@ -68,6 +68,9 @@ const _DETECTOR_ABOVE: float = 10.0
 const _DETECTOR_BELOW: float = 2.0
 const _PLAYERS_GROUP: StringName = &"players"
 
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["_visual:color", "_visual:position", "_visual:visible"]
 var _state: _FloorState = _FloorState.SOLID
 var _round_elapsed: float = 0.0
 var _stood_for: float = 0.0

@@ -47,6 +47,9 @@ const NEAR_TINT: float = 0.9
 ## How far clouds lift off the sky towards white.
 const CLOUD_LIGHTEN: float = 0.07
 
+## Issue #976: a clock the Online client keeps in step with the host's
+## (NetSync.gd).
+const NET_CLOCKS: Array[String] = ["_time"]
 var sky_top: Color = Color(0.1, 0.12, 0.2)
 var sky_bottom: Color = Color(0.2, 0.22, 0.28)
 var silhouette: Color = Color(0.13, 0.14, 0.19)

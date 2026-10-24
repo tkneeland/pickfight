@@ -487,6 +487,52 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_deltas_apply_onto_last_full_snapshot",
 	"remote_client_renders_stage_projectiles_and_pickups",
 	"remote_client_draws_real_player_and_pickup_art_930",
+	"online_puppets_match_live_host_round_976",
+	"online_puppet_figure_matches_host_player_976",
+	"online_puppet_draws_modified_weapon_976",
+	"online_puppet_loaded_and_phased_head_976",
+	"online_puppet_spawn_blink_976",
+	"online_puppet_hidden_when_knocked_out_976",
+	"online_puppet_eyes_follow_host_976",
+	"online_puppet_team_rings_976",
+	"online_puppet_propeller_hat_in_step_976",
+	"online_puppet_squash_follows_host_976",
+	"online_puppet_night_ink_976",
+	"online_idle_hint_mirrors_host_976",
+	"online_boomstick_ring_follows_host_976",
+	"online_stock_pips_976",
+	"online_player_numbers_follow_host_976",
+	"online_bullet_drawn_like_host_976",
+	"online_boomerang_drawn_like_host_976",
+	"online_hook_and_rope_drawn_like_host_976",
+	"online_flail_drawn_like_host_976",
+	"online_ghost_drawn_like_host_976",
+	"online_meteor_drawn_like_host_976",
+	"online_pickup_halo_follows_host_976",
+	"online_pickup_pop_in_976",
+	"online_part_bounce_pad_976",
+	"online_part_breakable_wall_976",
+	"online_part_breakable_wall_broken_976",
+	"online_part_collapsing_floor_976",
+	"online_part_crumbling_ledge_976",
+	"online_part_conveyor_clock_976",
+	"online_part_fan_976",
+	"online_part_moving_platform_976",
+	"online_part_saw_976",
+	"online_part_rotating_platform_976",
+	"online_part_teleporter_976",
+	"online_part_wind_zone_976",
+	"online_part_falling_rock_976",
+	"online_part_kill_zone_rising_976",
+	"online_part_clocks_resync_976",
+	"online_stage_parts_found_by_host_id_976",
+	"online_soccer_ball_drawn_like_host_976",
+	"online_ctf_flags_drawn_like_host_976",
+	"online_hill_drawn_like_host_976",
+	"online_tiebreaker_rock_follows_host_976",
+	"online_gale_follows_host_976",
+	"snapshot_parts_and_props_hostile_976",
+	"online_client_merges_v2_deltas_976",
 	"remote_client_interpolates_100ms_behind",
 	"remote_client_esc_menu_resume_and_leave",
 	"remote_client_bad_code_returns_to_join",
@@ -2570,6 +2616,98 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_renders_stage_projectiles_and_pickups()
 		"remote_client_draws_real_player_and_pickup_art_930":
 			return await _scenario_remote_client_draws_real_player_and_pickup_art_930()
+		"online_puppets_match_live_host_round_976":
+			return await _scenario_online_puppets_match_live_host_round_976()
+		"online_puppet_figure_matches_host_player_976":
+			return await _scenario_online_puppet_figure_matches_host_player_976()
+		"online_puppet_draws_modified_weapon_976":
+			return await _scenario_online_puppet_draws_modified_weapon_976()
+		"online_puppet_loaded_and_phased_head_976":
+			return await _scenario_online_puppet_loaded_and_phased_head_976()
+		"online_puppet_spawn_blink_976":
+			return await _scenario_online_puppet_spawn_blink_976()
+		"online_puppet_hidden_when_knocked_out_976":
+			return await _scenario_online_puppet_hidden_when_knocked_out_976()
+		"online_puppet_eyes_follow_host_976":
+			return await _scenario_online_puppet_eyes_follow_host_976()
+		"online_puppet_team_rings_976":
+			return await _scenario_online_puppet_team_rings_976()
+		"online_puppet_propeller_hat_in_step_976":
+			return await _scenario_online_puppet_propeller_hat_in_step_976()
+		"online_puppet_squash_follows_host_976":
+			return await _scenario_online_puppet_squash_follows_host_976()
+		"online_puppet_night_ink_976":
+			return await _scenario_online_puppet_night_ink_976()
+		"online_idle_hint_mirrors_host_976":
+			return await _scenario_online_idle_hint_mirrors_host_976()
+		"online_boomstick_ring_follows_host_976":
+			return await _scenario_online_boomstick_ring_follows_host_976()
+		"online_stock_pips_976":
+			return await _scenario_online_stock_pips_976()
+		"online_player_numbers_follow_host_976":
+			return await _scenario_online_player_numbers_follow_host_976()
+		"online_bullet_drawn_like_host_976":
+			return await _scenario_online_bullet_drawn_like_host_976()
+		"online_boomerang_drawn_like_host_976":
+			return await _scenario_online_boomerang_drawn_like_host_976()
+		"online_hook_and_rope_drawn_like_host_976":
+			return await _scenario_online_hook_and_rope_drawn_like_host_976()
+		"online_flail_drawn_like_host_976":
+			return await _scenario_online_flail_drawn_like_host_976()
+		"online_ghost_drawn_like_host_976":
+			return await _scenario_online_ghost_drawn_like_host_976()
+		"online_meteor_drawn_like_host_976":
+			return await _scenario_online_meteor_drawn_like_host_976()
+		"online_pickup_halo_follows_host_976":
+			return await _scenario_online_pickup_halo_follows_host_976()
+		"online_pickup_pop_in_976":
+			return await _scenario_online_pickup_pop_in_976()
+		"online_part_bounce_pad_976":
+			return await _scenario_online_part_bounce_pad_976()
+		"online_part_breakable_wall_976":
+			return await _scenario_online_part_breakable_wall_976()
+		"online_part_breakable_wall_broken_976":
+			return await _scenario_online_part_breakable_wall_broken_976()
+		"online_part_collapsing_floor_976":
+			return await _scenario_online_part_collapsing_floor_976()
+		"online_part_crumbling_ledge_976":
+			return await _scenario_online_part_crumbling_ledge_976()
+		"online_part_conveyor_clock_976":
+			return await _scenario_online_part_conveyor_clock_976()
+		"online_part_fan_976":
+			return await _scenario_online_part_fan_976()
+		"online_part_moving_platform_976":
+			return await _scenario_online_part_moving_platform_976()
+		"online_part_saw_976":
+			return await _scenario_online_part_saw_976()
+		"online_part_rotating_platform_976":
+			return await _scenario_online_part_rotating_platform_976()
+		"online_part_teleporter_976":
+			return await _scenario_online_part_teleporter_976()
+		"online_part_wind_zone_976":
+			return await _scenario_online_part_wind_zone_976()
+		"online_part_falling_rock_976":
+			return await _scenario_online_part_falling_rock_976()
+		"online_part_kill_zone_rising_976":
+			return await _scenario_online_part_kill_zone_rising_976()
+		"online_part_clocks_resync_976":
+			return await _scenario_online_part_clocks_resync_976()
+		"online_stage_parts_found_by_host_id_976":
+			return await _scenario_online_stage_parts_found_by_host_id_976()
+		"online_soccer_ball_drawn_like_host_976":
+			return await _scenario_online_soccer_ball_drawn_like_host_976()
+		"online_ctf_flags_drawn_like_host_976":
+			return await _scenario_online_ctf_flags_drawn_like_host_976()
+		"online_hill_drawn_like_host_976":
+			return await _scenario_online_hill_drawn_like_host_976()
+		"online_tiebreaker_rock_follows_host_976":
+			return await _scenario_online_tiebreaker_rock_follows_host_976()
+		"online_gale_follows_host_976":
+			return await _scenario_online_gale_follows_host_976()
+		"snapshot_parts_and_props_hostile_976":
+			return await _scenario_snapshot_parts_and_props_hostile_976()
+		"online_client_merges_v2_deltas_976":
+			return await _scenario_online_client_merges_v2_deltas_976()
 		"remote_client_interpolates_100ms_behind":
 			return await _scenario_remote_client_interpolates_100ms_behind()
 		"remote_client_esc_menu_resume_and_leave":
@@ -25763,6 +25901,10 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 				"team": 0,
 				"damage": 25,
 				"state": 0,
+				"flags": SnapshotScript.PLAYER_BLINKING | SnapshotScript.PLAYER_DIMMED,
+				"fire": SnapshotScript.FIRE_NONE,
+				"hat_spin": 64,
+				"squash": 40,
 			},
 			{
 				"player_id": 2,
@@ -25773,6 +25915,10 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 				"team": 1,
 				"damage": 50,
 				"state": 1,
+				"flags": SnapshotScript.PLAYER_HEAD_PHASED | SnapshotScript.PLAYER_HINT | SnapshotScript.PLAYER_HINT_PAD,
+				"fire": 127,
+				"hat_spin": 0,
+				"squash": 220,
 			},
 		],
 		"projectiles": [
@@ -25781,6 +25927,9 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 				"position": Vector2(200, 200),
 				"velocity": Vector2(100, 0),
 				"weapon_type": 3,
+				"owner": 2,
+				"rotation": 0.75,
+				"flags": SnapshotScript.PROJ_KIND_BOOMERANG | SnapshotScript.PROJ_GHOST,
 			},
 		],
 		"pickups": [
@@ -25788,6 +25937,8 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 				"pickup_id": 1,
 				"position": Vector2(300, 300),
 				"weapon_type": 2,
+				"halo": 200,
+				"pop": 1,
 			},
 		],
 		"flail": {
@@ -25811,6 +25962,15 @@ func _scenario_snapshot_encode_decode() -> Array[String]:
 		],
 		"kill_zone_height": 500,
 		"announcer_text": "Final round!",
+		# Version 2 (#976): flails, ghosts, meteors, stage flags, parts, props.
+		"flails": [{"owner": 1, "ball_position": Vector2(40, -60), "ball_rotation": 2.0,
+			"flags": SnapshotScript.FLAIL_PHASED,
+			"links": [{"position": Vector2(10, -20), "rotation": PI / 2.0}, {"position": Vector2(20, -40), "rotation": 0.0}]}],
+		"ghosts": [{"owner": 2, "position": Vector2(-100, 50), "alpha": 0.2, "puff": 1.0}],
+		"meteors": [{"meteor_id": 9, "position": Vector2(500, -900), "velocity": Vector2(-120, 600), "radius": 22}],
+		"stage_flags": SnapshotScript.STAGE_NIGHT | SnapshotScript.STAGE_PLAYER_NUMBERS,
+		"parts": [{"part_id": 3000000000, "state": [Vector2(4, 5), 1.25, Color(0.5, 0.25, 1.0), true, 7]}],
+		"props": [{"prop_id": 77, "kind": 3, "state": [Vector2(10, 20), 0.5]}],
 	}
 	var encoded = SnapshotScript.encode(world)
 	if encoded.is_empty():
@@ -25940,12 +26100,18 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 				"weapon": {"head_position": Vector2(120, 80), "head_rotation": 0.3, "head_shape_index": 2},
 				"damage": 30,
 				"state": 1,
+				"flags": SnapshotScript.PLAYER_SPECIAL_LOADED,
+				"fire": 254,
+				"hat_spin": 200,
+				"squash": 10,
 			},
 			{
 				"type": SnapshotScript.TYPE_PROJECTILE,
 				"id": 1,
 				"position": Vector2(200, 200),
 				"velocity": Vector2(100, -20),
+				"rotation": 1.0,
+				"flags": SnapshotScript.PROJ_KIND_HOOK,
 			},
 			{
 				"type": SnapshotScript.TYPE_TIMER,
@@ -25959,6 +26125,12 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 			{"type": SnapshotScript.TYPE_SCORES, "id": 2, "score": 7},
 			{"type": SnapshotScript.TYPE_KILL_FEED, "id": 0, "text": "Alice eliminated Bob"},
 			{"type": SnapshotScript.TYPE_KILL_ZONE, "id": 0, "height": 480},
+			{"type": SnapshotScript.TYPE_CHAIN, "id": 3, "ball_position": Vector2(1, 2), "ball_rotation": 0.5,
+				"flags": 1, "links": [{"position": Vector2(3, 4), "rotation": PI}]},
+			{"type": SnapshotScript.TYPE_GHOST, "id": 4, "position": Vector2(5, 6), "alpha": 1.0, "puff": 0.2},
+			{"type": SnapshotScript.TYPE_METEOR, "id": 6, "position": Vector2(7, 8), "velocity": Vector2(9, 10), "radius": 30},
+			{"type": SnapshotScript.TYPE_PART, "id": 0, "part_id": 123456, "state": [Vector2(1, 1), false]},
+			{"type": SnapshotScript.TYPE_PROP, "id": 8, "kind": 5, "state": [Vector2(2, 2), 80.0, 1, Color.RED, 0.5, false, Vector2(3, 3)]},
 		],
 	}
 	var encoded = SnapshotScript.encode(world)
@@ -25970,8 +26142,9 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 	var want: Array = [
 		{"type": SnapshotScript.TYPE_PLAYER, "id": 1, "position": Vector2(100, 100), "rotation": 0.5,
 			"linear_velocity": Vector2(10, -4), "head_position": Vector2(120, 80), "head_rotation": 0.3,
-			"head_shape_index": 2, "damage": 30, "state": 1},
-		{"type": SnapshotScript.TYPE_PROJECTILE, "id": 1, "position": Vector2(200, 200), "velocity": Vector2(100, -20)},
+			"head_shape_index": 2, "damage": 30, "state": 1, "flags": SnapshotScript.PLAYER_SPECIAL_LOADED, "fire": 254, "hat_spin": 200, "squash": 10},
+		{"type": SnapshotScript.TYPE_PROJECTILE, "id": 1, "position": Vector2(200, 200), "velocity": Vector2(100, -20),
+			"rotation": 1.0, "flags": SnapshotScript.PROJ_KIND_HOOK},
 		{"type": SnapshotScript.TYPE_TIMER, "id": 0, "timer_ms": 30000},
 		{"type": SnapshotScript.TYPE_PICKUP, "id": 4, "position": Vector2(-30, 60)},
 		{"type": SnapshotScript.TYPE_FLAIL, "id": 2, "pos1": Vector2(11, 12), "pos2": Vector2(-13, 14)},
@@ -25980,6 +26153,12 @@ func _scenario_snapshot_delta_encode() -> Array[String]:
 		{"type": SnapshotScript.TYPE_SCORES, "id": 2, "score": 7},
 		{"type": SnapshotScript.TYPE_KILL_FEED, "id": 0, "text": "Alice eliminated Bob"},
 		{"type": SnapshotScript.TYPE_KILL_ZONE, "id": 0, "height": 480},
+		{"type": SnapshotScript.TYPE_CHAIN, "id": 3, "ball_position": Vector2(1, 2), "ball_rotation": 0.5,
+			"flags": 1, "links": [{"position": Vector2(3, 4), "rotation": PI}]},
+		{"type": SnapshotScript.TYPE_GHOST, "id": 4, "position": Vector2(5, 6), "alpha": 1.0, "puff": 0.2},
+		{"type": SnapshotScript.TYPE_METEOR, "id": 6, "position": Vector2(7, 8), "velocity": Vector2(9, 10), "radius": 30},
+		{"type": SnapshotScript.TYPE_PART, "id": 0, "part_id": 123456, "state": [Vector2(1, 1), false]},
+		{"type": SnapshotScript.TYPE_PROP, "id": 8, "kind": 5, "state": [Vector2(2, 2), 80.0, 1, Color.RED, 0.5, false, Vector2(3, 3)]},
 	]
 	failures.append_array(_snap_mismatches_240(decoded.get("delta_entities", []), want, "delta_entities"))
 	_scenario_completed = true
@@ -27040,7 +27219,8 @@ func _scenario_snapshot_capture_matches_live_round() -> Array[String]:
 		_snap_near_251(failures, "player %d head" % slot, entry["weapon"]["head_position"], live.weapon_head_position())
 		if _snap_angle_off_251(entry["body"]["rotation"], live.global_rotation) > 0.001:
 			failures.append("player %d rotation %f, live %f" % [slot, entry["body"]["rotation"], live.global_rotation])
-		var head: Node2D = live.get("_head")
+		# #976: the head's rotation is the drawn head art's (the facing included).
+		var head: Node2D = live.get("_head_visual")
 		if head != null and _snap_angle_off_251(entry["weapon"]["head_rotation"], head.global_rotation) > 0.001:
 			failures.append("player %d head rotation %f, live %f" % [slot, entry["weapon"]["head_rotation"], head.global_rotation])
 		if entry["name"] != server.slot_name(slot):
@@ -29617,6 +29797,1224 @@ func _scenario_remote_client_renders_stage_projectiles_and_pickups() -> Array[St
 		failures.append("the stage or puppets stayed on screen outside a round")
 	await _rc_close_241(rig)
 	return failures
+# --- Online joiners draw exactly what the host draws (issue #976) ---------------
+const NetSyncScript976 := preload("res://scripts/NetSync.gd")
+const PlayerScript976 := preload("res://scripts/Player.gd")
+const FlailChainScript976 := preload("res://scripts/FlailChain.gd")
+const RoundModifiersScript976 := preload("res://scripts/RoundModifiers.gd")
+const RespawnScript976 := preload("res://scripts/Respawn.gd")
+const PickupDirectorScript976 := preload("res://scripts/PickupDirector.gd")
+const PickupSpawnRingScript976 := preload("res://scripts/PickupSpawnRing.gd")
+const SoccerScript976 := preload("res://scripts/Soccer.gd")
+const CtfScript976 := preload("res://scripts/CaptureTheFlag.gd")
+const KothScript976 := preload("res://scripts/KingOfTheHill.gd")
+const StageGustScript976 := preload("res://scripts/StageGust.gd")
+const FallingRockScene976: PackedScene = preload("res://scenes/parts/FallingRock.tscn")
+const NightLightingScript976 := preload("res://scripts/NightLighting.gd")
+const PaletteScript976 := preload("res://scripts/Palette.gd")
+const SnapshotScript976 := preload("res://scripts/Snapshot.gd")
+const PlayerFaceScript976 := preload("res://scripts/PlayerFace.gd")
+const KillZoneScript976 := preload("res://scripts/KillZone.gd")
+const GRAPPLE_PATH_976: String = "res://resources/grapple.tres"
+const BOOMSTICK_PATH_976: String = "res://resources/boomstick.tres"
+const AXE_PATH_976: String = "res://resources/axe.tres"
+
+## The snapshot index of the weapon file at `path` (0 for the pickaxe).
+func _widx_976(path: String) -> int:
+	return PickupWeaponsScript.WEAPON_PATHS.find(path) + 1
+
+## `_rc_world_241(0, 1)` (a round on stage 0) with `extra` merged over it.
+func _pf_world_976(extra: Dictionary = {}) -> Dictionary:
+	var w: Dictionary = _rc_world_241(0, 1)
+	w.merge(extra, true)
+	return w
+
+## Feeds `frame` (a full snapshot) to `client` through the codec and draws once.
+func _pf_feed_976(client: Node, frame: Dictionary) -> void:
+	# Drawn from this frame alone, not eased from the one fed before it.
+	client._samples.clear()
+	client.apply_snapshot(_rc_codec_241(frame))
+	client._render()
+
+## A stand-alone Online client (no host) fed `frame`.
+func _pf_client_976(rig: Dictionary, frame: Dictionary) -> Node:
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	_pf_feed_976(client, frame)
+	return client
+
+## What the host captures for a lone `p` in `slot`: SnapshotCapture's own
+## per-player readings, without a RoundManager round around it.
+func _pf_entry_976(p: RigidBody2D, slot: int) -> Dictionary:
+	var head: Node2D = p.get("_head")
+	var phase: int = 0
+	if p.alive:
+		phase = 2 if p.spawn_protected else 1
+	return {"player_id": slot,
+		"body": {"position": p.global_position, "rotation": p.global_rotation, "linear_velocity": p.linear_velocity},
+		"weapon": {"head_position": p.weapon_head_position(),
+			"head_rotation": SnapshotCaptureScript251._head_rotation(head, p.get("_head_visual")),
+			"head_shape_index": SnapshotCaptureScript251._weapon_index(p.weapon_stats)},
+		"color": slot, "name": "P%d" % slot, "team": p.team, "damage": p.damage, "state": phase,
+		"flags": SnapshotCaptureScript251._player_flags(p, head), "fire": SnapshotCaptureScript251._fire_byte(p),
+		"hat_spin": SnapshotCaptureScript251._hat_spin(p), "squash": SnapshotCaptureScript251._squash_byte(p)}
+
+## A lone host player in `slot`'s palette colour holding `path`.
+func _pf_host_player_976(stage: Node2D, slot: int, path: String, at: Vector2 = DEEP_PARK_POSITION) -> RigidBody2D:
+	var p: RigidBody2D = _spawn_player(stage, at)
+	p.set_identity_color(PaletteScript976.PLAYERS[slot])
+	# The ink RoundManager gives every player on stage 0 by day.
+	p.set_ink(PaletteScript976.ink_for(0, false))
+	if not path.is_empty():
+		await _equip(p, path)
+	else:
+		await _await_ticks(ROSTER_SWAP_TICKS)
+	return p
+
+func _pf_col_off_976(a: Color, b: Color) -> bool:
+	return absf(a.r - b.r) > 0.01 or absf(a.g - b.g) > 0.01 or absf(a.b - b.b) > 0.01 or absf(a.a - b.a) > 0.01
+
+func _pf_pts_off_976(a: PackedVector2Array, b: PackedVector2Array, tol: float = 0.01) -> bool:
+	if a.size() != b.size():
+		return true
+	for i in a.size():
+		if a[i].distance_to(b[i]) > tol:
+			return true
+	return false
+
+## Every way puppet `puppet` is drawn differently from the live player `host`:
+## body, outline, haft taper, hat, eyes, weapon head (art, colour, ink,
+## rotation, place), the loaded special, the spawn blink and the phased head.
+func _pf_figure_diffs_976(host: Node, puppet: Node2D, what: String) -> Array[String]:
+	var f: Array[String] = []
+	if puppet == null:
+		f.append("%s: no puppet" % what)
+		return f
+	var body: Polygon2D = host.get_node("Body")
+	if _pf_pts_off_976(puppet.body_visual().polygon, body.polygon):
+		f.append("%s: body polygon differs" % what)
+	if _pf_col_off_976(puppet.body_visual().color, body.color):
+		f.append("%s: body fill %s, host %s" % [what, puppet.body_visual().color, body.color])
+	var outline: Line2D = host.get("_identity_outline")
+	var p_out: Line2D = puppet.identity_outline()
+	if _pf_pts_off_976(p_out.points, outline.points) or _pf_col_off_976(p_out.default_color, outline.default_color) or p_out.width != outline.width:
+		f.append("%s: identity outline differs (%s vs %s)" % [what, p_out.default_color, outline.default_color])
+	var haft: Line2D = host.get_node("Haft")
+	var p_haft: Line2D = puppet.haft_line()
+	if p_haft.width != haft.width or _pf_col_off_976(p_haft.default_color, haft.default_color) or p_haft.z_index != haft.z_index \
+			or p_haft.width_curve == null or p_haft.width_curve.sample(1.0) != haft.width_curve.sample(1.0):
+		f.append("%s: haft taper or colour differs" % what)
+	# The host draws its haft to its weapon head (eased between physics ticks).
+	var tip: Vector2 = puppet.to_global(p_haft.points[1]) if p_haft.points.size() > 1 else Vector2.INF
+	var host_tip: Vector2 = host.weapon_head_position()
+	if tip.distance_to(host_tip) > 1.5:
+		f.append("%s: haft ends at %s, host %s" % [what, tip, host_tip])
+	if puppet.hat_id() != host.hat_id() or puppet.hat_node().position.distance_to(host.hat_node().position) > 0.5 \
+			or _pf_col_off_976(puppet.hat_node().tint, host.hat_node().tint):
+		f.append("%s: hat '%s' at %s, host '%s' at %s" % [what, puppet.hat_id(), puppet.hat_node().position, host.hat_id(), host.hat_node().position])
+	if not puppet.face_node().squash_scale().is_equal_approx(host.squash_scale()) \
+			and puppet.face_node().squash_scale().distance_to(host.squash_scale()) > 0.002:
+		f.append("%s: squash %s, host %s" % [what, puppet.face_node().squash_scale(), host.squash_scale()])
+	if puppet.eyes_id() != host.eyes_id() or _pf_col_off_976(puppet.face_node().ink, host.face_node().ink):
+		f.append("%s: eyes '%s' ink %s, host '%s' ink %s" % [what, puppet.eyes_id(), puppet.face_node().ink, host.eyes_id(), host.face_node().ink])
+	var hv: Polygon2D = host.get("_head_visual")
+	var p_hv: Polygon2D = puppet.head_visual()
+	if hv != null:
+		if p_hv == null:
+			f.append("%s: no weapon head drawn" % what)
+		else:
+			if _pf_pts_off_976(p_hv.polygon, hv.polygon):
+				f.append("%s: weapon head art differs" % what)
+			if _pf_col_off_976(p_hv.color, hv.color):
+				f.append("%s: weapon head colour %s, host %s" % [what, p_hv.color, hv.color])
+			var edge: Line2D = hv.get_node_or_null("HeadOutline")
+			var p_edge: Line2D = p_hv.get_node_or_null("HeadOutline")
+			if edge != null and (p_edge == null or _pf_col_off_976(p_edge.default_color, edge.default_color) or p_edge.width != edge.width):
+				f.append("%s: weapon head ink outline differs" % what)
+			if _snap_angle_off_251(p_hv.global_rotation, hv.global_rotation) > 0.01:
+				f.append("%s: weapon head drawn at %f rad, host %f" % [what, p_hv.global_rotation, hv.global_rotation])
+			if p_hv.global_position.distance_to(hv.global_position) > 1.5:
+				f.append("%s: weapon head at %s, host %s" % [what, p_hv.global_position, hv.global_position])
+			if absf(p_hv.modulate.a - hv.modulate.a) > 0.01:
+				f.append("%s: weapon head alpha %f, host %f" % [what, p_hv.modulate.a, hv.modulate.a])
+	var loaded: Polygon2D = host.get("_loaded_visual")
+	var p_loaded: Polygon2D = puppet.loaded_visual()
+	if (loaded != null) != (p_loaded != null):
+		f.append("%s: loaded special art present %s, host %s" % [what, p_loaded != null, loaded != null])
+	elif loaded != null and (loaded.visible != p_loaded.visible or _pf_pts_off_976(loaded.polygon, p_loaded.polygon)):
+		f.append("%s: loaded special shown %s, host %s" % [what, p_loaded.visible, loaded.visible])
+	if absf(puppet.figure().modulate.a - (host as CanvasItem).modulate.a) > 0.01:
+		f.append("%s: figure alpha %f, host %f" % [what, puppet.figure().modulate.a, (host as CanvasItem).modulate.a])
+	if puppet.visible != (host as CanvasItem).visible:
+		f.append("%s: shown %s, host %s" % [what, puppet.visible, (host as CanvasItem).visible])
+	return f
+
+## Values read off a host node and its client copy, compared (vectors to a
+## pixel, numbers and colours closely, anything else exactly).
+func _pf_values_976(got: Array, want: Array, what: String) -> Array[String]:
+	var f: Array[String] = []
+	if got.size() != want.size():
+		f.append("%s: %d values, host %d" % [what, got.size(), want.size()])
+		return f
+	for i in want.size():
+		var a: Variant = got[i]
+		var b: Variant = want[i]
+		var off: bool = false
+		if b is Vector2:
+			off = not (a is Vector2) or (a as Vector2).distance_to(b) > 1.0
+		elif b is float or b is int:
+			off = not (a is float or a is int) or absf(float(a) - float(b)) > 0.01
+		elif b is Color:
+			off = not (a is Color) or _pf_col_off_976(a, b)
+		else:
+			off = a != b
+		if off:
+			f.append("%s[%d]: client %s, host %s" % [what, i, a, b])
+	return f
+
+# Players ------------------------------------------------------------------------
+
+## A live bot round captured and drawn on a client: every puppet's figure,
+## every pickup and every stage part's look match the host's own nodes.
+func _scenario_online_puppets_match_live_host_round_976() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _snap_main_251(4)
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var slots: Array[int] = server.virtual_slots()
+	var players: Array[RigidBody2D] = []
+	for slot: int in slots:
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	if slots.is_empty() or not await _await_condition(func() -> bool: return _all_alive(players), BOT_START_MSEC):
+		failures.append("the bot round never started")
+		await _teardown(built["main"])
+		return failures
+	await _await_ticks(90)
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	client.looks = server.looks_message()
+	_pf_feed_976(client, SnapshotCaptureScript251.capture(rm))
+	# The second full snapshot maps the parts the first one's state built
+	# (the rising lava's art), as the next once-a-second full frame does.
+	_pf_feed_976(client, SnapshotCaptureScript251.capture(rm))
+	for slot: int in slots:
+		failures.append_array(_pf_figure_diffs_976(server.player_in_slot(slot), client.player_puppet(slot), "slot %d" % slot))
+	var host_pickups: Array[Node] = rm.get_tree().get_nodes_in_group("pickups")
+	if client.puppet_count(RcKind241.PICKUP) != host_pickups.size():
+		failures.append("%d pickups drawn, host has %d" % [client.puppet_count(RcKind241.PICKUP), host_pickups.size()])
+	var stage: Node = rm.get("_current_stage")
+	var parts: Array[Node] = NetSyncScript976.parts_of(stage)
+	for node: Node in parts:
+		var copy: Node = client.part_node(NetSyncScript976.part_id(stage, node))
+		if copy == null:
+			failures.append("stage part %s has no copy on the client" % stage.get_path_to(node))
+			continue
+		failures.append_array(_pf_values_976(NetSyncScript976.read(copy, NetSyncScript976.vars_of(copy)),
+			NetSyncScript976.read(node, NetSyncScript976.vars_of(node)), "part %s" % stage.get_path_to(node)))
+	if client.stage_node() == null or bool(client.stage_node().get("night")) != bool(stage.get("night")):
+		failures.append("the client's stage is not the host's night/day variant")
+	print("      %d players, %d pickups, %d parts compared on stage %d" % [slots.size(), host_pickups.size(), parts.size(), client.stage_id()])
+	for node: Node in rig["nodes"]:
+		node.queue_free()
+	await _teardown(built["main"])
+	return failures
+
+## A lone host player with each kind of weapon, hat and eyes, damaged and
+## turned, is drawn node for node the same by its puppet.
+func _scenario_online_puppet_figure_matches_host_player_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	for path: String in [PickupWeaponsScript.PICKAXE_PATH] + Array(PickupWeaponsScript.WEAPON_PATHS):
+		var p: RigidBody2D = await _pf_host_player_976(stage, 1, path)
+		p.set_hat("crown")
+		p.set_eyes("angry")
+		p.damage = 37.0
+		p.weapon_angle = 2.2
+		await _await_ticks(4)
+		client.looks = {"palette": [], "looks": [{"slot": 1, "hat": "crown", "eyes": "angry"}]}
+		_pf_feed_976(client, _pf_world_976({"players": [_pf_entry_976(p, 1)], "projectiles": [], "pickups": []}))
+		failures.append_array(_pf_figure_diffs_976(p, client.player_puppet(1), path.get_file()))
+		p.queue_free()
+		await physics_frame
+	for node: Node in rig["nodes"]:
+		node.queue_free()
+	await _teardown(stage)
+	return failures
+
+## Big heads and Tiny weapons change the held weapon's art; the puppet draws
+## the modified weapon exactly as the host does.
+func _scenario_online_puppet_draws_modified_weapon_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	for id: String in [RoundModifiersScript976.BIG_HEADS, RoundModifiersScript976.TINY_WEAPONS]:
+		var p: RigidBody2D = await _pf_host_player_976(stage, 0, GRAPPLE_PATH_976)
+		var modifier: RefCounted = RoundModifiersScript976.create(id)
+		p.set_weapon_stats_modifier(modifier._modified)
+		await _await_ticks(ROSTER_SWAP_TICKS)
+		var base: PackedVector2Array = (load(GRAPPLE_PATH_976) as Resource).art_outline
+		if not _pf_pts_off_976((p.get("_head_visual") as Polygon2D).polygon, base):
+			failures.append("%s: the host's head did not change, the check proves nothing" % id)
+		_pf_feed_976(client, _pf_world_976({"players": [_pf_entry_976(p, 0)], "projectiles": [], "pickups": [],
+			"modifiers": [{"modifier_id": 1, "name": id}]}))
+		failures.append_array(_pf_figure_diffs_976(p, client.player_puppet(0), id))
+		p.queue_free()
+		await physics_frame
+	for node: Node in rig["nodes"]:
+		node.queue_free()
+	await _teardown(stage)
+	return failures
+
+## The grapple's loaded hook shows on the puppet while the host's is loaded,
+## and a phased weapon head is see-through on both.
+func _scenario_online_puppet_loaded_and_phased_head_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var p: RigidBody2D = await _pf_host_player_976(stage, 2, GRAPPLE_PATH_976)
+	_pf_feed_976(client, _pf_world_976({"players": [_pf_entry_976(p, 2)], "projectiles": [], "pickups": []}))
+	failures.append_array(_pf_figure_diffs_976(p, client.player_puppet(2), "loaded"))
+	if client.player_puppet(2).loaded_visual() == null or not client.player_puppet(2).loaded_visual().visible:
+		failures.append("the loaded hook is not drawn on the puppet")
+	# A block of terrain round the head: wedged in it, the host phases the
+	# head and keeps it phased (#664) until it is clear.
+	var block := StaticBody2D.new()
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(600, 600)
+	shape.shape = rect
+	block.add_child(shape)
+	# The head 50 px inside the block's near edge, the body well outside it.
+	var out: Vector2 = (p.weapon_head_position() - p.global_position).normalized()
+	block.position = p.weapon_head_position() + out * 250.0
+	# Phased first: a solid head would be thrown out of the block.
+	p.get("_head").call("set_phased", true)
+	stage.add_child(block)
+	await _await_ticks(3)
+	if not p.is_head_phased():
+		failures.append("setup: the host's head did not stay phased")
+	_pf_feed_976(client, _pf_world_976({"players": [_pf_entry_976(p, 2)], "projectiles": [], "pickups": []}))
+	failures.append_array(_pf_figure_diffs_976(p, client.player_puppet(2), "phased"))
+	if absf(client.player_puppet(2).head_visual().modulate.a - PlayerScript976.PHASED_HEAD_ALPHA) > 0.01:
+		failures.append("the phased head is drawn at alpha %f" % client.player_puppet(2).head_visual().modulate.a)
+	for node: Node in rig["nodes"]:
+		node.queue_free()
+	await _teardown(stage)
+	return failures
+
+## Spawn protection's blink: the host's dim half dims the puppet's body (not
+## its weapon head), and the bright half shows it whole.
+func _scenario_online_puppet_spawn_blink_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var p: RigidBody2D = await _pf_host_player_976(stage, 0, "")
+	for alpha: float in [RespawnScript976.BLINK_ALPHA, 1.0]:
+		p.modulate.a = alpha
+		_pf_feed_976(client, _pf_world_976({"players": [_pf_entry_976(p, 0)], "projectiles": [], "pickups": []}))
+		failures.append_array(_pf_figure_diffs_976(p, client.player_puppet(0), "blink %.2f" % alpha))
+		if absf(client.player_puppet(0).head_visual().modulate.a - 1.0) > 0.01:
+			failures.append("the blink dimmed the puppet's weapon head")
+	for node: Node in rig["nodes"]:
+		node.queue_free()
+	await _teardown(stage)
+	return failures
+
+## A knocked-out player is hidden on the host; its puppet and name tag hide too.
+func _scenario_online_puppet_hidden_when_knocked_out_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var world: Dictionary = _pf_world_976()
+	world["players"][1]["state"] = 0
+	var client: Node = await _pf_client_976(rig, world)
+	if client.player_puppet(1) == null or client.player_puppet(1).visible:
+		failures.append("the knocked-out player's puppet is still drawn")
+	if client.player_puppet(0) == null or not client.player_puppet(0).visible:
+		failures.append("the living player's puppet is hidden")
+	if client.name_tags().name_tag(1).visible or not client.name_tags().name_tag(0).visible:
+		failures.append("name tags: dead shown %s, living shown %s" % [client.name_tags().name_tag(1).visible, client.name_tags().name_tag(0).visible])
+	await _rc_close_241(rig)
+	return failures
+
+## The eyes: the host's blink, the gaze toward the weapon head, the squint
+## when hit and the dead eyes all reach the puppet's face (PlayerFace.gd).
+func _scenario_online_puppet_eyes_follow_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var world: Dictionary = _pf_world_976()
+	world["players"][0]["flags"] = SnapshotScript976.PLAYER_BLINKING
+	var client: Node = await _pf_client_976(rig, world)
+	var face: Node2D = client.player_puppet(0).face_node()
+	if face.eye_state() != "blink":
+		failures.append("the host is blinking, the puppet's eyes are '%s'" % face.eye_state())
+	var want: Vector2 = (world["players"][0]["weapon"]["head_position"] - world["players"][0]["body"]["position"]).normalized()
+	if face.look_dir().distance_to(want) > 0.01:
+		failures.append("the puppet looks along %s, the host toward its head %s" % [face.look_dir(), want])
+	world["players"][0]["flags"] = 0
+	world["players"][0]["damage"] = 30
+	_pf_feed_976(client, world)
+	if face.eye_state() != "squint":
+		failures.append("a hit on the host should make the puppet squint, eyes are '%s'" % face.eye_state())
+	if face.hit_flash_alpha() <= 0.0 and not bool(get_root().get_node_or_null("Sfx") != null and get_root().get_node("Sfx").get("reduce_flash")):
+		failures.append("the hit flash did not show on the puppet")
+	world["players"][0]["state"] = 0
+	_pf_feed_976(client, world)
+	if face.eye_state() != "dead":
+		failures.append("a knocked-out puppet's eyes are '%s', not dead" % face.eye_state())
+	await _rc_close_241(rig)
+	return failures
+
+## Teams: the puppets' name tags take the host's team outline and ring; a
+## free-for-all has none.
+func _scenario_online_puppet_team_rings_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var world: Dictionary = _pf_world_976()
+	world["players"][0]["team"] = 0
+	world["players"][1]["team"] = 1
+	var client: Node = await _pf_client_976(rig, world)
+	var rings: Array = client.name_tags().team_rings()
+	var teams: Array = []
+	for ring: Array in rings:
+		teams.append(ring[1])
+	teams.sort()
+	if teams != [0, 1]:
+		failures.append("team rings %s, wanted one for each team" % [teams])
+	if client.player_puppet(1).team != 1:
+		failures.append("puppet 1 is on team %d" % client.player_puppet(1).team)
+	world["players"][0]["team"] = -1
+	world["players"][1]["team"] = -1
+	_pf_feed_976(client, world)
+	if not client.name_tags().team_rings().is_empty() or client.player_puppet(0).team != -1:
+		failures.append("a free-for-all still draws team rings")
+	await _rc_close_241(rig)
+	return failures
+
+## A propeller hat turns in step with the host's (Hat.spin_byte()).
+func _scenario_online_puppet_propeller_hat_in_step_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var p: RigidBody2D = await _pf_host_player_976(stage, 0, "")
+	p.set_hat("propeller")
+	await _await_ticks(37)
+	client.looks = {"palette": [], "looks": [{"slot": 0, "hat": "propeller", "eyes": "round"}]}
+	_pf_feed_976(client, _pf_world_976({"players": [_pf_entry_976(p, 0)], "projectiles": [], "pickups": []}))
+	var host_spin: float = p.hat_node().spin()
+	var got: float = client.player_puppet(0).hat_node().spin()
+	if absf(angle_difference(got, host_spin)) > TAU / 256.0 + 0.001:
+		failures.append("the puppet's propeller is at %f rad, the host's %f" % [got, host_spin])
+	for node: Node in rig["nodes"]:
+		node.queue_free()
+	await _teardown(stage)
+	return failures
+
+## A landing's squash and a big hit's stretch on the host squash the puppet
+## the same, hat and all, and at rest it is at rest.
+func _scenario_online_puppet_squash_follows_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var p: RigidBody2D = await _pf_host_player_976(stage, 0, "")
+	for dir: float in [1.0, -1.0, 0.0]:
+		if dir != 0.0:
+			p.get("_face").call("start_squash", PlayerFaceScript976.MAX_SQUASH, dir)
+		else:
+			await _await_ticks(60)
+		p.get("_face").call("_apply_squash")
+		_pf_feed_976(client, _pf_world_976({"players": [_pf_entry_976(p, 0)], "projectiles": [], "pickups": []}))
+		failures.append_array(_pf_figure_diffs_976(p, client.player_puppet(0), "squash %d" % int(dir)))
+		if dir != 0.0 and p.squash_scale().is_equal_approx(Vector2.ONE):
+			failures.append("setup: the host is not squashed")
+	for node: Node in rig["nodes"]:
+		node.queue_free()
+	await _teardown(stage)
+	return failures
+
+## Night stages: the client loads the night variant and draws the puppets
+## with the night ink, as the host's players are.
+func _scenario_online_puppet_night_ink_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _pf_client_976(rig, _pf_world_976({"stage_flags": SnapshotScript976.STAGE_NIGHT}))
+	var ink: Color = PaletteScript976.ink_for(0, true)
+	if client.stage_node() == null or not bool(client.stage_node().get("night")):
+		failures.append("the client's stage is not the night variant")
+	var puppet: Node2D = client.player_puppet(0)
+	if _pf_col_off_976(puppet.face_node().ink, ink):
+		failures.append("the face ink %s is not the night ink %s" % [puppet.face_node().ink, ink])
+	var edge: Line2D = puppet.head_visual().get_node("HeadOutline")
+	if _pf_col_off_976(edge.default_color, ink):
+		failures.append("the weapon head's outline %s is not the night ink" % edge.default_color)
+	if not puppet.is_in_group(NightLightingScript976.LIT_PLAYERS_GROUP):
+		failures.append("the puppet is not lit by the night lighting")
+	_pf_feed_976(client, _pf_world_976({"stage_flags": 0}))
+	if bool(client.stage_node().get("night")) or _pf_col_off_976(client.player_puppet(0).face_node().ink, PaletteScript976.ink_for(0, false)):
+		failures.append("the day stage kept the night variant or ink")
+	await _rc_close_241(rig)
+	return failures
+
+## The idle hint (#826) the host shows over a player shows over its puppet,
+## with the same drag or gamepad line, and goes when the host's does.
+func _scenario_online_idle_hint_mirrors_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var world: Dictionary = _pf_world_976()
+	world["players"][0]["flags"] = SnapshotScript976.PLAYER_HINT | SnapshotScript976.PLAYER_HINT_PAD
+	world["players"][1]["flags"] = SnapshotScript976.PLAYER_HINT
+	var client: Node = await _pf_client_976(rig, world)
+	var hint: Node = client.name_tags().idle_hint()
+	if hint.hint_kind(0) != 2 or hint.hint_kind(1) != 1:
+		failures.append("hint kinds %d / %d, wanted gamepad / drag" % [hint.hint_kind(0), hint.hint_kind(1)])
+	world["players"][0]["flags"] = 0
+	_pf_feed_976(client, world)
+	if hint.has_hint(0):
+		failures.append("the hint stayed after the host's went")
+	await _rc_close_241(rig)
+	return failures
+
+## The boomstick ring (#965) over a puppet fills as the host's fire clock runs.
+func _scenario_online_boomstick_ring_follows_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var world: Dictionary = _pf_world_976()
+	world["players"][0]["weapon"]["head_shape_index"] = _widx_976(BOOMSTICK_PATH_976)
+	world["players"][0]["fire"] = 127
+	world["players"][1]["fire"] = SnapshotScript976.FIRE_NONE
+	var client: Node = await _pf_client_976(rig, world)
+	var ring: Node = client.name_tags().boomstick_ring()
+	if absf(ring.ring_fill(0) - 127.0 / 254.0) > 0.01:
+		failures.append("the ring is %.3f full, the host's clock %.3f" % [ring.ring_fill(0), 127.0 / 254.0])
+	if ring.has_ring(1):
+		failures.append("a weapon that never fires on its own has a ring")
+	await _rc_close_241(rig)
+	return failures
+
+## Stock: the lives pips under each name tag come from the host's mode.
+func _scenario_online_stock_pips_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	client.hud = JSON.parse_string(JSON.stringify({"mode": "stock", "m": {"lives": {0: 3, 1: 1}, "clock": ""}}))
+	_pf_feed_976(client, _pf_world_976())
+	var counts: Array = client.name_tags().pip_counts()
+	counts.sort()
+	if counts != [[0, 3], [1, 1]]:
+		failures.append("pips %s, wanted [[0, 3], [1, 1]]" % [counts])
+	await _rc_close_241(rig)
+	return failures
+
+## Player numbers (#809): the host's setting shows the seat numbers on the
+## client's name tags and edge arrows.
+func _scenario_online_player_numbers_follow_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _pf_client_976(rig, _pf_world_976({"stage_flags": SnapshotScript976.STAGE_PLAYER_NUMBERS}))
+	if client.name_tags().team_badge(1).number() != 2 or client.offscreen_indicators().numbers_override != 1:
+		failures.append("the seat numbers are not shown")
+	_pf_feed_976(client, _pf_world_976({"stage_flags": 0}))
+	if client.name_tags().team_badge(1).number() != 0 or client.offscreen_indicators().numbers_override != 0:
+		failures.append("the seat numbers stayed after the host turned them off")
+	await _rc_close_241(rig)
+	return failures
+
+# Shots, flails, ghosts, meteors ---------------------------------------------------
+
+## The shot puppet for `kind` flags, owned by player 1.
+func _pf_shot_world_976(weapon: int, flags: int, rotation: float) -> Dictionary:
+	return _pf_world_976({"projectiles": [{"projectile_id": 7, "position": Vector2(10, 10), "velocity": Vector2(300, -40),
+		"weapon_type": weapon, "owner": 1, "rotation": rotation, "flags": flags}]})
+
+## A boomstick bullet is drawn by Projectile.draw_bullet at the host's z, in
+## its shooter's colour, from the shooter's weapon's radius.
+func _scenario_online_bullet_drawn_like_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _pf_client_976(rig, _pf_shot_world_976(_widx_976(BOOMSTICK_PATH_976), SnapshotScript976.PROJ_KIND_BULLET, 0.0))
+	var shot: Node2D = client.thing_puppet("proj7")
+	var host_shot: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+	get_root().add_child(host_shot)
+	if shot == null or shot.shot_kind() != SnapshotScript976.PROJ_KIND_BULLET:
+		failures.append("no bullet puppet")
+	else:
+		if shot.z_index != host_shot.z_index:
+			failures.append("bullet z %d, host %d" % [shot.z_index, host_shot.z_index])
+		if shot.color != client.player_puppet(1).color:
+			failures.append("bullet colour %s, shooter %s" % [shot.color, client.player_puppet(1).color])
+		if shot.velocity != Vector2(300, -40):
+			failures.append("bullet trail velocity %s" % shot.velocity)
+	host_shot.queue_free()
+	await _rc_close_241(rig)
+	return failures
+
+## A thrown boomerang: Boomerang.draw_boomerang at z 45, the host's spin, its
+## ghost bit, the shooter's colour.
+func _scenario_online_boomerang_drawn_like_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var flags: int = SnapshotScript976.PROJ_KIND_BOOMERANG | SnapshotScript976.PROJ_GHOST
+	var client: Node = await _pf_client_976(rig, _pf_shot_world_976(_widx_976(BOOMERANG_PATH), flags, 1.25))
+	var shot: Node2D = client.thing_puppet("proj7")
+	if shot == null or shot.shot_kind() != SnapshotScript976.PROJ_KIND_BOOMERANG:
+		failures.append("no boomerang puppet")
+	else:
+		if shot.z_index != 45 or absf(angle_difference(shot.shot_rotation, 1.25)) > 0.001:
+			failures.append("boomerang z %d spin %f, host z 45 spin 1.25" % [shot.z_index, shot.shot_rotation])
+		if shot.shot_flags & SnapshotScript976.PROJ_GHOST == 0:
+			failures.append("the boomerang lost its ghost bit")
+		if shot.color != client.player_puppet(1).color:
+			failures.append("boomerang colour %s, thrower %s" % [shot.color, client.player_puppet(1).color])
+	await _rc_close_241(rig)
+	return failures
+
+## A launched hook: GrappleHook.draw_hook at z 45, facing the host's way, its
+## rope from the shooter's weapon head.
+func _scenario_online_hook_and_rope_drawn_like_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _pf_client_976(rig, _pf_shot_world_976(_widx_976(GRAPPLE_PATH_976), SnapshotScript976.PROJ_KIND_HOOK, 0.8))
+	var shot: Node2D = client.thing_puppet("proj7")
+	if shot == null or shot.shot_kind() != SnapshotScript976.PROJ_KIND_HOOK:
+		failures.append("no hook puppet")
+	else:
+		if shot.z_index != 45 or absf(angle_difference(shot.global_rotation, 0.8)) > 0.001:
+			failures.append("hook z %d facing %f, host z 45 facing 0.8" % [shot.z_index, shot.global_rotation])
+		if shot.owner_puppet != client.player_puppet(1):
+			failures.append("the rope is not tied to the shooter's puppet")
+		elif shot.owner_puppet.weapon_head_position().distance_to(Vector2(160, 0)) > 0.5:
+			failures.append("the rope starts at %s, the shooter's head is at (160, 0)" % shot.owner_puppet.weapon_head_position())
+	await _rc_close_241(rig)
+	return failures
+
+## A flail: its ball and links are FlailChain's own visuals, in the owner's
+## colour, placed and turned as the host's, see-through when phased.
+func _scenario_online_flail_drawn_like_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var links: Array = [{"position": Vector2(20, 0), "rotation": 0.0}, {"position": Vector2(40, 5), "rotation": PI / 2.0},
+		{"position": Vector2(60, 10), "rotation": PI}]
+	var world: Dictionary = _pf_world_976({"flails": [{"owner": 0, "ball_position": Vector2(80, 12), "ball_rotation": 1.0,
+		"flags": SnapshotScript976.FLAIL_PHASED, "links": links}]})
+	var client: Node = await _pf_client_976(rig, world)
+	var flail: Node2D = client.thing_puppet("flail0")
+	var want: Polygon2D = FlailChainScript976.build_ball_visual(load(FLAIL_PATH), client.player_puppet(0).color)
+	if flail == null or flail.flail_ball() == null:
+		failures.append("no flail drawn")
+	else:
+		var ball: Polygon2D = flail.flail_ball()
+		if _pf_pts_off_976(ball.polygon, want.polygon) or _pf_col_off_976(ball.color, want.color):
+			failures.append("the ball is not FlailChain's ball in the owner's colour")
+		if ball.global_position.distance_to(Vector2(80, 12)) > 0.5 or absf(angle_difference(ball.global_rotation, 1.0)) > 0.01:
+			failures.append("ball at %s turned %f" % [ball.global_position, ball.global_rotation])
+		if absf(ball.modulate.a - FlailChainScript976.PHASED_ALPHA) > 0.01:
+			failures.append("the phased ball is drawn at alpha %f" % ball.modulate.a)
+		if flail.flail_link_count() != 3:
+			failures.append("%d links drawn, host has 3" % flail.flail_link_count())
+	want.free()
+	await _rc_close_241(rig)
+	return failures
+
+## A knocked-out player's ghost: Ghost.draw_ghost, at absolute z 0, in the
+## owner's colour, faded and puffed as the host's.
+func _scenario_online_ghost_drawn_like_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var world: Dictionary = _pf_world_976({"ghosts": [{"owner": 1, "position": Vector2(-50, -60), "alpha": 0.6, "puff": 0.4}]})
+	world["players"][1]["state"] = 0
+	var client: Node = await _pf_client_976(rig, world)
+	var ghost: Node2D = client.thing_puppet("ghost1")
+	if ghost == null:
+		failures.append("no ghost drawn")
+	else:
+		if ghost.z_as_relative or ghost.z_index != 0:
+			failures.append("ghost z %d (relative %s), host absolute 0" % [ghost.z_index, ghost.z_as_relative])
+		if ghost.color != client.player_puppet(1).color or absf(ghost.ghost_alpha - 0.6) > 0.01 or absf(ghost.puff - 0.4) > 0.01:
+			failures.append("ghost colour %s alpha %f puff %f" % [ghost.color, ghost.ghost_alpha, ghost.puff])
+		if ghost.global_position.distance_to(Vector2(-50, -60)) > 0.5:
+			failures.append("ghost at %s" % ghost.global_position)
+	await _rc_close_241(rig)
+	return failures
+
+## A Meteor shower meteor: Meteor.draw_meteor at z 5, its radius and trail.
+func _scenario_online_meteor_drawn_like_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _pf_client_976(rig, _pf_world_976({"meteors": [{"meteor_id": 4, "position": Vector2(30, -400),
+		"velocity": Vector2(-100, 700), "radius": 26}]}))
+	var meteor: Node2D = client.thing_puppet("meteor4")
+	if meteor == null:
+		failures.append("no meteor drawn")
+	else:
+		if meteor.z_index != 5 or meteor.radius != 26.0 or meteor.velocity != Vector2(-100, 700):
+			failures.append("meteor z %d radius %f velocity %s" % [meteor.z_index, meteor.radius, meteor.velocity])
+	await _rc_close_241(rig)
+	return failures
+
+# Pickups -----------------------------------------------------------------------
+
+## The pickup puppet is a display-only Pickup.tscn: same art, its halo
+## breathing in step with the host's, and never collectable.
+func _scenario_online_pickup_halo_follows_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _pf_client_976(rig, _pf_world_976({"pickups": [{"pickup_id": 9, "position": Vector2(50, -40),
+		"weapon_type": 3, "halo": 192, "pop": 0}]}))
+	var puppet: Node2D = client.thing_puppet("pick9")
+	var pickup: Node2D = puppet.pickup_node() if puppet != null else null
+	if pickup == null:
+		failures.append("no pickup drawn")
+	else:
+		if absf(pickup.halo_phase() - 0.75) > 0.01:
+			failures.append("the halo is at %f, the host's at 0.75" % pickup.halo_phase())
+		if pickup.is_in_group("pickups") or pickup.monitoring:
+			failures.append("the client's pickup can be collected")
+		if not pickup.is_in_group(NightLightingScript976.LIT_PICKUPS_GROUP):
+			failures.append("the client's pickup is not lit at night")
+		var host: Node2D = PickupScene.instantiate() as Node2D
+		host.set_weapon(load(PickupWeaponsScript.WEAPON_PATHS[2]))
+		get_root().add_child(host)
+		if _pf_pts_off_976(host.art_polygon(), pickup.art_polygon()):
+			failures.append("the pickup art differs from the host's")
+		host.queue_free()
+	await _rc_close_241(rig)
+	return failures
+
+## A pickup that is still popping in on the host (#816) pops in on the
+## client with the same ring; one already in place does not.
+func _scenario_online_pickup_pop_in_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _pf_client_976(rig, _pf_world_976({"pickups": [
+		{"pickup_id": 9, "position": Vector2(50, -40), "weapon_type": 3, "halo": 0, "pop": 1},
+		{"pickup_id": 10, "position": Vector2(-50, -40), "weapon_type": 4, "halo": 0, "pop": 0}]}))
+	var popping: Node2D = client.thing_puppet("pick9").pickup_node()
+	var settled: Node2D = client.thing_puppet("pick10").pickup_node()
+	if absf(popping.scale.x - PickupDirectorScript976.POP_START_SCALE) > 0.01:
+		failures.append("the popping pickup starts at scale %f, the host's at %f" % [popping.scale.x, PickupDirectorScript976.POP_START_SCALE])
+	if settled.scale != Vector2.ONE:
+		failures.append("a settled pickup popped in again")
+	var rings: int = 0
+	for child: Node in client._puppet_holder.get_children():
+		if child.get_script() == PickupSpawnRingScript976:
+			rings += 1
+	if rings != 1:
+		failures.append("%d spawn rings, wanted 1" % rings)
+	await _await_msec(int(PickupDirectorScript976.POP_SEC * 1000.0) + 100)
+	if popping.scale.distance_to(Vector2.ONE) > 0.01:
+		failures.append("the pop never finished (scale %s)" % popping.scale)
+	await _rc_close_241(rig)
+	return failures
+
+# Stage parts -------------------------------------------------------------------
+
+## One stage part's look carried host to client: the host's copy runs, the
+## client's (in its own physics world, its logic stopped by NetSync) takes
+## the host's state through the snapshot codec, and every sent value then
+## matches. A part whose look the host drives must not move on its own.
+func _part_parity_976(scene_path: String, configure: Callable, drive: Callable, ticks: int, check: Callable = Callable()) -> Array[String]:
+	var failures: Array[String] = []
+	var scene: PackedScene = load(scene_path)
+	var stage: Node2D = _new_empty_stage()
+	var host: Node2D = scene.instantiate() as Node2D
+	configure.call(host)
+	stage.add_child(host)
+	var mirror := SubViewport.new()
+	mirror.world_2d = World2D.new()
+	get_root().add_child(mirror)
+	var client: Node2D = scene.instantiate() as Node2D
+	configure.call(client)
+	mirror.add_child(client)
+	NetSyncScript976.freeze_part(client)
+	await drive.call(host, stage)
+	await _await_ticks(ticks)
+	var frame: Dictionary = {"is_full_snapshot": true, "parts": [{"part_id": 1, "state": NetSyncScript976.part_state(host)}]}
+	var decoded: Array = SnapshotScript976.decode(SnapshotScript976.encode(frame)).get("parts", [])
+	if decoded.size() != 1:
+		failures.append("the part's state did not survive the codec")
+	else:
+		NetSyncScript976.apply_part(client, decoded[0]["state"], true)
+		var paths: Array = NetSyncScript976.vars_of(host) + NetSyncScript976.clocks_of(host)
+		failures.append_array(_pf_values_976(NetSyncScript976.read(client, paths), NetSyncScript976.read(host, paths), scene_path.get_file()))
+		if check.is_valid():
+			failures.append_array(check.call(host, client))
+		if not NetSyncScript976.vars_of(client).is_empty():
+			var before: Array = NetSyncScript976.read(client, NetSyncScript976.vars_of(client))
+			await _await_ticks(20)
+			failures.append_array(_pf_values_976(NetSyncScript976.read(client, NetSyncScript976.vars_of(client)), before, "the client's own copy moved by itself"))
+	mirror.queue_free()
+	await _teardown(stage)
+	return failures
+
+func _pf_noop_976(_node: Node) -> void:
+	pass
+
+func _pf_tick_976(_host: Node, _stage: Node) -> void:
+	await physics_frame
+
+func _scenario_online_part_bounce_pad_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/BouncePad.tscn", _pf_noop_976,
+		func(host: Node, stage: Node2D) -> void:
+			var p: RigidBody2D = _spawn_player(stage, host.global_position + Vector2(0, -80))
+			p.linear_velocity = Vector2(0, 400)
+			await _await_condition(func() -> bool: return host.launch_count() > 0, 2000),
+		2,
+		func(host: Node, client: Node) -> Array[String]:
+			var f: Array[String] = []
+			if host.launch_count() == 0:
+				f.append("the host pad never launched anyone, the check proves nothing")
+			if _pf_col_off_976(client.visual_color(), host.visual_color()):
+				f.append("pad colour %s, host %s" % [client.visual_color(), host.visual_color()])
+			return f)
+
+func _scenario_online_part_breakable_wall_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/BreakableWall.tscn", _pf_noop_976,
+		func(host: Node, _stage: Node2D) -> void:
+			host.take_projectile_hit(host.hp * 0.6)
+			await physics_frame,
+		2,
+		func(host: Node, client: Node) -> Array[String]:
+			var f: Array[String] = []
+			if host.visible_crack_count() == 0:
+				f.append("the host wall shows no cracks, the check proves nothing")
+			if client.visible_crack_count() != host.visible_crack_count() or client.state_name() != host.state_name():
+				f.append("cracks %d state %s, host %d %s" % [client.visible_crack_count(), client.state_name(), host.visible_crack_count(), host.state_name()])
+			return f)
+
+func _scenario_online_part_breakable_wall_broken_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/BreakableWall.tscn", _pf_noop_976,
+		func(host: Node, _stage: Node2D) -> void:
+			host.take_projectile_hit(host.hp * 2.0)
+			await physics_frame,
+		90,
+		func(host: Node, client: Node) -> Array[String]:
+			var f: Array[String] = []
+			if not host.is_broken() or client.state_name() != host.state_name() or client.visible_crack_count() != host.visible_crack_count():
+				f.append("broken wall: client %s / %d cracks, host %s / %d" % [client.state_name(), client.visible_crack_count(), host.state_name(), host.visible_crack_count()])
+			return f)
+
+func _scenario_online_part_collapsing_floor_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/CollapsingFloor.tscn",
+		func(node: Node) -> void:
+			node.trigger = "timed"
+			node.collapse_after_sec = 0.3,
+		_pf_tick_976, 50,
+		func(host: Node, client: Node) -> Array[String]:
+			var f: Array[String] = []
+			if host.state_name() == "solid" or host.state_name() == "standing":
+				f.append("the host floor never moved on from %s, the check proves nothing" % host.state_name())
+			if _pf_col_off_976(client.visual_color(), host.visual_color()):
+				f.append("floor colour %s, host %s" % [client.visual_color(), host.visual_color()])
+			return f)
+
+func _scenario_online_part_crumbling_ledge_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/CrumblingLedge.tscn", _pf_noop_976,
+		func(host: Node, stage: Node2D) -> void:
+			_spawn_player(stage, host.global_position + Vector2(0, -40))
+			await _await_ticks(20),
+		10,
+		func(host: Node, client: Node) -> Array[String]:
+			var f: Array[String] = []
+			if _pf_col_off_976(client.visual_color(), host.visual_color()):
+				f.append("ledge colour %s, host %s" % [client.visual_color(), host.visual_color()])
+			return f)
+
+func _scenario_online_part_conveyor_clock_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/Conveyor.tscn",
+		func(node: Node) -> void:
+			node.position = Vector2.ZERO,
+		func(host: Node, _stage: Node2D) -> void:
+			# The host's belt has run longer than the tolerance the client allows.
+			host.set("_scroll", float(host.get("_scroll")) + 50.0)
+			await physics_frame,
+		1)
+
+func _scenario_online_part_fan_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/Fan.tscn",
+		func(node: Node) -> void:
+			node.spin_deg_per_sec = 90.0
+			node.travel = Vector2(200, 0),
+		_pf_tick_976, 40)
+
+func _scenario_online_part_moving_platform_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/MovingPlatform.tscn", _pf_noop_976, _pf_tick_976, 45,
+		func(host: Node, client: Node) -> Array[String]:
+			var f: Array[String] = []
+			if host.position == Vector2.ZERO:
+				f.append("the host platform never moved, the check proves nothing")
+			return f)
+
+func _scenario_online_part_saw_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/Saw.tscn",
+		func(node: Node) -> void:
+			node.travel = Vector2(0, 150),
+		_pf_tick_976, 40,
+		func(host: Node, client: Node) -> Array[String]:
+			var f: Array[String] = []
+			if absf(angle_difference(client.blade_rotation(), host.blade_rotation())) > 0.01:
+				f.append("blade at %f, host %f" % [client.blade_rotation(), host.blade_rotation()])
+			return f)
+
+func _scenario_online_part_rotating_platform_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/RotatingPlatform.tscn", _pf_noop_976, _pf_tick_976, 60)
+
+func _scenario_online_part_teleporter_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/Teleporter.tscn", _pf_noop_976, _pf_tick_976, 25)
+
+func _scenario_online_part_wind_zone_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/WindZone.tscn", _pf_noop_976, _pf_tick_976, 150,
+		func(host: Node, client: Node) -> Array[String]:
+			var f: Array[String] = []
+			if client.phase() != host.phase() or _pf_col_off_976(client.visual_color(), host.visual_color()):
+				f.append("wind phase %d colour %s, host %d %s" % [client.phase(), client.visual_color(), host.phase(), host.visual_color()])
+			return f)
+
+func _scenario_online_part_falling_rock_976() -> Array[String]:
+	return await _part_parity_976("res://scenes/parts/FallingRock.tscn",
+		func(node: Node) -> void:
+			node.set("auto_drop", false),
+		func(host: Node, _stage: Node2D) -> void:
+			host.drop_now()
+			await physics_frame,
+		30,
+		func(host: Node, client: Node) -> Array[String]:
+			var f: Array[String] = []
+			if client.rock_position().distance_to(host.rock_position()) > 1.0:
+				f.append("rock at %s, host %s" % [client.rock_position(), host.rock_position()])
+			return f)
+
+## The rising lava (#kill zone): its surface, rise and warning follow the host.
+func _scenario_online_part_kill_zone_rising_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var mirror := SubViewport.new()
+	mirror.world_2d = World2D.new()
+	get_root().add_child(mirror)
+	var host: Node2D = KillZoneScript976.new()
+	stage.add_child(host)
+	var client: Node2D = KillZoneScript976.new()
+	mirror.add_child(client)
+	NetSyncScript976.freeze_part(client)
+	host.start_rising(0.2, 120.0)
+	await _await_ticks(60)
+	var frame: Dictionary = {"is_full_snapshot": true, "parts": [{"part_id": 1, "state": NetSyncScript976.part_state(host)}]}
+	var decoded: Array = SnapshotScript976.decode(SnapshotScript976.encode(frame)).get("parts", [])
+	NetSyncScript976.apply_part(client, decoded[0]["state"] if not decoded.is_empty() else [], true)
+	failures.append_array(_pf_values_976(NetSyncScript976.read(client, NetSyncScript976.vars_of(client)),
+		NetSyncScript976.read(host, NetSyncScript976.vars_of(host)), "kill zone"))
+	if not client.is_rising() or absf(client.surface_y() - host.surface_y()) > 1.0:
+		failures.append("lava surface %f rising %s, host %f" % [client.surface_y(), client.is_rising(), host.surface_y()])
+	mirror.queue_free()
+	await _teardown(stage)
+	return failures
+
+## Clock-only parts (lava shimmer, sky, night lamps) keep running on the
+## client and are re-set to the host's clock on a full snapshot when drifted.
+func _scenario_online_part_clocks_resync_976() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in ["res://scripts/LavaSurface.gd", "res://scripts/StageBackground.gd", "res://scripts/NightLighting.gd"]:
+		var node: Node = (load(path) as GDScript).new()
+		node.set("_time", 3.0)
+		NetSyncScript976.freeze_part(node)
+		NetSyncScript976.apply_part(node, [10.0], true)
+		if absf(float(node.get("_time")) - 10.0) > 0.001:
+			failures.append("%s: a drifted clock was not re-set (%f)" % [path.get_file(), float(node.get("_time"))])
+		NetSyncScript976.apply_part(node, [10.1], true)
+		if absf(float(node.get("_time")) - 10.0) > 0.001:
+			failures.append("%s: a clock within tolerance was jerked" % path.get_file())
+		NetSyncScript976.apply_part(node, [20.0], false)
+		if absf(float(node.get("_time")) - 10.0) > 0.001:
+			failures.append("%s: a delta re-set the clock" % path.get_file())
+		node.free()
+	_scenario_completed = true
+	return failures
+
+## The client's stage parts are found by the id the host gives them, on a real
+## stage, and a part state in a snapshot reaches the right node.
+func _scenario_online_stage_parts_found_by_host_id_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var paths: PackedStringArray = RemoteClientScript241.stage_paths()
+	var stage_index: int = -1
+	var host_stage: Node = null
+	for i in paths.size():
+		var candidate: Node = (load(paths[i]) as PackedScene).instantiate()
+		for node: Node in NetSyncScript976.parts_of(candidate):
+			if node.get_script() != null and (node.get_script() as Script).resource_path.ends_with("MovingPlatform.gd"):
+				stage_index = i
+				break
+		if stage_index >= 0:
+			host_stage = candidate
+			break
+		candidate.free()
+	if host_stage == null:
+		failures.append("no stage has a moving platform")
+		_scenario_completed = true
+		return failures
+	host_stage.set("stage_index", stage_index)
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var holder := SubViewport.new()
+	holder.world_2d = World2D.new()
+	get_root().add_child(holder)
+	holder.add_child(host_stage)
+	await _await_ticks(30)
+	var parts: Array = []
+	var platform: Node = null
+	for node: Node in NetSyncScript976.parts_of(host_stage):
+		parts.append({"part_id": NetSyncScript976.part_id(host_stage, node), "state": NetSyncScript976.part_state(node)})
+		if platform == null and (node.get_script() as Script).resource_path.ends_with("MovingPlatform.gd"):
+			platform = node
+	var world: Dictionary = _rc_world_241(stage_index, 1)
+	world["parts"] = parts
+	_pf_feed_976(client, world)
+	var copy: Node = client.part_node(NetSyncScript976.part_id(host_stage, platform))
+	if copy == null:
+		failures.append("the client has no part under the host's id for %s" % host_stage.get_path_to(platform))
+	elif (copy as Node2D).position.distance_to((platform as Node2D).position) > 1.0:
+		failures.append("the platform copy is at %s, the host's at %s" % [(copy as Node2D).position, (platform as Node2D).position])
+	if client.part_node(NetSyncScript976.part_id(host_stage, platform)) != null and copy.is_physics_processing():
+		failures.append("the client's platform still runs its own motion")
+	holder.queue_free()
+	await _rc_close_241(rig)
+	return failures
+
+# Game-mode and modifier props --------------------------------------------------
+
+## Feeds a client one prop `kind` with `state` and returns its copy.
+## `host` is the host's prop node (read once the client is up, so it has not
+## moved on by the time the copy is compared) or its state array.
+func _pf_prop_client_976(rig: Dictionary, kind: int, host: Variant) -> Node:
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var state: Array = NetSyncScript976.prop_state(host) if host is Node else host
+	_pf_feed_976(client, _pf_world_976({"props": [{"prop_id": 31, "kind": kind, "state": state}]}))
+	return client
+
+## The polygons under `node`, in tree order, as [polygon, colour] pairs.
+func _pf_polys_976(node: Node) -> Array:
+	var out: Array = []
+	for child: Node in node.find_children("*", "Polygon2D", true, false):
+		out.append([(child as Polygon2D).polygon, (child as Polygon2D).color])
+	for child: Node in node.find_children("*", "Line2D", true, false):
+		out.append([(child as Line2D).points, (child as Line2D).default_color])
+	return out
+
+func _pf_same_polys_976(a: Array, b: Array, what: String) -> Array[String]:
+	var f: Array[String] = []
+	if a.size() != b.size():
+		f.append("%s: %d shapes, host %d" % [what, a.size(), b.size()])
+		return f
+	for i in a.size():
+		if _pf_pts_off_976(a[i][0], b[i][0]) or _pf_col_off_976(a[i][1], b[i][1]):
+			f.append("%s: shape %d differs" % [what, i])
+	return f
+
+## Soccer: the ball is Soccer.build_ball_visuals' disc and seam, where and as
+## turned as the host's.
+func _scenario_online_soccer_ball_drawn_like_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var host := Node2D.new()
+	SoccerScript976.build_ball_visuals(host)
+	host.position = Vector2(120, -30)
+	host.rotation = 0.9
+	NetSyncScript976.mark_prop(host, NetSyncScript976.PROP_SOCCER_BALL)
+	get_root().add_child(host)
+	var client: Node = await _pf_prop_client_976(rig, NetSyncScript976.PROP_SOCCER_BALL, host)
+	var ball: Node2D = client.prop_node(31)
+	if ball == null:
+		failures.append("no ball drawn")
+	else:
+		failures.append_array(_pf_same_polys_976(_pf_polys_976(ball), _pf_polys_976(host), "ball"))
+		if ball.global_position.distance_to(host.global_position) > 0.5 or absf(angle_difference(ball.global_rotation, host.global_rotation)) > 0.01:
+			failures.append("ball at %s turned %f, host %s %f" % [ball.global_position, ball.global_rotation, host.global_position, host.global_rotation])
+		if ball.is_in_group(NetSyncScript976.PROPS_GROUP):
+			failures.append("the client's copy would be captured as a host prop")
+	_pf_feed_976(client, _pf_world_976({"props": []}))
+	if client.prop_count() != 0:
+		failures.append("the ball stayed after the host's went")
+	host.free()
+	await _rc_close_241(rig)
+	return failures
+
+## CTF: each flag is CaptureTheFlag.build_flag's, in its team's colours,
+## shrunk while carried and hidden when the host hides it.
+func _scenario_online_ctf_flags_drawn_like_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var host: Node2D = CtfScript976.build_flag(1)
+	host.position = Vector2(-200, 40)
+	host.scale = Vector2.ONE * 0.6
+	NetSyncScript976.mark_prop(host, NetSyncScript976.PROP_CTF_FLAG)
+	get_root().add_child(host)
+	var client: Node = await _pf_prop_client_976(rig, NetSyncScript976.PROP_CTF_FLAG, host)
+	var flag: Node2D = client.prop_node(31)
+	if flag == null:
+		failures.append("no flag drawn")
+	else:
+		failures.append_array(_pf_same_polys_976(_pf_polys_976(flag), _pf_polys_976(host), "flag"))
+		if flag.global_position.distance_to(host.global_position) > 0.5 or absf(flag.scale.x - 0.6) > 0.01 or not flag.visible:
+			failures.append("flag at %s scale %f shown %s" % [flag.global_position, flag.scale.x, flag.visible])
+		host.visible = false
+		_pf_feed_976(client, _pf_world_976({"props": [{"prop_id": 31, "kind": NetSyncScript976.PROP_CTF_FLAG, "state": NetSyncScript976.prop_state(host)}]}))
+		if flag.visible:
+			failures.append("the hidden flag is still drawn")
+	host.free()
+	await _rc_close_241(rig)
+	return failures
+
+## King of the Hill: the hill is drawn by KingOfTheHill.draw_hill from the
+## host's own net_state (place, size, holder colour, fill, warning).
+func _scenario_online_hill_drawn_like_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var host: Node2D = KothScript976.new()
+	host.hill_position = Vector2(300, 120)
+	host.hill_radius = 140.0
+	host.hill_warning = true
+	get_root().add_child(host)
+	var want: Array = host.net_state()
+	var client: Node = await _pf_prop_client_976(rig, NetSyncScript976.PROP_HILL, want)
+	var hill: Node2D = client.prop_node(31)
+	if hill == null:
+		failures.append("no hill drawn")
+	else:
+		failures.append_array(_pf_values_976(hill.state(), want, "hill"))
+	host.free()
+	await _rc_close_241(rig)
+	return failures
+
+## Sudden death's falling rocks (Tiebreaker): each is a FallingRock whose
+## rock, marker and fade follow the host's.
+func _scenario_online_tiebreaker_rock_follows_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var stage: Node2D = _new_empty_stage()
+	var host: Node2D = FallingRockScene976.instantiate() as Node2D
+	host.set("auto_drop", false)
+	host.position = Vector2(0, -300)
+	NetSyncScript976.mark_prop(host, NetSyncScript976.PROP_ROCK)
+	stage.add_child(host)
+	host.drop_now()
+	await _await_ticks(40)
+	var client: Node = await _pf_prop_client_976(rig, NetSyncScript976.PROP_ROCK, host)
+	var rock: Node2D = client.prop_node(31)
+	if rock == null:
+		failures.append("no rock drawn")
+	else:
+		failures.append_array(_pf_values_976(NetSyncScript976.read(rock, NetSyncScript976.vars_of(rock)),
+			NetSyncScript976.read(host, NetSyncScript976.vars_of(host)), "rock"))
+		if rock.is_physics_processing():
+			failures.append("the client's rock drops on its own")
+	await _rc_close_241(rig)
+	await _teardown(stage)
+	return failures
+
+## The Gale modifier's gust: a StageGust with the host's size, direction and
+## timing, whose streaks and warning follow the host's.
+func _scenario_online_gale_follows_host_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var stage: Node2D = _new_empty_stage()
+	var host: Node2D = StageGustScript976.new()
+	host.size = Vector2(1600, 900)
+	host.direction = Vector2.LEFT
+	host.calm_sec = 0.5
+	NetSyncScript976.mark_prop(host, NetSyncScript976.PROP_GALE)
+	stage.add_child(host)
+	await _await_ticks(50)
+	var client: Node = await _pf_prop_client_976(rig, NetSyncScript976.PROP_GALE, host)
+	var gust: Node2D = client.prop_node(31)
+	if gust == null:
+		failures.append("no gale drawn")
+	else:
+		if gust.size != host.size or gust.direction != host.direction or gust.calm_sec != host.calm_sec:
+			failures.append("gale %s %s %f, host %s %s %f" % [gust.size, gust.direction, gust.calm_sec, host.size, host.direction, host.calm_sec])
+		var zone: Node = gust.gust_zone()
+		failures.append_array(_pf_values_976(NetSyncScript976.read(zone, NetSyncScript976.vars_of(zone)),
+			NetSyncScript976.read(host.gust_zone(), NetSyncScript976.vars_of(host.gust_zone())), "gale zone"))
+	await _rc_close_241(rig)
+	await _teardown(stage)
+	return failures
+
+# The wire -----------------------------------------------------------------------
+
+## Parts and props survive a hostile frame: an oversized state is refused, a
+## state that is not an array decodes empty, and a delta merges them.
+func _scenario_snapshot_parts_and_props_hostile_976() -> Array[String]:
+	var failures: Array[String] = []
+	var base: Dictionary = {"is_full_snapshot": true, "parts": [{"part_id": 5, "state": [1.0]}], "props": []}
+	var bytes: PackedByteArray = SnapshotScript976.encode(base)
+	# The part's state length sits just before its bytes: make it huge.
+	var huge: PackedByteArray = bytes.duplicate()
+	var state_bytes: PackedByteArray = var_to_bytes([1.0])
+	var at: int = -1
+	for i in huge.size() - state_bytes.size() + 1:
+		if huge.slice(i, i + state_bytes.size()) == state_bytes:
+			at = i - 2
+			break
+	if at < 0:
+		failures.append("setup: the part's state bytes were not found")
+		_scenario_completed = true
+		return failures
+	huge[at] = 0xFF
+	huge[at + 1] = 0xFF
+	if not SnapshotScript976.decode(huge).is_empty():
+		failures.append("an oversized part state was accepted")
+	# A prop whose state bytes hold a Dictionary, not an Array.
+	var marker: PackedByteArray = var_to_bytes([123456.0])
+	var good: PackedByteArray = SnapshotScript976.encode({"is_full_snapshot": true, "parts": [],
+		"props": [{"prop_id": 9, "kind": NetSyncScript976.PROP_HILL, "state": [123456.0]}]})
+	var payload: PackedByteArray = var_to_bytes({"a": 1})
+	var not_array := PackedByteArray()
+	for i in good.size() - marker.size() + 1:
+		if good.slice(i, i + marker.size()) == marker:
+			not_array = good.slice(0, i - 2)
+			not_array.append(payload.size() >> 8)
+			not_array.append(payload.size() & 0xFF)
+			not_array.append_array(payload)
+			not_array.append_array(good.slice(i + marker.size()))
+			break
+	var decoded: Dictionary = SnapshotScript976.decode(not_array)
+	if decoded.is_empty() or decoded["props"].size() != 1 or decoded["props"][0]["state"] != []:
+		failures.append("a non-array prop state was not read as empty: %s" % [decoded.get("props")])
+	var merged: Dictionary = SnapshotScript976.apply_delta(SnapshotScript976.decode(bytes), SnapshotScript976.decode(SnapshotScript976.encode(
+		{"is_full_snapshot": false, "delta_entities": [{"type": SnapshotScript976.TYPE_PART, "id": 0, "part_id": 5, "state": [2.0]},
+			{"type": SnapshotScript976.TYPE_PROP, "id": 3, "kind": 1, "state": [Vector2(1, 2)]}]})))
+	if merged["parts"] != [{"part_id": 5, "state": [2.0]}] or merged["props"] != [{"prop_id": 3, "kind": 1, "state": [Vector2(1, 2)]}]:
+		failures.append("deltas did not merge: parts %s props %s" % [merged["parts"], merged["props"]])
+	_scenario_completed = true
+	return failures
+
+## The client merges every v2 delta (flags, flails, ghosts, meteors, parts,
+## props) onto its last full snapshot, as SnapshotCapture.delta sends them.
+func _scenario_online_client_merges_v2_deltas_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var base: Dictionary = _pf_world_976({"flails": [], "ghosts": [], "meteors": [], "parts": [], "props": []})
+	var client: Node = await _pf_client_976(rig, base)
+	var moved: Dictionary = base.duplicate(true)
+	moved["players"][0]["flags"] = SnapshotScript976.PLAYER_DIMMED
+	moved["flails"] = [{"owner": 0, "ball_position": Vector2(5, 5), "ball_rotation": 0.0, "flags": 0, "links": []}]
+	moved["ghosts"] = [{"owner": 1, "position": Vector2(9, 9), "alpha": 1.0, "puff": 1.0}]
+	moved["meteors"] = [{"meteor_id": 2, "position": Vector2(1, 1), "velocity": Vector2(0, 10), "radius": 20}]
+	moved["parts"] = [{"part_id": 77, "state": [Vector2(3, 3)], "nvars": 1}]
+	moved["props"] = [{"prop_id": 4, "kind": NetSyncScript976.PROP_SOCCER_BALL, "state": [Vector2(2, 2), 0.0]}]
+	client.apply_snapshot(_rc_codec_241(SnapshotCaptureScript251.delta(moved, base)))
+	var w: Dictionary = client.world()
+	if int(w["players"][0].get("flags", 0)) != SnapshotScript976.PLAYER_DIMMED:
+		failures.append("the player flags delta was dropped")
+	if w.get("flails", []).size() != 1 or w.get("ghosts", []).size() != 1 or w.get("meteors", []).size() != 1:
+		failures.append("flail/ghost/meteor deltas: %d / %d / %d" % [w.get("flails", []).size(), w.get("ghosts", []).size(), w.get("meteors", []).size()])
+	if w.get("parts", []).size() != 1 or w.get("props", []).size() != 1:
+		failures.append("part/prop deltas: %d / %d" % [w.get("parts", []).size(), w.get("props", []).size()])
+	await _rc_close_241(rig)
+	return failures
+
 func _scenario_remote_client_draws_real_player_and_pickup_art_930() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = {"nodes": [], "relay": null}
@@ -29629,7 +31027,7 @@ func _scenario_remote_client_draws_real_player_and_pickup_art_930() -> Array[Str
 	var bare: Node2D = client.player_puppet(1)
 	if hatted == null or hatted.hat_id() != "crown" or hatted.eyes_id() != "angry":
 		failures.append("player 0 puppet wears hat '%s' eyes '%s', expected crown / angry" % [hatted.hat_id() if hatted != null else "<none>", hatted.eyes_id() if hatted != null else "<none>"])
-	elif hatted.get_node_or_null("Hat") == null or hatted.get_node("Hat").parts("crown").is_empty():
+	elif hatted.hat_node() == null or hatted.hat_node().parts("crown").is_empty():
 		failures.append("player 0 puppet has no Hat node with crown art")
 	if hatted != null and hatted.color != Color.html("#445566"):
 		failures.append("player 0 puppet colour %s is not the looks palette's" % hatted.color)

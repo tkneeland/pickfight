@@ -53,8 +53,14 @@ var _players: Array = []
 var _slot_name: Callable
 var _slot_color: Callable
 var _name_tags: Array[Label] = []
+## Issue #976: the Online client draws the host's player-numbers setting, not
+## its own: 1 on, 0 off, -1 (the host) reads HostSettings.
+var numbers_override: int = -1
 ## Stock (#354): a Callable slot -> lives (-1 for none) drawn as pips under the tag.
 var lives_of: Callable = Callable()
+## Issue #976: on the Online client, slot -> the host's idle hint kind
+## (IdleHint.hint_kind) for the plates to mirror; unset on the host.
+var hint_mirror: Callable = Callable()
 const PIP_RADIUS: float = 4.0
 const PIP_GAP: float = 4.0
 ## [slot, centre, count] per slot with pips this frame.
@@ -114,7 +120,7 @@ func tick() -> void:
 	var sfx: Node = get_node_or_null("/root/Sfx")
 	if sfx != null:
 		tag_scale *= float(sfx.get("ui_scale"))
-	var numbers: bool = HostSettingsScript.shared().player_numbers  # #809
+	var numbers: bool = HostSettingsScript.shared().player_numbers if numbers_override < 0 else numbers_override == 1  # #809
 	var had_rings: bool = not _rings.is_empty() or not _pips.is_empty()
 	_rings.clear()
 	_pips.clear()
@@ -197,7 +203,12 @@ func _tick_idle_hint(tag_scale: float) -> void:
 		return
 	var rm: Node = get_parent()
 	var ctx: Dictionary = {"scale": tag_scale}
-	if rm != null and rm.get("_state") != null and rm.get("_round_number") != null:
+	ctx["anchor"] = func(slot: int) -> Vector2:
+		var tag: Label = _name_tags[slot]
+		return tag.position + Vector2(tag.get_minimum_size().x * 0.5 * tag_scale, 0.0)
+	if hint_mirror.is_valid():
+		ctx["mirror"] = hint_mirror # the Online client (#976)
+	elif rm != null and rm.get("_state") != null and rm.get("_round_number") != null:
 		var state: int = int(rm.get("_state"))
 		ctx["active"] = state == 1 # RoundManager.State.ROUND_ACTIVE
 		ctx["reset"] = state == 3 # RoundManager.State.LOBBY
@@ -211,9 +222,6 @@ func _tick_idle_hint(tag_scale: float) -> void:
 				if int(server.pad_slot(device)) == slot:
 					return true
 			return false
-		ctx["anchor"] = func(slot: int) -> Vector2:
-			var tag: Label = _name_tags[slot]
-			return tag.position + Vector2(tag.get_minimum_size().x * 0.5 * tag_scale, 0.0)
 	_idle_hint.tick(ctx)
 
 ## The boomstick ring (#965), for the scenarios.

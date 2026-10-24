@@ -13,6 +13,12 @@ extends RefCounted
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const GameClockScript := preload("res://scripts/GameClock.gd")
+const SnapshotScript := preload("res://scripts/Snapshot.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const BoomerangScript := preload("res://scripts/Boomerang.gd")
+const GrappleHookScript := preload("res://scripts/GrappleHook.gd")
+const MeteorScript := preload("res://scripts/Meteor.gd")
+const NetSyncScript := preload("res://scripts/NetSync.gd")
 
 ## Frames captured since boot; scenarios read it to prove a phones-only game
 ## captures nothing.
@@ -47,6 +53,13 @@ static func capture(round_manager: Node) -> Dictionary:
 		"kill_feed": _kill_feed(rm),
 		"kill_zone_height": _kill_zone_height(rm),
 		"announcer_text": _announcer_text(rm),
+		# Issue #976: what an Online joiner needs to draw these exactly.
+		"flails": _flails(rm, players),
+		"ghosts": _ghosts(rm),
+		"meteors": _meteors(rm),
+		"stage_flags": _stage_flags(rm),
+		"parts": _parts(rm.get("_current_stage")),
+		"props": _props(rm),
 	}
 	var scores: Dictionary = {}
 	for entry: Dictionary in players:
@@ -80,12 +93,15 @@ static func delta(world: Dictionary, previous: Dictionary) -> Dictionary:
 	for p: Dictionary in world.get("players", []):
 		if before.get(p["player_id"]) != p:
 			entities.append({"type": 0x01, "id": p["player_id"], "body": p["body"],
-				"weapon": p["weapon"], "damage": p["damage"], "state": p["state"]})
+				"weapon": p["weapon"], "damage": p["damage"], "state": p["state"],
+				"flags": p.get("flags", 0), "fire": p.get("fire", SnapshotScript.FIRE_NONE),
+				"hat_spin": p.get("hat_spin", 0), "squash": p.get("squash", SnapshotScript.SQUASH_REST)})
 	before = _by_key(previous.get("projectiles", []), "projectile_id")
 	for p: Dictionary in world.get("projectiles", []):
 		if before.get(p["projectile_id"]) != p:
 			entities.append({"type": 0x02, "id": p["projectile_id"],
-				"position": p["position"], "velocity": p["velocity"]})
+				"position": p["position"], "velocity": p["velocity"],
+				"rotation": p.get("rotation", 0.0), "flags": p.get("flags", 0)})
 	before = _by_key(previous.get("pickups", []), "pickup_id")
 	for p: Dictionary in world.get("pickups", []):
 		if before.get(p["pickup_id"]) != p:
@@ -98,6 +114,40 @@ static func delta(world: Dictionary, previous: Dictionary) -> Dictionary:
 	if not grapple.is_empty() and grapple != previous.get("grapple", {}):
 		entities.append({"type": 0x05, "id": grapple["grapple_id"],
 			"pos1": grapple["hook_position"], "pos2": grapple["rope_end"]})
+	before = _by_key(previous.get("flails", []), "owner")
+	for f: Dictionary in world.get("flails", []):
+		if before.get(f["owner"]) != f:
+			var e: Dictionary = f.duplicate()
+			e["type"] = SnapshotScript.TYPE_CHAIN
+			e["id"] = f["owner"]
+			entities.append(e)
+	before = _by_key(previous.get("ghosts", []), "owner")
+	for g: Dictionary in world.get("ghosts", []):
+		if before.get(g["owner"]) != g:
+			var e: Dictionary = g.duplicate()
+			e["type"] = SnapshotScript.TYPE_GHOST
+			e["id"] = g["owner"]
+			entities.append(e)
+	before = _by_key(previous.get("meteors", []), "meteor_id")
+	for m: Dictionary in world.get("meteors", []):
+		if before.get(m["meteor_id"]) != m:
+			var e: Dictionary = m.duplicate()
+			e["type"] = SnapshotScript.TYPE_METEOR
+			e["id"] = m["meteor_id"]
+			entities.append(e)
+	# A part's clocks run on the client too: only a change in its looks sends it.
+	before = _by_key(previous.get("parts", []), "part_id")
+	for part: Dictionary in world.get("parts", []):
+		var was: Variant = before.get(part["part_id"])
+		var nvars: int = int(part.get("nvars", 0))
+		if was == null or (part["state"] as Array).slice(0, nvars) != (was["state"] as Array).slice(0, nvars):
+			entities.append({"type": SnapshotScript.TYPE_PART, "id": 0, "part_id": part["part_id"],
+				"state": part["state"]})
+	before = _by_key(previous.get("props", []), "prop_id")
+	for prop: Dictionary in world.get("props", []):
+		if before.get(prop["prop_id"]) != prop:
+			entities.append({"type": SnapshotScript.TYPE_PROP, "id": prop["prop_id"], "kind": prop["kind"],
+				"state": prop["state"]})
 	if world.get("timer_ms") != previous.get("timer_ms"):
 		entities.append({"type": 0x07, "id": 0, "timer_ms": world.get("timer_ms", 0)})
 	var old_scores: Dictionary = previous.get("scores", {})
@@ -116,7 +166,11 @@ static func structure_changed(world: Dictionary, previous: Dictionary) -> bool:
 		return true
 	if world.get("round_phase") != previous.get("round_phase") or world.get("stage_id") != previous.get("stage_id"):
 		return true
-	for pair: Array in [["players", "player_id"], ["projectiles", "projectile_id"], ["pickups", "pickup_id"]]:
+	if world.get("stage_flags", 0) != previous.get("stage_flags", 0):
+		return true
+	for pair: Array in [["players", "player_id"], ["projectiles", "projectile_id"], ["pickups", "pickup_id"],
+			["flails", "owner"], ["ghosts", "owner"], ["meteors", "meteor_id"], ["parts", "part_id"],
+			["props", "prop_id"]]:
 		var now: Dictionary = _by_key(world.get(pair[0], []), pair[1])
 		var before: Dictionary = _by_key(previous.get(pair[0], []), pair[1])
 		for id: Variant in before:
@@ -154,6 +208,7 @@ static func _players(rm: Node, state: int) -> Array:
 	for slot: int in rm.get("_in_round"):
 		var p: RigidBody2D = nodes[slot]
 		var head: Node2D = p.get("_head")
+		var head_visual: Node2D = p.get("_head_visual")
 		var phase: int = STATE_DEAD
 		if p.alive:
 			phase = STATE_PROTECTED if p.spawn_protected else STATE_ALIVE
@@ -163,16 +218,76 @@ static func _players(rm: Node, state: int) -> Array:
 				"linear_velocity": p.linear_velocity},
 			"weapon": {
 				"head_position": p.weapon_head_position(),
-				"head_rotation": head.global_rotation if head != null else 0.0,
-				"head_shape_index": _weapon_index(p.get("_stats")),
+				# The drawn head's facing (#976): the head body is rotation-locked,
+				# so its own rotation never turns; the art on it does.
+				"head_rotation": _head_rotation(head, head_visual),
+				# The weapon held, by its file (`_stats` is a modifier's copy
+				# with no path while Big heads or Tiny weapons run).
+				"head_shape_index": _weapon_index(p.weapon_stats if p.weapon_stats != null else p.get("_stats")),
 			},
 			"color": slot,
 			"name": rm.call("_slot_name", slot),
 			"team": p.team,
 			"damage": p.damage,
 			"state": phase,
+			"flags": _player_flags(p, head) | _hint_flags(rm, slot),
+			"fire": _fire_byte(p),
+			"hat_spin": _hat_spin(p),
+			"squash": _squash_byte(p),
 		})
 	return out
+
+## Where the player's propeller hat's blades are (Hat.spin_byte()), 0 bare.
+static func _hat_spin(p: Node) -> int:
+	var hat: Node = p.call("hat_node") if p.has_method("hat_node") else null
+	return int(hat.call("spin_byte")) if hat != null and is_instance_valid(hat) else 0
+
+## The player's face squash (PlayerFace.squash_byte()), at rest without one.
+static func _squash_byte(p: Node) -> int:
+	var face: Node = p.get("_face")
+	return int(face.call("squash_byte")) if face != null and is_instance_valid(face) else SnapshotScript.SQUASH_REST
+
+static func _head_rotation(head: Node2D, head_visual: Node2D) -> float:
+	if head_visual != null and is_instance_valid(head_visual) and head_visual.is_inside_tree():
+		return head_visual.global_rotation
+	return head.global_rotation if head != null and is_instance_valid(head) else 0.0
+
+static func _player_flags(p: Node, head: Node2D) -> int:
+	var flags: int = 0
+	if head != null and is_instance_valid(head) and bool(head.get("phased")):
+		flags |= SnapshotScript.PLAYER_HEAD_PHASED
+	var loaded: Node2D = p.get("_loaded_visual")
+	if loaded != null and is_instance_valid(loaded) and loaded.visible:
+		flags |= SnapshotScript.PLAYER_SPECIAL_LOADED
+	if p.has_method("eye_state") and p.eye_state() == "blink":
+		flags |= SnapshotScript.PLAYER_BLINKING
+	if (p as CanvasItem).modulate.a < 1.0:
+		flags |= SnapshotScript.PLAYER_DIMMED
+	return flags
+
+## The idle hint's bits (#826) for `slot`: up, and whether it reads the
+## gamepad line.
+static func _hint_flags(rm: Node, slot: int) -> int:
+	var tags: Variant = rm.get("_name_tags")
+	if tags == null or not is_instance_valid(tags) or not (tags as Object).has_method("idle_hint"):
+		return 0
+	var hint: Node = tags.idle_hint()
+	if hint == null:
+		return 0
+	match int(hint.hint_kind(slot)):
+		1:
+			return SnapshotScript.PLAYER_HINT
+		2:
+			return SnapshotScript.PLAYER_HINT | SnapshotScript.PLAYER_HINT_PAD
+	return 0
+
+## How far the fire clock has run, 0..FIRE_FULL, or FIRE_NONE.
+static func _fire_byte(p: Node) -> int:
+	var ready_in: float = p.fire_ready_in()
+	var stats: Resource = p.get("_stats")
+	if not is_finite(ready_in) or stats == null or float(stats.fire_interval) <= 0.0:
+		return SnapshotScript.FIRE_NONE
+	return clampi(roundi((1.0 - ready_in / float(stats.fire_interval)) * SnapshotScript.FIRE_FULL), 0, SnapshotScript.FIRE_FULL)
 
 static func _stage_bodies(stage: Node) -> Array:
 	var out: Array = []
@@ -186,17 +301,136 @@ static func _stage_bodies(stage: Node) -> Array:
 			"linear_velocity": Vector2.ZERO})
 	return out
 
+## Every shot in flight (issue #976): the boomstick's bullets, thrown
+## boomerangs and launched hooks, each with its kind, owner and facing.
 static func _projectiles(rm: Node) -> Array:
 	var out: Array = []
+	var players: Array = rm.get("_players")
 	for node: Node in rm.get_tree().get_nodes_in_group("projectiles"):
 		var shooter: Variant = node.get("shooter")
-		out.append({
-			"projectile_id": node.get_instance_id() & 0xFFFF,
-			"position": node.global_position,
-			"velocity": node.direction * node.speed,
-			"weapon_type": _weapon_index(shooter.get("_stats")) if shooter != null else 0,
-		})
+		var index: int = _weapon_index_named(str(node.get("weapon_id")))
+		if index == 0 and shooter != null and is_instance_valid(shooter):
+			index = _weapon_index(shooter.get("weapon_stats"))
+		out.append(_shot(node, players, index, node.direction * node.speed, 0.0, SnapshotScript.PROJ_KIND_BULLET))
+	for node: Node in rm.get_tree().get_nodes_in_group(BoomerangScript.GROUP):
+		var flags: int = SnapshotScript.PROJ_KIND_BOOMERANG | (SnapshotScript.PROJ_GHOST if bool(node.get("ghost")) else 0)
+		out.append(_shot(node, players, _special_index(node, &"boomerang"), node.get("velocity"), node.spin(), flags))
+	for node: Node in rm.get_tree().get_nodes_in_group(GrappleHookScript.GROUP):
+		out.append(_shot(node, players, _special_index(node, &"grapple"), Vector2.ZERO, (node as Node2D).global_rotation, SnapshotScript.PROJ_KIND_HOOK))
 	return out
+
+static func _shot(node: Node, players: Array, index: int, velocity: Variant, rotation: float, flags: int) -> Dictionary:
+	var shooter: Variant = node.get("shooter")
+	var owner: int = players.find(shooter) if shooter != null and is_instance_valid(shooter) else -1
+	return {
+		"projectile_id": node.get_instance_id() & 0xFFFF,
+		"position": (node as Node2D).global_position,
+		"velocity": velocity if velocity is Vector2 else Vector2.ZERO,
+		"weapon_type": index,
+		"owner": owner,
+		"rotation": rotation,
+		"flags": flags,
+	}
+
+## The weapon a thrown boomerang or launched hook came from: its shooter's,
+## while that is still a weapon with the same special, else the first weapon
+## that has it.
+static func _special_index(node: Node, special: StringName) -> int:
+	var shooter: Variant = node.get("shooter")
+	if shooter != null and is_instance_valid(shooter):
+		var held: Resource = shooter.get("weapon_stats")
+		if held != null and StringName(held.get("special")) == special:
+			return _weapon_index(held)
+	for i in PickupWeaponsScript.WEAPON_PATHS.size():
+		var stats: Resource = load(PickupWeaponsScript.WEAPON_PATHS[i])
+		if stats != null and StringName(stats.get("special")) == special:
+			return i + 1
+	return 0
+
+## The snapshot weapon index of the weapon file named `id` ("boomstick"), 0 for none.
+static func _weapon_index_named(id: String) -> int:
+	if id.is_empty():
+		return 0
+	for i in PickupWeaponsScript.WEAPON_PATHS.size():
+		if PickupWeaponsScript.WEAPON_PATHS[i].get_file().get_basename() == id:
+			return i + 1
+	return 0
+
+## Every flail in play (issue #976): its owner, ball and links.
+static func _flails(rm: Node, players: Array) -> Array:
+	var out: Array = []
+	var nodes: Array = rm.get("_players")
+	for entry: Dictionary in players:
+		var player: Node = nodes[entry["player_id"]]
+		var chain: RefCounted = player.flail_chain()
+		var ball: Node2D = player.flail_ball()
+		if chain == null or ball == null or not is_instance_valid(ball):
+			continue
+		var links: Array = []
+		for link: Node2D in chain.get("links"):
+			if is_instance_valid(link):
+				links.append({"position": link.global_position, "rotation": link.global_rotation})
+		out.append({"owner": entry["player_id"], "ball_position": ball.global_position,
+			"ball_rotation": ball.global_rotation,
+			"flags": SnapshotScript.FLAIL_PHASED if bool(ball.get("phased")) else 0, "links": links})
+	return out
+
+## Every KO'd player's ghost (issue #976), shown or still fading in.
+static func _ghosts(rm: Node) -> Array:
+	var out: Array = []
+	var ghosts: Variant = rm.get("_ghosts")
+	if not ghosts is Dictionary:
+		return out
+	for slot: int in ghosts:
+		var ghost: Node2D = ghosts[slot]
+		if ghost == null or not is_instance_valid(ghost):
+			continue
+		out.append({"owner": slot, "position": ghost.global_position,
+			"alpha": ghost.alpha(), "puff": clampf(ghost.puff_progress(), 0.0, 1.0)})
+	return out
+
+## Every stage part whose look the host sends (issue #976), by its id.
+## `nvars` (host-side only, never encoded) is how many of `state`'s values
+## are looks rather than clocks.
+static func _parts(stage: Node) -> Array:
+	var out: Array = []
+	if stage == null or not is_instance_valid(stage):
+		return out
+	for node: Node in NetSyncScript.parts_of(stage):
+		if out.size() >= SnapshotScript.MAX_COUNT_U8:
+			break
+		out.append({"part_id": NetSyncScript.part_id(stage, node), "state": NetSyncScript.part_state(node),
+			"nvars": NetSyncScript.vars_of(node).size()})
+	return out
+
+## Every runtime prop the host marked (issue #976): the soccer ball, CTF
+## flags, the hill, tiebreaker rocks, the gale.
+static func _props(rm: Node) -> Array:
+	var out: Array = []
+	for node: Node in rm.get_tree().get_nodes_in_group(NetSyncScript.PROPS_GROUP):
+		if out.size() >= SnapshotScript.MAX_COUNT_U8:
+			break
+		if not node.is_inside_tree() or node.is_queued_for_deletion():
+			continue
+		out.append({"prop_id": node.get_instance_id() & 0xFFFF, "kind": NetSyncScript.prop_kind(node),
+			"state": NetSyncScript.prop_state(node)})
+	return out
+
+static func _meteors(rm: Node) -> Array:
+	var out: Array = []
+	for node: Node in rm.get_tree().get_nodes_in_group(MeteorScript.GROUP):
+		out.append({"meteor_id": node.get_instance_id() & 0xFFFF, "position": (node as Node2D).global_position,
+			"velocity": node.velocity, "radius": node.radius})
+	return out
+
+static func _stage_flags(rm: Node) -> int:
+	var flags: int = 0
+	var stage: Node = rm.get("_current_stage")
+	if stage != null and is_instance_valid(stage) and bool(stage.get("night")):
+		flags |= SnapshotScript.STAGE_NIGHT
+	if HostSettingsScript.shared().player_numbers:
+		flags |= SnapshotScript.STAGE_PLAYER_NUMBERS
+	return flags
 
 static func _pickups(rm: Node) -> Array:
 	var out: Array = []
@@ -205,6 +439,9 @@ static func _pickups(rm: Node) -> Array:
 			"pickup_id": node.get_instance_id() & 0xFFFF,
 			"position": node.global_position,
 			"weapon_type": _weapon_index(node.weapon_stats),
+			"halo": node.halo_phase_byte(),
+			# Still popping in (#816): the client plays the same pop for it.
+			"pop": 1 if (node as Node2D).scale.x < 1.0 else 0,
 		})
 	return out
 

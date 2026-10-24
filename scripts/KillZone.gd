@@ -53,6 +53,9 @@ signal rise_countdown(seconds_left: int)
 signal rise_began
 const COUNTDOWN_FROM: int = 3
 
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["position", "_rising", "_grace_left"]
 var _rising: bool = false
 var _grace_left: float = 0.0
 var _speed: float = 0.0
@@ -138,6 +141,19 @@ func _physics_process(delta: float) -> void:
 	# on the next step, so `body_entered` fires for a body the zone rises
 	# into exactly as it does for one that falls in.
 	position.y -= _speed * delta
+
+## Issue #976: on the Online client, after the host's state is copied in --
+## the surface appears when the rise starts and pulses through the grace, as
+## `start_rising()` and `_physics_process()` draw it on the host.
+func _net_refresh() -> void:
+	if _rising:
+		_ensure_surface()
+	if _surface == null:
+		return
+	if _rising and _grace_left > 0.0:
+		_update_warning()
+	else:
+		_surface.color = _surface_color
 
 func _update_warning() -> void:
 	if _grace_left > rise_warning_sec:

@@ -123,6 +123,10 @@ const _ROCK_SIDES: int = 9
 ## the idle timer starting a warning; `drop_now()` starts one at once; with
 ## `one_shot` the part frees itself when that one rock has landed, so a rain
 ## leaves nothing behind. Set before the part enters the tree.
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["_rock:global_position", "_rock:visible", "_rock_visual:modulate",
+	"_marker:global_position", "_marker:visible", "_marker:modulate"]
 var auto_drop: bool = true
 var one_shot: bool = false
 

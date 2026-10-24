@@ -437,7 +437,7 @@ func _swap_stage(changing: bool = false) -> void:
 	var night: bool = _roll_night()
 	_current_stage.set("night", night)
 	container.add_child(_current_stage)
-	var ink: Color = PaletteScript.NIGHT["ink"] if night else PaletteScript.mood_for_stage(_stage_rotation.stage_index)["ink"]
+	var ink: Color = PaletteScript.ink_for(_stage_rotation.stage_index, night)
 	for player in _players:
 		if player != null and player.has_method("set_ink"):
 			player.set_ink(ink)
@@ -873,9 +873,11 @@ func _update_score_label() -> void:
 # mid-round spawn to protect: a phone that joins mid-round waits for the next
 # round (ADR-0004), and that round's start protects it with everyone else.
 
-## Blink rate and the dimmed alpha a protected player blinks down to.
-const SPAWN_BLINK_HZ: float = 8.0
-const SPAWN_BLINK_ALPHA: float = 0.35
+## Blink rate and the dimmed alpha a protected player blinks down to: Respawn.gd's,
+## so a round-start spawn and a Stock respawn blink alike (#976).
+const RespawnBlinkScript := preload("res://scripts/Respawn.gd")
+const SPAWN_BLINK_HZ: float = RespawnBlinkScript.BLINK_HZ
+const SPAWN_BLINK_ALPHA: float = RespawnBlinkScript.BLINK_ALPHA
 
 var _protected: Array[Node2D] = []
 var _protected_until_msec: int = 0
@@ -897,10 +899,10 @@ func _tick_spawn_protection() -> void:
 	if now >= _protected_until_msec or _state != State.ROUND_ACTIVE:
 		_end_spawn_protection()
 		return
-	var lit: bool = int(float(now) / 1000.0 * SPAWN_BLINK_HZ * 2.0) % 2 == 0
+	var alpha: float = RespawnBlinkScript.blink_alpha(now)
 	for player: Node2D in _protected:
 		if is_instance_valid(player):
-			player.modulate.a = 1.0 if lit else SPAWN_BLINK_ALPHA
+			player.modulate.a = alpha
 
 func _end_spawn_protection() -> void:
 	for player: Node2D in _protected:

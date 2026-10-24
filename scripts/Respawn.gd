@@ -9,6 +9,15 @@ extends RefCounted
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md).
 
 const GameClockScript := preload("res://scripts/GameClock.gd")
+## A spawn-protected player blinks at this rate down to this alpha (#114).
+const BLINK_HZ: float = 8.0
+const BLINK_ALPHA: float = 0.35
+
+## Issue #976: a spawn-protected player's alpha at game time `now_msec`: the
+## blink the round start, a respawn and the Online client's puppets all draw.
+static func blink_alpha(now_msec: int) -> float:
+	var lit: bool = int(float(now_msec) / 1000.0 * BLINK_HZ * 2.0) % 2 == 0
+	return 1.0 if lit else BLINK_ALPHA
 
 var respawn_sec: float = 1.5
 ## Optional own-half filter for team modes (#605): `team_of.call(slot)` is 0
@@ -194,5 +203,4 @@ func _tick_protection() -> void:
 			player.modulate.a = 1.0
 			_protected.erase(slot)
 		else:
-			var lit: bool = int(float(now) / 1000.0 * 16.0) % 2 == 0
-			player.modulate.a = 1.0 if lit else 0.35
+			player.modulate.a = blink_alpha(now)

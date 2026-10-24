@@ -76,6 +76,9 @@ const _DETECTOR_BELOW: float = 2.0
 ## `launch_speed` has been launched, and is not launched again.
 const _RELAUNCH_SHARE: float = 0.5
 
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["_body_poly:color", "_visual:scale"]
 var _visual: Node2D
 var _body_poly: Polygon2D
 var _detector: Area2D

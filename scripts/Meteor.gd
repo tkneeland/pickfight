@@ -53,7 +53,11 @@ func setup(from: Vector2, flight_velocity: Vector2, hit_damage: float, knock: fl
 	radius = meteor_radius
 	lowest_y = floor_y
 
+## Every live meteor is in this group: the Online snapshot (#976) finds them by it.
+const GROUP: StringName = &"meteors"
+
 func _ready() -> void:
+	add_to_group(GROUP)
 	z_index = 5
 	# So a bot can find the live meteors without knowing the stage (#985).
 	add_to_group(&"meteors")
@@ -71,9 +75,14 @@ func hit_count() -> int:
 	return _hits
 
 func _draw() -> void:
-	draw_line(Vector2.ZERO, -velocity * TRAIL_SEC, TRAIL_COLOR, radius * 1.4)
-	draw_circle(Vector2.ZERO, radius, RIM_COLOR)
-	draw_circle(Vector2.ZERO, radius * 0.7, CORE_COLOR)
+	draw_meteor(self, velocity, radius)
+
+## Issue #976: how a meteor is drawn on `canvas`, shared with the Online
+## client's puppet (RemotePuppet.gd) so both draw the same.
+static func draw_meteor(canvas: CanvasItem, flight: Vector2, r: float) -> void:
+	canvas.draw_line(Vector2.ZERO, -flight * TRAIL_SEC, TRAIL_COLOR, r * 1.4)
+	canvas.draw_circle(Vector2.ZERO, r, RIM_COLOR)
+	canvas.draw_circle(Vector2.ZERO, r * 0.7, CORE_COLOR)
 
 func _physics_process(delta: float) -> void:
 	if _done:

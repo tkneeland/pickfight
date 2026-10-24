@@ -32,6 +32,9 @@ const COOLDOWN_SEC: float = 1.0
 const _PULSE_SEC: float = 0.3
 const _PULSE_SCALE: float = 1.5
 
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["_ring:scale"]
 var _ring: Node2D
 var _clock: float = 0.0
 var _pulse_remaining: float = 0.0

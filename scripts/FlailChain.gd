@@ -132,7 +132,7 @@ func build(owner_player: RigidBody2D, rig: Node2D, from_head: RigidBody2D, stats
 		link.angular_damp = 1.0
 		link.collision_layer = 0
 		link.collision_mask = 0
-		link.add_child(_ring())
+		link.add_child(build_link_visual())
 		rig.add_child(link)
 		link.global_position = at
 		_pin(rig, previous, link, previous.global_position)
@@ -165,11 +165,7 @@ func build(owner_player: RigidBody2D, rig: Node2D, from_head: RigidBody2D, stats
 	ball.drive_force = 0.0
 	ball.contact_monitor = true
 	ball.max_contacts_reported = 4
-	ball_visual = Polygon2D.new()
-	ball_visual.name = "BallVisual"
-	var art: PackedVector2Array = stats.ball_art
-	ball_visual.polygon = art if art.size() >= 3 else _circle(radius, 12)
-	ball_visual.color = colour
+	ball_visual = build_ball_visual(stats, colour)
 	ball.add_child(ball_visual)
 	rig.add_child(ball)
 	ball.global_position = at
@@ -355,7 +351,20 @@ func _pin(rig: Node2D, a: RigidBody2D, b: RigidBody2D, at: Vector2) -> void:
 	joint.node_a = joint.get_path_to(a)
 	joint.node_b = joint.get_path_to(b)
 
-func _ring() -> Polygon2D:
+## Issue #976: the ball as drawn, in its own frame: `stats.ball_art` (a circle
+## of `ball_radius` without art) in `colour`. Shared with the Online client's
+## puppet (RemotePuppet.gd) so both draw the same.
+static func build_ball_visual(stats: Resource, colour: Color) -> Polygon2D:
+	var visual := Polygon2D.new()
+	visual.name = "BallVisual"
+	var art: PackedVector2Array = stats.ball_art
+	visual.polygon = art if art.size() >= 3 else _circle(maxf(1.0, float(stats.ball_radius)), 12)
+	visual.color = colour
+	return visual
+
+## One chain link as drawn: a small ring with a dark edge. Shared with the
+## Online client's puppet (issue #976).
+static func build_link_visual() -> Polygon2D:
 	var ring := Polygon2D.new()
 	ring.name = "LinkVisual"
 	ring.polygon = _circle(LINK_DRAW_RADIUS, LINK_DRAW_SEGMENTS)
@@ -369,7 +378,7 @@ func _ring() -> Polygon2D:
 	ring.add_child(edge)
 	return ring
 
-func _circle(radius: float, segments: int) -> PackedVector2Array:
+static func _circle(radius: float, segments: int) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	for i in segments:
 		var a: float = TAU * float(i) / float(segments)

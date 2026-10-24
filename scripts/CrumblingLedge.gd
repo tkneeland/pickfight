@@ -50,6 +50,9 @@ const AWAY_COLOR: Color = Color(0.35, 0.35, 0.4, 0.25)
 const _DETECTOR_ABOVE: float = 10.0
 const _DETECTOR_BELOW: float = 2.0
 
+## Issue #976: what the Online client copies from the host to draw this part
+## as the host does (NetSync.gd).
+const NET_VARS: Array[String] = ["_visual:color"]
 var _state: _LedgeState = _LedgeState.SOLID
 ## The colour of the ledge when whole; `Stage` swaps in the stage mood's platform
 ## colour through `set_platform_color()`. The away colour follows it.

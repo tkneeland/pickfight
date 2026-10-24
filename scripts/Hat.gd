@@ -76,6 +76,23 @@ func _process(delta: float) -> void:
 	_spin = fmod(_spin + delta * PROPELLER_SPIN, TAU)
 	queue_redraw()
 
+## Issue #976: where the propeller's blades are, 0..255 round a turn, so the
+## Online client's copy turns in step with the host's.
+func spin_byte() -> int:
+	return clampi(int(_spin / TAU * 256.0), 0, 255)
+
+## The Online client's copy keeps turning on its own clock, re-set to the
+## host's `spin_byte()` when it is more than SPIN_SYNC_TOLERANCE off.
+const SPIN_SYNC_TOLERANCE: float = 0.5
+func set_spin_byte(byte: int) -> void:
+	var theirs: float = float(clampi(byte, 0, 255)) / 256.0 * TAU
+	if absf(angle_difference(_spin, theirs)) > SPIN_SYNC_TOLERANCE:
+		_spin = theirs
+		queue_redraw()
+
+func spin() -> float:
+	return _spin
+
 func _draw() -> void:
 	for part: Dictionary in parts(hat_id, _spin):
 		var fill: Color = _resolve(part["fill"])
