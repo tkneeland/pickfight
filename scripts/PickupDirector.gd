@@ -59,6 +59,9 @@ var _next_pickup_msec: int = 0
 var rng := RandomNumberGenerator.new()
 ## Weapons still to come out before the draw repeats one (`draw_weapon`).
 var _bag: Array[Resource] = []
+## The weapon `draw_weapon` last returned (#1042), so a fresh bag never opens
+## with the weapon that closed the last one. Reset with the bag at round start.
+var _last_drawn: Resource = null
 
 func _init(round_manager: Node = null) -> void:
 	name = "PickupDirector"
@@ -71,6 +74,7 @@ func start() -> void:
 	clear()
 	# The bag is dealt per stage (#310): a new stage has a new theme.
 	_bag.clear()
+	_last_drawn = null
 	_spawn_pickup()
 	_next_pickup_msec = GameClockScript.now_msec() + int(interval_sec() * 1000.0)
 
@@ -234,6 +238,8 @@ func draw_weapon(offered: Array[Resource]) -> Resource:
 	# out after the rest of it.
 	for stats: Resource in deferred:
 		_bag.push_front(stats)
+	if drawn != null:
+		_last_drawn = drawn
 	return drawn
 
 ## Deals a fresh shuffled bag of `offered`, themed copies included. False when
@@ -251,6 +257,19 @@ func _refill_bag(offered: Array[Resource]) -> bool:
 		var swap: Resource = _bag[i]
 		_bag[i] = _bag[j]
 		_bag[j] = swap
+	# #1042: the next pop must not repeat the weapon that closed the last bag.
+	# Swap it with a different entry, picked off our own stream; a bag of one
+	# weapon repeats as before.
+	if not _bag.is_empty() and _last_drawn != null and _bag.back() == _last_drawn:
+		var others: Array[int] = []
+		for i in _bag.size():
+			if _bag[i] != _last_drawn:
+				others.append(i)
+		if not others.is_empty():
+			var k: int = others[rng.randi() % others.size()]
+			var top: Resource = _bag.back()
+			_bag[_bag.size() - 1] = _bag[k]
+			_bag[k] = top
 	return not _bag.is_empty()
 
 ## Resource paths of the weapons of the pickups on the stage now (#1038).
