@@ -33,6 +33,8 @@ var phase: int = 1
 ## snapshot's `head_shape_index`; 0 is the pickaxe). Pickup: `weapon_type`.
 var head_rotation: float = 0.0
 var weapon_index: int = 0
+## Whether the host shows its weapon's `loaded_art` (`Player.special_loaded()`).
+var loaded: bool = false
 var _hat: Node2D
 var _face: Node2D
 var _stats_cache: Dictionary = {}
@@ -159,3 +161,7 @@ func _draw_head() -> void:
 	var closed: PackedVector2Array = poly.duplicate()
 	closed.append(poly[0])
 	draw_polyline(closed, ink, 2.0, true)
+	var stats: Resource = _stats_for(weapon_index)
+	if loaded and stats != null and "loaded_art" in stats and stats.loaded_art.size() >= 3:
+		# Player.gd's LoadedVisual: the loaded art over the head, in its colour.
+		draw_colored_polygon(xf * stats.loaded_art, color)
