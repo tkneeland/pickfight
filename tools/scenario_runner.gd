@@ -765,6 +765,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_host_hud_mirror_976",
 	"remote_client_mode_huds_976",
 	"remote_client_victory_awards_976",
+	"remote_name_tags_and_match_point_dots_976",
+	"remote_idle_hint_976",
+	"remote_boomstick_ring_976",
+	"remote_pickup_spawn_ring_976",
+	"remote_night_stage_and_ink_976",
 	"remote_client_removed_body_is_gone_after_one_snapshot",
 	"hud_top_gap_reclaimed_kill_feed_and_score_line",
 	"bot_stays_on_stage_over_jittered_starts",
@@ -3149,6 +3154,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_mode_huds_976()
 		"remote_client_victory_awards_976":
 			return await _scenario_remote_client_victory_awards_976()
+		"remote_name_tags_and_match_point_dots_976":
+			return await _scenario_remote_name_tags_and_match_point_dots_976()
+		"remote_idle_hint_976":
+			return await _scenario_remote_idle_hint_976()
+		"remote_boomstick_ring_976":
+			return await _scenario_remote_boomstick_ring_976()
+		"remote_pickup_spawn_ring_976":
+			return await _scenario_remote_pickup_spawn_ring_976()
+		"remote_night_stage_and_ink_976":
+			return await _scenario_remote_night_stage_and_ink_976()
 		"remote_client_removed_body_is_gone_after_one_snapshot":
 			return await _scenario_remote_client_removed_body_is_gone_after_one_snapshot()
 		"hud_top_gap_reclaimed_kill_feed_and_score_line":
@@ -29726,8 +29741,11 @@ func _scenario_remote_client_renders_stage_projectiles_and_pickups() -> Array[St
 	if pickup == null or pickup.weapon_index != 3 or pickup.pickup_layout()["fallback"]:
 		failures.append("pickup puppet is not drawn as weapon 3's art")
 	var puppet: Node2D = client.player_puppet(1)
-	if puppet == null or puppet.position != Vector2(100, 0) or puppet.damage != 10 or puppet.label != "P1":
-		failures.append("player 1 puppet is wrong")
+	if puppet == null or puppet.position != Vector2(100, 0) or puppet.damage != 10 or puppet.label != "":
+		failures.append("player 1 puppet is wrong (its name is the host's NameTags now, #976)")
+	client._track_heads()
+	if client.effects.fighter_at(1).display_name != "P1":
+		failures.append("player 1's name tag stand-in is named '%s'" % client.effects.fighter_at(1).display_name)
 	if client._stage != null and client._camera.global_position.distance_to(client._stage.get_view_rect().get_center()) > 1.0:
 		failures.append("the camera does not frame the stage (at %s)" % client._camera.global_position)
 	# Issue #976: the modifier banner is the host's own ModifierBanner label.
@@ -54919,6 +54937,22 @@ func _scenario_remote_client_plays_host_round_effects_976() -> Array[String]:
 		await _rc_close_241(rig)
 		return failures
 	var winner: int = int(rm.get("_in_round")[0])
+	# The joiner's name tags are the host's NameTags, with the host's names.
+	var tags_match: Callable = func() -> bool:
+		for slot: int in rm.get("_in_round"):
+			var mine: Label = client._name_tag(slot)
+			var host_tag: Label = rm.name_tag(slot)
+			if mine == null or host_tag == null or not mine.visible or mine.text != host_tag.text \
+					or mine.get_theme_color("font_color").to_html() != host_tag.get_theme_color("font_color").to_html():
+				return false
+		return true
+	if not await _wait_for_239(tags_match, 3000):
+		for slot: int in rm.get("_in_round"):
+			var mine: Label = client._name_tag(slot)
+			var host_tag: Label = rm.name_tag(slot)
+			failures.append("the joiner's name tag %d: %s, host %s" % [slot,
+				[mine.text, mine.visible, mine.get_theme_color("font_color")] if mine != null else null,
+				[host_tag.text, host_tag.visible, host_tag.get_theme_color("font_color")] if host_tag != null else null])
 	_hud_436_eliminate_all_but(rig, winner)
 	var wants: Array[String] = ["title", "ko", "ko_jolt", "banner", "win_ring"]
 	var all_in: Callable = func() -> bool:
@@ -55285,5 +55319,215 @@ func _scenario_remote_client_victory_awards_976() -> Array[String]:
 	client.effects.show_victory({})
 	if client.effects.victory_visible():
 		failures.append("the victory screen stayed after the host left it")
+	await _rc_close_241(rig)
+	return failures
+
+# --- Issue #976 follow-up: name tags, idle hint, boomstick ring, pickup ring, night ---
+const RemotePuppetScript976 := preload("res://scripts/RemotePuppet.gd")
+const IdleHintScript976 := preload("res://scripts/IdleHint.gd")
+const BoomstickRingScript976 := preload("res://scripts/BoomstickRing.gd")
+const RemoteFighterScript976 := preload("res://scripts/RemoteFighter.gd")
+const PickupDirectorScript976 := preload("res://scripts/PickupDirector.gd")
+const PickupSpawnRingScript976 := preload("res://scripts/PickupSpawnRing.gd")
+const MatchPointDotScript976 := preload("res://scripts/MatchPointDot.gd")
+const TeamsScript976 := preload("res://scripts/Teams.gd")
+## A player puppet for slot `slot` at `at`, under the joiner's effects node.
+func _fx_puppet_976(client: Node, at: Vector2, colour: Color, hat: String = "none") -> Node2D:
+	var puppet: Node2D = RemotePuppetScript976.new()
+	client.effects.add_child(puppet)
+	puppet.global_position = at
+	puppet.color = colour
+	puppet.set_look(hat, "round", colour)
+	return puppet
+## The joiner's name tags are the host's NameTags.gd: name, colour, team
+## outline, team badge, seat number and Stock pips; MATCH POINT puts its gold
+## dot on that tag; the puppet draws no name of its own.
+func _scenario_remote_name_tags_and_match_point_dots_976() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var puppet: Node2D = _fx_puppet_976(client, client._camera.global_position, Color.RED, "crown")
+	client.effects.place_fighter(2, puppet, true, 0, Color.RED, "Ann", 0)
+	client.effects.set_numbers(true)
+	client.hud = {"mode": "stock", "m": {"lives": {"2": 3}}}
+	client.effects.name_tags.tick()
+	var tag: Label = client.effects.name_tags.name_tag(2)
+	if tag == null or not tag.visible or tag.text != "Ann" or tag.get_theme_color("font_color") != Color.RED:
+		failures.append("the joiner's name tag for slot 2 is %s" % [[tag.text, tag.visible] if tag != null else null])
+	elif tag.get_theme_color("font_outline_color") != TeamsScript976.team_color(0):
+		failures.append("the tag's outline is not team 0's colour")
+	var badge: Control = client.effects.name_tags.team_badge(2)
+	if badge == null or int(badge.call("team")) != 0 or int(badge.call("number")) != 3:
+		failures.append("the team badge (#752) shows team %s, number %s" % [badge.call("team") if badge != null else null, badge.call("number") if badge != null else null])
+	if client.effects.name_tags.pip_counts() != [[2, 3]]:
+		failures.append("Stock pips on the joiner: %s, expected [[2, 3]]" % [client.effects.name_tags.pip_counts()])
+	if client.effects.name_tags.team_rings().size() != 1:
+		failures.append("no team ring round the fighter")
+	# The hat lifts the tag as on the host: its bottom clears the hat's top.
+	var hat_top: float = client.effects.fighter_at(2).hat_top()
+	if hat_top <= 24.0 or tag.position.y + tag.get_minimum_size().y * tag.scale.y > puppet.global_position.y - hat_top + 0.5:
+		failures.append("the tag does not clear the hat (hat top %s, tag bottom %s)" % [hat_top, tag.position.y + tag.size.y])
+	client._world = {"round_phase": RemoteClientScript241.PHASE_ROUND_ACTIVE}
+	_fx_play_976(client, [{"k": "match_point", "lines": [{"text": "Ann", "color": Color.RED, "slot": 2}]}])
+	var dots: int = 0
+	for child: Node in tag.get_children():
+		if child.get_script() == MatchPointDotScript976:
+			dots += 1
+	if dots != 1:
+		failures.append("the MATCH POINT dot on the joiner's tag: %d, expected 1" % dots)
+	client.effects.place_fighter(2, puppet, false, 0, Color.RED, "Ann", 0)
+	client.effects.name_tags.tick()
+	if tag.visible:
+		failures.append("a KO'd fighter kept its name tag")
+	await _rc_close_241(rig)
+	return failures
+## The first-round idle hint (#826): the host records showing and dismissing
+## it, and the joiner's NameTags shows and lets go of the same plate.
+func _scenario_remote_idle_hint_976() -> Array[String]:
+	var failures: Array[String] = []
+	EffectStreamScript976.set_recording(true)
+	var host_hint: Node2D = IdleHintScript976.new([null, null], func(_s: int) -> Color: return Color.RED)
+	get_root().add_child(host_hint)
+	host_hint.show_hint(1, false)
+	host_hint.hide_hint(1)
+	var events: Array = EffectStreamScript976.take()
+	EffectStreamScript976.set_recording(false)
+	host_hint.queue_free()
+	var kinds: Array = events.map(func(e: Dictionary) -> String: return str(e["k"]))
+	if kinds != ["idle_hint", "idle_hint_end"] or int(events[0]["s"]) != 1 or bool(events[0]["pad"]):
+		failures.append("the host recorded %s" % [events])
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var puppet: Node2D = _fx_puppet_976(client, client._camera.global_position, Color.RED)
+	client.effects.place_fighter(1, puppet, true, -1, Color.RED, "Bo", 0)
+	var hint: Node2D = client.effects.name_tags.idle_hint()
+	_fx_play_976(client, [events[0]])
+	if not hint.has_hint(1) or hint.hint_text(1) != tr("HINT_DRAG_TO_SWING"):
+		failures.append("the joiner shows no idle hint (text '%s')" % hint.hint_text(1))
+	client.effects.name_tags.tick()
+	if not hint.has_hint(1):
+		failures.append("the joiner's own tick dropped the host's hint")
+	_fx_play_976(client, [events[1]])
+	if hint.has_hint(1):
+		failures.append("the joiner kept the hint the host dismissed")
+	await _rc_close_241(rig)
+	return failures
+## The boomstick's fire-clock ring (#965): the host records the clock where it
+## starts and at each shot; the joiner's BoomstickRing fills the same.
+func _scenario_remote_boomstick_ring_976() -> Array[String]:
+	var failures: Array[String] = []
+	var shooter: Node2D = RemoteFighterScript976.new()
+	shooter.alive = true
+	get_root().add_child(shooter)
+	shooter.sync_fire(1.0, 0.6)
+	var host_ring: Node2D = BoomstickRingScript976.new([shooter], func(_s: int) -> Color: return Color.RED)
+	get_root().add_child(host_ring)
+	EffectStreamScript976.set_recording(true)
+	host_ring.tick(Callable(), 1.0)
+	host_ring.tick(Callable(), 1.0)
+	shooter.sync_fire(1.0, 0.95) # a shot: the clock wraps
+	host_ring.tick(Callable(), 1.0)
+	shooter.sync_fire(0.0, 0.0) # dropped
+	host_ring.tick(Callable(), 1.0)
+	var events: Array = EffectStreamScript976.take()
+	EffectStreamScript976.set_recording(false)
+	shooter.queue_free()
+	host_ring.queue_free()
+	var got: String = " ".join(events.map(func(e: Dictionary) -> String: return "%s:%.2f/%.2f" % [e["k"], float(e["i"]), float(e["r"])]))
+	if got != "fire_clock:1.00/0.60 fire_clock:1.00/0.95 fire_clock:0.00/0.00":
+		failures.append("the host recorded %s" % [got])
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var puppet: Node2D = _fx_puppet_976(client, client._camera.global_position, Color.RED)
+	client.effects.place_fighter(1, puppet, true, -1, Color.RED, "Bo", 0)
+	_fx_play_976(client, [{"k": "fire_clock", "s": 1, "i": 1.0, "r": 0.25}])
+	client.effects.name_tags.tick()
+	var ring: Node2D = client.effects.name_tags.boomstick_ring()
+	if not ring.has_ring(1) or not is_equal_approx(ring.ring_fill(1), 0.75):
+		failures.append("the joiner's ring: %s, fill %s (expected 0.75)" % [ring.has_ring(1), ring.ring_fill(1)])
+	_fx_play_976(client, [{"k": "fire_clock", "s": 1, "i": 0.0, "r": 0.0}])
+	client.effects.name_tags.tick()
+	if ring.has_ring(1):
+		failures.append("the ring stayed after the host's weapon stopped firing")
+	await _rc_close_241(rig)
+	return failures
+## The pickup spawn cue (#816): the host records the ring with the pickup's
+## snapshot id; the joiner plays the same ring and pops that pickup's puppet.
+func _scenario_remote_pickup_spawn_ring_976() -> Array[String]:
+	var failures: Array[String] = []
+	var director: Node = PickupDirectorScript976.new()
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	var pickup := Node2D.new()
+	holder.add_child(pickup)
+	EffectStreamScript976.set_recording(true)
+	director._pop_in(pickup, holder, Vector2(40, -30))
+	var events: Array = EffectStreamScript976.take()
+	EffectStreamScript976.set_recording(false)
+	var host_rings: int = holder.get_children().filter(func(c: Node) -> bool: return c.get_script() == PickupSpawnRingScript976).size()
+	if host_rings != 1 or not pickup.scale.is_equal_approx(Vector2.ONE * PickupDirectorScript976.POP_START_SCALE):
+		failures.append("the host's own spawn cue changed (rings %d, scale %s)" % [host_rings, pickup.scale])
+	if events.size() != 1 or str(events[0]["k"]) != "pickup_ring" or events[0]["p"] != Vector2(40, -30) or int(events[0]["id"]) != pickup.get_instance_id() & 0xFFFF:
+		failures.append("the host recorded %s" % [events])
+	holder.queue_free()
+	director.free()
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var puppet: Node2D = client._puppet("pick9", RcKind241.PICKUP)
+	_fx_play_976(client, [{"k": "pickup_ring", "p": Vector2(40, -30), "id": 9}])
+	var rings: Array = client.effects.get_children().filter(func(c: Node) -> bool: return c.get_script() == PickupSpawnRingScript976)
+	if rings.size() != 1 or (rings[0] as Node2D).global_position != Vector2(40, -30):
+		failures.append("the joiner played %d spawn rings" % rings.size())
+	client._apply_pops()
+	if not puppet.scale.is_equal_approx(Vector2.ONE * PickupDirectorScript976.POP_START_SCALE):
+		failures.append("the joiner's pickup puppet did not pop in (scale %s)" % puppet.scale)
+	await _rc_close_241(rig)
+	return failures
+## A night stage (#332): the snapshot carries the night entry, the joiner
+## builds the same night variant whose lights glow on its puppets, and the
+## stage mood's ink is on every puppet's face, as on the host.
+func _scenario_remote_night_stage_and_ink_976() -> Array[String]:
+	var failures: Array[String] = []
+	var stub_script := GDScript.new()
+	stub_script.source_code = "extends Node\nvar _current_stage: Node\nfunc active_modifier_id() -> String:\n\treturn \"\"\n"
+	stub_script.reload()
+	var rm: Node = stub_script.new()
+	var stage := Node2D.new()
+	stage.set_script(load("res://scripts/Stage.gd"))
+	stage.set("night", true)
+	rm.set("_current_stage", stage)
+	var mods: Array = SnapshotCaptureScript976._modifiers(rm)
+	if mods != [{"modifier_id": SnapshotCaptureScript976.NIGHT_MODIFIER_ID, "name": "night"}]:
+		failures.append("the host's night stage is sent as %s" % [mods])
+	stage.set("night", false)
+	if not SnapshotCaptureScript976._modifiers(rm).is_empty():
+		failures.append("a day stage still sends a night entry")
+	stage.free()
+	rm.free()
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var world: Dictionary = _rc_world_241(0, 1)
+	world["modifiers"] = [{"modifier_id": SnapshotCaptureScript976.NIGHT_MODIFIER_ID, "name": "night"}]
+	client.apply_snapshot(_rc_codec_241(world))
+	client._render()
+	client._track_heads()
+	if not client.stage_is_night():
+		failures.append("the joiner built the day stage")
+	var lighting: Node = client._stage.get_node_or_null("NightLighting")
+	if lighting == null or lighting.get("player_group") != RemoteClientScript241.NIGHT_PLAYER_GROUP:
+		failures.append("the night lighting does not light the joiner's puppets")
+	await process_frame
+	var puppet: Node2D = client.player_puppet(1)
+	if puppet == null or puppet.get_node_or_null("NightGlow") == null:
+		failures.append("no night glow on the joiner's player puppet")
+	if puppet != null and puppet.ink != (client._stage.get("mood") as Dictionary)["ink"]:
+		failures.append("the puppet's ink %s is not the night mood's" % [puppet.ink])
+	var pickup: Node2D = client._puppets.get("pick9")
+	if pickup == null or pickup.get_node_or_null("NightGlow") == null:
+		failures.append("no night glow on the joiner's pickup puppet")
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1)))
+	client._render()
+	if client.stage_is_night():
+		failures.append("the next day stage stayed night on the joiner")
 	await _rc_close_241(rig)
 	return failures

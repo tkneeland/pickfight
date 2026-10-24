@@ -76,6 +76,9 @@ const DEFAULT_VIEW_SIZE: Vector2 = Vector2(1600.0, 900.0)
 ## Night variant (#332): set before the stage enters the tree. The stage then
 ## uses the Night palette mood and adds a `NightLighting` child. Visual only.
 var night: bool = false
+## The [fighters, pickups] groups the night lighting glows on; the Online
+## joiner (#976) sets its puppets' groups before the stage enters the tree.
+var night_light_groups: PackedStringArray = PackedStringArray(["players", "pickups"])
 
 func _ready() -> void:
 	_mark_team_zones()
@@ -100,6 +103,9 @@ func _ready() -> void:
 		kill_zone.set_kill_color(mood["kill"])
 	if night:
 		var lighting: Node2D = NightLightingType.new()
+		if night_light_groups.size() == 2:
+			lighting.player_group = StringName(night_light_groups[0])
+			lighting.pickup_group = StringName(night_light_groups[1])
 		add_child(lighting)
 		var lamp_points: Array[Vector2] = []
 		for spawn in get_spawn_points():

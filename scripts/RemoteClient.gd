@@ -36,6 +36,7 @@ const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 ## Issue #976: the host's effects, screens and HUD, drawn by the host's scripts.
 const RemoteEffectsScript: GDScript = preload("res://scripts/RemoteEffects.gd")
+const PickupDirectorScript := preload("res://scripts/PickupDirector.gd")
 const RemoteHudScript: GDScript = preload("res://scripts/RemoteHud.gd")
 const UiMirrorScript: GDScript = preload("res://scripts/UiMirror.gd")
 const ModifierBannerScript: GDScript = preload("res://scripts/ModifierBanner.gd")
@@ -159,6 +160,12 @@ var _modifier_label: Label
 var effects: Node2D
 var _last_round_phase: int = 0
 var _ui_text: String = ""
+var _stage_night: bool = false
+## Pickup snapshot ids the host just popped in -> give-up time (msec).
+var _pending_pops: Dictionary = {}
+const POP_WAIT_MSEC: int = 1000
+const NIGHT_PLAYER_GROUP: StringName = &"remote_players"
+const NIGHT_PICKUP_GROUP: StringName = &"remote_pickups"
 var _screens: Dictionary = {}
 var _victory_text: String = ""
 var _leave_button: Button
@@ -903,8 +910,10 @@ func _round_shown() -> bool:
 ## Loads the host's stage by id when a round is on screen and frees it when not.
 func _sync_stage() -> void:
 	var want: int = int(_world.get("stage_id", 0)) if _round_shown() else -1
-	if want == _stage_id:
+	var night: bool = want >= 0 and _night_in(_world)
+	if want == _stage_id and night == _stage_night:
 		return
+	_stage_night = night
 	if _stage != null:
 		_stage_holder.remove_child(_stage)
 		_stage.queue_free()
@@ -920,8 +929,23 @@ func _sync_stage() -> void:
 		return
 	_stage = scene.instantiate()
 	_stage.set("stage_index", want)
+	# Issue #976: the host's night variant (#332), lighting the puppets.
+	_stage.set("night", night)
+	_stage.set("night_light_groups", PackedStringArray([String(NIGHT_PLAYER_GROUP), String(NIGHT_PICKUP_GROUP)]))
 	_stage_holder.add_child(_stage)
 	_fit_camera()
+
+## Whether the host's stage in `world` is its night variant (#332): the
+## snapshot's "night" modifier entry (`SnapshotCapture.NIGHT_MODIFIER_ID`).
+static func _night_in(world: Dictionary) -> bool:
+	for mod: Variant in world.get("modifiers", []):
+		if mod is Dictionary and int(mod.get("modifier_id", 0)) == SnapshotCaptureScript.NIGHT_MODIFIER_ID and str(mod.get("name", "")) == "night":
+			return true
+	return false
+
+## Whether the stage on screen is its night variant (scenarios).
+func stage_is_night() -> bool:
+	return _stage != null and _stage.get("night") == true
 
 func _fit_camera() -> void:
 	if _camera == null:
@@ -946,6 +970,7 @@ func _clear_world() -> void:
 	_last_round_phase = 0
 	_ui_text = ""
 	_screens = {}
+	_pending_pops.clear()
 	_victory_text = ""
 	if effects != null:
 		effects.round_left()
@@ -982,6 +1007,11 @@ func _puppet(key: String, kind: int) -> Node2D:
 	if puppet == null:
 		puppet = PuppetScript.new()
 		puppet.kind = kind
+		# In the night lighting's groups before it enters the tree (#976).
+		if kind == PuppetScript.Kind.PLAYER:
+			puppet.add_to_group(NIGHT_PLAYER_GROUP)
+		elif kind == PuppetScript.Kind.PICKUP:
+			puppet.add_to_group(NIGHT_PICKUP_GROUP)
 		_puppet_holder.add_child(puppet)
 		_puppets[key] = puppet
 	return puppet
@@ -1031,7 +1061,6 @@ func _render() -> void:
 			puppet.color = look["color"]
 		puppet.weapon_index = int((p.get("weapon", {}) as Dictionary).get("head_shape_index", 0))
 		puppet.set_look(str(look.get("hat", "none")), str(look.get("eyes", "round")), puppet.color)
-		puppet.label = str(p.get("name", ""))
 		puppet.damage = int(p.get("damage", 0))
 		puppet.phase = int(p.get("state", 1))
 		puppet.set_pose((from_pose[0] as Vector2).lerp(to_pose[0], alpha),
@@ -1155,13 +1184,40 @@ func _build_world() -> void:
 	effects.camera = _camera
 	effects.round_playing = func() -> bool: return int(_world.get("round_phase", 0)) == PHASE_ROUND_ACTIVE
 	effects.name_tag_of = _name_tag
+	effects.lives_of = _lives_of
+	effects.pop_pickup = _pop_pickup
 	effects.screen.pad_check = func() -> bool: return _pad_driving
 	_fit_camera()
 
 ## The joiner's name tag Label for `slot`, or null (MATCH POINT dots, #976).
 func _name_tag(slot: int) -> Label:
-	var tags: Node = find_child("NameTags", true, false)
-	return tags.name_tag(slot) if tags != null and tags.has_method("name_tag") else null
+	return effects.name_tags.name_tag(slot) if effects != null and effects.name_tags != null else null
+
+## Stock lives for the name tags' pips (#354), from the host's `hud` frame; -1
+## outside a Stock round.
+func _lives_of(slot: int) -> int:
+	var m: Variant = hud.get("m")
+	if str(hud.get("mode", "")) != "stock" or not m is Dictionary or not (m as Dictionary).get("lives") is Dictionary:
+		return -1
+	var lives: Dictionary = m["lives"]
+	return int(lives.get(str(slot), lives.get(slot, -1)))
+
+## The host popped pickup `id` in (#816): the puppet pops the same way, now or
+## as soon as it shows up.
+func _pop_pickup(id: int) -> void:
+	_pending_pops[id] = Time.get_ticks_msec() + POP_WAIT_MSEC
+
+func _apply_pops() -> void:
+	if _pending_pops.is_empty():
+		return
+	var now: int = Time.get_ticks_msec()
+	for id: int in _pending_pops.keys():
+		var puppet: Node2D = _puppets.get("pick%d" % id)
+		if puppet != null:
+			PickupDirectorScript.pop_scale(puppet)
+			_pending_pops.erase(id)
+		elif now > int(_pending_pops[id]):
+			_pending_pops.erase(id)
 
 ## Issue #976: head trails follow each shown player puppet's weapon head.
 func _track_heads() -> void:
@@ -1172,6 +1228,12 @@ func _track_heads() -> void:
 		if puppet.kind == PuppetScript.Kind.PLAYER:
 			players.append(puppet)
 	effects.track_heads(players)
+	_apply_pops()
+	# The stage mood's ink is on every face and head outline, as on the host (#255).
+	var ink: Variant = (_stage.get("mood") as Dictionary).get("ink") if _stage != null and _stage.get("mood") is Dictionary else null
+	for puppet: Node in _puppets.values():
+		if ink is Color and puppet.kind == PuppetScript.Kind.PLAYER:
+			puppet.set_ink(ink)
 	# The host's edge arrows follow each fighter as the snapshot has it.
 	var placed: Dictionary = {}
 	if _round_shown():
@@ -1181,7 +1243,8 @@ func _track_heads() -> void:
 				var puppet: Node2D = player_puppet(id)
 				placed[id] = true
 				effects.place_fighter(id, puppet, int(p.get("state", 1)) != SnapshotCaptureScript.STATE_DEAD,
-					int(p.get("team", -1)), puppet.color if puppet != null else Color.WHITE)
+					int(p.get("team", -1)), puppet.color if puppet != null else Color.WHITE,
+					str(p.get("name", "")), int((p.get("weapon", {}) as Dictionary).get("head_shape_index", 0)) if p.get("weapon") is Dictionary else 0)
 	for id in RemoteEffectsScript.MAX_SLOTS:
 		if not placed.has(id):
 			effects.place_fighter(id, null, false, -1, Color.WHITE)

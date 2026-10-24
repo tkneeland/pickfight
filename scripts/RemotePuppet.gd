@@ -20,6 +20,8 @@ const HEAD_INK: Color = Color(0.07, 0.07, 0.09, 1.0)
 
 var kind: int = Kind.PLAYER
 var color: Color = Color.WHITE
+## Unused for drawing: a player's name tag is the host's `NameTags.gd`, run by
+## `RemoteEffects.gd` (#976).
 var label: String = ""
 ## Player: world offset from the body to the weapon head.
 var head_offset: Vector2 = Vector2.ZERO
@@ -34,6 +36,9 @@ var weapon_index: int = 0
 var _hat: Node2D
 var _face: Node2D
 var _stats_cache: Dictionary = {}
+## Issue #976: the stage mood's ink on the face and the weapon head's outline,
+## as the host's `Player.set_ink()`.
+var ink: Color = HEAD_INK
 
 func set_pose(position_in: Vector2, rotation_in: float, head_position: Vector2, head_rotation_in: float = 0.0) -> void:
 	position = position_in
@@ -55,6 +60,21 @@ func set_look(hat_id: String, eyes_id: String, tint: Color) -> void:
 	_hat.set_hat(hat_id)
 	_hat.set_tint(tint)
 	_face.set_eyes(eyes_id)
+	if _face.get("ink") != ink:
+		_face.set_ink(ink)
+
+## Issue #976: as `Player.set_ink()`.
+func set_ink(colour: Color) -> void:
+	if colour == ink:
+		return
+	ink = colour
+	if _face != null:
+		_face.set_ink(colour)
+	queue_redraw()
+
+## Where the weapon head is (the night stage's head glow, #976).
+func weapon_head_position() -> Vector2:
+	return global_position + head_offset
 
 func hat_id() -> String:
 	return _hat.hat_id if _hat != null else HatScript.NONE
@@ -118,7 +138,6 @@ func _draw_player() -> void:
 	if phase == 0:
 		draw_line(Vector2(-10, -10), Vector2(10, 10), Color.BLACK, 3.0)
 		draw_line(Vector2(-10, 10), Vector2(10, -10), Color.BLACK, 3.0)
-	_draw_label(Vector2(0, -BODY_RADIUS - 8 - HatScript.height_of(hat_id())))
 
 ## The haft, tapering from the body to the head like the host's Line2D.
 func _draw_haft() -> void:
@@ -139,11 +158,4 @@ func _draw_head() -> void:
 	draw_colored_polygon(poly, color)
 	var closed: PackedVector2Array = poly.duplicate()
 	closed.append(poly[0])
-	draw_polyline(closed, HEAD_INK, 2.0, true)
-
-func _draw_label(at: Vector2) -> void:
-	if label.is_empty():
-		return
-	var font: Font = ThemeDB.fallback_font
-	var size: Vector2 = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16)
-	draw_string(font, at + Vector2(-size.x * 0.5, 0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
+	draw_polyline(closed, ink, 2.0, true)
