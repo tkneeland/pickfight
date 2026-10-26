@@ -88,6 +88,10 @@ const DROP_GRAVITY: float = 1400.0
 const DROP_REST_CLEARANCE: float = 16.0
 ## A pickup that never finds ground is freed this far below where it was dropped.
 const DROP_MAX_FALL: float = 4000.0
+## A drop that starts inside terrain is lifted this far per probe, at most this
+## many times, until its centre is in the open; it then falls onto that top.
+const DROP_LIFT_STEP: float = 8.0
+const DROP_LIFT_STEPS: int = 256
 var carrier: Node = null
 var _falling: bool = false
 var _fall_speed: float = 0.0
@@ -122,7 +126,21 @@ func _physics_process(delta: float) -> void:
 		if body is CollisionObject2D:
 			bodies.append((body as CollisionObject2D).get_rid())
 	var query := PhysicsRayQueryParameters2D.create(from, to + Vector2(0.0, DROP_REST_CLEARANCE), LAYER_WORLD, bodies)
+	# Issue #1102: a ray that starts inside terrain reports a hit at its own
+	# start with no normal, so a ghost's drop inside a ledge is lifted out first.
+	query.hit_from_inside = true
 	var hit: Dictionary = get_world_2d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty() and (hit["normal"] as Vector2) == Vector2.ZERO:
+		var point := PhysicsPointQueryParameters2D.new()
+		point.collision_mask = LAYER_WORLD
+		point.exclude = bodies
+		point.position = from
+		var lifted: int = 0
+		while lifted < DROP_LIFT_STEPS and not get_world_2d().direct_space_state.intersect_point(point, 1).is_empty():
+			point.position.y -= DROP_LIFT_STEP
+			lifted += 1
+		global_position = point.position
+		return
 	if not hit.is_empty():
 		global_position = (hit["position"] as Vector2) - Vector2(0.0, DROP_REST_CLEARANCE)
 		_falling = false
