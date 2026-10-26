@@ -59533,6 +59533,8 @@ func _scenario_koth_kicked_leader_cannot_win_on_clock() -> Array[String]:
 		failures.append("the clock-out should name slot 1 the winner, got %s" % [wins])
 	if rm.score_of(0) != 0 or rm.score_of(1) != 1:
 		failures.append("scores are %d/%d, want 0/1" % [rm.score_of(0), rm.score_of(1)])
+	await _teardown(rig["stage"])
+	return failures
 
 
 ## #1106: a fighter still waiting on the 4 s respawn timer at the whistle comes
