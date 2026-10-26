@@ -2263,14 +2263,16 @@ func _on_ko_eliminated(slot: int) -> void:
 		return
 	if _pending_kos.is_empty():
 		_flush_kos.call_deferred()
-	_pending_kos.append([slot, GameClockScript.now_msec()])
+	var dead: Variant = _players[slot] if slot >= 0 and slot < _players.size() else null
+	var hazard: Variant = dead.get("death_hazard") if is_instance_valid(dead) else null
+	_pending_kos.append([slot, GameClockScript.now_msec(), hazard is String and hazard != ""])
 
 func _flush_kos() -> void:
 	var pending: Array = _pending_kos
 	_pending_kos = []
 	var feed: Control = kill_feed()
 	for entry: Array in pending:
-		var ko: Dictionary = _stats.record_elimination(entry[0], entry[1])
+		var ko: Dictionary = _stats.record_elimination(entry[0], entry[1], bool(entry[2]))
 		_log_play_of_round_ko(ko, int(entry[1]))
 		_tally_career_ko(ko["victim"], ko["killer"])
 		_achievement_ko(ko["victim"], ko["killer"], int(entry[1]))
