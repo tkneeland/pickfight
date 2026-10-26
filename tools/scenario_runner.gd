@@ -8416,7 +8416,7 @@ func _scenario_eliminated_player_cannot_collect() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
 	var dead: RigidBody2D = _spawn_player(stage, PARK_POSITION)
-	var live: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(200.0, -15.0))
+	var live: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(300.0, 0.0))
 	await _await_ticks(5)
 	var dead_weapon: Resource = _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH)
 	var live_weapon: Resource = _make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH)
@@ -14451,7 +14451,7 @@ func _scenario_sfx_pickup_grab_plays_once_per_grab() -> Array[String]:
 		return ["pickup_grab is not in the sound table"]
 	var stage: Node2D = _new_stage()
 	var dead: RigidBody2D = _spawn_player(stage, PARK_POSITION)
-	var live: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(200.0, -15.0))
+	var live: RigidBody2D = _spawn_player(stage, PARK_POSITION + Vector2(300.0, 0.0))
 	await _await_ticks(5)
 	var dead_pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(0.0, 60.0), _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
 	var live_pickup: Node2D = _place_pickup(stage, PARK_POSITION + Vector2(300.0, 60.0), _make_pickup_weapon(PICKUP_WEAPON_B_MAX_REACH))
@@ -33456,7 +33456,7 @@ func _scenario_ghost_grabs_carries_and_drops_one_pickup_at_a_time_660() -> Array
 	ghost.global_position = ghost.bounds.get_center() + Vector2(-300.0, 0.0)
 	var near: Area2D = _ghost_pickup_660(loop, ghost.global_position + Vector2(45.0, 0.0))
 	var also_near: Area2D = _ghost_pickup_660(loop, ghost.global_position + Vector2(-50.0, 0.0))
-	var far: Area2D = _ghost_pickup_660(loop, ghost.global_position + Vector2(200.0, -15.0))
+	var far: Area2D = _ghost_pickup_660(loop, ghost.global_position + Vector2(300.0, 0.0))
 	players[0].push_ghost_action()
 	await _await_ticks(2)
 	var grabbed: Array = [near, also_near].filter(func(p: Area2D) -> bool: return p.global_position.distance_to(ghost.global_position) < 30.0)
