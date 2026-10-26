@@ -1273,6 +1273,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"koth_kicked_leader_cannot_win_on_clock",
 	"pickup_refalls_when_platform_removed_1103",
 	"soccer_overtime_cancels_pending_respawns",
+	"background_threads_never_touch_the_tree_1112",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4251,6 +4252,8 @@ func _run_scenario(name: String) -> Array[String]:
 
 		"soccer_overtime_cancels_pending_respawns":
 			return await _scenario_soccer_overtime_cancels_pending_respawns()
+		"background_threads_never_touch_the_tree_1112":
+			return await _scenario_background_threads_never_touch_the_tree_1112()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59608,4 +59611,105 @@ func _scenario_soccer_overtime_cancels_pending_respawns() -> Array[String]:
 		if mode.is_pending(slot):
 			failures.append("fighter %d was queued to respawn during overtime" % slot)
 	await _teardown(rig["stage"])
+	return failures
+## Issue #1112: collects every engine error and warning, from any thread, so a
+## scenario can assert that none of them was a thread-guard complaint.
+class ThreadErrorLogger extends Logger:
+	var _mutex := Mutex.new()
+	var messages: PackedStringArray = PackedStringArray()
+	func _log_error(function: String, file: String, line: int, code: String, rationale: String, _editor_notify: bool, _error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		_mutex.lock()
+		messages.append("%s:%d %s %s" % [file, line, code, rationale])
+		_mutex.unlock()
+	func thread_complaints() -> PackedStringArray:
+		var found := PackedStringArray()
+		_mutex.lock()
+		for m: String in messages:
+			if m.contains("caller thread") or m.contains("call_deferred"):
+				found.append(m)
+		_mutex.unlock()
+		return found
+	func clear() -> void:
+		_mutex.lock()
+		messages.clear()
+		_mutex.unlock()
+## Issue #1112 (CI: signal 11 after "The caller thread can't call the function
+## `propagate_notification()`" on /root). Nothing in the game calls
+## `propagate_notification()`; that error is what the engine's own crash
+## handler logs when `NOTIFICATION_CRASH` reaches the tree from the crashing
+## (non-main) thread, so the real fault is a native crash on a worker thread.
+## The game's two background tasks are the Sfx PCM decode task and the replay
+## GIF thread. This runs each the way a round teardown does -- freed while
+## still working, freed after finishing -- and asserts the task is joined
+## before the node goes, no task is left running, and the engine logged no
+## thread-guard error. A control task that logs from a worker thread proves
+## the detector sees messages from off the main thread.
+func _scenario_background_threads_never_touch_the_tree_1112() -> Array[String]:
+	var failures: Array[String] = []
+	var logger := ThreadErrorLogger.new()
+	OS.add_logger(logger)
+	# Control: the detector must see a message logged from a worker thread.
+	var probe: int = WorkerThreadPool.add_task(func() -> void: push_warning("1112 detector self-test, not a real error: call_deferred"), false, "1112 control")
+	WorkerThreadPool.wait_for_task_completion(probe)
+	if logger.thread_complaints().is_empty():
+		failures.append("control: a message logged from a worker thread never reached the logger, so this scenario cannot detect a thread error")
+	logger.clear()
+	# Sfx: freed at every stage of its decode, then once after it finished.
+	var sfx_script: GDScript = load("res://scripts/Sfx.gd") as GDScript
+	var tmp: String = OS.get_temp_dir().path_join("pf_1112")
+	DirAccess.make_dir_recursive_absolute(tmp)
+	for frames: int in [0, 1, 2, 5, 10, -1]:
+		var sfx: Node = sfx_script.new()
+		sfx.name = "SfxChurn1112"
+		sfx.persist_settings = false
+		sfx.settings_path = tmp.path_join("sfx.cfg")
+		root.add_child(sfx)
+		if frames < 0:
+			if not await _await_condition(func() -> bool: return sfx.decoding_done(), 10000, true):
+				failures.append("a second Sfx never finished decoding")
+		else:
+			for i in frames:
+				await process_frame
+		var task: int = sfx._decode_task
+		root.remove_child(sfx)
+		if sfx._decode_task != -1:
+			failures.append("Sfx left its decode task %d running after leaving the tree (freed after %d frames)" % [task, frames])
+		sfx.free()
+		await process_frame
+	# ReplayBuffer: freed while the GIF thread encodes, then after it saved.
+	var replay_script: GDScript = load("res://scripts/ReplayBuffer.gd") as GDScript
+	var clips: String = "user://scenario_clips_1112"
+	for wait_for_save: bool in [false, true]:
+		var rb: Node = replay_script.new()
+		root.add_child(rb)
+		rb.clips_dir = clips
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(clips))
+		for i in 60:
+			var img := Image.create(320, 180, false, Image.FORMAT_RGBA8)
+			img.fill(Color(float(i % 255) / 255.0, 0.2, 0.4))
+			rb.push_frame(img)
+		if not rb.start_gif(clips):
+			failures.append("the replay buffer would not start a GIF encode")
+		if wait_for_save:
+			var saved: Array = [""]
+			rb.gif_saved.connect(func(path: String) -> void: saved[0] = path)
+			if not await _await_condition(func() -> bool: return saved[0] != "", 10000, true):
+				failures.append("the GIF encode never reported it was saved")
+			if rb._gif_thread != null:
+				failures.append("the replay buffer kept its GIF thread after the save")
+		root.remove_child(rb)
+		rb.free()
+		await process_frame
+	for f: String in DirAccess.get_files_at(ProjectSettings.globalize_path(clips)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(clips).path_join(f))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(clips))
+	for f: String in DirAccess.get_files_at(tmp):
+		DirAccess.remove_absolute(tmp.path_join(f))
+	DirAccess.remove_absolute(tmp)
+	await process_frame
+	await process_frame
+	for complaint: String in logger.thread_complaints():
+		failures.append("the engine logged a thread error: %s" % complaint)
+	OS.remove_logger(logger)
+	_scenario_completed = true
 	return failures
