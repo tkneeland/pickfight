@@ -118,6 +118,8 @@ func _start_warning() -> void:
 	_state = _LedgeState.WARNING
 	_timer_remaining = warn_sec
 	_visual.color = WARNING_COLOR
+	# Once per cycle (#1083): a ledge only enters WARNING from SOLID.
+	PartKitScript.sfx(self, &"ledge_crack", global_position)
 
 func _physics_process(delta: float) -> void:
 	if _state == _LedgeState.SOLID:

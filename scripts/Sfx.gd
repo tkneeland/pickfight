@@ -212,6 +212,10 @@ const SOUNDS: Dictionary = {
 		"kenney_rpg/creak1.ogg",
 		"kenney_rpg/creak2.ogg",
 		"kenney_rpg/creak3.ogg"], "db": 0.0},
+	# A crumbling ledge starting to give way (#1083): a short dry crack.
+	"ledge_crack": {"files": [
+		"kenney_impact/impactWood_light_000.ogg",
+		"kenney_impact/impactWood_light_001.ogg"], "db": -4.0, "max_sec": 0.4},
 	"floor_collapse": {"files": [
 		"kenney_impact/impactWood_heavy_002.ogg",
 		"kenney_impact/impactWood_heavy_003.ogg",

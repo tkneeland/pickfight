@@ -1260,6 +1260,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hill_taken_banner_names_holder",
 	"stage_builder_rebuilds_stages_from_definitions_1046",
 	"heckler_award_for_most_landed_boos_1085",
+	"crumbling_ledge_plays_crack_once_per_cycle_1083",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4210,6 +4211,8 @@ func _run_scenario(name: String) -> Array[String]:
 
 		"heckler_award_for_most_landed_boos_1085":
 			return await _scenario_heckler_award_for_most_landed_boos_1085()
+		"crumbling_ledge_plays_crack_once_per_cycle_1083":
+			return await _scenario_crumbling_ledge_plays_crack_once_per_cycle_1083()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -58941,4 +58944,51 @@ func _scenario_heckler_award_for_most_landed_boos_1085() -> Array[String]:
 	if not tied.extra_awards([0, 1]).filter(func(a: Dictionary) -> bool: return a["title"] == "Heckler").is_empty():
 		failures.append("Heckler given for a tie")
 	await _teardown(loop["stage"])
+	return failures
+## Issue #1083: a crumbling ledge plays ledge_crack once when it enters WARNING,
+## not again until it has gone AWAY, come back SOLID and been triggered anew.
+## The cue goes through PartKit.sfx, so Online joiners hear it via the Sfx
+## `played` signal -> snapshot sound trailer, as every other part cue.
+func _scenario_crumbling_ledge_plays_crack_once_per_cycle_1083() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"ledge_crack"):
+		return ["ledge_crack is not in the sound table"]
+	var stage: Node2D = _new_stage()
+	var ledge: StaticBody2D = CrumblingLedgeScene.instantiate() as StaticBody2D
+	ledge.position = Vector2(0, -300)
+	stage.add_child(ledge)
+	var spawn_pos: Vector2 = Vector2(0, -300 - 12.0 - PLAYER_RADIUS + LEDGE_LANDING_OVERLAP)
+	var player: RigidBody2D = _spawn_player(stage, spawn_pos)
+	player.set_input_vector(Vector2.UP)
+	sfx.start_recording()
+	var tps: float = float(Engine.physics_ticks_per_second)
+	for _tick in int(round((LEDGE_WARN_SEC - 0.3) * tps)):
+		await physics_frame
+	var warning_count: int = _sfx_count(sfx, "ledge_crack")
+	var last: Dictionary = _sfx_last(sfx, "ledge_crack")
+	# Through AWAY and back: the ledge falls, the player drops away, no new cue.
+	for _tick in int(round((LEDGE_AWAY_SEC + 1.0) * tps)):
+		await physics_frame
+	var through_away: int = _sfx_count(sfx, "ledge_crack")
+	# Stand on the reformed ledge again: a second cycle, a second cue.
+	# (A fresh fighter: the first one has long since fallen out of the world.)
+	var second_player: RigidBody2D = _spawn_player(stage, spawn_pos)
+	second_player.set_input_vector(Vector2.UP)
+	for _tick in int(round(0.5 * tps)):
+		await physics_frame
+	var second: int = _sfx_count(sfx, "ledge_crack")
+	sfx.stop_recording()
+	print("      cracks: first warning %d, through away %d, second cycle %d" % [warning_count, through_away, second])
+	if warning_count != 1:
+		failures.append("entering WARNING played ledge_crack %d times, want 1" % warning_count)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("ledge_crack was not positional")
+	if through_away != 1:
+		failures.append("going AWAY and back played %d cracks in total, want 1" % through_away)
+	if second != 2:
+		failures.append("a second cycle brought the total to %d cracks, want 2" % second)
+	await _teardown(stage)
 	return failures
