@@ -1256,6 +1256,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"steam_invite_room_emptying_under_the_prompt_joins_1075",
 	"steam_invite_as_a_client_leaves_and_joins_1075",
 	"stage_def_good_and_hostile_1045",
+	"stock_last_life_and_steal_banners",
 	"hill_taken_banner_names_holder",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4198,6 +4199,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_steam_invite_as_a_client_leaves_and_joins_1075()
 		"stage_def_good_and_hostile_1045":
 			return _scenario_stage_def_good_and_hostile_1045()
+		"stock_last_life_and_steal_banners":
+			return await _scenario_stock_last_life_and_steal_banners()
 		"hill_taken_banner_names_holder":
 			return await _scenario_hill_taken_banner_names_holder()
 		_:
@@ -58576,6 +58579,91 @@ func _scenario_stage_def_good_and_hostile_1045() -> Array[String]:
 		elif not String(r["reason"]).contains(c[2]):
 			failures.append("%s: reason '%s' lacks '%s'" % [c[0], r["reason"], c[2]])
 	_scenario_completed = true
+	return failures
+
+## #1078: Stock names the fighter on their last life and the one who stole a
+## life, through the kill feed's banner (and so the effect stream the Online
+## joiner replays); none in overtime, from one life, or for a refused steal.
+func _scenario_stock_last_life_and_steal_banners() -> Array[String]:
+	var failures: Array[String] = []
+	EffectStreamScript976.set_recording(true)
+	var rig: Dictionary = _stock_rig(3, 2, 0, {0: 0, 1: 0, 2: 1})
+	var feed: Control = KillFeedScript.new()
+	feed.name = "KillFeed1078"
+	(rig["stage"] as Node2D).add_child(feed)
+	rig["rm"].kill_feed_path = rig["rm"].get_path_to(feed)
+	var players: Array[RigidBody2D] = rig["players"]
+	var mode: Node = await _stock_started(rig)
+	if mode == null:
+		failures.append("the Stock Teams round never started")
+		EffectStreamScript976.set_recording(false)
+		await _stock_finish(rig)
+		return failures
+	var rm: Node = rig["rm"]
+	var name0: String = str(rm._slot_name(0))
+	var last_text: String = tr("BANNER_LAST_LIFE") % name0
+	var stole_text: String = tr("BANNER_STOLE_LIFE") % name0
+	await _stock_lose_life(players[0])
+	var want_last: String = "%s|" % last_text
+	if feed.banner_log != PackedStringArray([want_last]):
+		failures.append("dropping to one life logged %s, wanted [%s]" % [feed.banner_log, want_last])
+	# Going out from the last life shows no second banner.
+	players[0].eliminate()
+	await _await_ticks(4)
+	if feed.banner_log.size() != 1:
+		failures.append("going out logged a banner: %s" % [feed.banner_log])
+	# A refused steal (slot 1 is alive) shows none; a real one names the thief.
+	if mode.steal_life(1):
+		failures.append("a steal by a standing fighter was accepted")
+	if feed.banner_log.size() != 1:
+		failures.append("a refused steal logged a banner: %s" % [feed.banner_log])
+	if not mode.steal_life(0):
+		failures.append("steal_life was refused")
+	elif feed.banner_log != PackedStringArray([want_last, "%s|" % stole_text]):
+		failures.append("the steal logged %s, wanted the last-life then [%s]" % [feed.banner_log, stole_text])
+	# The Online joiner replays the recorded stream: same text, same colour.
+	var banners: Array = EffectStreamScript976.pending().filter(func(ev: Dictionary) -> bool: return ev.get("k") == "banner")
+	if banners.size() != 2 or str(banners[0].get("h")) != last_text or str(banners[1].get("h")) != stole_text:
+		failures.append("the effect stream carried %s" % [banners])
+	elif banners[0].get("c") != (rm._slot_color(0) as Color):
+		failures.append("the stream's banner is not in the fighter's colour")
+	EffectStreamScript976.set_recording(false)
+	await _stock_finish(rig, false)
+	# Overtime: a fighter going down shows no last-life banner.
+	rig = _stock_rig(3, 3, 0)
+	feed = KillFeedScript.new()
+	feed.name = "KillFeed1078b"
+	(rig["stage"] as Node2D).add_child(feed)
+	rig["rm"].kill_feed_path = rig["rm"].get_path_to(feed)
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the overtime round never started")
+		await _stock_finish(rig)
+		return failures
+	mode.overtime = true
+	players[1].eliminate()
+	await _await_ticks(4)
+	if not feed.banner_log.is_empty():
+		failures.append("overtime logged a banner: %s" % [feed.banner_log])
+	await _stock_finish(rig, false)
+	# One life from the start: going out is not "last life".
+	rig = _stock_rig(3, 1, 0)
+	feed = KillFeedScript.new()
+	feed.name = "KillFeed1078c"
+	(rig["stage"] as Node2D).add_child(feed)
+	rig["rm"].kill_feed_path = rig["rm"].get_path_to(feed)
+	players = rig["players"]
+	mode = await _stock_started(rig)
+	if mode == null:
+		failures.append("the one-life round never started")
+		await _stock_finish(rig)
+		return failures
+	players[1].eliminate()
+	await _await_ticks(4)
+	if not feed.banner_log.is_empty():
+		failures.append("a one-life fighter going out logged a banner: %s" % [feed.banner_log])
+	await _stock_finish(rig)
 	return failures
 
 ## #1077: a change of hill holder shows "<name> takes the hill!" in the new
