@@ -1270,6 +1270,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flail_ball_does_not_knock_spawn_protected_1099",
 	"pickup_dropped_inside_terrain_rests_on_it_1102",
 	"umbrella_open_plays_a_soft_sound_1095",
+	"koth_kicked_leader_cannot_win_on_clock",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4240,6 +4241,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_dropped_inside_terrain_rests_on_it_1102()
 		"umbrella_open_plays_a_soft_sound_1095":
 			return await _scenario_umbrella_open_plays_a_soft_sound_1095()
+		"koth_kicked_leader_cannot_win_on_clock":
+			return await _scenario_koth_kicked_leader_cannot_win_on_clock()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59500,4 +59503,31 @@ func _scenario_umbrella_open_plays_a_soft_sound_1095() -> Array[String]:
 		failures.append("a pickaxe held overhead played umbrella_open")
 	await _teardown(stage2, false)
 	_scenario_completed = true
+	return failures
+## Issue #1107: a kicked leader cannot win King of the Hill on the clock. Three fighters (kicking
+## one of two would end the round): slot 0 banks the most hold time, the host kicks it, the clock runs out and slot 1 (more than slot 2) wins.
+func _scenario_koth_kicked_leader_cannot_win_on_clock() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _koth_rig_662(3)
+	if not rig["started"]:
+		await _teardown(rig["stage"])
+		return ["the King of the Hill round never started"]
+	var rm: Node = rig["rm"]
+	var hill: Node = rig["hill"]
+	var wins: Array[int] = []
+	rm.round_won.connect(func(slot: int) -> void: wins.append(slot))
+	hill.hold_time[0] = 9.0
+	hill.hold_time[1] = 2.0
+	hill.hold_time[2] = 1.0
+	(rig["roster"].slots as Array).erase(0)
+	rm.call("_on_host_command", "kick", 0)
+	await _await_ticks(3)
+	hill.time_left = 0.2
+	await _await_condition(func() -> bool: return not wins.is_empty(), 3000)
+	print("      kicked leader: wins %s, scores %d/%d" % [wins, rm.score_of(0), rm.score_of(1)])
+	if wins != [1]:
+		failures.append("the clock-out should name slot 1 the winner, got %s" % [wins])
+	if rm.score_of(0) != 0 or rm.score_of(1) != 1:
+		failures.append("scores are %d/%d, want 0/1" % [rm.score_of(0), rm.score_of(1)])
+	await _teardown(rig["stage"])
 	return failures
