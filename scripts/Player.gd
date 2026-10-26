@@ -2576,7 +2576,7 @@ func hit_blocked(point: Vector2) -> bool:
 	return (canopy_open() and canopy_faces(point)) or shield_blocks(point)
 
 func _shield_bash(victim: Node) -> void:
-	if not victim.alive or not (victim is RigidBody2D):
+	if not victim.alive or not (victim is RigidBody2D) or victim.get("spawn_protected") == true:
 		return
 	var away: Vector2 = (victim.global_position - global_position).normalized()
 	(victim as RigidBody2D).apply_central_impulse(away * SHIELD_BASH_IMPULSE)
