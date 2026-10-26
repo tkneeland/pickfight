@@ -1264,6 +1264,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"fan_plays_whoosh_on_entry_once_per_second_1084",
 	"bounce_pad_launch_puffs_one_ring_1089",
 	"award_pit_boss_counts_hazard_kos_1088",
+	"hooks_skip_spawn_protected_1093",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4222,6 +4223,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bounce_pad_launch_puffs_one_ring_1089()
 		"award_pit_boss_counts_hazard_kos_1088":
 			return await _scenario_award_pit_boss_counts_hazard_kos_1088()
+		"hooks_skip_spawn_protected_1093":
+			return await _scenario_hooks_skip_spawn_protected_1093()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59243,4 +59246,55 @@ func _scenario_award_pit_boss_counts_hazard_kos_1088() -> Array[String]:
 	stats.begin_match()
 	if not stats.hazard_kos.is_empty():
 		failures.append("begin_match left hazard KOs behind")
+	return failures
+## Issue #1093: a hook that meets a spawn-protected fighter neither reels nor
+## knocks it. The rod hauls an unprotected fighter; the grapple still anchors.
+func _scenario_hooks_skip_spawn_protected_1093() -> Array[String]:
+	var failures: Array[String] = []
+	var moved: Dictionary = {}
+	var stuck: Dictionary = {}
+	for path: String in [FISHING_ROD_PATH, GRAPPLE_PATH]:
+		for protected_flag: bool in [true, false]:
+			var stage: Node2D = _new_stage()
+			var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+			var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(260, 0))
+			await _await_ticks(2)
+			await _equip(shooter, path)
+			_brace(shooter)
+			victim.freeze = true
+			await _flick(shooter, Vector2.RIGHT)
+			var hook: Node2D = shooter.launched_hook()
+			if hook == null:
+				failures.append("a flick did not fire the hook (%s)" % path)
+				await _teardown(stage)
+				return failures
+			victim.freeze = false
+			victim.linear_velocity = Vector2.ZERO
+			victim.gravity_scale = 0.0
+			victim.spawn_protected = protected_flag
+			var start: Vector2 = victim.global_position
+			var peak: float = 0.0
+			var was_stuck: bool = false
+			for _i in 120:
+				await physics_frame
+				if is_instance_valid(hook) and hook.is_stuck():
+					was_stuck = true
+				peak = maxf(peak, absf(victim.global_position.x - start.x))
+				if not is_instance_valid(hook):
+					break
+			var key: String = "%s/%s" % [path, protected_flag]
+			moved[key] = peak
+			stuck[key] = was_stuck
+			print("      %s: moved %.1f stuck %s" % [key, peak, was_stuck])
+			await _teardown(stage)
+	var rod: String = FISHING_ROD_PATH
+	var grapple: String = GRAPPLE_PATH
+	if moved["%s/false" % rod] < 8.0:
+		failures.append("control: the rod did not reel an unprotected fighter (moved %.1f)" % moved["%s/false" % rod])
+	if moved["%s/true" % rod] > 1.0:
+		failures.append("the rod moved a spawn-protected fighter %.1f px" % moved["%s/true" % rod])
+	if moved["%s/true" % grapple] > 1.0:
+		failures.append("the grapple moved a spawn-protected fighter %.1f px" % moved["%s/true" % grapple])
+	if not stuck["%s/true" % grapple] or not stuck["%s/false" % grapple]:
+		failures.append("the grapple stopped anchoring on a player")
 	return failures
