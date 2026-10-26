@@ -1261,6 +1261,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_builder_rebuilds_stages_from_definitions_1046",
 	"heckler_award_for_most_landed_boos_1085",
 	"crumbling_ledge_plays_crack_once_per_cycle_1083",
+	"fan_plays_whoosh_on_entry_once_per_second_1084",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4213,6 +4214,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_heckler_award_for_most_landed_boos_1085()
 		"crumbling_ledge_plays_crack_once_per_cycle_1083":
 			return await _scenario_crumbling_ledge_plays_crack_once_per_cycle_1083()
+		"fan_plays_whoosh_on_entry_once_per_second_1084":
+			return await _scenario_fan_plays_whoosh_on_entry_once_per_second_1084()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -58990,5 +58993,92 @@ func _scenario_crumbling_ledge_plays_crack_once_per_cycle_1083() -> Array[String
 		failures.append("going AWAY and back played %d cracks in total, want 1" % through_away)
 	if second != 2:
 		failures.append("a second cycle brought the total to %d cracks, want 2" % second)
+	await _teardown(stage)
+	return failures
+## Issue #1084: a fan plays fan_whoosh when a living fighter first enters its
+## air column; staying is silent, re-entering within 1 s is silent, after 1 s
+## it plays again; a ghost and a spawn-protected fighter play nothing. The cue
+## goes through PartKit.sfx, so Online joiners hear it via the Sfx `played`
+## signal -> snapshot sound trailer, at the same position.
+func _fan_whoosh_visit(player: RigidBody2D, fan: Node2D, sfx: Node, inside_ticks: int) -> int:
+	var before: int = _sfx_count(sfx, "fan_whoosh")
+	player.teleport_to(fan.position + Vector2(100, 0))
+	player.linear_velocity = Vector2.ZERO
+	for _tick in inside_ticks:
+		await physics_frame
+	player.teleport_to(fan.position + Vector2(100, -900))
+	player.linear_velocity = Vector2.ZERO
+	for _tick in 6:
+		await physics_frame
+	return _sfx_count(sfx, "fan_whoosh") - before
+func _scenario_fan_plays_whoosh_on_entry_once_per_second_1084() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"fan_whoosh"):
+		return ["fan_whoosh is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var fan: Node2D = FanScene.instantiate() as Node2D
+	fan.strength = 0.0
+	fan.position = DEEP_PARK_POSITION
+	stage.add_child(fan)
+	var player: RigidBody2D = _spawn_player(stage, fan.position + Vector2(0, -900))
+	player.gravity_scale = 0.0
+	player.set("spawn_protected", false)
+	var heard: Array = []
+	sfx.played.connect(func(sound: StringName, position: Variant, strength: float) -> void:
+		heard.append({"name": String(sound), "position": position, "strength": strength}))
+	sfx.start_recording()
+	await _await_ticks(4)
+	player.teleport_to(fan.position + Vector2(100, 0))
+	player.linear_velocity = Vector2.ZERO
+	for _tick in 20:
+		await physics_frame
+	var first: int = _sfx_count(sfx, "fan_whoosh")
+	var last: Dictionary = _sfx_last(sfx, "fan_whoosh")
+	for _tick in 20:
+		await physics_frame
+	var stayed: int = _sfx_count(sfx, "fan_whoosh") - first
+	player.teleport_to(fan.position + Vector2(100, -900))
+	for _tick in 3:
+		await physics_frame
+	var quick: int = await _fan_whoosh_visit(player, fan, sfx, 4)
+	for _tick in 80:
+		await physics_frame
+	var later: int = await _fan_whoosh_visit(player, fan, sfx, 10)
+	for _tick in 80:
+		await physics_frame
+	player.set("spawn_protected", true)
+	var protected_visit: int = await _fan_whoosh_visit(player, fan, sfx, 10)
+	player.set("spawn_protected", false)
+	for _tick in 80:
+		await physics_frame
+	player.set("alive", false)
+	var dead: int = await _fan_whoosh_visit(player, fan, sfx, 10)
+	sfx.stop_recording()
+	print("      whooshes: entry %d, staying %d, quick re-entry %d, later re-entry %d, protected %d, dead %d" % [first, stayed, quick, later, protected_visit, dead])
+	if first != 1:
+		failures.append("entering the column played fan_whoosh %d times, want 1" % first)
+	elif not last.is_empty() and not (last["position"] is Vector2):
+		failures.append("fan_whoosh was not positional")
+	if stayed != 0:
+		failures.append("staying in the column played %d more whooshes" % stayed)
+	if quick != 0:
+		failures.append("re-entering within 1 s played %d whooshes" % quick)
+	if later != 1:
+		failures.append("re-entering after more than 1 s played %d whooshes, want 1" % later)
+	if protected_visit != 0:
+		failures.append("a spawn-protected fighter played %d whooshes" % protected_visit)
+	if dead != 0:
+		failures.append("a dead fighter played %d whooshes" % dead)
+	var trailer: PackedByteArray = SnapshotCaptureScript251.encode_sound_trailer(heard, "")
+	var split: Dictionary = SnapshotCaptureScript251.split_sound_trailer(SnapshotScript251.encode(_rc_world_241(0, 1)) + trailer)
+	var events: int = 0
+	for ev: Dictionary in split["events"]:
+		if ev["name"] == "fan_whoosh":
+			events += 1
+	if events != 2:
+		failures.append("the trailer carried %d fan_whoosh events, want 2" % events)
 	await _teardown(stage)
 	return failures

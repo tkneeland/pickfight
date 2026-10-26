@@ -18,6 +18,9 @@ extends Node2D
 ## `facing` is the column's direction at rest, in the node's local space.
 
 const WindZoneScene: PackedScene = preload("res://scenes/parts/WindZone.tscn")
+const PartKitScript: GDScript = preload("res://scripts/PartKit.gd")
+## A fighter may be whooshed at again only after this long (issue #1084).
+const WHOOSH_INTERVAL_SEC: float = 1.0
 
 @export var facing: Vector2 = Vector2.RIGHT
 ## Length and width of the air column.
@@ -39,6 +42,10 @@ var _origin: Vector2 = Vector2.ZERO
 var _elapsed: float = 0.0
 var _spin: float = 0.0
 var _zone: Area2D = null
+## Instance ids of the fighters in the column last tick, and seconds until
+## each may be whooshed at again.
+var _inside_last: Dictionary = {}
+var _whoosh_wait: Dictionary = {}
 
 func _ready() -> void:
 	_origin = position
@@ -78,7 +85,29 @@ func _physics_process(delta: float) -> void:
 	if travel != Vector2.ZERO and travel_sec > 0.0:
 		var f: float = 0.5 - 0.5 * cos(TAU * _elapsed / travel_sec)
 		position = _origin + travel * f
+	_whoosh_on_entry(delta)
 	queue_redraw()
+
+## Plays `fan_whoosh` when a living, unprotected fighter first enters the
+## column, at most once per fighter per second (issue #1084; the conveyor's
+## `belt_step` rule, #1060). It goes through `PartKit.sfx`, so Online joiners
+## hear it from the snapshot sound trailer like every other part cue.
+func _whoosh_on_entry(delta: float) -> void:
+	for id: int in _whoosh_wait.keys():
+		var left: float = float(_whoosh_wait[id]) - delta
+		if left <= 0.0:
+			_whoosh_wait.erase(id)
+		else:
+			_whoosh_wait[id] = left
+	var now: Dictionary = {}
+	for body: Node2D in _zone.get_overlapping_bodies():
+		if body is RigidBody2D and body.is_in_group("players") and bool(body.get("alive")) and not bool(body.get("spawn_protected")):
+			var id: int = body.get_instance_id()
+			now[id] = true
+			if not _inside_last.has(id) and not _whoosh_wait.has(id):
+				_whoosh_wait[id] = WHOOSH_INTERVAL_SEC
+				PartKitScript.sfx(self, &"fan_whoosh", body.global_position)
+	_inside_last = now
 
 func _draw() -> void:
 	# Housing, then blades that turn with time so it reads as running.

@@ -183,6 +183,8 @@ const SOUNDS: Dictionary = {
 		"kenney_scifi/thrusterFire_000.ogg"], "db": -8.0, "max_sec": 0.4},
 	"belt_step": {"files": [
 		"kenney_scifi/spaceEngineLow_000.ogg"], "db": -8.0, "max_sec": 0.35},
+	"fan_whoosh": {"files": [
+		"kenney_scifi/thrusterFire_000.ogg"], "db": -10.0, "max_sec": 0.5},
 	"ice_skid": {"files": [
 		"kenney_impact/impactMetal_light_000.ogg",
 		"kenney_impact/impactMetal_light_001.ogg"], "db": -8.0, "max_sec": 0.4},
