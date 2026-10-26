@@ -240,6 +240,9 @@ const SOUNDS: Dictionary = {
 	# Grabbing a pickup (#898): a short quiet blip at the grabber.
 	"pickup_grab": {"files": [
 		"kenney_interface/maximize_006.ogg"], "db": -9.0, "overlap": 2, "max_sec": 0.4},
+	# A ghost letting go of a pickup with its action (#1114): a soft low pluck.
+	"ghost_drop": {"files": [
+		"kenney_interface/pluck_001.ogg"], "db": -13.0, "overlap": 2, "max_sec": 0.3},
 	# A pickup appearing (#998): a soft short pluck where it pops in.
 	"pickup_spawn": {"files": [
 		"kenney_interface/pluck_001.ogg"], "db": -13.0, "overlap": 2, "max_sec": 0.35},
