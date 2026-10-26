@@ -1266,6 +1266,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bounce_pad_launch_puffs_one_ring_1089",
 	"award_pit_boss_counts_hazard_kos_1088",
 	"hooks_skip_spawn_protected_1093",
+	"shield_bash_does_not_knock_spawn_protected_1098",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4228,6 +4229,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hooks_skip_spawn_protected_1093()
 		"bot_sidesteps_boomerang_and_hook_1094":
 			return await _scenario_bot_sidesteps_boomerang_and_hook_1094()
+		"shield_bash_does_not_knock_spawn_protected_1098":
+			return await _scenario_shield_bash_does_not_knock_spawn_protected_1098()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59345,3 +59348,40 @@ func _scenario_bot_sidesteps_boomerang_and_hook_1094() -> Array[String]:
 			failures.append("the bot left the floor to dodge the %s, ending at x=%.0f y=%.0f" % [kind, edge["x"], edge["y"]])
 	_scenario_completed = true
 	return failures
+## Issue #1098: a shield bash that lands on a spawn-protected fighter neither
+## shoves nor hurts it; the same bash on an unprotected fighter still does.
+func _scenario_shield_bash_does_not_knock_spawn_protected_1098() -> Array[String]:
+	var failures: Array[String] = []
+	var plain: Array[float] = await _shield_bash_protected_result(false)
+	var guarded: Array[float] = await _shield_bash_protected_result(true)
+	print("      bash: unprotected dmg %.1f speed %.0f; protected dmg %.1f speed %.0f" % [plain[0], plain[1], guarded[0], guarded[1]])
+	if plain[1] < 50.0:
+		failures.append("the control bash barely moved an unprotected fighter (%.0f px/s)" % plain[1])
+	# The swing itself still bumps the body (~150 px/s, as a pickaxe does); only the bash impulse is gone.
+	if guarded[1] > plain[1] * 0.4:
+		failures.append("a spawn-protected fighter was shoved to %.0f px/s by a shield bash (%.0f unprotected)" % [guarded[1], plain[1]])
+	if guarded[0] > 0.0:
+		failures.append("a spawn-protected fighter took %.1f from a shield bash" % guarded[0])
+	_scenario_completed = true
+	return failures
+## Shield-bashes a neighbour (protected or not); returns [damage, top speed].
+func _shield_bash_protected_result(protected_flag: bool) -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var holder: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(70, 0))
+	await _await_ticks(2)
+	await _equip(holder, SHIELD_PATH)
+	holder.gravity_scale = 0.0
+	victim.gravity_scale = 0.0
+	victim.spawn_protected = protected_flag
+	var strikes: Array = []
+	_record_strikes(holder, strikes)
+	holder.set_input_vector(Vector2.RIGHT)
+	await _await_condition(func() -> bool: return not strikes.is_empty(), 4000)
+	var fastest: float = 0.0
+	for i in 6:
+		fastest = maxf(fastest, victim.linear_velocity.length())
+		await physics_frame
+	var result: Array[float] = [victim.damage, fastest]
+	await _teardown(stage, false)
+	return result
