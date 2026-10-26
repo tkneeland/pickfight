@@ -1258,6 +1258,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_def_good_and_hostile_1045",
 	"stock_last_life_and_steal_banners",
 	"hill_taken_banner_names_holder",
+	"stage_builder_rebuilds_stages_from_definitions_1046",
 	"heckler_award_for_most_landed_boos_1085",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4204,6 +4205,9 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_last_life_and_steal_banners()
 		"hill_taken_banner_names_holder":
 			return await _scenario_hill_taken_banner_names_holder()
+		"stage_builder_rebuilds_stages_from_definitions_1046":
+			return await _scenario_stage_builder_rebuilds_stages_from_definitions_1046()
+
 		"heckler_award_for_most_landed_boos_1085":
 			return await _scenario_heckler_award_for_most_landed_boos_1085()
 		_:
@@ -58751,6 +58755,146 @@ func _scenario_hill_taken_banner_names_holder() -> Array[String]:
 	EffectStreamScript976.set_recording(false)
 	await _teardown(rig["stage"])
 	return failures
+
+## #1046: StageBuilder rebuilds three built-in stages from hand-written definitions and the
+## measured terrain matches tools/stage_platform_geometry.txt line for line, tint included.
+## A definition has no part names, so built parts are Part0.. and are renamed to the table's
+## names in order before comparing. Also: spawns, KillZone and preview framing read like a
+## built-in's, a hostile definition builds nothing, and a mode tag weights the stage.
+func _scenario_stage_builder_rebuilds_stages_from_definitions_1046() -> Array[String]:
+	var failures: Array[String] = []
+	var builder: GDScript = load("res://scripts/StageBuilder.gd")
+	var table: Dictionary = {}
+	for raw: String in FileAccess.get_file_as_string(STAGE_GEOMETRY_TABLE_REFACTOR_PLATFORMS).split("\n", false):
+		var line: String = raw.strip_edges(false, true)
+		if line.is_empty() or line.begins_with("#"):
+			continue
+		var stage_lines: PackedStringArray = table.get(line.get_slice("|", 0), PackedStringArray())
+		stage_lines.append(line)
+		table[line.get_slice("|", 0)] = stage_lines
+	var eight: Array = [[-150, 0], [150, 0], [-520, 0], [520, 0], [-600, 0], [600, 0], [-680, 0], [680, 0]]
+	var kill_floor: Dictionary = {"type": "KillFloor", "pos": [0, 480]}
+	var defs: Dictionary = {
+		"Battlefield": {"schema": 1, "name": "Battlefield", "spawns": eight, "parts": [
+			{"type": "Platform", "pos": [0, 320], "size": [1440, 40]},
+			{"type": "Platform", "pos": [-340, 160], "size": [240, 24]},
+			{"type": "Platform", "pos": [340, 160], "size": [240, 24]},
+			{"type": "Platform", "pos": [0, 100], "size": [200, 24]}, kill_floor]},
+		"Pocket": {"schema": 1, "name": "Pocket", "spawns": eight, "parts": [
+			{"type": "Platform", "pos": [0, 320], "size": [720, 40]},
+			{"type": "Platform", "pos": [0, 160], "size": [200, 24]},
+			{"type": "Platform", "pos": [-505, 230], "size": [290, 24]},
+			{"type": "Platform", "pos": [505, 230], "size": [290, 24]}, kill_floor]},
+		"Pillars": {"schema": 1, "name": "Pillars", "spawns": eight, "parts": [
+			{"type": "Platform", "pos": [-320, 270], "size": [140, 300]},
+			{"type": "Platform", "pos": [0, 270], "size": [140, 300]},
+			{"type": "Platform", "pos": [320, 270], "size": [140, 300]},
+			{"type": "Platform", "pos": [-640, 270], "size": [140, 300]},
+			{"type": "Platform", "pos": [640, 270], "size": [140, 300]}, kill_floor]},
+	}
+	for stage_name: String in defs:
+		var built: Dictionary = builder.build(defs[stage_name])
+		if not built["ok"]:
+			failures.append("%s: rejected: %s" % [stage_name, built["reason"]])
+			continue
+		var instance: Node2D = built["stage"]
+		# The table's lines in its order; the tinted ones come last in the file.
+		var want: PackedStringArray = table[stage_name]
+		var names: PackedStringArray = []
+		for l: String in want:
+			if l.contains("|body|"):
+				names.append(l.get_slice("|", 2))
+		var got: PackedStringArray = await _stage_geometry_lines_1046(stage_name, instance, names)
+		for i in maxi(got.size(), want.size()):
+			var a: String = got[i] if i < got.size() else "<nothing>"
+			var b: String = want[i] if i < want.size() else "<nothing>"
+			if a != b:
+				failures.append("%s line %d: got %s, wanted %s" % [stage_name, i, a, b])
+				break
+		var spawns: Array[Vector2] = instance.get_spawn_points()
+		if spawns.size() != 8 or spawns[0] != Vector2(-150, 0) or spawns[7] != Vector2(680, 0):
+			failures.append("%s: spawn markers read back as %s" % [stage_name, spawns])
+		if instance.get_view_rect().size != Vector2(1600, 900):
+			failures.append("%s: preview framing is %s, not the normal 1600x900 view" % [stage_name, instance.get_view_rect().size])
+		instance.free()
+	var bad: Dictionary = builder.build({"schema": 1, "name": "Bad", "parts": [{"type": "Script", "pos": [0, 0]}], "spawns": []})
+	if bad["ok"] or bad["stage"] != null or String(bad["reason"]).is_empty():
+		failures.append("a hostile definition was built or gave no reason: %s" % [bad])
+	var bad_text: Dictionary = builder.build_text("{not json")
+	if bad_text["ok"] or bad_text["stage"] != null:
+		failures.append("malformed JSON was built")
+	var tagged_def: Dictionary = (defs["Pocket"] as Dictionary).duplicate()
+	tagged_def["modes"] = ["stock"]
+	var tagged: Dictionary = builder.build(tagged_def)
+	if not tagged["ok"]:
+		failures.append("a stock-tagged definition was rejected: %s" % tagged["reason"])
+	else:
+		if float((tagged["stage"].mode_weights as Dictionary).get("stock", 0.0)) != 4.0:
+			failures.append("a mode tag did not weight the stage")
+		tagged["stage"].free()
+	_scenario_completed = true
+	return failures
+
+## The table's lines for a stage node built at runtime: bodies and KillZone as authored,
+## then, in the tree under mood 0, the tinted colours. Part0.. become `names` in order.
+func _stage_geometry_lines_1046(stage_name: String, instance: Node2D, names: PackedStringArray) -> PackedStringArray:
+	var raw: PackedStringArray = []
+	var nodes: Array[Node] = instance.find_children("*", "StaticBody2D", true, false)
+	var kill_zone: Node = instance.get_node_or_null("KillZone")
+	if kill_zone == null:
+		return PackedStringArray(["no KillZone"])
+	nodes.append(kill_zone)
+	for node: Node in nodes:
+		var path: String = _geometry_path_refactor_platforms(instance, node)
+		var body: CollisionObject2D = node as CollisionObject2D
+		var head: String = "%s|%s|%s|%s|%s|layer=%d|mask=%d|z=%d|zrel=%s|visible=%s" % [stage_name,
+				"body" if node is StaticBody2D else "kill", path, node.get_class(),
+				var_to_str(_geometry_xform_refactor_platforms(instance, body)),
+				body.collision_layer, body.collision_mask, body.z_index, body.z_as_relative, body.visible]
+		if node is StaticBody2D:
+			var static_body: StaticBody2D = node
+			head += "|material=%s|vel=%s|spin=%s" % [static_body.physics_material_override != null,
+					var_to_str(static_body.constant_linear_velocity), static_body.constant_angular_velocity]
+		else:
+			var script: Script = node.get_script()
+			head += "|script=%s" % (script.resource_path if script != null else "")
+			for prop: Dictionary in node.get_property_list():
+				if int(prop["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE and int(prop["usage"]) & PROPERTY_USAGE_STORAGE:
+					head += "|%s=%s" % [prop["name"], var_to_str(node.get(prop["name"]))]
+		raw.append(head)
+		for child: Node in node.get_children():
+			if child is CollisionShape2D:
+				var shape_node: CollisionShape2D = child
+				var shape: Shape2D = shape_node.shape
+				raw.append("%s|shape|%s/%s|%s|%s|%s|oneway=%s|disabled=%s" % [stage_name, path, _geometry_name_refactor_platforms(child),
+						var_to_str(shape_node.transform), shape.get_class() if shape != null else "null",
+						var_to_str(shape.get("size")) if shape != null else "", shape_node.one_way_collision,
+						shape_node.disabled])
+			elif child is Polygon2D:
+				var poly: Polygon2D = child
+				raw.append("%s|poly|%s/%s|%s|%s|%s|z=%d|visible=%s|texture=%s|offset=%s" % [stage_name, path,
+						_geometry_name_refactor_platforms(child), var_to_str(poly.transform), var_to_str(poly.polygon), var_to_str(poly.color),
+						poly.z_index, poly.visible, poly.texture != null, var_to_str(poly.offset)])
+			else:
+				raw.append("%s|child|%s/%s|%s" % [stage_name, path, _geometry_name_refactor_platforms(child), child.get_class()])
+	instance.set("stage_index", 0)
+	var holder := Node2D.new()
+	get_root().add_child(holder)
+	holder.add_child(instance)
+	for node: Node in instance.find_children("*", "StaticBody2D", true, false):
+		for child: Node in node.get_children():
+			if child is Polygon2D:
+				raw.append("%s|tinted|%s/%s|%s" % [stage_name, _geometry_path_refactor_platforms(instance, node),
+						_geometry_name_refactor_platforms(child), var_to_str((child as Polygon2D).color)])
+	holder.remove_child(instance)
+	holder.queue_free()
+	await process_frame
+	var out: PackedStringArray = []
+	for line: String in raw:
+		for i in names.size():
+			line = line.replace("Part%d" % i, names[i])
+		out.append(line)
+	return out
 
 ## Issue #1085: Heckler goes to the KO'd fighter whose ghost landed the most Boos on living rivals,
 ## at least 2, no ties. A Boo skipped for spawn protection does not count.
