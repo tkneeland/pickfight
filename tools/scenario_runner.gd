@@ -1270,6 +1270,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"flail_ball_does_not_knock_spawn_protected_1099",
 	"pickup_dropped_inside_terrain_rests_on_it_1102",
 	"umbrella_open_plays_a_soft_sound_1095",
+	"pickup_refalls_when_platform_removed_1103",
 	"soccer_overtime_cancels_pending_respawns",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4241,6 +4242,9 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_pickup_dropped_inside_terrain_rests_on_it_1102()
 		"umbrella_open_plays_a_soft_sound_1095":
 			return await _scenario_umbrella_open_plays_a_soft_sound_1095()
+		"pickup_refalls_when_platform_removed_1103":
+			return await _scenario_pickup_refalls_when_platform_removed_1103()
+
 		"soccer_overtime_cancels_pending_respawns":
 			return await _scenario_soccer_overtime_cancels_pending_respawns()
 		_:
@@ -59504,6 +59508,39 @@ func _scenario_umbrella_open_plays_a_soft_sound_1095() -> Array[String]:
 	await _teardown(stage2, false)
 	_scenario_completed = true
 	return failures
+## Issue #1103: a dropped pickup resting on a bar falls again, from rest, when
+## the bar is freed, and comes to rest on the floor below; one that was never
+## dropped stays where it is.
+func _scenario_pickup_refalls_when_platform_removed_1103() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	var bar: StaticBody2D = _add_bar(stage, Vector2(0.0, 300.0), Vector2(400.0, 40.0))
+	_add_bar(stage, Vector2(0.0, 700.0), Vector2(800.0, 40.0))
+	await _await_ticks(5)
+	var pickup: Node2D = _place_pickup(stage, Vector2(0.0, 100.0), _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	var authored: Node2D = _place_pickup(stage, Vector2(300.0, 100.0), _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	pickup.drop()
+	await _await_condition(func() -> bool: return not pickup.is_falling(), 3000)
+	var landed_y: float = pickup.global_position.y
+	if landed_y > 270.0 or landed_y < 200.0:
+		failures.append("the pickup did not first rest on the bar (y %.1f)" % landed_y)
+	await _await_ticks(30)
+	if absf(pickup.global_position.y - landed_y) > 0.5:
+		failures.append("a pickup resting on a bar drifted (y %.1f -> %.1f)" % [landed_y, pickup.global_position.y])
+	bar.queue_free()
+	await _await_condition(func() -> bool: return not is_instance_valid(pickup) or pickup.is_falling(), 600)
+	if is_instance_valid(pickup) and not pickup.is_falling() and pickup.global_position.y < landed_y + 1.0:
+		failures.append("the pickup still hangs at y %.1f after its bar was freed" % pickup.global_position.y)
+	await _await_condition(func() -> bool: return not is_instance_valid(pickup) or not pickup.is_falling(), 3000)
+	if not is_instance_valid(pickup):
+		failures.append("the pickup was freed instead of landing on the floor below")
+	elif pickup.global_position.y < 600.0 or pickup.global_position.y > 670.0:
+		failures.append("the pickup came to rest at y %.1f, not on the floor (top y 680)" % pickup.global_position.y)
+	if is_instance_valid(authored) and (authored.is_falling() or authored.global_position != Vector2(300.0, 100.0)):
+		failures.append("an authored pickup moved")
+	await _teardown(stage)
+	return failures
+
 
 ## #1106: a fighter still waiting on the 4 s respawn timer at the whistle comes
 ## back at once into Sudden Death, and no respawn timer outlives the whistle.

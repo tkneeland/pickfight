@@ -96,6 +96,12 @@ var carrier: Node = null
 var _falling: bool = false
 var _fall_speed: float = 0.0
 var _fall_start_y: float = 0.0
+## Issue #1103: set once a ghost has dropped this pickup (never for an authored
+## spawn). While it rests it keeps checking for ground, so it falls again when
+## the platform under it moves away or breaks.
+var _dropped: bool = false
+## Slack below DROP_REST_CLEARANCE before a resting dropped pickup counts as unsupported.
+const DROP_REST_MARGIN: float = 3.0
 
 func is_carried() -> bool:
 	return carrier != null and is_instance_valid(carrier)
@@ -106,26 +112,31 @@ func is_falling() -> bool:
 func carry_by(who: Node) -> void:
 	carrier = who
 	_falling = false
+	_dropped = false
 
 func drop() -> void:
 	carrier = null
 	_falling = true
+	_dropped = true
 	_fall_speed = 0.0
 	_fall_start_y = global_position.y
 
 func _physics_process(delta: float) -> void:
-	if not _falling:
+	if not _falling and not _dropped:
 		return
-	_fall_speed += DROP_GRAVITY * delta
+	# #1103: a resting dropped pickup re-checks its ground with the same ray.
+	var resting: bool = not _falling
+	if not resting:
+		_fall_speed += DROP_GRAVITY * delta
 	var from: Vector2 = global_position
-	var to: Vector2 = from + Vector2(0.0, _fall_speed * delta)
+	var to: Vector2 = from + Vector2(0.0, 0.0 if resting else _fall_speed * delta)
 	# Bodies share the world layer; land on terrain only. Built up front:
 	# `query.exclude` hands back a copy, so appending to it would be lost.
 	var bodies: Array[RID] = []
 	for body: Node in get_tree().get_nodes_in_group("players"):
 		if body is CollisionObject2D:
 			bodies.append((body as CollisionObject2D).get_rid())
-	var query := PhysicsRayQueryParameters2D.create(from, to + Vector2(0.0, DROP_REST_CLEARANCE), LAYER_WORLD, bodies)
+	var query := PhysicsRayQueryParameters2D.create(from, to + Vector2(0.0, DROP_REST_CLEARANCE + (DROP_REST_MARGIN if resting else 0.0)), LAYER_WORLD, bodies)
 	# Issue #1102: a ray that starts inside terrain reports a hit at its own
 	# start with no normal, so a ghost's drop inside a ledge is lifted out first.
 	query.hit_from_inside = true
@@ -140,6 +151,12 @@ func _physics_process(delta: float) -> void:
 			point.position.y -= DROP_LIFT_STEP
 			lifted += 1
 		global_position = point.position
+		return
+	if resting:
+		if hit.is_empty():
+			_falling = true
+			_fall_speed = 0.0
+			_fall_start_y = from.y
 		return
 	if not hit.is_empty():
 		global_position = (hit["position"] as Vector2) - Vector2(0.0, DROP_REST_CLEARANCE)
