@@ -1255,6 +1255,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"steam_invite_mid_match_asks_first_1075",
 	"steam_invite_room_emptying_under_the_prompt_joins_1075",
 	"steam_invite_as_a_client_leaves_and_joins_1075",
+	"stage_def_good_and_hostile_1045",
 	"stock_last_life_and_steal_banners",
 	"hill_taken_banner_names_holder",
 ]
@@ -4196,6 +4197,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_steam_invite_room_emptying_under_the_prompt_joins_1075()
 		"steam_invite_as_a_client_leaves_and_joins_1075":
 			return await _scenario_steam_invite_as_a_client_leaves_and_joins_1075()
+		"stage_def_good_and_hostile_1045":
+			return _scenario_stage_def_good_and_hostile_1045()
 		"stock_last_life_and_steal_banners":
 			return await _scenario_stock_last_life_and_steal_banners()
 		"hill_taken_banner_names_holder":
@@ -58518,6 +58521,66 @@ func _scenario_steam_invite_as_a_client_leaves_and_joins_1075() -> Array[String]
 	steam.pending_join_code = ""
 	await _rc_close_241(rig)
 	return failures
+## #1045: StageDef accepts one good definition and rejects each hostile one with its own reason.
+func _scenario_stage_def_good_and_hostile_1045() -> Array[String]:
+	var failures: Array[String] = []
+	var sd: GDScript = load("res://scripts/StageDef.gd")
+	var good_spawns: Array = []
+	for i in 8:
+		good_spawns.append([-300 + i * 80, -40])
+	var good: Dictionary = {"schema": 1, "name": "Ledges", "modes": ["stock"], "spawns": good_spawns,
+		"parts": [{"type": "Platform", "pos": [0, 0], "size": [800, 24], "params": {"one_way": false}},
+			{"type": "KillFloor", "pos": [0, 900]}]}
+	var res: Dictionary = sd.validate_text(JSON.stringify(good))
+	if not res["ok"] or res["reason"] != "" or res["def"]["parts"].size() != 2 or res["def"]["spawns"].size() != 8:
+		failures.append("good definition rejected: %s" % res["reason"])
+	# Each hostile case: a mutation of the good definition, and a fragment its reason must contain.
+	var cases: Array = []
+	cases.append(["malformed JSON", "{\"schema\": 1,", "malformed JSON"])
+	cases.append(["not an object", "[1, 2]", "must be a JSON object"])
+	var m: Dictionary = good.duplicate(true)
+	m["schema"] = 2
+	cases.append(["wrong schema", JSON.stringify(m), "schema version"])
+	m = good.duplicate(true)
+	m["parts"].append({"type": "Script", "pos": [0, 0]})
+	cases.append(["unknown part", JSON.stringify(m), "unknown type 'Script'"])
+	m = good.duplicate(true)
+	m["parts"][0]["params"] = {"script": "x"}
+	cases.append(["unknown param", JSON.stringify(m), "unknown param"])
+	m = good.duplicate(true)
+	m["parts"][0]["pos"] = [9000, 0]
+	cases.append(["part out of bounds", JSON.stringify(m), "out of bounds"])
+	m = good.duplicate(true)
+	m["parts"][0]["size"] = [5000, 24]
+	cases.append(["oversize part", JSON.stringify(m), "oversize"])
+	m = good.duplicate(true)
+	m["parts"][0]["pos"] = [3900, 0]
+	cases.append(["box reaches out", JSON.stringify(m), "reaches out of bounds"])
+	m = good.duplicate(true)
+	for i in 70:
+		m["parts"].append({"type": "Platform", "pos": [0, -100], "size": [50, 20]})
+	cases.append(["too many parts", JSON.stringify(m), "too many parts"])
+	m = good.duplicate(true)
+	m["spawns"] = good_spawns.slice(0, 3)
+	cases.append(["too few spawns", JSON.stringify(m), "too few spawns"])
+	m = good.duplicate(true)
+	m["spawns"][2] = [0, 99999]
+	cases.append(["spawn out of bounds", JSON.stringify(m), "spawn 2 is out of bounds"])
+	m = good.duplicate(true)
+	m["parts"].remove_at(1)
+	cases.append(["no kill floor", JSON.stringify(m), "no KillFloor"])
+	m = good.duplicate(true)
+	m["modes"] = ["bogus"]
+	cases.append(["unknown mode", JSON.stringify(m), "unknown mode tag"])
+	for c in cases:
+		var r: Dictionary = sd.validate_text(c[1])
+		if r["ok"]:
+			failures.append("%s: accepted" % c[0])
+		elif not String(r["reason"]).contains(c[2]):
+			failures.append("%s: reason '%s' lacks '%s'" % [c[0], r["reason"], c[2]])
+	_scenario_completed = true
+	return failures
+
 ## #1078: Stock names the fighter on their last life and the one who stole a
 ## life, through the kill feed's banner (and so the effect stream the Online
 ## joiner replays); none in overtime, from one life, or for a refused steal.
