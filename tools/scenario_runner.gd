@@ -1274,6 +1274,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_refalls_when_platform_removed_1103",
 	"soccer_overtime_cancels_pending_respawns",
 	"ghost_pickup_grab_and_drop_play_cues",
+	"ctf_flag_drop_and_return_play_cues",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4254,6 +4255,9 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_soccer_overtime_cancels_pending_respawns()
 		"ghost_pickup_grab_and_drop_play_cues":
 			return await _scenario_ghost_pickup_grab_and_drop_play_cues()
+
+		"ctf_flag_drop_and_return_play_cues":
+			return await _scenario_ctf_flag_drop_and_return_play_cues()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59668,4 +59672,65 @@ func _scenario_ghost_pickup_grab_and_drop_play_cues() -> Array[String]:
 	if _sfx_count(sfx, "ghost_drop") != drops:
 		failures.append("a round-end drop played ghost_drop")
 	await _teardown(loop["stage"])
+	return failures
+
+## Issue #1115: a carrier who drops the flag plays flag_drop once; a dropped flag going
+## home (the 10 s timeout, a teammate's touch) plays flag_return once; a capture and a
+## hall change play neither. Online joiners hear the same cues through the Sfx snapshot trailer.
+func _scenario_ctf_flag_drop_and_return_play_cues() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = get_root().get_node_or_null(SFX_AUTOLOAD_PATH)
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	for key: String in ["flag_drop", "flag_return"]:
+		if not sfx.has_sound(StringName(key)):
+			return ["%s is not in the sound table" % key]
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var players: Array = rig["players"]
+	sfx.start_recording()
+	# A hit carrier drops the flag: one flag_drop, no return yet.
+	players[0].teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(2)
+	mode.drop_flag(1)
+	if _sfx_count(sfx, "flag_drop") != 1 or _sfx_count(sfx, "flag_return") != 0:
+		failures.append("a drop played drop %d, return %d; expected 1 and 0" % [_sfx_count(sfx, "flag_drop"), _sfx_count(sfx, "flag_return")])
+	# The 10 s timeout sends it home: one flag_return.
+	players[0].teleport_to(Vector2(-600.0, 240.0))
+	await _await_ticks(640)
+	if int(mode.state[1]) != mode.HOME:
+		failures.append("the flag did not time out home")
+	if _sfx_count(sfx, "flag_return") != 1 or _sfx_count(sfx, "flag_drop") != 1:
+		failures.append("the timeout played drop %d, return %d; expected 1 and 1" % [_sfx_count(sfx, "flag_drop"), _sfx_count(sfx, "flag_return")])
+	# A teammate's touch returns it: one more flag_return.
+	players[0].teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(2)
+	mode.drop_flag(1)
+	players[0].teleport_to(Vector2(-500.0, 240.0))
+	var spot: Vector2 = mode.flag_position[1]
+	await _await_ticks(20)
+	players[3].teleport_to(spot)
+	await _await_ticks(3)
+	if int(mode.state[1]) != mode.HOME:
+		failures.append("a teammate's touch did not return the flag")
+	if _sfx_count(sfx, "flag_drop") != 2 or _sfx_count(sfx, "flag_return") != 2:
+		failures.append("the touch played drop %d, return %d; expected 2 and 2" % [_sfx_count(sfx, "flag_drop"), _sfx_count(sfx, "flag_return")])
+	# A capture sends the flag home silently.
+	var drops: int = _sfx_count(sfx, "flag_drop")
+	var returns: int = _sfx_count(sfx, "flag_return")
+	players[0].teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	await _await_ticks(2)
+	mode.capture(0, 0)
+	if _sfx_count(sfx, "flag_drop") != drops or _sfx_count(sfx, "flag_return") != returns:
+		failures.append("a capture played a flag cue")
+	# A hall change resets the flags silently (the capture's pause runs out first).
+	await _await_ticks(150)
+	if _sfx_count(sfx, "flag_drop") != drops or _sfx_count(sfx, "flag_return") != returns:
+		failures.append("the hall change played a flag cue")
+	await _teardown(rig["stage"])
 	return failures

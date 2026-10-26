@@ -65,6 +65,26 @@ jobs:
       - name: Import project
         run: '"$GODOT_DIR/godot" --headless --path . --import'
 
+      - name: Delete the global class cache (#1113)
+        run: |
+          # `--import` wrote .godot/global_script_class_cache.cfg, which resolves
+          # `class_name` references a fresh clone cannot. Delete it so the boot
+          # check below fails as a fresh clone would (CLAUDE.md, #21, #195).
+          rm -f .godot/global_script_class_cache.cfg
+          if [ -e .godot/global_script_class_cache.cfg ]; then
+            echo "::error::could not delete the global class cache"; exit 1
+          fi
+
+      - name: Boot check (#1113)
+        run: |
+          # Godot exits 0 even on a broken build, so fail on the output (#21).
+          "$GODOT_DIR/godot" --headless --path . --quit > boot.log 2>&1 || true
+          cat boot.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' boot.log | grep -v 'Could not create child process'; then
+            echo "::error::boot check found script errors; not exporting"
+            exit 1
+          fi
+
       - name: Export builds
         run: |
           mkdir -p build/windows build/macos build/linux dist

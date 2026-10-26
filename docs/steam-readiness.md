@@ -170,7 +170,7 @@ All in-game text is translatable (#367) and ships in English plus the 8 language
 ### 9. Release gates (owner)
 | # | Item | Who | Status |
 |---|---|---|---|
-| 9.1 | Playtest-ready build passes the fresh-clone script check from `CLAUDE.md` (no `class_name` references) | agent | todo (re-run on the release tag) |
+| 9.1 | Playtest-ready build passes the fresh-clone script check from `CLAUDE.md` (no `class_name` references) | agent | automated: `release.yml` deletes the class cache and fails the release before export on any `SCRIPT ERROR`/`Failed to load script` boot output (#1113); first tag run will confirm |
 | 9.2 | Final build uploaded, Valve review passed | owner | todo |
 | 9.3 | Set price ($9.99), release date, press "Release" | owner | todo |
 | 9.4 | Post-launch: monitor the in-game Feedback button (#262) and Steam discussions | owner | todo |

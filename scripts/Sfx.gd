@@ -196,6 +196,11 @@ const SOUNDS: Dictionary = {
 		"kenney_impact/impactMetal_light_001.ogg"], "db": -6.0, "max_sec": 0.35},
 	"magnet_pull": {"files": [
 		"kenney_scifi/forceField_000.ogg"], "db": -6.0, "max_sec": 0.6},
+	# Capture the Flag (#1115): a carrier drops the flag; a dropped flag goes home.
+	"flag_drop": {"files": [
+		"kenney_impact/impactSoft_medium_000.ogg"], "db": -6.0, "max_sec": 0.4},
+	"flag_return": {"files": [
+		"kenney_interface/confirmation_002.ogg"], "db": -8.0, "max_sec": 0.5},
 	"hazard_hit": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",
 		"kenney_impact/impactPlate_shield_001.ogg"], "db": -2.0, "max_sec": 0.7},
