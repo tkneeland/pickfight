@@ -137,6 +137,7 @@ func _on_eliminated(slot: int) -> void:
 		_respawner.queue(slot)
 	if int(lives[slot]) == 1 and not overtime:
 		callout.emit(&"announce_last_life")
+		_banner(slot, "BANNER_LAST_LIFE")
 	# Counted here, after the lives are, so a player about to come back is
 	# never taken for the last one down.
 	round_manager._record_survivor(slot)
@@ -190,6 +191,7 @@ func steal_life(slot: int) -> bool:
 	lives[slot] = 1
 	_respawn(slot)
 	callout.emit(&"announce_stolen")
+	_banner(slot, "BANNER_STOLE_LIFE")
 	return true
 
 # --- Time limit and overtime ---------------------------------------------------
@@ -257,6 +259,13 @@ func is_won() -> bool:
 	return _resolving
 
 # --- Display -------------------------------------------------------------------
+
+## A named banner through the kill feed (#1078): `key`'s text with the
+## fighter's name, in their colour. Online joiners get it from the effect stream.
+func _banner(slot: int, key: String) -> void:
+	var feed: Control = round_manager.kill_feed() if round_manager != null else null
+	if feed != null:
+		feed.show_banner(tr(key) % str(round_manager._slot_name(slot)), "", round_manager._slot_color(slot))
 
 func _build_hud() -> void:
 	_hud = CanvasLayer.new()
