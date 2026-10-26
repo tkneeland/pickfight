@@ -1273,6 +1273,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"koth_kicked_leader_cannot_win_on_clock",
 	"pickup_refalls_when_platform_removed_1103",
 	"soccer_overtime_cancels_pending_respawns",
+	"ghost_pickup_grab_and_drop_play_cues",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4251,6 +4252,8 @@ func _run_scenario(name: String) -> Array[String]:
 
 		"soccer_overtime_cancels_pending_respawns":
 			return await _scenario_soccer_overtime_cancels_pending_respawns()
+		"ghost_pickup_grab_and_drop_play_cues":
+			return await _scenario_ghost_pickup_grab_and_drop_play_cues()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59608,4 +59611,61 @@ func _scenario_soccer_overtime_cancels_pending_respawns() -> Array[String]:
 		if mode.is_pending(slot):
 			failures.append("fighter %d was queued to respawn during overtime" % slot)
 	await _teardown(rig["stage"])
+	return failures
+## Issue #1114: a ghost's grab plays pickup_grab, its action-drop plays ghost_drop, both at 0.6
+## strength; a Boo plays only ghost_boo; a round-end drop plays nothing.
+func _scenario_ghost_pickup_grab_and_drop_play_cues() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"ghost_drop"):
+		return ["ghost_drop is not in the sound table"]
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		await _teardown(loop["stage"])
+		return ["no ghost"]
+	ghost.global_position = ghost.bounds.get_center() + Vector2(-300.0, 0.0)
+	_ghost_pickup_660(loop, ghost.global_position + Vector2(20.0, 0.0))
+	sfx.start_recording()
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if _sfx_count(sfx, "pickup_grab") != 1:
+		failures.append("a ghost's grab played pickup_grab %d times, expected 1" % _sfx_count(sfx, "pickup_grab"))
+	elif absf(float(_sfx_last(sfx, "pickup_grab").get("strength", -1.0)) - 0.6) > 0.01:
+		failures.append("the ghost's grab cue was not at 0.6 strength")
+	if _sfx_count(sfx, "ghost_drop") != 0 or _sfx_count(sfx, "ghost_boo") != 0:
+		failures.append("a grab played a drop or boo cue")
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ghost_drop") != 1:
+		failures.append("a ghost's drop played ghost_drop %d times, expected 1" % _sfx_count(sfx, "ghost_drop"))
+	if _sfx_count(sfx, "pickup_grab") != 1:
+		failures.append("the drop played an extra pickup_grab")
+	# Nothing in reach, a rival beside it: a Boo is only ghost_boo.
+	ghost.bounds = Rect2(-100000.0, -100000.0, 200000.0, 200000.0)
+	ghost.global_position = players[1].global_position + Vector2(-80.0, 0.0)
+	var boo_before: int = _sfx_count(sfx, "ghost_boo")
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if _sfx_count(sfx, "ghost_boo") != boo_before + 1:
+		failures.append("a Boo did not play ghost_boo once")
+	if _sfx_count(sfx, "pickup_grab") != 1 or _sfx_count(sfx, "ghost_drop") != 1:
+		failures.append("a Boo played a grab or drop cue")
+	# Round end: a carried pickup is let go silently.
+	ghost.global_position = ghost.bounds.get_center() + Vector2(-300.0, 0.0)
+	_ghost_pickup_660(loop, ghost.global_position + Vector2(20.0, 0.0))
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	var drops: int = _sfx_count(sfx, "ghost_drop")
+	rm.round_end_pause_sec = 60.0
+	players[2].eliminate()
+	players[3].eliminate()
+	await _await_ticks(10)
+	if _sfx_count(sfx, "ghost_drop") != drops:
+		failures.append("a round-end drop played ghost_drop")
+	await _teardown(loop["stage"])
 	return failures

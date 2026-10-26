@@ -58,6 +58,8 @@ var _idle_sec: float = 0.0
 var _mouse_driven: bool = false
 var _carried: Node2D = null
 var _boo_cooldown: float = 0.0
+## Volume of a ghost's grab and drop cues against a fighter's grab (#1114).
+const GHOST_CUE_STRENGTH: float = 0.6
 var _puff_age: float = BOO_PUFF_SEC
 
 func setup(for_player: Node, for_slot: int, at: Vector2, area: Rect2, tint: Color) -> void:
@@ -140,13 +142,16 @@ func _physics_process(delta: float) -> void:
 ## The one button: drop what it carries, else grab a pickup in reach, else boo.
 func _act() -> void:
 	if carried() != null:
+		var dropped: Node2D = carried()
 		_drop()
+		_play_cue(&"ghost_drop", dropped.global_position)  # soft cue at the pickup (#1114)
 		return
 	var pickup: Node2D = _nearest_pickup()
 	if pickup != null:
 		_carried = pickup
 		pickup.carry_by(self)
 		pickup.global_position = global_position + CARRY_OFFSET
+		_play_cue(&"pickup_grab", global_position)  # quieter than a fighter's grab (#1114)
 		return
 	_boo()
 
@@ -164,6 +169,13 @@ func _nearest_pickup() -> Node2D:
 			best = pickup
 			best_dist = dist
 	return best
+
+## A quiet cue through the same Sfx path as the Boo, so Online joiners hear it
+## from the snapshot trailer (#1114).
+func _play_cue(sound: StringName, at: Vector2) -> void:
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(sound, at, GHOST_CUE_STRENGTH)
 
 func _drop() -> void:
 	var pickup: Node2D = carried()
