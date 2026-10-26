@@ -1268,6 +1268,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"hooks_skip_spawn_protected_1093",
 	"shield_bash_does_not_knock_spawn_protected_1098",
 	"flail_ball_does_not_knock_spawn_protected_1099",
+	"pickup_dropped_inside_terrain_rests_on_it_1102",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4234,6 +4235,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_shield_bash_does_not_knock_spawn_protected_1098()
 		"flail_ball_does_not_knock_spawn_protected_1099":
 			return await _scenario_flail_ball_does_not_knock_spawn_protected_1099()
+		"pickup_dropped_inside_terrain_rests_on_it_1102":
+			return await _scenario_pickup_dropped_inside_terrain_rests_on_it_1102()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59420,3 +59423,22 @@ func _flail_protected_result(protected_flag: bool) -> Array[float]:
 	var result: Array[float] = [victim.damage, victim.linear_velocity.length()]
 	await _teardown(stage, false)
 	return result
+## Issue #1102: a pickup a ghost drops while its centre is inside a bar comes
+## to rest on the bar's top instead of falling through it.
+func _scenario_pickup_dropped_inside_terrain_rests_on_it_1102() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_empty_stage()
+	_add_bar(stage, Vector2(0.0, 300.0), Vector2(800.0, 40.0))
+	await _await_ticks(5)
+	var pickup: Node2D = _place_pickup(stage, Vector2(0.0, 300.0), _make_pickup_weapon(PICKUP_WEAPON_A_MAX_REACH))
+	pickup.weapon_stats = null
+	pickup.drop()
+	await _await_condition(func() -> bool: return not is_instance_valid(pickup) or not pickup.is_falling(), 3000)
+	if not is_instance_valid(pickup):
+		failures.append("the pickup dropped inside the bar was freed instead of resting on it")
+	elif pickup.is_falling():
+		failures.append("the pickup dropped inside the bar never came to rest")
+	elif pickup.global_position.y > 280.0:
+		failures.append("the pickup came to rest at y %.1f, not above the bar's top (y 280)" % pickup.global_position.y)
+	await _teardown(stage)
+	return failures
