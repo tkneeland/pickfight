@@ -554,6 +554,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_dodges_meteor",
 	"bot_sidesteps_incoming_bullet",
 	"bot_sidestep_bullet_keeps_footing_997",
+	"bot_sidesteps_boomerang_and_hook_1094",
 	"bot_braces_for_gust_warning",
 	"hazard_death_credits_last_hitter_within_window",
 	"hazard_death_after_window_gives_no_credit",
@@ -4225,6 +4226,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_award_pit_boss_counts_hazard_kos_1088()
 		"hooks_skip_spawn_protected_1093":
 			return await _scenario_hooks_skip_spawn_protected_1093()
+		"bot_sidesteps_boomerang_and_hook_1094":
+			return await _scenario_bot_sidesteps_boomerang_and_hook_1094()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59297,4 +59300,48 @@ func _scenario_hooks_skip_spawn_protected_1093() -> Array[String]:
 		failures.append("the grapple moved a spawn-protected fighter %.1f px" % moved["%s/true" % grapple])
 	if not stuck["%s/true" % grapple] or not stuck["%s/false" % grapple]:
 		failures.append("the grapple stopped anchoring on a player")
+	return failures
+## Issue #1094: a bot at (bot_x, 274) with a rival 600 px to its left and a
+## rival's boomerang or grapple hook ("boomerang" / "hook") flying at it from
+## `from` (relative to the bot). Returns the damage the bot took and where it
+## ended.
+func _bot_thrown_run_1094(kind: String, level: String, bot_x: float, from: Vector2) -> Dictionary:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(bot_x, 274.0))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(bot_x - 600.0, 274.0))
+	await _await_ticks(2)
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.difficulty = level
+	bot.player = player
+	bot.output = player.set_input_vector
+	stage.add_child(bot)
+	player.spawn_protected = false
+	await _await_ticks(30)
+	var stats: Resource = load(BOOMERANG_PATH if kind == "boomerang" else GRAPPLE_PATH)
+	var thrown: Node2D = load("res://scripts/Boomerang.gd").new() if kind == "boomerang" else load("res://scripts/GrappleHook.gd").new()
+	thrown.setup(rival, player.global_position + from, -from.normalized(), stats)
+	stage.add_child(thrown)
+	var before: float = player.damage
+	await _await_ticks(80)
+	var out: Dictionary = {"taken": player.damage - before, "x": player.global_position.x, "y": player.global_position.y}
+	await _teardown(stage, false)
+	return out
+## A Normal bot leaves the line of a boomerang and of a hook coming flat at it
+## from 200 px and takes nothing; an Easy bot does not and is hit; a Normal bot
+## at the floor's edge does not step off it to dodge.
+func _scenario_bot_sidesteps_boomerang_and_hook_1094() -> Array[String]:
+	var failures: Array[String] = []
+	for kind: String in ["boomerang", "hook"]:
+		var easy: Dictionary = await _bot_thrown_run_1094(kind, "easy", 0.0, Vector2(200.0, -15.0))
+		var normal: Dictionary = await _bot_thrown_run_1094(kind, "normal", 0.0, Vector2(200.0, -15.0))
+		var edge: Dictionary = await _bot_thrown_run_1094(kind, "normal", 570.0, Vector2(-100.0, -250.0))
+		print("      bot_sidesteps_boomerang_and_hook_1094: %s taken easy %.1f normal %.1f, edge x=%.0f y=%.0f" % [kind, easy["taken"], normal["taken"], edge["x"], edge["y"]])
+		if easy["taken"] <= 0.0:
+			failures.append("the control is empty: the Easy bot was not hit by the %s" % kind)
+		if normal["taken"] > 0.0:
+			failures.append("the Normal bot took %.1f from the %s" % [normal["taken"], kind])
+		if edge["x"] > 600.0 or edge["y"] > 330.0:
+			failures.append("the bot left the floor to dodge the %s, ending at x=%.0f y=%.0f" % [kind, edge["x"], edge["y"]])
+	_scenario_completed = true
 	return failures
