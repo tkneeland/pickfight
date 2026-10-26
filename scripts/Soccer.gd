@@ -334,12 +334,23 @@ func _time_up() -> void:
 		if is_instance_valid(player) and (bool(player.alive) or is_pending(slot)):
 			tied.append(slot)
 	tied.sort()
-	overtime = true
+	begin_tiebreak(tied)
 	ball.queue_free()
 	ball = null
 	_stuck_sec = 0.0
 	round_manager.begin_overtime(tied)
 	callout.emit(&"announce_overtime")
+
+## The tiebreaker started among `slots` (here from the clock, or a double-KO
+## replay run by `RoundManager`): everyone is back at once and no respawn timer
+## outlives the whistle (#1106), as Capture the Flag does (#1013).
+func begin_tiebreak(slots: Array[int]) -> void:
+	overtime = true
+	for slot: int in slots:
+		var player: Node2D = _watched.get(slot)
+		if player != null and is_instance_valid(player) and not bool(player.alive) and _respawner.is_pending(slot):
+			_respawner.respawn_now(slot)
+		_respawner.cancel(slot)
 
 ## #988: a ball that stays nearly still with nobody in reach for `STUCK_SEC`
 ## goes back to the centre like a kick-off: no score change, no banner.
