@@ -332,7 +332,10 @@ func _timeout(teams: bool) -> void:
 	if teams:
 		units = [0, 1]
 	else:
-		units = _slots.duplicate()
+		# A kicked player's banked hold time cannot win the clock (#1107).
+		for slot: int in _slots:
+			if _still_claimed(slot):
+				units.append(slot)
 	for unit: int in units:
 		var held: float = team_hold_of(unit) if teams else hold_of(unit)
 		if held > best + 0.0001:
@@ -345,6 +348,14 @@ func _timeout(teams: bool) -> void:
 		return
 	overtime = true
 	callout.emit(&"announce_overtime")
+
+## True while the roster still claims the slot, or when there is no server to
+## ask. A disconnect that keeps its seat (ADR-0007) stays claimed.
+func _still_claimed(slot: int) -> bool:
+	var server: Variant = round_manager.get("_controller_server") if round_manager != null else null
+	if server == null or not is_instance_valid(server) or not (server as Object).has_method("claimed_slots"):
+		return true
+	return (server.claimed_slots() as Array).has(slot)
 
 # --- Hill state and display ----------------------------------------------------
 
