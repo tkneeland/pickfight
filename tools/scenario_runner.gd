@@ -1256,6 +1256,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"steam_invite_room_emptying_under_the_prompt_joins_1075",
 	"steam_invite_as_a_client_leaves_and_joins_1075",
 	"stage_def_good_and_hostile_1045",
+	"hill_taken_banner_names_holder",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4197,6 +4198,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_steam_invite_as_a_client_leaves_and_joins_1075()
 		"stage_def_good_and_hostile_1045":
 			return _scenario_stage_def_good_and_hostile_1045()
+		"hill_taken_banner_names_holder":
+			return await _scenario_hill_taken_banner_names_holder()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -58573,4 +58576,87 @@ func _scenario_stage_def_good_and_hostile_1045() -> Array[String]:
 		elif not String(r["reason"]).contains(c[2]):
 			failures.append("%s: reason '%s' lacks '%s'" % [c[0], r["reason"], c[2]])
 	_scenario_completed = true
+	return failures
+
+## #1077: a change of hill holder shows "<name> takes the hill!" in the new
+## holder's colour through the kill feed's banner path (read from the recorded
+## effect stream, which is what Online joiners replay); the first take, an
+## emptied hill and a return to the same holder show none; the win banner stays.
+func _scenario_hill_taken_banner_names_holder() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var rig: Dictionary = _mode_rig(3, GameModesType.KING_OF_THE_HILL)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var feed: Control = KillFeedScript.new()
+	feed.name = "KillFeed1077"
+	(rig["stage"] as Node2D).add_child(feed)
+	rm.kill_feed_path = rm.get_path_to(feed)
+	if not await _mode_started(rig):
+		failures.append("the King of the Hill round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var hill: Node = rm.game_mode_node()
+	await _await_ticks(10)
+	hill.seconds_to_win = 100.0
+	hill.hill_radius = 150.0
+	for p in players:
+		p.gravity_scale = 0.0
+		p.linear_velocity = Vector2.ZERO
+	players[0].teleport_to(Vector2(-700.0, -600.0))
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[2].teleport_to(Vector2(700.0, -600.0))
+	await _await_ticks(5)
+	var all_slots: Array[int] = [0, 1, 2]
+	hill.start_round(all_slots)
+	EffectStreamScript976.set_recording(true)
+	EffectStreamScript976.take()
+	var banners: Callable = func() -> Array:
+		var out: Array = []
+		for e: Variant in EffectStreamScript976.pending():
+			if e is Dictionary and str(e.get("k", "")) == "banner":
+				out.append(e)
+		return out
+	# First holder: no banner.
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	if not (banners.call() as Array).is_empty():
+		failures.append("the first holder got a banner: %s" % [banners.call()])
+	# Hill empties: no banner.
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	await _await_ticks(10)
+	if not (banners.call() as Array).is_empty():
+		failures.append("an emptied hill got a banner: %s" % [banners.call()])
+	# The same holder returns: no banner.
+	players[1].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	if not (banners.call() as Array).is_empty():
+		failures.append("the same holder retaking got a banner: %s" % [banners.call()])
+	# A different holder: one named banner in their colour.
+	players[1].teleport_to(Vector2(-700.0, -500.0))
+	players[0].teleport_to(hill.hill_position)
+	await _await_ticks(10)
+	var got: Array = banners.call()
+	var want_text: String = tr("BANNER_TAKES_THE_HILL") % str(rm._slot_name(0))
+	if got.size() != 1:
+		failures.append("a new holder gave %d banners: %s" % [got.size(), got])
+	else:
+		var ev: Dictionary = got[0]
+		if str(ev.get("h", "")) != want_text:
+			failures.append("the banner is '%s', expected '%s'" % [ev.get("h", ""), want_text])
+		var colour: Color = ev.get("c", Color.BLACK)
+		if colour.to_html() != (rm._slot_color(0) as Color).to_html():
+			failures.append("the banner colour %s is not slot 0's %s" % [colour, rm._slot_color(0)])
+	# The win banner still shows.
+	hill.seconds_to_win = 0.05
+	await _await_ticks(20)
+	var won: bool = false
+	for e: Variant in banners.call():
+		if str((e as Dictionary).get("h", "")) == tr("BANNER_HOLDS_THE_HILL") % str(rm._slot_name(0)):
+			won = true
+	if not won:
+		failures.append("the win banner did not show")
+	EffectStreamScript976.take()
+	EffectStreamScript976.set_recording(false)
+	await _teardown(rig["stage"])
 	return failures

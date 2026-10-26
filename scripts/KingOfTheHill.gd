@@ -290,7 +290,18 @@ func is_won() -> bool:
 func _note_holder(holder: int) -> void:
 	if _last_holder != -1 and holder != _last_holder:
 		callout.emit(&"announce_hill_taken")
+		_show_taken_banner(holder)
 	_last_holder = holder
+
+## "<name or team> takes the hill!" in the new holder's colour, through the
+## kill feed's banner path the win banner uses (#1077); the effect stream
+## replays it for Online joiners.
+func _show_taken_banner(unit: int) -> void:
+	var feed: Control = round_manager.kill_feed() if round_manager != null else null
+	if feed == null:
+		return
+	var who: String = TeamsScript.team_name(unit) if _teams_round() else str(round_manager._slot_name(unit))
+	feed.show_banner(tr("BANNER_TAKES_THE_HILL") % who, "", _colour_of(unit))
 
 ## `unit` (a slot, or a team in Teams) takes the round: the banner, no
 ## eliminations; the round manager freezes everyone else.
