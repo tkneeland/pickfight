@@ -273,7 +273,7 @@ func _timeout() -> void:
 func begin_tiebreak(slots: Array[int]) -> void:
 	overtime = true
 	for team: int in [0, 1]:
-		return_flag(team)
+		return_flag(team, false)
 	for slot: int in slots:
 		var player: Node2D = _watched.get(slot)
 		if player != null and is_instance_valid(player) and not bool(player.alive) and _respawner.is_pending(slot):
@@ -369,6 +369,7 @@ func drop_flag(team: int) -> void:
 	if player != null and is_instance_valid(player):
 		at = player.global_position
 	flag_dropped.emit(team, slot)
+	_cue(&"flag_drop", at)
 	var ground: Vector2 = _ground_below(at)
 	if ground == Vector2.INF:
 		return_flag(team)
@@ -377,13 +378,23 @@ func drop_flag(team: int) -> void:
 	state[team] = DROPPED
 	return_left[team] = return_sec
 
-## `team`'s flag goes back to its base, whatever it was doing.
-func return_flag(team: int) -> void:
+## `team`'s flag goes back to its base, whatever it was doing. `cue` is false
+## for a capture (the "Captured!" line covers it) and a reset (#1115).
+func return_flag(team: int, cue: bool = true) -> void:
 	state[team] = HOME
 	carrier[team] = -1
 	return_left[team] = 0.0
 	flag_position[team] = home_position(team)
 	flag_returned.emit(team)
+	if cue:
+		_cue(&"flag_return", flag_position[team])
+
+## One short cue through Sfx (#1115). Host only: Online joiners hear it
+## through the generic Sfx snapshot trailer.
+func _cue(sound: StringName, at: Vector2) -> void:
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if sfx != null:
+		sfx.play(sound, at, 1.0)
 
 ## `team` captures with `slot` carrying the other flag, which goes home.
 ## Public so a scenario can drive it.
@@ -396,7 +407,7 @@ func capture(team: int, slot: int) -> void:
 	scores[team] = int(scores[team]) + 1
 	capturers[slot] = int(capturers.get(slot, 0)) + 1
 	carrier[enemy_flag] = -1
-	return_flag(enemy_flag)
+	return_flag(enemy_flag, false)
 	flag_captured.emit(team, slot)
 	callout.emit(&"announce_captured")
 	_update_hud()

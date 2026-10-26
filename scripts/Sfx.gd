@@ -196,6 +196,11 @@ const SOUNDS: Dictionary = {
 		"kenney_impact/impactMetal_light_001.ogg"], "db": -6.0, "max_sec": 0.35},
 	"magnet_pull": {"files": [
 		"kenney_scifi/forceField_000.ogg"], "db": -6.0, "max_sec": 0.6},
+	# Capture the Flag (#1115): a carrier drops the flag; a dropped flag goes home.
+	"flag_drop": {"files": [
+		"kenney_impact/impactSoft_medium_000.ogg"], "db": -6.0, "max_sec": 0.4},
+	"flag_return": {"files": [
+		"kenney_interface/confirmation_002.ogg"], "db": -8.0, "max_sec": 0.5},
 	"hazard_hit": {"files": [
 		"kenney_impact/impactPlate_shield_000.ogg",
 		"kenney_impact/impactPlate_shield_001.ogg"], "db": -2.0, "max_sec": 0.7},
@@ -235,6 +240,9 @@ const SOUNDS: Dictionary = {
 	# Grabbing a pickup (#898): a short quiet blip at the grabber.
 	"pickup_grab": {"files": [
 		"kenney_interface/maximize_006.ogg"], "db": -9.0, "overlap": 2, "max_sec": 0.4},
+	# A ghost letting go of a pickup with its action (#1114): a soft low pluck.
+	"ghost_drop": {"files": [
+		"kenney_interface/pluck_001.ogg"], "db": -13.0, "overlap": 2, "max_sec": 0.3},
 	# A pickup appearing (#998): a soft short pluck where it pops in.
 	"pickup_spawn": {"files": [
 		"kenney_interface/pluck_001.ogg"], "db": -13.0, "overlap": 2, "max_sec": 0.35},
