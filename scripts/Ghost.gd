@@ -18,6 +18,9 @@ extends Node2D
 ## which moves the ghost like a cursor, 1:1, and stops when the mouse stops)
 ## and `take_ghost_actions()`.
 
+## A Boo shoved a living rival (#1085); `RoundManager` counts it for Heckler.
+signal boo_landed(slot: int)
+
 const PickupGroup: StringName = &"pickups"
 const PlayerGroup: StringName = &"players"
 ## Input shorter than this is not a touch.
@@ -195,6 +198,7 @@ func _boo() -> void:
 		target.note_booed(slot)  # achievements (#689)
 	_boo_cooldown = BOO_COOLDOWN_SEC
 	_puff_age = 0.0
+	boo_landed.emit(slot)
 	var sfx: Node = get_node_or_null(^"/root/Sfx")
 	if sfx != null:
 		sfx.play(&"ghost_boo", global_position, 0.7)
