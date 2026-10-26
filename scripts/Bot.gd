@@ -1325,7 +1325,9 @@ func _incoming_shots(groups: Array, max_ahead: float) -> Array[Dictionary]:
 
 ## Issue #997: a bot not holding a shield sidesteps a hostile bullet closing
 ## on it: Hard from BULLET_DODGE_RANGE_HARD px, Normal from
-## BULLET_DODGE_RANGE_NORMAL, Easy never (#682). It leaves the bullet's line
+## BULLET_DODGE_RANGE_NORMAL, Easy never (#682). A rival's thrown boomerang or
+## flying grapple or fishing-rod hook counts the same (#1094; a hook already
+## stuck, reeling or going home is not a line to leave). It leaves the bullet's line
 ## perpendicular to it at full input and keeps going until the bullet is no
 ## longer on a collision course. A bullet along the floor has only up and down
 ## as perpendicular, so the bot hops (head planted straight down). Never off a
@@ -1342,7 +1344,12 @@ func _bullet_drive(delta: float) -> Vector2:
 		return Vector2.INF
 	_bullet_dodge_left = maxf(_bullet_dodge_left - delta, 0.0)
 	var range_px: float = BULLET_DODGE_RANGE_HARD if level == "hard" else BULLET_DODGE_RANGE_NORMAL
-	var shots: Array[Dictionary] = _incoming_shots([&"projectiles"], range_px)
+	var shots: Array[Dictionary] = []
+	for shot: Dictionary in _incoming_shots([&"projectiles", &"grapple_hooks", &"boomerangs"], range_px):
+		var node: Node = shot["node"]
+		if node.has_method("is_flying") and not node.is_flying():
+			continue
+		shots.append(shot)
 	if shots.is_empty():
 		_bullet_dodge_left = 0.0
 		return Vector2.INF
