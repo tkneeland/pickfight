@@ -37,6 +37,7 @@ const COMBO: String = "COMBO"
 const SHARPSHOOTER: String = "SHARPSHOOTER"
 const JACK: String = "JACK"
 const HECKLER: String = "HECKLER"
+const PIT_BOSS: String = "PIT_BOSS"
 
 ## Weapon ids whose last hit makes a KO a ranged KO (#953).
 const RANGED_WEAPONS: PackedStringArray = ["boomstick", "boomerang"]
@@ -46,6 +47,8 @@ const SHARPSHOOTER_MIN: int = 2
 const JACK_MIN: int = 3
 ## The fewest landed ghost Boos that earn Heckler (#1085).
 const HECKLER_MIN: int = 2
+## The fewest hazard or ring-out KOs that earn Pit Boss (#1088).
+const PIT_BOSS_MIN: int = 2
 
 ## The shortest unbroken KO run that earns Streaker (#890).
 const STREAKER_MIN: int = 3
@@ -77,6 +80,8 @@ var best_ko_run: Dictionary = {}
 var best_multi_ko: Dictionary = {}
 ## slot -> KOs whose last hit came from a boomstick bullet or boomerang this match (#953).
 var ranged_kos: Dictionary = {}
+## Credited KOs whose victim died to a hazard or the kill zone, per killer (#1088).
+var hazard_kos: Dictionary = {}
 ## slot -> ghost Boos that shoved a living rival this match (#1085).
 var boos_landed: Dictionary = {}
 ## Balance log (issue #316): weapon id -> damage / landed hits by REAL players
@@ -138,6 +143,7 @@ func begin_match() -> void:
 	best_ko_run.clear()
 	best_multi_ko.clear()
 	ranged_kos.clear()
+	hazard_kos.clear()
 	boos_landed.clear()
 	weapon_damage.clear()
 	weapon_hits.clear()
@@ -185,7 +191,7 @@ func resume_round(slot: int, now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, best_hit, ko_run, best_ko_run, best_multi_ko, ranged_kos, boos_landed, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, best_hit, ko_run, best_ko_run, best_multi_ko, ranged_kos, hazard_kos, boos_landed, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	_last_killer.erase(slot)
@@ -244,7 +250,7 @@ func record_hit(attacker: int, victim: int, amount: float, now_msec: int, weapon
 ## Records `victim`'s elimination at `now_msec` and returns what happened:
 ## {"victim", "killer" (-1 for a self-KO), "streak" (the killer's KOs in a
 ## row, 1 for a lone KO), "first_blood" (the match's first credited KO)}.
-func record_elimination(victim: int, now_msec: int) -> Dictionary:
+func record_elimination(victim: int, now_msec: int, hazard: bool = false) -> Dictionary:
 	_add(deaths, victim, 1)
 	ko_run.erase(victim)
 	_air_since.erase(victim)
@@ -267,6 +273,8 @@ func record_elimination(victim: int, now_msec: int) -> Dictionary:
 		_add(weapon_kos, str(hit["weapon"]), 1)
 	if bool(hit.get("ranged", false)):
 		_add(ranged_kos, killer, 1)
+	if hazard:
+		_add(hazard_kos, killer, 1)
 	total_kos += 1
 	var run: Array = _streak.get(killer, [-MULTI_KO_WINDOW_MSEC - 1, 0])
 	var streak: int = int(run[1]) + 1 if now_msec - int(run[0]) <= MULTI_KO_WINDOW_MSEC else 1
@@ -400,6 +408,9 @@ func extra_awards(slots: Array) -> Array[Dictionary]:
 	var heckler: int = _heckler(slots)
 	if heckler != -1:
 		out.append(_award(HECKLER, TranslationServer.translate("AWARD_HECKLER"), heckler, TranslationServer.translate("DETAIL_HECKLER") % int(boos_landed[heckler])))
+	var boss: int = _pit_boss(slots)
+	if boss != -1:
+		out.append(_award(PIT_BOSS, TranslationServer.translate("AWARD_PIT_BOSS"), boss, TranslationServer.translate("DETAIL_PIT_BOSS") % int(hazard_kos[boss])))
 	return out
 
 func _distinct_weapons(slot: int) -> int:
@@ -439,6 +450,25 @@ func _heckler(slots: Array) -> int:
 		elif n == top and n > 0:
 			tied = true
 	if who == -1 or tied or top < HECKLER_MIN:
+		return -1
+	return who
+
+## "Pit Boss" (#1088): the most KOs credited from a hazard or ring-out death,
+## given only when it is at least PIT_BOSS_MIN and strictly beats every other
+## fighter's.
+func _pit_boss(slots: Array) -> int:
+	var top: int = 0
+	var who: int = -1
+	var tied: bool = false
+	for slot: int in slots:
+		var n: int = int(hazard_kos.get(slot, 0))
+		if n > top:
+			top = n
+			who = slot
+			tied = false
+		elif n == top and n > 0:
+			tied = true
+	if who == -1 or tied or top < PIT_BOSS_MIN:
 		return -1
 	return who
 

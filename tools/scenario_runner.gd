@@ -1263,6 +1263,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"crumbling_ledge_plays_crack_once_per_cycle_1083",
 	"fan_plays_whoosh_on_entry_once_per_second_1084",
 	"bounce_pad_launch_puffs_one_ring_1089",
+	"award_pit_boss_counts_hazard_kos_1088",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4219,6 +4220,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_fan_plays_whoosh_on_entry_once_per_second_1084()
 		"bounce_pad_launch_puffs_one_ring_1089":
 			return await _scenario_bounce_pad_launch_puffs_one_ring_1089()
+		"award_pit_boss_counts_hazard_kos_1088":
+			return await _scenario_award_pit_boss_counts_hazard_kos_1088()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59181,4 +59184,63 @@ func _scenario_bounce_pad_launch_puffs_one_ring_1089() -> Array[String]:
 	await _teardown(stage)
 	EffectStream1089.set_recording(false)
 	sfx.reduce_flash = flash_was
+	return failures
+## Issue #1088: Pit Boss goes to the most hazard or ring-out credited KOs, at least 2, no ties.
+## A self-KO by hazard credits nobody. The award rides the shared victory data to the joiner.
+func _scenario_award_pit_boss_counts_hazard_kos_1088() -> Array[String]:
+	var failures: Array[String] = []
+	var find := func(stats: RefCounted) -> Array:
+		return stats.extra_awards([0, 1, 2, 3]).filter(func(a: Dictionary) -> bool: return a["title"] == "Pit Boss")
+	var ko := func(stats: RefCounted, killer: int, victim: int, hazard: bool, t: int) -> void:
+		stats.record_hit(killer, victim, 10.0, t, "pickaxe")
+		stats.record_elimination(victim, t + 1, hazard)
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	ko.call(stats, 0, 1, true, 1000)
+	ko.call(stats, 0, 2, true, 9000)
+	ko.call(stats, 1, 3, false, 17000)
+	var found: Array = find.call(stats)
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "2 hazard KOs":
+		failures.append("expected Pit Boss for slot 0 with 2 hazard KOs, got %s" % [found])
+	var one: RefCounted = MatchStatsScript.new()
+	one.begin_match()
+	ko.call(one, 0, 1, true, 1000)
+	if not find.call(one).is_empty():
+		failures.append("Pit Boss given for a single hazard KO")
+	var plain: RefCounted = MatchStatsScript.new()
+	plain.begin_match()
+	for i: int in 3:
+		ko.call(plain, 0, 1 + i, false, 1000 + i * 5000)
+	if not find.call(plain).is_empty():
+		failures.append("ordinary KOs counted toward Pit Boss")
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	for who: int in [0, 1]:
+		ko.call(tied, who, 2, true, 1000 + who * 5000)
+		ko.call(tied, who, 3, true, 2000 + who * 5000)
+	if not find.call(tied).is_empty():
+		failures.append("Pit Boss given for a tie")
+	var selfko: RefCounted = MatchStatsScript.new()
+	selfko.begin_match()
+	selfko.record_elimination(0, 1000, true)
+	selfko.record_elimination(0, 9000, true)
+	if not find.call(selfko).is_empty() or not selfko.hazard_kos.is_empty():
+		failures.append("self-KOs by hazard counted toward Pit Boss")
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var slots: Array[int] = [0, 1]
+	var awards: Array[Dictionary] = []
+	for a: Dictionary in stats.extra_awards(slots):
+		awards.append(a)
+	var data: Dictionary = {"slots": slots, "scores": PackedInt32Array([5, 2]), "winner": 0, "awards": awards,
+		"winner_team": -1, "teams": {}, "team_scores": PackedInt32Array(), "stats": [] as Array[Dictionary],
+		"inputs": PackedStringArray(["pc", "phone"]), "names": {0: ["Ann", Color.RED], 1: ["Bo", Color.BLUE]}, "end_card": false}
+	client.effects.show_victory(RemoteHudScript976.unpack(RemoteHudScript976._pack(data), {}))
+	var texts: PackedStringArray = _texts_976(client.effects.victory.awards_row())
+	if not texts.has("Pit Boss") or not texts.has("Ann  -  2 hazard KOs"):
+		failures.append("Pit Boss missing from the joiner's awards %s" % [texts])
+	await _rc_close_241(rig)
+	stats.begin_match()
+	if not stats.hazard_kos.is_empty():
+		failures.append("begin_match left hazard KOs behind")
 	return failures
