@@ -143,6 +143,9 @@ const SOUNDS: Dictionary = {
 		"kenney_scifi/forceField_001.ogg"], "db": -8.0, "overlap": 4, "max_sec": 0.4},
 	# The boomerang caught back in the hand (#862): a bright pluck, a pitched
 	# variant of an existing file.
+	# The umbrella canopy opening (#1095): a soft pluck, quiet, once per open.
+	"umbrella_open": {"files": [
+		"kenney_interface/pluck_001.ogg"], "db": -14.0, "max_sec": 0.4},
 	"catch_boomerang": {"files": [
 		"kenney_interface/confirmation_002.ogg"], "db": -6.0, "overlap": 4, "max_sec": 0.4},
 	"bullet_impact": {"files": [

@@ -1269,6 +1269,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"shield_bash_does_not_knock_spawn_protected_1098",
 	"flail_ball_does_not_knock_spawn_protected_1099",
 	"pickup_dropped_inside_terrain_rests_on_it_1102",
+	"umbrella_open_plays_a_soft_sound_1095",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4237,6 +4238,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_flail_ball_does_not_knock_spawn_protected_1099()
 		"pickup_dropped_inside_terrain_rests_on_it_1102":
 			return await _scenario_pickup_dropped_inside_terrain_rests_on_it_1102()
+		"umbrella_open_plays_a_soft_sound_1095":
+			return await _scenario_umbrella_open_plays_a_soft_sound_1095()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59441,4 +59444,60 @@ func _scenario_pickup_dropped_inside_terrain_rests_on_it_1102() -> Array[String]
 	elif pickup.global_position.y > 280.0:
 		failures.append("the pickup came to rest at y %.1f, not above the bar's top (y 280)" % pickup.global_position.y)
 	await _teardown(stage)
+	return failures
+
+## Issue #1095: raising the umbrella overhead plays one umbrella_open; holding
+## it plays no more; lowering and raising again after the gap plays another;
+## a pickaxe held overhead and a KO'd fighter stay silent.
+func _scenario_umbrella_open_plays_a_soft_sound_1095() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = get_root().get_node_or_null(SFX_AUTOLOAD_PATH)
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not sfx.has_sound(&"umbrella_open"):
+		return ["umbrella_open is not in the sound table"]
+	var stage: Node2D = _new_empty_stage()
+	var player: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	await _equip(player, UMBRELLA_PATH)
+	player.set_input_vector(Vector2.DOWN)
+	await _await_ticks(5)
+	sfx.start_recording()
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(20)
+	var opened: int = _sfx_count(sfx, "umbrella_open")
+	await _await_ticks(60)
+	var held: int = _sfx_count(sfx, "umbrella_open")
+	player.set_input_vector(Vector2.DOWN)
+	await _await_ticks(40)
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(20)
+	var again: int = _sfx_count(sfx, "umbrella_open")
+	print("      umbrella_open: raised %d, held %d, raised again %d" % [opened, held, again])
+	if opened != 1:
+		failures.append("raising the umbrella overhead played umbrella_open %d times, expected 1" % opened)
+	if held != 1:
+		failures.append("holding it open brought the count to %d, expected still 1" % held)
+	if again != 2:
+		failures.append("lowering and raising again brought the count to %d, expected 2" % again)
+	player.set("alive", false)
+	player.set_input_vector(Vector2.DOWN)
+	await _await_ticks(40)
+	var alive_count: int = _sfx_count(sfx, "umbrella_open")
+	player.set_input_vector(Vector2.UP)
+	await _await_ticks(20)
+	if _sfx_count(sfx, "umbrella_open") != alive_count:
+		failures.append("a KO'd fighter's umbrella played umbrella_open")
+	await _teardown(stage, false)
+	var stage2: Node2D = _new_empty_stage()
+	var pick: RigidBody2D = _spawn_player(stage2, DEEP_PARK_POSITION)
+	await _equip(pick, PICKAXE_STARTER_PATH)
+	pick.set_input_vector(Vector2.DOWN)
+	await _await_ticks(5)
+	var before: int = _sfx_count(sfx, "umbrella_open")
+	pick.set_input_vector(Vector2.UP)
+	await _await_ticks(30)
+	if _sfx_count(sfx, "umbrella_open") != before:
+		failures.append("a pickaxe held overhead played umbrella_open")
+	await _teardown(stage2, false)
+	_scenario_completed = true
 	return failures
