@@ -1258,6 +1258,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_def_good_and_hostile_1045",
 	"stock_last_life_and_steal_banners",
 	"hill_taken_banner_names_holder",
+	"heckler_award_for_most_landed_boos_1085",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4203,6 +4204,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stock_last_life_and_steal_banners()
 		"hill_taken_banner_names_holder":
 			return await _scenario_hill_taken_banner_names_holder()
+		"heckler_award_for_most_landed_boos_1085":
+			return await _scenario_heckler_award_for_most_landed_boos_1085()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -58747,4 +58750,51 @@ func _scenario_hill_taken_banner_names_holder() -> Array[String]:
 	EffectStreamScript976.take()
 	EffectStreamScript976.set_recording(false)
 	await _teardown(rig["stage"])
+	return failures
+
+## Issue #1085: Heckler goes to the KO'd fighter whose ghost landed the most Boos on living rivals,
+## at least 2, no ties. A Boo skipped for spawn protection does not count.
+func _scenario_heckler_award_for_most_landed_boos_1085() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	var ghost: Node2D = rm.ghost_of(0)
+	if ghost == null:
+		failures.append("no ghost")
+		await _teardown(loop["stage"])
+		return failures
+	ghost.bounds = Rect2(-100000.0, -100000.0, 200000.0, 200000.0)
+	var target: RigidBody2D = players[1]
+	var find := func() -> Array:
+		return rm._stats.extra_awards([0, 1, 2]).filter(func(a: Dictionary) -> bool: return a["title"] == "Heckler")
+	var base: int = int(rm._stats.boos_landed.get(0, 0))
+	# A protected rival in range: the Boo is skipped and counts for nothing.
+	target.spawn_protected = true
+	ghost.global_position = target.global_position + Vector2(-20.0, 0.0)
+	players[0].push_ghost_action()
+	await _await_ticks(2)
+	if int(rm._stats.boos_landed.get(0, 0)) != base:
+		failures.append("a skipped spawn-protected Boo was counted")
+	target.spawn_protected = false
+	for i in 3:
+		ghost._boo_cooldown = 0.0
+		ghost.global_position = target.global_position + Vector2(-20.0, 0.0)
+		players[0].push_ghost_action()
+		await _await_ticks(2)
+		if i == 0 and (int(rm._stats.boos_landed.get(0, 0)) != base + 1 or not (find.call() as Array).is_empty()):
+			failures.append("one landed Boo counted wrong or earned the award")
+	if int(rm._stats.boos_landed.get(0, 0)) != base + 3:
+		failures.append("expected 3 landed Boos, got %d" % (int(rm._stats.boos_landed.get(0, 0)) - base))
+	var found: Array = find.call()
+	if found.size() != 1 or found[0]["slot"] != 0 or found[0]["detail"] != "%d Boos landed" % (base + 3):
+		failures.append("expected Heckler for slot 0, got %s" % [found])
+	# A tie shares nothing; bookkeeping alone, no round needed.
+	var tied: RefCounted = MatchStatsScript.new()
+	tied.begin_match()
+	for s: int in [0, 0, 1, 1]:
+		tied.record_boo(s)
+	if not tied.extra_awards([0, 1]).filter(func(a: Dictionary) -> bool: return a["title"] == "Heckler").is_empty():
+		failures.append("Heckler given for a tie")
+	await _teardown(loop["stage"])
 	return failures

@@ -2751,6 +2751,7 @@ func _tick_ghosts() -> void:
 		ghost.name = "Ghost%d" % slot
 		_current_stage.add_child(ghost)
 		ghost.setup(player, slot, player.global_position, view, player.identity_color)
+		ghost.boo_landed.connect(_stats.record_boo)
 		_ghosts[slot] = ghost
 
 func _clear_ghosts() -> void:
