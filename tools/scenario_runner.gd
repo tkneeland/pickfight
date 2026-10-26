@@ -59539,6 +59539,7 @@ func _scenario_pickup_refalls_when_platform_removed_1103() -> Array[String]:
 	if is_instance_valid(authored) and (authored.is_falling() or authored.global_position != Vector2(300.0, 100.0)):
 		failures.append("an authored pickup moved")
 	await _teardown(stage)
+	return failures
 
 
 ## #1106: a fighter still waiting on the 4 s respawn timer at the whistle comes
