@@ -1271,6 +1271,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"pickup_dropped_inside_terrain_rests_on_it_1102",
 	"umbrella_open_plays_a_soft_sound_1095",
 	"koth_kicked_leader_cannot_win_on_clock",
+	"soccer_overtime_cancels_pending_respawns",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4243,6 +4244,9 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_umbrella_open_plays_a_soft_sound_1095()
 		"koth_kicked_leader_cannot_win_on_clock":
 			return await _scenario_koth_kicked_leader_cannot_win_on_clock()
+
+		"soccer_overtime_cancels_pending_respawns":
+			return await _scenario_soccer_overtime_cancels_pending_respawns()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59529,5 +59533,39 @@ func _scenario_koth_kicked_leader_cannot_win_on_clock() -> Array[String]:
 		failures.append("the clock-out should name slot 1 the winner, got %s" % [wins])
 	if rm.score_of(0) != 0 or rm.score_of(1) != 1:
 		failures.append("scores are %d/%d, want 0/1" % [rm.score_of(0), rm.score_of(1)])
+
+
+## #1106: a fighter still waiting on the 4 s respawn timer at the whistle comes
+## back at once into Sudden Death, and no respawn timer outlives the whistle.
+func _scenario_soccer_overtime_cancels_pending_respawns() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	var players: Array[RigidBody2D] = rig["players"]
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the Soccer round never started"]
+	var mode: Node = rm.game_mode_node()
+	await _await_ticks(20)
+	players[1].eliminate()
+	await _await_ticks(2)
+	if players[1].alive or not mode.is_pending(1):
+		failures.append("control: the knocked-out fighter was not waiting to respawn")
+	mode.time_left = 0.1
+	if not await _await_condition(func() -> bool: return mode.overtime, 3000):
+		failures.append("a level score at time did not start overtime")
+		await _teardown(rig["stage"])
+		return failures
+	await _await_ticks(4)
+	for slot: int in range(players.size()):
+		if not players[slot].alive:
+			failures.append("fighter %d was not alive at the start of overtime" % slot)
+		if mode.is_pending(slot):
+			failures.append("fighter %d was still waiting to respawn in overtime" % slot)
+	# Past the 4 s timer: nobody comes back later, nobody is queued.
+	await _await_msec(4500)
+	for slot: int in range(players.size()):
+		if mode.is_pending(slot):
+			failures.append("fighter %d was queued to respawn during overtime" % slot)
 	await _teardown(rig["stage"])
 	return failures
