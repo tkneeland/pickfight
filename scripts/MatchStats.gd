@@ -36,6 +36,7 @@ const STREAKER: String = "STREAKER"
 const COMBO: String = "COMBO"
 const SHARPSHOOTER: String = "SHARPSHOOTER"
 const JACK: String = "JACK"
+const HECKLER: String = "HECKLER"
 
 ## Weapon ids whose last hit makes a KO a ranged KO (#953).
 const RANGED_WEAPONS: PackedStringArray = ["boomstick", "boomerang"]
@@ -43,6 +44,8 @@ const RANGED_WEAPONS: PackedStringArray = ["boomstick", "boomerang"]
 const SHARPSHOOTER_MIN: int = 2
 ## The fewest distinct weapons that earn Jack of All Trades (#970).
 const JACK_MIN: int = 3
+## The fewest landed ghost Boos that earn Heckler (#1085).
+const HECKLER_MIN: int = 2
 
 ## The shortest unbroken KO run that earns Streaker (#890).
 const STREAKER_MIN: int = 3
@@ -74,6 +77,8 @@ var best_ko_run: Dictionary = {}
 var best_multi_ko: Dictionary = {}
 ## slot -> KOs whose last hit came from a boomstick bullet or boomerang this match (#953).
 var ranged_kos: Dictionary = {}
+## slot -> ghost Boos that shoved a living rival this match (#1085).
+var boos_landed: Dictionary = {}
 ## Balance log (issue #316): weapon id -> damage / landed hits by REAL players
 ## this match. Bots and self-hits are left out. Written once per match by
 ## `RoundManager` to `user://balance_stats.jsonl`; local only, tuning only.
@@ -133,6 +138,7 @@ func begin_match() -> void:
 	best_ko_run.clear()
 	best_multi_ko.clear()
 	ranged_kos.clear()
+	boos_landed.clear()
 	weapon_damage.clear()
 	weapon_hits.clear()
 	weapon_kos.clear()
@@ -179,7 +185,7 @@ func resume_round(slot: int, now_msec: int) -> void:
 ## occupant did is theirs, so every entry for it goes -- their numbers, the
 ## hit they last took or dealt, their streak and their round clock.
 func forget_slot(slot: int) -> void:
-	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, best_hit, ko_run, best_ko_run, best_multi_ko, ranged_kos, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
+	for table: Dictionary in [kos, self_kos, deaths, damage_dealt, damage_taken, best_hit, ko_run, best_ko_run, best_multi_ko, ranged_kos, boos_landed, survival_msec, longest_air_msec, pickups, weapon_grabs, hill_hold_sec, tags_passed, lives_left, goals, captures, _streak, _alive_since, _air_since]:
 		table.erase(slot)
 	_last_hit.erase(slot)
 	_last_killer.erase(slot)
@@ -273,6 +279,12 @@ func record_elimination(victim: int, now_msec: int) -> Dictionary:
 		_last_killer.erase(killer)
 	_last_killer[victim] = killer
 	return result
+
+## `slot`'s ghost shoved a living rival with a Boo (#1085). Not a hit: no KO credit.
+func record_boo(slot: int) -> void:
+	if slot < 0:
+		return
+	_add(boos_landed, slot, 1)
 
 ## `slot` picked up weapon `weapon` (a name such as "Hammer") off the stage.
 func record_pickup(slot: int, weapon: String) -> void:
@@ -385,6 +397,9 @@ func extra_awards(slots: Array) -> Array[Dictionary]:
 	var jack: int = _jack(slots)
 	if jack != -1:
 		out.append(_award(JACK, TranslationServer.translate("AWARD_JACK"), jack, TranslationServer.translate("DETAIL_JACK") % _distinct_weapons(jack)))
+	var heckler: int = _heckler(slots)
+	if heckler != -1:
+		out.append(_award(HECKLER, TranslationServer.translate("AWARD_HECKLER"), heckler, TranslationServer.translate("DETAIL_HECKLER") % int(boos_landed[heckler])))
 	return out
 
 func _distinct_weapons(slot: int) -> int:
@@ -406,6 +421,24 @@ func _jack(slots: Array) -> int:
 		elif n == top and n > 0:
 			tied = true
 	if who == -1 or tied or top < JACK_MIN:
+		return -1
+	return who
+
+## "Heckler" (#1085): the most landed ghost Boos, given only when it is at least
+## HECKLER_MIN and strictly beats every other fighter's.
+func _heckler(slots: Array) -> int:
+	var top: int = 0
+	var who: int = -1
+	var tied: bool = false
+	for slot: int in slots:
+		var n: int = int(boos_landed.get(slot, 0))
+		if n > top:
+			top = n
+			who = slot
+			tied = false
+		elif n == top and n > 0:
+			tied = true
+	if who == -1 or tied or top < HECKLER_MIN:
 		return -1
 	return who
 
