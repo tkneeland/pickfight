@@ -2189,7 +2189,7 @@ func _tick_special(delta: float) -> void:
 		&"flail":
 			_tick_flail()
 		&"umbrella":
-			_tick_umbrella()
+			_tick_umbrella(delta)
 		&"grapple", &"boomerang":
 			_tick_launcher(delta)
 		&"pogo":
@@ -2403,6 +2403,11 @@ const CANOPY_BLOCK_FACTOR: float = 0.25
 ## A hit is on the face when it comes from within this cosine of the aim.
 const CANOPY_FACE_COS: float = 0.3
 
+## Least gap between two canopy-open sounds from one fighter, in seconds (#1095).
+const CANOPY_SOUND_GAP_SEC: float = 0.5
+var _canopy_was_open: bool = false
+var _canopy_sound_cooldown: float = 0.0
+
 ## Whether an umbrella is in hand and held overhead.
 func canopy_open() -> bool:
 	if _stats == null or _stats.special != &"umbrella" or not _rig_is_live():
@@ -2420,8 +2425,19 @@ func canopy_faces(point: Vector2) -> bool:
 func wind_multiplier() -> float:
 	return CANOPY_WIND_MULTIPLIER if canopy_open() else 1.0
 
-func _tick_umbrella() -> void:
-	if canopy_open() and linear_velocity.y > CANOPY_FALL_CAP:
+func _tick_umbrella(delta: float) -> void:
+	var open: bool = canopy_open()
+	# A soft cue on the closed-to-open edge (#1095), at most once per
+	# CANOPY_SOUND_GAP_SEC so a wobbling aim does not spam. Online clients hear
+	# it through the generic Sfx snapshot trailer.
+	_canopy_sound_cooldown = maxf(0.0, _canopy_sound_cooldown - delta)
+	if open and not _canopy_was_open and _canopy_sound_cooldown <= 0.0 and bool(get("alive")):
+		_canopy_sound_cooldown = CANOPY_SOUND_GAP_SEC
+		var sfx: Node = get_node_or_null(^"/root/Sfx")
+		if sfx != null:
+			sfx.play(&"umbrella_open", global_position, 1.0)
+	_canopy_was_open = open
+	if open and linear_velocity.y > CANOPY_FALL_CAP:
 		linear_velocity.y = CANOPY_FALL_CAP
 # --- Pogo (issue #271) --------------------------------------------------------
 #
