@@ -45,6 +45,8 @@ extends StaticBody2D
 ## Preloaded by path, never referenced by `class_name` (CLAUDE.md): the shared
 ## part helpers.
 const PartKitScript := preload("res://scripts/PartKit.gd")
+const EffectStreamScript := preload("res://scripts/EffectStream.gd")
+const BouncePadRingScript := preload("res://scripts/BouncePadRing.gd")
 
 ## The pad's collision and visual box, centred on the node. The launch goes
 ## along the node's local up (-Y), so this is the top face's length by the
@@ -164,6 +166,21 @@ func _try_launch(body: RigidBody2D) -> void:
 	_launches += 1
 	_flash_remaining = _FLASH_SEC
 	PartKitScript.sfx(self, &"bounce_launch", body.global_position)
+	_puff_ring(body.global_position)
+
+## The ring puff (#1089) at the point of the top face under the launched body.
+## Recorded for the Online joiners whatever this machine's Reduce flashes says
+## (each machine asks its own); drawn here unless it is on.
+func _puff_ring(body_at: Vector2) -> void:
+	var up: Vector2 = launch_direction()
+	var across: Vector2 = Vector2(up.y, -up.x)
+	var face_centre: Vector2 = global_position + up * (size.y / 2.0)
+	var offset: float = clampf((body_at - face_centre).dot(across), -size.x / 2.0, size.x / 2.0)
+	var at: Vector2 = face_centre + across * offset
+	EffectStreamScript.record("bounce_ring", {"p": at}, self)
+	if PartKitScript.reduce_flash(self) or get_parent() == null:
+		return
+	BouncePadRingScript.spawn_at(get_parent(), at)
 
 # Why the weapon gets the launch too (`PartKit.weapon_bodies_of()`): measured,
 # launching the body alone does not work. The weapon is jointed to the body and

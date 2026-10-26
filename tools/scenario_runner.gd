@@ -1262,6 +1262,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"heckler_award_for_most_landed_boos_1085",
 	"crumbling_ledge_plays_crack_once_per_cycle_1083",
 	"fan_plays_whoosh_on_entry_once_per_second_1084",
+	"bounce_pad_launch_puffs_one_ring_1089",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4216,6 +4217,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_crumbling_ledge_plays_crack_once_per_cycle_1083()
 		"fan_plays_whoosh_on_entry_once_per_second_1084":
 			return await _scenario_fan_plays_whoosh_on_entry_once_per_second_1084()
+		"bounce_pad_launch_puffs_one_ring_1089":
+			return await _scenario_bounce_pad_launch_puffs_one_ring_1089()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59081,4 +59084,101 @@ func _scenario_fan_plays_whoosh_on_entry_once_per_second_1084() -> Array[String]
 	if events != 2:
 		failures.append("the trailer carried %d fan_whoosh events, want 2" % events)
 	await _teardown(stage)
+	return failures
+## The bounce rings (#1089) under `parent`, found by script since the node name
+## is shared with nothing else.
+func _bounce_rings_1089(parent: Node) -> int:
+	var count: int = 0
+	for child: Node in parent.get_children():
+		var script: Script = child.get_script() as Script
+		if script != null and script.resource_path.ends_with("BouncePadRing.gd"):
+			count += 1
+	return count
+## Issue #1089: a body launched by a bounce pad puffs exactly one spring-green
+## ring from the pad's top face, recorded for the Online stream and replayed by
+## the joiner; Reduce flashes on skips the host's ring (the stream still
+## records, each machine asks its own setting); a head on the pad adds none.
+func _scenario_bounce_pad_launch_puffs_one_ring_1089() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	var flash_was: bool = bool(sfx.get("reduce_flash"))
+	sfx.set_reduce_flash(false)
+	var EffectStream1089: GDScript = load("res://scripts/EffectStream.gd") as GDScript
+	EffectStream1089.set_recording(true)
+	# 1. A dropped body: one launch, one ring, one recorded effect.
+	var stage: Node2D = _new_empty_stage()
+	var pad: StaticBody2D = BouncePadScene.instantiate() as StaticBody2D
+	pad.position = PART_POSITION
+	stage.add_child(pad)
+	var pad_top: float = PART_POSITION.y - PAD_SIZE.y / 2.0
+	var player: RigidBody2D = _spawn_player(stage, Vector2(PART_POSITION.x, pad_top - PAD_DROP_HEIGHT - PLAYER_RADIUS))
+	player.set_input_vector(Vector2.UP)
+	for _tick in PAD_WATCH_TICKS:
+		await physics_frame
+		if pad.launch_count() > 0:
+			break
+	await _await_ticks(5) # past the re-launch guard window, well inside the ring's life
+	var rings: int = _bounce_rings_1089(stage)
+	var recorded: Array = EffectStream1089.pending().filter(func(ev: Dictionary) -> bool: return ev.get("k") == "bounce_ring")
+	print("      launches %d, rings %d, recorded %d" % [pad.launch_count(), rings, recorded.size()])
+	if pad.launch_count() != 1:
+		failures.append("the pad launched %d times, expected once" % pad.launch_count())
+	if rings != 1:
+		failures.append("expected exactly one ring after one launch, got %d" % rings)
+	if recorded.size() != 1:
+		failures.append("expected one bounce_ring effect for the Online stream, got %d" % recorded.size())
+	elif absf(float(recorded[0]["p"].y) - pad_top) > 4.0:
+		failures.append("the ring was recorded at %s, not on the pad's top face (y %.1f)" % [recorded[0]["p"], pad_top])
+	# The joiner plays the recorded effect with the shared ring code.
+	if not recorded.is_empty():
+		var rig: Dictionary = {"nodes": [], "relay": null}
+		var client: Node = await _fx_client_976(rig)
+		sfx.set_reduce_flash(false)
+		_fx_play_976(client, recorded)
+		if _bounce_rings_1089(client.effects) != 1:
+			failures.append("the Online joiner did not play the ring")
+		sfx.set_reduce_flash(true)
+		var before: int = _bounce_rings_1089(client.effects)
+		_fx_play_976(client, recorded)
+		if _bounce_rings_1089(client.effects) != before:
+			failures.append("the Online joiner played the ring with Reduce flashes on")
+		sfx.set_reduce_flash(false)
+		await _rc_close_241(rig)
+	await _teardown(stage)
+	# 2. Reduce flashes on: launched, recorded, but no ring on the host.
+	EffectStream1089.set_recording(true)
+	sfx.set_reduce_flash(true)
+	stage = _new_empty_stage()
+	pad = BouncePadScene.instantiate() as StaticBody2D
+	pad.position = PART_POSITION
+	stage.add_child(pad)
+	player = _spawn_player(stage, Vector2(PART_POSITION.x, pad_top - PAD_DROP_HEIGHT - PLAYER_RADIUS))
+	player.set_input_vector(Vector2.UP)
+	for _tick in PAD_WATCH_TICKS:
+		await physics_frame
+		if pad.launch_count() > 0:
+			break
+	await _await_ticks(5)
+	if pad.launch_count() != 1:
+		failures.append("with Reduce flashes on the pad launched %d times, expected once" % pad.launch_count())
+	if _bounce_rings_1089(stage) != 0:
+		failures.append("a ring puffed with Reduce flashes on")
+	await _teardown(stage)
+	sfx.set_reduce_flash(false)
+	# 3. A head planted on the pad is plain ground: no launch, no ring.
+	EffectStream1089.set_recording(true)
+	stage = _new_empty_stage()
+	pad = BouncePadScene.instantiate() as StaticBody2D
+	pad.size = Vector2(240, PAD_SIZE.y)
+	pad.position = Vector2(0, GROUND_TOP + PAD_SIZE.y / 2.0)
+	stage.add_child(pad)
+	player = _spawn_player(stage, Vector2(0, PAD_PLANT_SPAWN_Y))
+	player.set_input_vector(Vector2.DOWN * PAD_PLANT_MAGNITUDE)
+	await _await_ticks(LANDING_TICKS)
+	if pad.launch_count() != 0 or _bounce_rings_1089(stage) != 0:
+		failures.append("a head on the pad launched %d times and puffed %d rings, expected none" % [
+			pad.launch_count(), _bounce_rings_1089(stage)])
+	await _teardown(stage)
+	EffectStream1089.set_recording(false)
+	sfx.reduce_flash = flash_was
 	return failures
