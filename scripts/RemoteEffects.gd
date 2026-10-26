@@ -32,6 +32,8 @@ const DeathBurstScript: GDScript = preload("res://scripts/DeathBurst.gd")
 const PickupCalloutScript: GDScript = preload("res://scripts/PickupCallout.gd")
 const ShieldSparkScript: GDScript = preload("res://scripts/ShieldSpark.gd")
 const RoundWinRingScript: GDScript = preload("res://scripts/RoundWinRing.gd")
+const BouncePadRingScript: GDScript = preload("res://scripts/BouncePadRing.gd")
+const PartKitScript: GDScript = preload("res://scripts/PartKit.gd")
 const MatchPointPlateScript: GDScript = preload("res://scripts/MatchPointPlate.gd")
 const FinalKoViewScript: GDScript = preload("res://scripts/FinalKoView.gd")
 const RoundCardsScript: GDScript = preload("res://scripts/RoundCards.gd")
@@ -222,6 +224,9 @@ func play(ev: Dictionary) -> void:
 			ShieldSparkScript.spawn_at(self, _v2(ev, "p"), _col(ev, "c"))
 		"win_ring":
 			RoundWinRingScript.spawn_at(self, _v2(ev, "p"), _col(ev, "c"))
+		"bounce_ring":
+			if not PartKitScript.reduce_flash(self):
+				BouncePadRingScript.spawn_at(self, _v2(ev, "p"))
 		"feed_ko":
 			if kill_feed != null:
 				kill_feed.push_ko(str(ev.get("kn", "")), _col(ev, "kc"), str(ev.get("vn", "")), _col(ev, "vc"))
