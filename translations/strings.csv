@@ -562,3 +562,4 @@ INVITE_JOIN,Join (Enter / Y),Beitreten (Enter / Y),Rejoindre (Enter / Y),Unirse 
 INVITE_STAY,Stay (Esc / N),Bleiben (Esc / N),Rester (Esc / N),Quedarme (Esc / N),Ficar (Esc / N),留下 (Esc / N),残る (Esc / N),남기 (Esc / N),Остаться (Esc / N)
 BANNER_LAST_LIFE,%s is on their last life!,%s ist auf dem letzten Leben!,%s est sur sa dernière vie !,¡%s está en su última vida!,%s está na última vida!,%s 只剩最后一条命了!,%s は最後のライフ!,%s 마지막 목숨!,У %s последняя жизнь!
 BANNER_STOLE_LIFE,%s stole a life!,%s hat ein Leben gestohlen!,%s a volé une vie !,¡%s robó una vida!,%s roubou uma vida!,%s 夺得一条命!,%s がライフを奪った!,%s 목숨 +1!,%s украл жизнь!
+BANNER_TAKES_THE_HILL,%s takes the hill!,%s übernimmt den Hügel!,%s prend la colline !,¡%s toma la colina!,%s toma a colina!,%s 夺下了山丘!,%s がヒルを奪った!,%s 언덕을 차지했어요!,%s захватывает гору!
