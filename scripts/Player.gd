@@ -2379,7 +2379,7 @@ func _land_ball_strike(victim: Node, speed: float) -> void:
 	var ball: RigidBody2D = _flail.ball
 	var toward: Vector2 = ((victim as Node2D).global_position - ball.global_position).normalized()
 	var point: Vector2 = ball.global_position + toward * float(_stats.ball_radius)
-	if amount > 0.0 and victim is RigidBody2D:
+	if amount > 0.0 and victim is RigidBody2D and victim.get("spawn_protected") != true:
 		var shove: float = minf(speed * ball.mass * float(_stats.ball_knockback), BALL_KNOCKBACK_MAX)
 		(victim as RigidBody2D).apply_central_impulse(toward * shove)
 	_deliver_hit(victim, amount, point)

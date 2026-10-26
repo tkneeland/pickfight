@@ -1267,6 +1267,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"award_pit_boss_counts_hazard_kos_1088",
 	"hooks_skip_spawn_protected_1093",
 	"shield_bash_does_not_knock_spawn_protected_1098",
+	"flail_ball_does_not_knock_spawn_protected_1099",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4231,6 +4232,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_sidesteps_boomerang_and_hook_1094()
 		"shield_bash_does_not_knock_spawn_protected_1098":
 			return await _scenario_shield_bash_does_not_knock_spawn_protected_1098()
+		"flail_ball_does_not_knock_spawn_protected_1099":
+			return await _scenario_flail_ball_does_not_knock_spawn_protected_1099()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59383,5 +59386,37 @@ func _shield_bash_protected_result(protected_flag: bool) -> Array[float]:
 		fastest = maxf(fastest, victim.linear_velocity.length())
 		await physics_frame
 	var result: Array[float] = [victim.damage, fastest]
+	await _teardown(stage, false)
+	return result
+## Issue #1099: a flail ball strike on a spawn-protected fighter neither shoves
+## nor hurts it; the same strike on an unprotected fighter still does.
+func _scenario_flail_ball_does_not_knock_spawn_protected_1099() -> Array[String]:
+	var failures: Array[String] = []
+	var plain: Array[float] = await _flail_protected_result(false)
+	var guarded: Array[float] = await _flail_protected_result(true)
+	print("      ball: unprotected dmg %.1f speed %.0f; protected dmg %.1f speed %.0f" % [plain[0], plain[1], guarded[0], guarded[1]])
+	if plain[1] < 50.0:
+		failures.append("the control strike barely moved an unprotected fighter (%.0f px/s)" % plain[1])
+	# Overlapping the ball still bumps the body a little; only the strike impulse is gone.
+	if guarded[1] > plain[1] * 0.4:
+		failures.append("a spawn-protected fighter was shoved to %.0f px/s by a flail ball" % guarded[1])
+	if guarded[0] > 0.0:
+		failures.append("a spawn-protected fighter took %.1f from a flail ball" % guarded[0])
+	_scenario_completed = true
+	return failures
+## Lands a fast flail ball strike on a neighbour (protected or not); returns [damage, speed].
+func _flail_protected_result(protected_flag: bool) -> Array[float]:
+	var stage: Node2D = _new_stage()
+	var attacker: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(0, 400))
+	await _await_ticks(2)
+	await _equip(attacker, FLAIL_PATH)
+	attacker.gravity_scale = 0.0
+	victim.gravity_scale = 0.0
+	victim.spawn_protected = protected_flag
+	attacker.flail_ball().global_position = victim.global_position + Vector2(-60, 0)
+	attacker._land_ball_strike(victim, 2200.0)
+	await physics_frame
+	var result: Array[float] = [victim.damage, victim.linear_velocity.length()]
 	await _teardown(stage, false)
 	return result
