@@ -251,6 +251,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Stage rotation data check: a scenario reads every stage's `mode_weights` and `weapon_weight_overrides` and fails naming the stage and key on a typo, a non-positive weight, or a dedicated-stage mode with no stage (#801)
 - Scenario loads and instantiates every scene under `scenes/` and flags dead `ext_resource` paths (#802)
 - Screenshot capture tools for stages and damage numbers
+- Sound call-site check: a scenario reads every `.gd` under `scripts/` and fails, naming file, line and name, when a string-literal sound name passed to `sfx.play(`, `PartKitScript.sfx(` or the Announcer `.say(` is not a key of `Sfx.SOUNDS`; a second scenario proves it flags a made-up name (#1120)
 - Doc path check: a scenario fails, naming doc, line and path, when FEATURES, `docs/agents/`, ADRs or `docs/steam-*.md` name a repo path in backticks that does not exist (#803)
 - Launch copy count check: a scenario counts stages, weapons, languages and the player cap from the game and fails, naming file and line, when site/index.html or the store-page docs quote a different number; a second scenario proves it flags a wrong count (#797)
 - Controller offline check: a scenario reads `controller/index.html` and fails, naming the line, if it loads a script, stylesheet, image, font, `url()`, `@import`, fetch/WebSocket or import from a literal remote host (tappable links are allowed); a second scenario proves it flags a CDN reference (#798)

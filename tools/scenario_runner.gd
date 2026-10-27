@@ -1276,6 +1276,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"background_threads_never_touch_the_tree_1112",
 	"ghost_pickup_grab_and_drop_play_cues",
 	"ctf_flag_drop_and_return_play_cues",
+	"sfx_call_sites_name_real_sounds_1120",
+	"sfx_call_site_check_flags_bad_fixture_1120",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4261,6 +4263,10 @@ func _run_scenario(name: String) -> Array[String]:
 
 		"ctf_flag_drop_and_return_play_cues":
 			return await _scenario_ctf_flag_drop_and_return_play_cues()
+		"sfx_call_sites_name_real_sounds_1120":
+			return _scenario_sfx_call_sites_name_real_sounds_1120()
+		"sfx_call_site_check_flags_bad_fixture_1120":
+			return _scenario_sfx_call_site_check_flags_bad_fixture_1120()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -59838,4 +59844,70 @@ func _scenario_ctf_flag_drop_and_return_play_cues() -> Array[String]:
 	if _sfx_count(sfx, "flag_drop") != drops or _sfx_count(sfx, "flag_return") != returns:
 		failures.append("the hall change played a flag cue")
 	await _teardown(rig["stage"])
+	return failures
+
+# --- Sound names at call sites (issue #1120) -----------------------------------------
+## Sfx.play() drops an unknown name with one runtime warning, so a typo in a
+## literal at a call site ships as a silent missing cue. This reads each .gd
+## under scripts/ and lists every string-literal name passed to sfx.play( /
+## Sfx.play( / PartKitScript.sfx( (name is the 2nd argument) and the Announcer's
+## .say( that is not a key of Sfx.SOUNDS, as "file:line name". Names built at
+## runtime are not literals and are skipped.
+func _sfx_call_site_names_1120(text: String) -> Array:
+	var out: Array = []
+	var regex := RegEx.new()
+	regex.compile("(?:\\b[Ss]fx\\.play\\(|\\.say\\(|PartKitScript\\.sfx\\([^,()]*,)\\s*&?[\"']([^\"']*)[\"']")
+	var lines: PackedStringArray = text.split("\n")
+	for i: int in lines.size():
+		if lines[i].strip_edges().begins_with("#"):
+			continue
+		for found: RegExMatch in regex.search_all(lines[i]):
+			out.append([i + 1, found.get_string(1)])
+	return out
+
+func _sfx_call_site_problems_1120(label: String, text: String, sounds: Dictionary) -> Array[String]:
+	var problems: Array[String] = []
+	for hit: Array in _sfx_call_site_names_1120(text):
+		if not sounds.has(StringName(hit[1])) and not sounds.has(hit[1]):
+			problems.append("%s:%d %s" % [label, hit[0], hit[1]])
+	return problems
+
+func _sfx_call_site_files_1120(dir: String) -> Array[String]:
+	var out: Array[String] = []
+	for file: String in DirAccess.get_files_at(dir):
+		if file.ends_with(".gd"):
+			out.append(dir.path_join(file))
+	for sub: String in DirAccess.get_directories_at(dir):
+		out.append_array(_sfx_call_site_files_1120(dir.path_join(sub)))
+	return out
+
+func _scenario_sfx_call_sites_name_real_sounds_1120() -> Array[String]:
+	var failures: Array[String] = []
+	var sounds: Dictionary = (load("res://scripts/Sfx.gd") as GDScript).SOUNDS
+	var files: Array[String] = _sfx_call_site_files_1120("res://scripts")
+	if files.size() < 10:
+		failures.append("found only %d .gd files under scripts/" % files.size())
+	var checked: int = 0
+	for path: String in files:
+		var text: String = FileAccess.get_file_as_string(path)
+		checked += _sfx_call_site_names_1120(text).size()
+		failures.append_array(_sfx_call_site_problems_1120(path.trim_prefix("res://"), text, sounds))
+	if checked < 20:
+		failures.append("the checker found only %d literal sound names under scripts/, expected dozens" % checked)
+	_scenario_completed = true
+	return failures
+
+func _scenario_sfx_call_site_check_flags_bad_fixture_1120() -> Array[String]:
+	var failures: Array[String] = []
+	var sounds: Dictionary = {&"hit": 1, &"jump": 2}
+	var good: String = "sfx.play(&\"hit\")\nPartKitScript.sfx(self, &\"jump\", pos)\nAnnouncer.say(&\"hit\")\nsfx.play(name_var)\n# sfx.play(&\"nope\")"
+	var found: Array[String] = _sfx_call_site_problems_1120("fixture.gd", good, sounds)
+	if found.size() != 0:
+		failures.append("a fixture with real names was flagged: %s" % [found])
+	var bad: String = "ok\nsfx.play(&\"hit\")\nSfx.play(\"hti\")\nPartKitScript.sfx(self, &\"made_up\", pos)\nannouncer.say(&\"bogus_say\")"
+	found = _sfx_call_site_problems_1120("fixture.gd", bad, sounds)
+	var wanted: Array[String] = ["fixture.gd:3 hti", "fixture.gd:4 made_up", "fixture.gd:5 bogus_say"]
+	if found != wanted:
+		failures.append("the bad fixture gave %s, wanted %s" % [found, wanted])
+	_scenario_completed = true
 	return failures
