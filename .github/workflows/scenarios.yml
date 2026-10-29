@@ -158,6 +158,29 @@ jobs:
           code=$?
           set -e
           cat shard.log
+          # A native crash (signal 11 on 2026-10-24, run 40074228396, #1112)
+          # kills the runner mid-shard. No script touches the tree off the main
+          # thread (the "/root ... propagate_notification" line is Godot's
+          # crash handler), the cause is inside the engine and has not been
+          # reproduced. So a crash with no FAIL is annotated loudly and the
+          # scenarios that never printed PASS run once more in a fresh
+          # process; a second crash, or any FAIL, still fails the shard.
+          if [ "$code" -ge 128 ] && ! grep -q '^FAIL' shard.log; then
+            echo "::warning::Godot crashed (exit=$code) mid-shard; rerunning the scenarios that had not passed (#1112)"
+            grep -E 'handle_crash|ERROR:' shard.log | tail -5 || true
+            rest=$(echo "$list" | tr ',' '\n' | grep -vxFf <(sed -n 's/^PASS  *//p' shard.log) | paste -sd, -)
+            if [ -n "$rest" ]; then
+              set +e
+              "$GODOT_DIR/godot" --headless --fixed-fps 60 --log-file "$GODOT_LOG_DIR/shard-retry.log" --path . \
+                -s tools/scenario_runner.gd -- --scenarios="$rest" > shard-retry.log 2>&1
+              code=$?
+              set -e
+              cat shard-retry.log
+              cat shard-retry.log >> shard.log
+            else
+              code=0
+            fi
+          fi
           fails=$(grep -c '^FAIL' shard.log || true)
           passes=$(grep -c '^PASS' shard.log || true)
           echo "exit=$code passed=$passes failed=$fails expected=$count"
