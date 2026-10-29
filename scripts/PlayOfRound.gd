@@ -75,6 +75,11 @@ static func _key_greater(a: Array, b: Array) -> bool:
 ## a host rendering below 24 fps (or hitching, or skipping grabs) still ends the
 ## clip `TAIL_MSEC` after the KO (#1139). The count is trimmed (from the start of
 ## the clip) so its slow-motion running time fits in the pause minus a margin.
+## A grab gap longer than this (host paused, window minimised) is a hole in the
+## ring: nothing from before it is ever shown, and a ring that stopped feeding
+## before the KO skips cleanly (#1141).
+const MAX_GAP_MSEC := 1000
+
 static func select_frames(stamps: PackedInt64Array, now_msec: int, ko_msec: int, remaining_msec: int) -> Dictionary:
 	var none := {"start": 0, "count": 0}
 	var total: int = stamps.size()
@@ -86,11 +91,11 @@ static func select_frames(stamps: PackedInt64Array, now_msec: int, ko_msec: int,
 		if stamps[i] <= end_t:
 			end_index = i
 			break
-	if end_index < 0:
+	if end_index < 0 or end_t - int(stamps[end_index]) > MAX_GAP_MSEC:
 		return none
 	var from_t: int = int(stamps[end_index]) - int(CLIP_SEC * 1000.0)
 	var start: int = end_index
-	while start > 0 and stamps[start - 1] > from_t:
+	while start > 0 and stamps[start - 1] > from_t and stamps[start] - stamps[start - 1] <= MAX_GAP_MSEC:
 		start -= 1
 	var count: int = end_index - start + 1
 	var fit: int = int(floor(float(remaining_msec - END_MARGIN_MSEC) / 1000.0 * CAPTURE_FPS * SLOW_FACTOR))
