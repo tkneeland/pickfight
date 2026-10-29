@@ -125,6 +125,7 @@ func _init() -> void:
 	for id: String in PickerScript.options("hat"):
 		var button: Button = _button(PickerScript.label_of("hat", id))
 		button.name = "Hat_" + id
+		_add_icon(button)
 		button.pressed.connect(pick_hat.bind(id))
 		_hat_grid.add_child(button)
 		_hat_buttons[id] = button
@@ -134,6 +135,7 @@ func _init() -> void:
 	for id: String in PickerScript.options("eyes"):
 		var button: Button = _button(PickerScript.label_of("eyes", id))
 		button.name = "Eyes_" + id
+		_add_icon(button)
 		button.pressed.connect(pick_eyes.bind(id))
 		_eyes_grid.add_child(button)
 		_eyes_buttons[id] = button
@@ -320,6 +322,26 @@ func _refresh() -> void:
 		_color_buttons[i].button_pressed = i == index
 	var colour: Color = Color.html(str(palette[index])) if index >= 0 and index < palette.size() and not str(palette[index]).is_empty() else Color.WHITE
 	_preview.set_look(colour, hat, eyes)
+	# #1126: every option drawn in the player's colour (a hat on the current eyes, eyes on a bare head).
+	for id: String in _hat_buttons:
+		icon_of(_hat_buttons[id]).set_look(colour, id, eyes)
+	for id: String in _eyes_buttons:
+		icon_of(_eyes_buttons[id]).set_look(colour, PickerScript.HatScript.NONE, id)
+
+## The drawn icon on a hat or eyes button (#1126): a `CosmeticsPreview`, so the
+## game's own `Hat.gd` / `PlayerFace.gd` do the drawing. Null for any other button.
+static func icon_of(button: Button) -> Control:
+	return button.get_node_or_null(^"Icon") as Control if button != null else null
+
+func _add_icon(button: Button) -> void:
+	var icon: Control = PreviewScript.new()
+	icon.name = "Icon"
+	icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 4)
+	button.add_child(icon)
+	# The option's name stays reachable as the tooltip (and for a screen reader).
+	button.tooltip_text = button.text
+	button.text = ""
+	button.custom_minimum_size = Vector2(0, 64)
 
 func _build_colors() -> void:
 	for button: Button in _color_buttons:

@@ -1280,6 +1280,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ctf_flag_drop_and_return_play_cues",
 	"sfx_call_sites_name_real_sounds_1120",
 	"sfx_call_site_check_flags_bad_fixture_1120",
+	"look_picker_buttons_show_icons",
 	"online_client_shows_the_host_lobby_1127",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4272,6 +4273,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_sfx_call_sites_name_real_sounds_1120()
 		"sfx_call_site_check_flags_bad_fixture_1120":
 			return _scenario_sfx_call_site_check_flags_bad_fixture_1120()
+		"look_picker_buttons_show_icons":
+			return await _scenario_look_picker_buttons_show_icons()
 		"online_client_shows_the_host_lobby_1127":
 			return await _scenario_online_client_shows_the_host_lobby_1127()
 		_:
@@ -40626,6 +40629,7 @@ func _hold_rig_459(id: String, failures: Array[String]) -> Dictionary:
 # --- In-game cosmetics picker (issue #441) ----------------------------------------
 const CosmeticsPickerScript441 := preload("res://scripts/CosmeticsPicker.gd")
 const CosmeticsPanelScript441 := preload("res://scripts/OnlineCosmeticsPanel.gd")
+const CosmeticsPickerScript1126 := preload("res://scripts/CosmeticsPicker.gd")
 const PadPickerCardScript441 := preload("res://scripts/PadPickerCard.gd")
 ## The visible gamepad picker cards under `root` (a redraw's old rows excluded).
 func _pad_cards_441(root: Node) -> Array[Control]:
@@ -60041,5 +60045,40 @@ func _scenario_play_of_round_frames_are_sharp_and_smooth_1128() -> Array[String]
 	por.dismiss()
 	por.queue_free()
 	rb.queue_free()
+	_scenario_completed = true
+	return failures
+
+## #1126: every hat and eyes button of the Your look picker carries a drawn icon
+## (the game's own preview render), and it redraws when the colour changes.
+func _scenario_look_picker_buttons_show_icons() -> Array[String]:
+	var failures: Array[String] = []
+	var panel: Control = CosmeticsPanelScript441.new()
+	root.add_child(panel)
+	panel.set_catalog({"palette": ["#e63946", "#2a9d8f", "#457b9d"], "looks": [{"slot": 0, "color": 0, "hat": "none", "eyes": "round"}]})
+	panel.set_looks([{"slot": 0, "color": 0, "hat": "none", "eyes": "round"}], 0)
+	await _await_ticks(2)
+	var buttons: Array[Button] = []
+	for id: String in CosmeticsPickerScript1126.options("hat"):
+		buttons.append(panel.hat_button(id))
+	for id: String in CosmeticsPickerScript1126.options("eyes"):
+		buttons.append(panel.eyes_button(id))
+	if buttons.size() < 15:
+		failures.append("expected 9 hat and 6 eyes buttons, found %d" % buttons.size())
+	var before: Dictionary = {}
+	for button: Button in buttons:
+		var icon: Control = CosmeticsPanelScript441.icon_of(button) if button != null else null
+		if icon == null:
+			failures.append("%s has no icon" % [button.name if button != null else "a missing button"])
+			continue
+		if icon.size.x <= 0.0 or icon.size.y <= 0.0 or button.tooltip_text.is_empty():
+			failures.append("%s icon is empty (size %s, tooltip '%s')" % [button.name, icon.size, button.tooltip_text])
+		before[button.name] = icon.color
+	panel.pick_color(1)
+	await _await_ticks(2)
+	for button: Button in buttons:
+		var icon: Control = CosmeticsPanelScript441.icon_of(button) if button != null else null
+		if icon != null and icon.color == before.get(button.name):
+			failures.append("%s icon kept its colour after a colour pick" % button.name)
+	panel.queue_free()
 	_scenario_completed = true
 	return failures
