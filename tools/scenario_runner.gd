@@ -1285,6 +1285,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sfx_call_site_check_flags_bad_fixture_1120",
 	"look_picker_buttons_show_icons",
 	"online_client_shows_the_host_lobby_1127",
+	"agent_scripts_stay_portable",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4283,6 +4284,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_look_picker_buttons_show_icons()
 		"online_client_shows_the_host_lobby_1127":
 			return await _scenario_online_client_shows_the_host_lobby_1127()
+		"agent_scripts_stay_portable":
+			return _scenario_agent_scripts_stay_portable()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -60209,5 +60212,108 @@ func _scenario_look_picker_buttons_show_icons() -> Array[String]:
 		if icon != null and icon.color == before.get(button.name):
 			failures.append("%s icon kept its colour after a colour pick" % button.name)
 	panel.queue_free()
+	_scenario_completed = true
+	return failures
+## Shell idioms that break an agent script on macOS, Linux or Windows Git Bash
+## (#1135, tools/agents/README.md). Each rule is [regex, message, guard tool]:
+## a non-empty guard tool exempts lines covered by `command -v <tool>`.
+const AGENT_SCRIPT_IDIOMS_1135: Array = [
+	["(?<![\\w-])stat\\s+-f", "`stat -f` is BSD-only; use pf_mtime from pf-env.sh", ""],
+	["(?<![\\w-])date\\s+(?:-\\S+\\s+)*-[A-Za-z]*[jr]", "`date -j`/`date -r` is BSD-only; use pf_iso_to_epoch/pf_epoch_fmt from pf-env.sh", ""],
+	["(?:^|[|;&(`{]|\\b(?:then|do|else)\\s)\\s*bc(?=\\s|$|[);|<&`])", "`bc` is missing on Git Bash for Windows; use awk", "bc"],
+	["(?<![\\w-])sed\\s+(?:-\\S+\\s+)*-i\\s*(?:''|\"\")", "`sed -i ''` is BSD-only; use `sed -i.bak ...` then rm the .bak", ""],
+	["(?<![\\w-])readlink\\s+(?:-\\S+\\s+)*-[A-Za-z]*f", "`readlink -f` is missing on older macOS", ""],
+	["(?<![\\w-])osascript(?![\\w-])", "`osascript` is macOS-only; use pf_notify or guard it with `command -v osascript`", "osascript"],
+]
+## Every .sh under `dir`, recursively (.gitattributes covers tools/agents/**/*.sh).
+func _agent_script_paths_1135(dir: String) -> PackedStringArray:
+	var out: PackedStringArray = []
+	for f: String in DirAccess.get_files_at(dir):
+		if f.ends_with(".sh"):
+			out.append(dir.path_join(f))
+	for d: String in DirAccess.get_directories_at(dir):
+		out.append_array(_agent_script_paths_1135(dir.path_join(d)))
+	return out
+## Portability problems in one agent script's raw bytes, each as
+## "<label>:<line>: <why>". The first line must be a shebang, or a
+## `# Source me` header for a helper that is only ever sourced. Comment lines
+## and trailing ` # ...` comments are not checked for idioms.
+func _agent_script_problems_1135(label: String, bytes: PackedByteArray, check_idioms: bool) -> Array[String]:
+	var problems: Array[String] = []
+	var cr: int = bytes.find(13)
+	if cr != -1:
+		problems.append("%s:%d: CRLF line ending; agent scripts must be LF (bash reads the \\r as part of the command)" % [label, bytes.slice(0, cr).count(10) + 1])
+	var lines: PackedStringArray = bytes.get_string_from_utf8().replace("\r", "").split("\n")
+	if not (lines[0].begins_with("#!") or lines[0].begins_with("# Source me")):
+		problems.append("%s:1: no shebang; start with `#!/bin/bash` (or `# Source me` for a sourced helper)" % label)
+	if not check_idioms:
+		return problems
+	var rules: Array[RegEx] = []
+	for rule: Array in AGENT_SCRIPT_IDIOMS_1135:
+		rules.append(RegEx.create_from_string(rule[0]))
+	var comment_rx := RegEx.create_from_string("(?:^|\\s)#(?:\\s.*)?$")
+	var if_rx := RegEx.create_from_string("(?:^|[;&|(\\s])if\\s")
+	var elif_rx := RegEx.create_from_string("(?:^|[;\\s])elif\\s")
+	var else_rx := RegEx.create_from_string("(?:^|[;\\s])else(?=\\s|;|$)")
+	var fi_rx := RegEx.create_from_string("(?:^|[;&\\s])fi(?=\\s|;|\\)|$)")
+	# Conditions of the enclosing `if` blocks, so `if command -v bc; then` guards its body.
+	var ifs: Array[String] = []
+	for i: int in lines.size():
+		var code: String = lines[i]
+		if code.strip_edges().begins_with("#"):
+			continue
+		var comment: RegExMatch = comment_rx.search(code)
+		if comment != null:
+			code = code.substr(0, comment.get_start())
+		var context: String = "\n".join(ifs) + "\n" + code
+		for r: int in rules.size():
+			if rules[r].search(code) == null:
+				continue
+			var guard: String = AGENT_SCRIPT_IDIOMS_1135[r][2]
+			if not guard.is_empty() and context.contains("command -v " + guard):
+				continue
+			problems.append("%s:%d: %s: %s" % [label, i + 1, AGENT_SCRIPT_IDIOMS_1135[r][1], code.strip_edges()])
+		var opens: int = if_rx.search_all(code).size()
+		if opens == 0 and not ifs.is_empty():
+			if elif_rx.search(code) != null:
+				ifs[-1] = code
+			elif else_rx.search(code) != null:
+				ifs[-1] = ""
+		for _k: int in opens:
+			ifs.append(code)
+		for _k: int in fi_rx.search_all(code).size():
+			if not ifs.is_empty():
+				ifs.pop_back()
+	return problems
+## Every tools/agents script stays runnable on macOS, Linux and Windows Git
+## Bash: a shebang, LF line endings, and none of the BSD- or macOS-only idioms
+## outside pf-env.sh, which holds the portable helpers (#1135).
+func _scenario_agent_scripts_stay_portable() -> Array[String]:
+	var failures: Array[String] = []
+	var paths: PackedStringArray = _agent_script_paths_1135("res://tools/agents")
+	# 21 scripts when this was written: an empty listing must not pass vacuously.
+	if paths.size() < 15:
+		failures.append("only %d scripts found under tools/agents; the listing came back empty?" % paths.size())
+	for path: String in paths:
+		failures.append_array(_agent_script_problems_1135(path.trim_prefix("res://"), FileAccess.get_file_as_bytes(path), path.get_file() != "pf-env.sh"))
+	# The CRLF check reads the working tree; this rule keeps CRLF out of the
+	# committed content and out of every checkout, whatever core.autocrlf says.
+	if not FileAccess.get_file_as_string("res://.gitattributes").contains("tools/agents/**/*.sh text eol=lf"):
+		failures.append(".gitattributes lost `tools/agents/**/*.sh text eol=lf`")
+	# The checker itself must still catch each idiom and skip comments and guards.
+	var fixture: String = "#!/bin/bash\n# date -r in a comment is fine\nm=$(stat -f %m x)\necho abc | bc -l\nsed -i '' s/a/b/ f\ncommand -v osascript >/dev/null && osascript -e 'x'\nif command -v bc >/dev/null; then\n  echo 1 | bc\nfi\nx=1 # readlink -f y\nsed -i.bak s/a/b/ f\necho \"$(date -u +%s)\"\r\nreadlink -f y\nt=$(date -j -f %s 1 +%F)\n"
+	var problems: Array[String] = _agent_script_problems_1135("fixture.sh", fixture.to_utf8_buffer(), true)
+	var wanted: Array[String] = ["fixture.sh:12: CRLF", "fixture.sh:3: `stat -f`", "fixture.sh:4: `bc`", "fixture.sh:5: `sed -i ''`", "fixture.sh:13: `readlink -f`", "fixture.sh:14: `date -j`"]
+	var matched: int = 0
+	for w: String in wanted:
+		for p: String in problems:
+			if p.begins_with(w):
+				matched += 1
+				break
+	if matched != wanted.size() or problems.size() != wanted.size():
+		failures.append("fixture gave %s, wanted exactly %s" % [problems, wanted])
+	var no_shebang: Array[String] = _agent_script_problems_1135("bare.sh", "echo hi\n".to_utf8_buffer(), true)
+	if no_shebang.size() != 1 or not no_shebang[0].begins_with("bare.sh:1: no shebang"):
+		failures.append("a script with no shebang gave %s" % [no_shebang])
 	_scenario_completed = true
 	return failures
