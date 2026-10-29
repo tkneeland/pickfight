@@ -60147,10 +60147,10 @@ func _scenario_play_of_round_frames_are_sharp_and_smooth_1128() -> Array[String]
 	for i in 30:
 		var big := Image.create(1600, 900, false, Image.FORMAT_RGBA8)
 		big.fill(Color(float(i) / 30.0, 0.3, 0.6))
-		for tries in 200:
-			if rb._keep_hi_async(big):
-				break
-			await process_frame # the pool is busy: a grab is dropped, so retry (#1138)
+		var until: int = Time.get_ticks_msec() + 20000
+		while not rb._keep_hi_async(big) and Time.get_ticks_msec() < until:
+			OS.delay_msec(5) # the pool is busy: a grab is dropped, so retry (#1138)
+		await process_frame
 	if rb.hi_frame_size() != Vector2i(640, 360):
 		failures.append("a 1600x900 grab was kept at %s, want 640x360" % rb.hi_frame_size())
 	var frames: Array[Image] = rb.hi_frames_slice(0, 30)
