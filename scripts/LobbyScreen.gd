@@ -552,7 +552,10 @@ func _on_invite_pressed() -> void:
 		_server.invite_steam_friends()
 
 func _on_card_clicked(slot: int) -> void:
-	if _server != null and _server.has_method("host_pc_slot") and slot == _server.host_pc_slot() and _server.host_picker_shown():
+	var source: Object = _server
+	if source == null and not _last_lobby_args.is_empty() and _last_lobby_args[2] != null and _last_lobby_args[2].has_method("is_joiner_view"):
+		source = _last_lobby_args[2] # an Online joiner opens its own Your look (#1127)
+	if source != null and source.has_method("host_pc_slot") and slot == source.host_pc_slot() and source.host_picker_shown():
 		set_popup("look")
 
 func _on_badge_pressed(slot: int) -> void:
@@ -796,6 +799,19 @@ func show_pause_banner(on: bool) -> void:
 
 func attach_controls(server: Object) -> void:
 	_host.attach(server)
+
+## An Online joiner's copy of this screen (#1127, `RemoteLobby.gd`): no host
+## controls, but the big room code and Copy code on the join card, whose button
+## calls `copy_pressed`.
+func attach_joiner(copy_pressed: Callable) -> void:
+	_host.attach_joiner(copy_pressed)
+
+## The right column the joiner's own buttons go into, and the top bar's left slot.
+func right_column() -> VBoxContainer:
+	return _lobby_right
+
+func top_left() -> HBoxContainer:
+	return _top_left
 
 func control_button(id: String) -> Button:
 	return _host.control_button(id)

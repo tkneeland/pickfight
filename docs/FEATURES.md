@@ -266,3 +266,4 @@ Not shipped; do not treat as existing.
 - #242 Deploy relay, ship PC builds (tkneeland)
 - #268 Switch release (tkneeland)
 - #298 Steam lobbies and invites over relay (agage-JG)
+- Online joiner's lobby is the host's lobby (#1127, `RemoteLobby.gd`): an Online client builds the host's own `LobbyScreen` (logo, 4x2 player cards with hats and eyes, ping, ready pills, mode cards, the big room code with Copy code on the join card, the How to play and Your look popups) and feeds it the `lobby` frame, so a joiner sees what the host sees, with no second copy of the drawing. Your own card reads "(you)" and opens Your look when clicked; the right column adds Your look, How to play, the career line, the host seat's mode / target row, Leave match and Ready (Enter, or A / Start). Readying closes Your look. Not shown to a joiner: the host's Stages & Rules summary and Start.

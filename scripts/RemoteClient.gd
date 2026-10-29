@@ -34,6 +34,7 @@ const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.g
 const CosmeticsPanelScript: GDScript = preload("res://scripts/OnlineCosmeticsPanel.gd")
 const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
 const CopyCodeScript: GDScript = preload("res://scripts/CopyCode.gd")
+const RemoteLobbyScript: GDScript = preload("res://scripts/RemoteLobby.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
 const NetSyncScript: GDScript = preload("res://scripts/NetSync.gd")
 ## Issue #976: the host's effects, screens and HUD, drawn by the host's scripts.
@@ -195,7 +196,7 @@ var _wait_label: Label
 var _lobby_panel: Control
 var _lobby_title: Label
 var _career_button: Button
-var _lobby_list: VBoxContainer
+var _lobby # RemoteLobby.gd: the host's lobby screen on this client (#1127)
 var _ready_button: Button
 var _copy_button: Button # #1033: the joiner's Copy code, shared logic with the host's (#863)
 var _copied_until_msec: int = 0
@@ -1718,75 +1719,39 @@ func modifier_label() -> Label:
 	return _modifier_label
 
 func _build_lobby_panel() -> void:
-	_lobby_panel = Control.new()
-	_lobby_panel.name = "LobbyPanel"
-	_lobby_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_lobby_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ui.add_child(_lobby_panel)
-	var box: VBoxContainer = _centered_panel(_lobby_panel, 380, &"")
-	_lobby_title = _label(tr("JOIN_LOBBY_TITLE"), 28, Color.WHITE, UiThemeScript.HEADING_LABEL)
-	box.add_child(_lobby_title)
-	_copy_button = Button.new()
-	_copy_button.name = "CopyCode"
-	_copy_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_copy_button.visible = false
-	_copy_button.pressed.connect(copy_room_code)
-	box.add_child(_copy_button)
+	# #1127: the host's own lobby screen, fed by the `lobby` frame; see RemoteLobby.gd.
+	_lobby = RemoteLobbyScript.new()
+	_lobby.build(self, copy_room_code)
+	_lobby_panel = _lobby.screen.lobby_panel()
+	_lobby_panel.visible = false
+	_lobby_title = _lobby.title
+	_copy_button = _lobby.screen.control_button("copy_code")
+	_copy_button.focus_mode = Control.FOCUS_ALL # in the gamepad focus chain (#1033)
 	_sync_copy_button()
-	_career_button = Button.new()
-	_career_button.name = "Career"
-	_career_button.flat = true
-	_career_button.focus_mode = Control.FOCUS_NONE
+	_career_button = _lobby.career_button
 	_career_button.pressed.connect(func() -> void:
 		_career_open = not _career_open
 		_refresh_career())
-	box.add_child(_career_button)
 	_refresh_career()
-	_lobby_list = VBoxContainer.new()
-	# Issue #441: the cosmetics panel sits beside the player list.
-	var beside := HBoxContainer.new()
-	beside.add_theme_constant_override("separation", 20)
-	box.add_child(beside)
-	beside.add_child(_lobby_list)
-	_cosmetics_panel = CosmeticsPanelScript.new()
+	_cosmetics_panel = _lobby.look_panel()
 	_cosmetics_panel.picked.connect(_on_cosmetic_picked)
-	beside.add_child(_cosmetics_panel)
-	_ready_button = Button.new()
-	_ready_button.name = "Ready"
-	_ready_button.toggle_mode = true
+	_cosmetics_panel.visible = true
+	_ready_button = _lobby.ready_button
 	_pad_active = not Input.get_connected_joypads().is_empty()
 	_sync_ready_caption()
 	_ready_button.toggled.connect(func(on: bool) -> void:
 		_ready_want = 1 if on else 0
 		_ready_want_msec = GameClockScript.now_msec()
 		_send_json({"t": "ready", "v": on}))
-	box.add_child(_ready_button)
-	_host_row = HBoxContainer.new()
-	_host_row.name = "HostMenu"
-	_host_row.add_theme_constant_override("separation", 8)
-	box.add_child(_host_row)
-	_mode_button = Button.new()
-	_mode_button.name = "Mode"
-	_mode_button.pressed.connect(func() -> void:
+	_host_row = _lobby.host_row
+	_mode_button = _lobby.mode_button
+	_target_label = _lobby.target_label
+	_lobby.toggle_mode.connect(func() -> void:
 		_send_json({"t": "mode", "v": "ffa" if lobby.get("mode") == "teams" else "teams"}))
-	_host_row.add_child(_mode_button)
-	var down := Button.new()
-	down.name = "TargetDown"
-	down.text = "-"
-	down.pressed.connect(func() -> void: _send_json({"t": "target", "n": int(lobby.get("target", 5)) - 1}))
-	_host_row.add_child(down)
-	_target_label = _label(tr("LOBBY_FIRST_TO") % 5)
-	_host_row.add_child(_target_label)
-	var up := Button.new()
-	up.name = "TargetUp"
-	up.text = "+"
-	up.pressed.connect(func() -> void: _send_json({"t": "target", "n": int(lobby.get("target", 5)) + 1}))
-	_host_row.add_child(up)
-	_leave_button = Button.new()
-	_leave_button.name = "LeaveLobby"
-	_leave_button.text = tr("JOIN_LEAVE_MATCH")
+	_lobby.step_target.connect(func(delta: int) -> void:
+		_send_json({"t": "target", "n": int(lobby.get("target", 5)) + delta}))
+	_leave_button = _lobby.leave_button
 	_leave_button.pressed.connect(leave)
-	box.add_child(_leave_button)
 
 func _build_menu_panel() -> void:
 	_menu_panel = Control.new()
@@ -1928,6 +1893,29 @@ func lobby_title_text() -> String:
 				return tr("JOIN_ROOM_HOSTED") % [room_code, host_name]
 	return tr("JOIN_ROOM_TITLE") % room_code
 
+## Redraws the host's lobby screen from the `lobby` frame (#1127): the same call
+## RoundManager makes, with this client's RemoteLobby standing in for the server.
+func _refresh_shared_lobby(phase: String) -> void:
+	_lobby.own_slot = slot
+	_lobby.set_looks(looks.get("looks", []))
+	if not _lobby_panel.visible:
+		_lobby.screen.set_popup("")
+		return
+	_wait_label.visible = false
+	if lobby.has("players") and lobby.has("target"):
+		var state_copy: Dictionary = lobby.duplicate()
+		for key: String in ["count", "host"]:
+			if not state_copy.has(key):
+				state_copy[key] = 0 if key == "count" else -1
+		_lobby.screen.refresh_lobby(state_copy, 2, _lobby)
+		_lobby.screen._stages_summary.visible = false # the host's saved stage settings are not this seat's
+		var hint: Label = _lobby.screen._lobby_status
+		if hint.text == tr("LOBBY_ENTER_OR_START"):
+			hint.text = "" # there is no Start for a joiner to press
+	var room: Label = _lobby.screen._room_label
+	room.text = room_code
+	room.visible = not room_code.is_empty()
+
 func _refresh_lobby() -> void:
 	if _lobby_panel == null or state != State.PLAYING:
 		return
@@ -1940,18 +1928,7 @@ func _refresh_lobby() -> void:
 		_lobby_title.text = tr("JOIN_ROOM_OVER") % room_code
 	else:
 		_lobby_title.text = lobby_title_text()
-	for child in _lobby_list.get_children():
-		_lobby_list.remove_child(child)
-		child.queue_free()
-	for entry: Variant in lobby.get("players", []):
-		if entry is Dictionary:
-			var line: String = str(entry.get("name", "")) if not str(entry.get("name", "")).is_empty() else "P%d" % (int(entry.get("slot", 0)) + 1)
-			if entry.get("ready", false):
-				line = tr("JOIN_PLAYER_READY") % line
-			if entry.has("ping"):
-				line += "  " + tr("PING_MS") % int(entry["ping"])
-			var color := Color.html(str(entry.get("color", "ffffff")))
-			_lobby_list.add_child(_label(line, 20, color))
+	_refresh_shared_lobby(phase)
 	var host: bool = _is_host()
 	_host_row.visible = host
 	_mode_button.text = tr("MODE_TEAMS") if lobby.get("mode") == "teams" else tr("MODE_FFA")
@@ -1960,7 +1937,10 @@ func _refresh_lobby() -> void:
 	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")
 	_ready_button.visible = phase != "playing" and phase != "round_end"
 	_sync_copy_button()
-	_cosmetics_panel.visible = (phase == "lobby" or phase == "countdown") and not _own_ready()
+	_ready_button.theme_type_variation = UiThemeScript.SKY_BUTTON if _own_ready() else UiThemeScript.START_BUTTON
+	if _own_ready() and _lobby.screen.popup_open() == "look":
+		_lobby.screen.set_popup("") # readied: the picker closes, as it hid before (#441)
+	_lobby.look_button.visible = (phase == "lobby" or phase == "countdown") and not _own_ready()
 	if _ready_want != -1 and (_own_ready() == (_ready_want == 1) or GameClockScript.now_msec() - _ready_want_msec > 3000):
 		_ready_want = -1 # the host's echo arrived (or never will): mirror again (#550)
 	if _ready_want == -1:
@@ -2056,6 +2036,7 @@ func _on_looks(msg: Dictionary) -> void:
 		looks["looks"] = msg["looks"]
 	if msg.get("looks") is Array:
 		_cosmetics_panel.set_looks(msg["looks"], slot)
+		_refresh_lobby()
 
 ## A click on the panel: tell the host (the phone's own frame) and save it.
 func _on_cosmetic_picked(kind: String, value: Variant) -> void:
