@@ -7,7 +7,7 @@
 #   PEER_BEACON        a WATCH_PEERS account's #432 usage beacon became fresh (once)
 #   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than pf_worker_target (day DAY_AGENTS, night
 #                      NIGHT_AGENTS, 1 past FIVE_H_SLOW_USED, 0 past FIVE_H_STOP_USED or the weekly stop)
-#   AUSTIN_QUEUE_LOW <n>  (triagemaster only) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
+#   AUSTIN_QUEUE_LOW <n>  (triagemaster only, ticket-maker on) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
 #   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
 . "$(dirname "$0")/pf-env.sh" || exit 1
 SEEN=$PF_STATE/.pf-triage-seen; touch "$SEEN"
@@ -58,7 +58,8 @@ while true; do
       git -C "$ROOT" branch -a --list "*issue-$n-*" | grep -q . && active=$((active+1))
     done
     if [ "$active" -lt "$min" ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
-    if pf_is_triagemaster && pf_budget_ok; then
+    if pf_is_triagemaster && pf_budget_ok && [ "$(bash "$(dirname "$0")/pf-ticketmaker.sh")" = on ]; then
+      # no refill while the ticket-maker is off (playtest phase, autotriage.md rule 11)
       # peers' queues: dev tickets assigned to a peer (meta tickets excluded)
       for peer in ${WATCH_PEERS:-agage-JG}; do
         aq=$(echo "$issues" | jq --arg p "$peer" --arg m "$META_TICKETS" '[.[] | select(.pull_request==null and (.number|IN($m|split(" ")|map(tonumber)[])|not)) | select(any(.assignees[]; .login==$p)) | select(any(.labels[]; .name=="ready-for-agent"))] | length' 2>/dev/null || echo 9)
