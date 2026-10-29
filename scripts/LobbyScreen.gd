@@ -412,8 +412,10 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	var target_kind: String = str(state.get("target_kind", "first_to"))
 	var target_text: String = tr(GameModesScript.target_status_key(target_kind)) % state["target"]
 	_picked_mode = mode_id
-	_lobby_target_label.text = "%s%s - %s - %s" % [GameModesScript.display_name(mode_id), " - " + tr("MODE_TEAMS") if teams else "", target_text, StagesRulesScreenScript.stage_count_text(mode_id)]
-	_stages_summary.text = StagesRulesScreenScript.summary(mode_id)
+	var joiner: bool = join_source != null and join_source.has_method("is_joiner_view") # the room's settings come in the frame (#1127)
+	var stage_text: String = StagesRulesScreenScript.stage_count_text_from_state(mode_id, state) if joiner else StagesRulesScreenScript.stage_count_text(mode_id)
+	_lobby_target_label.text = "%s%s - %s - %s" % [GameModesScript.display_name(mode_id), " - " + tr("MODE_TEAMS") if teams else "", target_text, stage_text]
+	_stages_summary.text = StagesRulesScreenScript.summary_from_state(mode_id, state) if joiner else StagesRulesScreenScript.summary(mode_id)
 	_host.set_target(target_kind, int(state["target"]))
 	_select_mode_card(mode_id)
 	_popups.set_mode(mode_id, target_kind, int(state["target"]))

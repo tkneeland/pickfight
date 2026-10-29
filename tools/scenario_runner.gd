@@ -59932,7 +59932,7 @@ func _scenario_online_client_shows_the_host_lobby_1127() -> Array[String]:
 	client._on_host_text(JSON.stringify({"slot": 1}))
 	client._on_host_text(JSON.stringify({"t": "looks", "palette": ["#e69f00", "#56b4e9", "#009e73"], "looks": [
 		{"slot": 0, "hat": "crown", "eyes": "angry", "color": 0}, {"slot": 1, "hat": "viking", "eyes": "wide", "color": 1}]}))
-	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false,
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"": {"on": ["x"], "locked": ["night"]}}},
 		"players": [{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9", "ping": 40}]}))
 	await process_frame
 	var screen: Node = client._lobby.screen
@@ -59944,6 +59944,10 @@ func _scenario_online_client_shows_the_host_lobby_1127() -> Array[String]:
 		failures.append("the own card is empty")
 	if screen.mode_cards().is_empty():
 		failures.append("the host's mode cards are missing from the joiner's lobby")
+	if screen._stages_summary.text != TranslationServer.translate("SR_SUMMARY") % [TranslationServer.translate("SR_STAGE_COUNT") % 2, TranslationServer.translate("SR_MODS_SOME") % [1, 2]]:
+		failures.append("the summary does not show the room's stage and rule settings: '%s'" % screen._stages_summary.text)
+	if not screen._stages_summary.is_visible_in_tree() or not screen._lobby_target_label.text.contains("2"):
+		failures.append("the room's settings are not shown read only: '%s'" % screen._lobby_target_label.text)
 	var room: Label = screen._room_label
 	if room == null or room.text != "WXYZ" or not room.is_visible_in_tree():
 		failures.append("the room code is not on the join card")
@@ -59959,7 +59963,7 @@ func _scenario_online_client_shows_the_host_lobby_1127() -> Array[String]:
 	if screen.popup_open() != "look":
 		failures.append("clicking the own card did not open Your look (open: '%s')" % screen.popup_open())
 	client._ready_button.button_pressed = true
-	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false,
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"": {"on": ["x"], "locked": ["night"]}}},
 		"players": [{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": true, "name": "Me", "color": "56b4e9"}]}))
 	await process_frame
 	if screen.popup_open() != "":

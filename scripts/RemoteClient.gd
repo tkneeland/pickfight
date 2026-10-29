@@ -1908,7 +1908,6 @@ func _refresh_shared_lobby(phase: String) -> void:
 			if not state_copy.has(key):
 				state_copy[key] = 0 if key == "count" else -1
 		_lobby.screen.refresh_lobby(state_copy, 2, _lobby)
-		_lobby.screen._stages_summary.visible = false # the host's saved stage settings are not this seat's
 		var hint: Label = _lobby.screen._lobby_status
 		if hint.text == tr("LOBBY_ENTER_OR_START"):
 			hint.text = "" # there is no Start for a joiner to press
