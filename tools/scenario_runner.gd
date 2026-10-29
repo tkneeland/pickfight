@@ -1278,6 +1278,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ctf_flag_drop_and_return_play_cues",
 	"sfx_call_sites_name_real_sounds_1120",
 	"sfx_call_site_check_flags_bad_fixture_1120",
+	"online_client_shows_the_host_lobby_1127",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4267,6 +4268,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_sfx_call_sites_name_real_sounds_1120()
 		"sfx_call_site_check_flags_bad_fixture_1120":
 			return _scenario_sfx_call_site_check_flags_bad_fixture_1120()
+		"online_client_shows_the_host_lobby_1127":
+			return await _scenario_online_client_shows_the_host_lobby_1127()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -39786,7 +39789,7 @@ func _rc_untranslated_review(client: Node) -> PackedStringArray:
 		if not (node is Label or node is BaseButton) or not node.is_inside_tree():
 			continue
 		var text: String = str(node.get("text"))
-		if text.is_empty() or text == "-" or text == "+" or text.begins_with("[xx] "):
+		if text.is_empty() or text == "-" or text == "+" or text == "X" or text.contains("[xx]") or node.name == &"RoomCode" or node.name == &"Countdown": # data and glyphs, not strings (#1127)
 			continue
 		out.append("%s '%s'" % [node.name, text])
 	return out
@@ -40823,6 +40826,8 @@ func _scenario_cosmetics_online_saved_pick_arrives_on_join() -> Array[String]:
 	var panel: Control = client.cosmetics_panel()
 	if not await _wait_for_239(func() -> bool: return panel.palette.size() > 0 and panel.preview_look().get("hat") == "viking", 5000):
 		failures.append("the panel never got the palette and the client's look (palette %d, preview %s)" % [panel.palette.size(), panel.preview_look()])
+	client._lobby.screen.set_popup("look") # the picker is the Your look popup now (#1127)
+	await process_frame
 	if not panel.is_visible_in_tree():
 		failures.append("the panel is hidden in the lobby before the client readies")
 	for entry: Variant in server.looks_update_message()["looks"]:
@@ -59909,5 +59914,61 @@ func _scenario_sfx_call_site_check_flags_bad_fixture_1120() -> Array[String]:
 	var wanted: Array[String] = ["fixture.gd:3 hti", "fixture.gd:4 made_up", "fixture.gd:5 bogus_say"]
 	if found != wanted:
 		failures.append("the bad fixture gave %s, wanted %s" % [found, wanted])
+	_scenario_completed = true
+	return failures
+
+## #1127: an Online client's lobby is the host's own LobbyScreen (cards, room code,
+## popups), not a separate panel: the seats are LobbyPlayerCards with the looks
+## frame's hat and eyes, the own card reads "(you)" and opens Your look, the join
+## card shows the room code and Copy code, and readying closes the popup.
+func _scenario_online_client_shows_the_host_lobby_1127() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	client.room_code = "WXYZ"
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 1}))
+	client._on_host_text(JSON.stringify({"t": "looks", "palette": ["#e69f00", "#56b4e9", "#009e73"], "looks": [
+		{"slot": 0, "hat": "crown", "eyes": "angry", "color": 0}, {"slot": 1, "hat": "viking", "eyes": "wide", "color": 1}]}))
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"": {"on": ["x"], "locked": ["night"]}}},
+		"players": [{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9", "ping": 40}]}))
+	await process_frame
+	var screen: Node = client._lobby.screen
+	if not client._lobby_panel.visible or client._lobby_panel != screen.lobby_panel():
+		failures.append("the client's lobby panel is not the host screen's")
+	if screen.player_cards().size() != 2:
+		failures.append("expected 2 player cards, got %d" % screen.player_cards().size())
+	elif screen.player_card(1).find_child("*", true, false) == null:
+		failures.append("the own card is empty")
+	if screen.mode_cards().is_empty():
+		failures.append("the host's mode cards are missing from the joiner's lobby")
+	if screen._stages_summary.text != TranslationServer.translate("SR_SUMMARY") % [TranslationServer.translate("SR_STAGE_COUNT") % 2, TranslationServer.translate("SR_MODS_SOME") % [1, 2]]:
+		failures.append("the summary does not show the room's stage and rule settings: '%s'" % screen._stages_summary.text)
+	if not screen._stages_summary.is_visible_in_tree() or not screen._lobby_target_label.text.contains("2"):
+		failures.append("the room's settings are not shown read only: '%s'" % screen._lobby_target_label.text)
+	var room: Label = screen._room_label
+	if room == null or room.text != "WXYZ" or not room.is_visible_in_tree():
+		failures.append("the room code is not on the join card")
+	var copy: Button = client.find_child("CopyCode", true, false) as Button
+	if copy == null or not copy.is_visible_in_tree():
+		failures.append("Copy code is not showing in the lobby")
+	if client._lobby.slot_hat(0) != "crown" or client._lobby.slot_eyes(1) != "wide":
+		failures.append("the cards' looks do not come from the looks frame")
+	screen._on_card_clicked(0)
+	if screen.popup_open() != "":
+		failures.append("clicking another seat's card opened Your look")
+	screen._on_card_clicked(1)
+	if screen.popup_open() != "look":
+		failures.append("clicking the own card did not open Your look (open: '%s')" % screen.popup_open())
+	client._ready_button.button_pressed = true
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"": {"on": ["x"], "locked": ["night"]}}},
+		"players": [{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": true, "name": "Me", "color": "56b4e9"}]}))
+	await process_frame
+	if screen.popup_open() != "":
+		failures.append("readying left Your look open")
+	client.queue_free()
+	await process_frame
 	_scenario_completed = true
 	return failures

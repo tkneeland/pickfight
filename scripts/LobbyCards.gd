@@ -83,6 +83,8 @@ func open_seats() -> Array[Control]:
 ## Redraws the column from the lobby state.
 func refresh(state: Dictionary, join_source: Object) -> void:
 	var server: Object = _screen._server
+	if server == null and join_source != null and join_source.has_method("is_joiner_view"):
+		server = join_source # an Online joiner's RemoteLobby answers the cards' look queries (#1127)
 	var teams: bool = bool(state.get("teams", false))
 	var entries: Array = state["players"].duplicate()
 	if teams:

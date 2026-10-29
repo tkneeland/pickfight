@@ -132,6 +132,15 @@ func attach(server: Object) -> void:
 	_place_kind_notice()
 	refresh()
 
+## An Online joiner's lobby (#1127): only the room code and Copy code on the join
+## card, the same widgets the host's has. Nothing here commands a server.
+func attach_joiner(copy_pressed: Callable) -> void:
+	if _room_label != null or _screen._lobby_right == null:
+		return
+	_build_room_widgets()
+	_copy_button.pressed.connect(copy_pressed)
+	_copy_button.visible = false
+
 ## The top-left Couch / Online / Solo switch (#435): one cream frame, three cells
 ## split by ink rules, the picked one yellow. C, O and S press them too.
 func _build_kind_switch() -> void:

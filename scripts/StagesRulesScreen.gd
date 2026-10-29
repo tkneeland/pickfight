@@ -136,6 +136,30 @@ static func summary(mode_id: String) -> String:
 		mods = TranslationServer.translate("SR_MODS_SOME") % [on, open]
 	return TranslationServer.translate("SR_SUMMARY") % [stage_count_text(mode_id), mods]
 
+## The same two lines read from a lobby frame's `stages_by_mode` and `rules` (#1127), for an
+## Online joiner, whose own saved settings are not the room's. Read only.
+static func stage_count_text_from_state(mode_id: String, state: Dictionary) -> String:
+	var by_mode: Variant = state.get("stages_by_mode", {})
+	var entry: Variant = by_mode.get(mode_id, {}) if by_mode is Dictionary else {}
+	var on: Variant = entry.get("on", []) if entry is Dictionary else []
+	var count: int = (on as Array).size() if on is Array else 0
+	return TranslationServer.translate("SR_STAGE_COUNT_ONE" if count == 1 else "SR_STAGE_COUNT") % count
+
+static func summary_from_state(mode_id: String, state: Dictionary) -> String:
+	var rules: Variant = state.get("rules", {})
+	var modes: Variant = rules.get("modes", {}) if rules is Dictionary else {}
+	var entry: Variant = modes.get(mode_id, {}) if modes is Dictionary else {}
+	var ids: Variant = rules.get("modifiers", []) if rules is Dictionary else []
+	var on: int = (entry.get("on", []) as Array).size() if entry is Dictionary and entry.get("on") is Array else 0
+	var locked: int = (entry.get("locked", []) as Array).size() if entry is Dictionary and entry.get("locked") is Array else 0
+	var open: int = maxi(0, ((ids as Array).size() if ids is Array else 0) - locked)
+	var mods: String = TranslationServer.translate("SR_MODS_OFF")
+	if open > 0 and on == open:
+		mods = TranslationServer.translate("SR_MODS_ON")
+	elif on > 0:
+		mods = TranslationServer.translate("SR_MODS_SOME") % [on, open]
+	return TranslationServer.translate("SR_SUMMARY") % [stage_count_text_from_state(mode_id, state), mods]
+
 # --- Building ------------------------------------------------------------------
 
 ## Builds the screen into `card` (a PanelContainer) the first time it opens.
