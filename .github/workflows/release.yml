@@ -92,9 +92,12 @@ jobs:
           "$GODOT_DIR/godot" --headless --path . --export-release "macOS" build/macos/Pickfight.zip
           "$GODOT_DIR/godot" --headless --path . --export-release "Linux" build/linux/pickfight.x86_64
           chmod +x build/linux/pickfight.x86_64
-          (cd build/windows && zip -qr ../../dist/pickfight-windows.zip .)
-          (cd build/macos && zip -qr ../../dist/pickfight-mac.zip .)
-          (cd build/linux && zip -qr ../../dist/pickfight-linux.zip .)
+          (cd build/windows && zip -qry ../../dist/pickfight-windows.zip .)
+          # Godot exports macOS as a zip; unpack it so itch installs Pickfight.app,
+          # not a zip inside a zip. -y keeps the app bundle's framework symlinks.
+          unzip -q build/macos/Pickfight.zip -d build/macos/app
+          (cd build/macos/app && zip -qry ../../../dist/pickfight-mac.zip .)
+          (cd build/linux && zip -qry ../../dist/pickfight-linux.zip .)
           ls -l dist
 
       - name: Upload artifacts
