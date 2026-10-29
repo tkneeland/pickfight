@@ -91,8 +91,9 @@ func _process(delta: float) -> void:
 		return
 	if f9_due:
 		# The F9 ring: shrunk in place on the main thread, so the pool job
-		# gets its own copy.
-		_keep_hi_async(img.duplicate() as Image)
+		# gets its own copy, made only when the pool has room (#1138).
+		if _hi_has_room():
+			_keep_hi_async(img.duplicate() as Image)
 		_keep_frame(img)
 	else:
 		_keep_hi_async(img)
