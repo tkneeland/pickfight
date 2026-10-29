@@ -279,17 +279,17 @@ func play(ev: Dictionary) -> void:
 ## of pause left), under this machine's Play of the Round and Screen shake.
 func _play_of_round(ev: Dictionary) -> void:
 	end_play_of_round()
-	if not HostSettingsScript.shared().play_of_round or replay.frame_count() == 0:
+	if not HostSettingsScript.shared().play_of_round or replay.hi_frame_count() == 0:
 		return
 	var now: int = Time.get_ticks_msec()
-	var pick: Dictionary = PlayOfRoundScript.select_frames(replay.frame_count(), now, now - int(ev.get("age", 0)), int(ev.get("rem", 0)))
+	var pick: Dictionary = PlayOfRoundScript.select_frames(replay.hi_frame_count(), now, now - int(ev.get("age", 0)), int(ev.get("rem", 0)))
 	if int(pick["count"]) <= 0:
 		return
 	if play_of_round == null:
 		play_of_round = PlayOfRoundScript.new()
 		add_child(play_of_round)
 	var sfx: Node = get_node_or_null("/root/Sfx")
-	play_of_round.play(replay.frames_slice(int(pick["start"]), int(pick["count"])), str(ev.get("cap", "")),
+	play_of_round.play(replay.hi_frames_slice(int(pick["start"]), int(pick["count"])), str(ev.get("cap", "")),
 		sfx == null or bool(sfx.get("screen_shake")))
 
 func end_play_of_round() -> void:

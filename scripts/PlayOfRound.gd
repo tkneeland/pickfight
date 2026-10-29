@@ -1,6 +1,6 @@
 extends CanvasLayer
 ## Play of the round (#704): after a round, the best KO replayed in slow motion
-## from the F9 replay buffer (#502), with the killer's name. It plays only inside
+## from the replay buffer's own sharp ring (640x360 at 24 fps, #1128), with the killer's name. It plays only inside
 ## the existing round-end pause and never changes its length: `RoundManager`
 ## owns the deadline, trims the clip to the time left (`select_frames`) and
 ## dismisses the panel the tick the pause ends. This node only picks and shows.
@@ -23,8 +23,8 @@ const MIN_PLAY_SEC: float = 1.5
 ## Kept free at the end of the pause, so the clip is gone before it is.
 const END_MARGIN_MSEC: int = 250
 const ReplayBufferScript := preload("res://scripts/ReplayBuffer.gd")
-## The replay buffer's capture rate: the clip's frames are its frames.
-const CAPTURE_FPS: int = ReplayBufferScript.CAPTURE_FPS
+## The sharp ring's capture rate: the clip's frames are its frames.
+const CAPTURE_FPS: int = ReplayBufferScript.HI_FPS
 
 signal finished
 
@@ -110,6 +110,7 @@ func _init() -> void:
 	_rect.offset_top = 0
 	_rect.offset_bottom = 0
 	_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	add_child(_rect)
 	_caption = Label.new()
 	_caption.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -167,6 +168,10 @@ func _show_frame(index: int) -> void:
 		return
 	_shown = index
 	var img: Image = _frames[index]
+	if img.get_format() == ReplayBufferScript.HI_FORMAT:
+		# The ring packs RGB565 to stay small; one frame at a time back to RGB8.
+		img = img.duplicate() as Image
+		img.convert(Image.FORMAT_RGB8)
 	if _texture != null and _texture.get_size() == Vector2(img.get_size()) \
 			and _texture.get_format() == img.get_format() and not img.has_mipmaps():
 		_texture.update(img)
