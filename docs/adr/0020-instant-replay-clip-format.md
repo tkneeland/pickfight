@@ -44,7 +44,16 @@ state replay needs a deterministic re-sim the game does not have.
   frames a second, drawn with linear filtering.
 - **Memory cap:** 120 x 640 x 360 x 2 = 55,296,000 bytes (52.7 MiB, under the
   64 MB target), fixed whatever the match does. While a grab is being shrunk
-  the pool holds at most 2 source frames on top (the window's size, transient).
+  at most 2 resize jobs run, so at most 2 window-sized source frames are alive on
+  top (transient). When both are busy the next grab is dropped, never waited
+  for (#1138), and a buffer freed outside the tree finishes its jobs on
+  predelete.
+- **Shape:** frames fit inside 640x360 with the window's aspect kept (a 16:10
+  window is 576x360, an ultrawide 640x274), so no shape holds more pixels than
+  640x360 and the cap above stands (#1137).
+- **Selection:** the replay window is cut by each frame's grab time, not by
+  index, so a host below 24 fps or one that dropped grabs still ends the clip
+  half a second after the KO (#1139).
 - **Cost:** the viewport grab runs at 24 a second (it ran at 12); the resize and
   RGB565 pack run on `WorkerThreadPool`, not the main thread. Every second grab
   also feeds the F9 ring as before.
