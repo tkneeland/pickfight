@@ -2323,7 +2323,7 @@ func _log_play_of_round_ko(ko: Dictionary, t_msec: int) -> void:
 func _start_play_of_round() -> void:
 	if _play_of_round != null:
 		_play_of_round.dismiss()
-	if not HostSettingsScript.shared().play_of_round or _replay == null or _replay.frame_count() == 0:
+	if not HostSettingsScript.shared().play_of_round or _replay == null or _replay.hi_frame_count() == 0:
 		return
 	# A match-deciding round has its own slow-motion KO and the podium after it.
 	if _match_winner_slot != -1 or _match_winner_team != -1 or _final_ko_active:
@@ -2332,7 +2332,7 @@ func _start_play_of_round() -> void:
 	if best.is_empty():
 		return
 	var now: int = GameClockScript.now_msec()
-	var pick: Dictionary = PlayOfRoundScript.select_frames(_replay.frame_count(), now, int(best["t"]), _pause_until_msec - now)
+	var pick: Dictionary = PlayOfRoundScript.select_frames(_replay.hi_frame_count(), now, int(best["t"]), _pause_until_msec - now)
 	if int(pick["count"]) <= 0:
 		return
 	if _play_of_round == null:
@@ -2344,7 +2344,7 @@ func _start_play_of_round() -> void:
 	var caption: String = tr("PLAY_OF_ROUND_CAPTION") % _slot_name(int(best["killer"]))
 	# The Online joiner plays the same moment from its own screen's frames (#976).
 	EffectStreamScript.record("por", {"age": now - int(best["t"]), "rem": _pause_until_msec - now, "cap": caption})
-	_play_of_round.play(_replay.frames_slice(int(pick["start"]), int(pick["count"])), caption, _shake_on())
+	_play_of_round.play(_replay.hi_frames_slice(int(pick["start"]), int(pick["count"])), caption, _shake_on())
 
 func _shake_on() -> bool:
 	var sfx: Node = get_node_or_null("/root/Sfx") if is_inside_tree() else null

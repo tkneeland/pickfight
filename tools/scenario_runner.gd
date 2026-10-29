@@ -1003,6 +1003,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"settings_hygiene_609",
 	"play_of_round_best_moment_scoring_order_704",
 	"play_of_round_trims_to_the_pause_or_plays_nothing_704",
+	"play_of_round_buffer_stays_bounded",
+	"play_of_round_frames_are_sharp_and_smooth_1128",
 	"play_of_round_no_ko_plays_nothing_704",
 	"play_of_round_leaves_the_pause_length_alone_704",
 	"play_of_round_skip_input_dismisses_704",
@@ -1279,6 +1281,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sfx_call_sites_name_real_sounds_1120",
 	"sfx_call_site_check_flags_bad_fixture_1120",
 	"look_picker_buttons_show_icons",
+	"online_client_shows_the_host_lobby_1127",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -3728,6 +3731,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_soccer_ball_flies_farther_than_at_mass_one_649()
 		"play_of_round_best_moment_scoring_order_704": return await _scenario_play_of_round_best_moment_scoring_order_704()
 		"play_of_round_trims_to_the_pause_or_plays_nothing_704": return await _scenario_play_of_round_trims_to_the_pause_or_plays_nothing_704()
+		"play_of_round_buffer_stays_bounded": return await _scenario_play_of_round_buffer_stays_bounded()
+		"play_of_round_frames_are_sharp_and_smooth_1128": return await _scenario_play_of_round_frames_are_sharp_and_smooth_1128()
 		"play_of_round_no_ko_plays_nothing_704": return await _scenario_play_of_round_no_ko_plays_nothing_704()
 		"play_of_round_leaves_the_pause_length_alone_704": return await _scenario_play_of_round_leaves_the_pause_length_alone_704()
 		"play_of_round_skip_input_dismisses_704": return await _scenario_play_of_round_skip_input_dismisses_704()
@@ -4270,6 +4275,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_sfx_call_site_check_flags_bad_fixture_1120()
 		"look_picker_buttons_show_icons":
 			return await _scenario_look_picker_buttons_show_icons()
+		"online_client_shows_the_host_lobby_1127":
+			return await _scenario_online_client_shows_the_host_lobby_1127()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -39789,7 +39796,7 @@ func _rc_untranslated_review(client: Node) -> PackedStringArray:
 		if not (node is Label or node is BaseButton) or not node.is_inside_tree():
 			continue
 		var text: String = str(node.get("text"))
-		if text.is_empty() or text == "-" or text == "+" or text.begins_with("[xx] "):
+		if text.is_empty() or text == "-" or text == "+" or text == "X" or text.contains("[xx]") or node.name == &"RoomCode" or node.name == &"Countdown": # data and glyphs, not strings (#1127)
 			continue
 		out.append("%s '%s'" % [node.name, text])
 	return out
@@ -40827,6 +40834,8 @@ func _scenario_cosmetics_online_saved_pick_arrives_on_join() -> Array[String]:
 	var panel: Control = client.cosmetics_panel()
 	if not await _wait_for_239(func() -> bool: return panel.palette.size() > 0 and panel.preview_look().get("hat") == "viking", 5000):
 		failures.append("the panel never got the palette and the client's look (palette %d, preview %s)" % [panel.palette.size(), panel.preview_look()])
+	client._lobby.screen.set_popup("look") # the picker is the Your look popup now (#1127)
+	await process_frame
 	if not panel.is_visible_in_tree():
 		failures.append("the panel is hidden in the lobby before the client readies")
 	for entry: Variant in server.looks_update_message()["looks"]:
@@ -50518,13 +50527,13 @@ func _scenario_play_of_round_best_moment_scoring_order_704() -> Array[String]:
 func _scenario_play_of_round_trims_to_the_pause_or_plays_nothing_704() -> Array[String]:
 	var failures: Array[String] = []
 	var pick: Callable = PlayOfRoundScript704.select_frames
-	# A KO 100 ms ago with 48 frames held and a 10 s pause: the whole 4 s clip.
+	# A KO 100 ms ago with 120 frames held and a 10 s pause: the whole 4 s clip (96 frames at 24 fps, #1128).
 	var full: Dictionary = pick.call(120, 20000, 19900, 10000)
-	if int(full["count"]) != 48 or int(full["start"]) + int(full["count"]) - 1 != 119:
+	if int(full["count"]) != 96 or int(full["start"]) + int(full["count"]) - 1 != 119:
 		failures.append("a long pause did not show the whole clip: %s" % full)
-	# A 3 s pause: slow motion (0.5x of 12 fps) must fit with a margin.
+	# A 3 s pause: slow motion (0.5x of 24 fps) must fit with a margin.
 	var trimmed: Dictionary = pick.call(120, 20000, 19900, 3000)
-	var run_sec: float = float(trimmed["count"]) / 6.0
+	var run_sec: float = float(trimmed["count"]) / 12.0
 	if int(trimmed["count"]) == 0 or run_sec > 3.0 - 0.25:
 		failures.append("a 3 s pause was not trimmed to fit: %s runs %.2f s" % [trimmed, run_sec])
 	# Under 1.5 s of clip fits: nothing.
@@ -55448,8 +55457,9 @@ func _scenario_night_glows_removed_with_stage_review_gp() -> Array[String]:
 		failures.append("the player kept its night glow after the night stage left")
 	await _teardown(holder)
 	return failures
-## Instant replay captures 12 frames a second on a host running at 50 fps:
-## the time past each capture carries over instead of being dropped.
+## Instant replay grabs 24 frames a second (every second one feeds the 12 fps
+## F9 ring) on a host running at 50 fps: the time past each grab carries over
+## instead of being dropped.
 func _scenario_replay_capture_keeps_twelve_fps_review_gp() -> Array[String]:
 	var failures: Array[String] = []
 	var buffer: Node = ReplayBufferScript_review_gp.new()
@@ -55457,8 +55467,8 @@ func _scenario_replay_capture_keeps_twelve_fps_review_gp() -> Array[String]:
 	for i in 500:
 		if buffer.capture_due(0.02):
 			captures += 1
-	if captures < 119 or captures > 121:
-		failures.append("10 s at 50 fps captured %d frames, want 120" % captures)
+	if captures < 239 or captures > 241:
+		failures.append("10 s at 50 fps grabbed %d frames, want 240" % captures)
 	var img := Image.create(512, 288, false, Image.FORMAT_RGBA8)
 	buffer.push_frame(img)
 	var kept: Array[Image] = buffer.frames_slice(0, 1)
@@ -56694,8 +56704,8 @@ func _scenario_expanding_rings_share_base_and_free_refactor_audio() -> Array[Str
 				(ring as Node).free()
 	var play_of_round: GDScript = preload("res://scripts/PlayOfRound.gd")
 	var replay: GDScript = preload("res://scripts/ReplayBuffer.gd")
-	if int(play_of_round.get_script_constant_map()["CAPTURE_FPS"]) != int(replay.get_script_constant_map()["CAPTURE_FPS"]):
-		failures.append("PlayOfRound's CAPTURE_FPS no longer matches ReplayBuffer's")
+	if int(play_of_round.get_script_constant_map()["CAPTURE_FPS"]) != int(replay.get_script_constant_map()["HI_FPS"]):
+		failures.append("PlayOfRound's CAPTURE_FPS no longer matches ReplayBuffer's HI_FPS")
 	_scenario_completed = true
 	return failures
 ## Refactor (audio/juice) small fixes: a window close while Music is already
@@ -57497,7 +57507,7 @@ func _scenario_remote_effects_play_of_round_976() -> Array[String]:
 	var rig: Dictionary = {"nodes": [], "relay": null}
 	var client: Node = await _fx_client_976(rig)
 	var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
-	for i in 36:
+	for i in 120:
 		client.effects.replay.push_frame(img)
 	_fx_play_976(client, [{"k": "por", "age": 1000, "rem": 3000, "cap": "Play of the Round: Ann"}])
 	var por: CanvasLayer = client.effects.play_of_round
@@ -59913,6 +59923,128 @@ func _scenario_sfx_call_site_check_flags_bad_fixture_1120() -> Array[String]:
 	var wanted: Array[String] = ["fixture.gd:3 hti", "fixture.gd:4 made_up", "fixture.gd:5 bogus_say"]
 	if found != wanted:
 		failures.append("the bad fixture gave %s, wanted %s" % [found, wanted])
+	_scenario_completed = true
+	return failures
+
+## #1127: an Online client's lobby is the host's own LobbyScreen (cards, room code,
+## popups), not a separate panel: the seats are LobbyPlayerCards with the looks
+## frame's hat and eyes, the own card reads "(you)" and opens Your look, the join
+## card shows the room code and Copy code, and readying closes the popup.
+func _scenario_online_client_shows_the_host_lobby_1127() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	client.room_code = "WXYZ"
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 1}))
+	client._on_host_text(JSON.stringify({"t": "looks", "palette": ["#e69f00", "#56b4e9", "#009e73"], "looks": [
+		{"slot": 0, "hat": "crown", "eyes": "angry", "color": 0}, {"slot": 1, "hat": "viking", "eyes": "wide", "color": 1}]}))
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"": {"on": ["x"], "locked": ["night"]}}},
+		"players": [{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9", "ping": 40}]}))
+	await process_frame
+	var screen: Node = client._lobby.screen
+	if not client._lobby_panel.visible or client._lobby_panel != screen.lobby_panel():
+		failures.append("the client's lobby panel is not the host screen's")
+	if screen.player_cards().size() != 2:
+		failures.append("expected 2 player cards, got %d" % screen.player_cards().size())
+	elif screen.player_card(1).find_child("*", true, false) == null:
+		failures.append("the own card is empty")
+	if screen.mode_cards().is_empty():
+		failures.append("the host's mode cards are missing from the joiner's lobby")
+	if screen._stages_summary.text != TranslationServer.translate("SR_SUMMARY") % [TranslationServer.translate("SR_STAGE_COUNT") % 2, TranslationServer.translate("SR_MODS_SOME") % [1, 2]]:
+		failures.append("the summary does not show the room's stage and rule settings: '%s'" % screen._stages_summary.text)
+	if not screen._stages_summary.is_visible_in_tree() or not screen._lobby_target_label.text.contains("2"):
+		failures.append("the room's settings are not shown read only: '%s'" % screen._lobby_target_label.text)
+	var room: Label = screen._room_label
+	if room == null or room.text != "WXYZ" or not room.is_visible_in_tree():
+		failures.append("the room code is not on the join card")
+	var copy: Button = client.find_child("CopyCode", true, false) as Button
+	if copy == null or not copy.is_visible_in_tree():
+		failures.append("Copy code is not showing in the lobby")
+	if client._lobby.slot_hat(0) != "crown" or client._lobby.slot_eyes(1) != "wide":
+		failures.append("the cards' looks do not come from the looks frame")
+	screen._on_card_clicked(0)
+	if screen.popup_open() != "":
+		failures.append("clicking another seat's card opened Your look")
+	screen._on_card_clicked(1)
+	if screen.popup_open() != "look":
+		failures.append("clicking the own card did not open Your look (open: '%s')" % screen.popup_open())
+	client._ready_button.button_pressed = true
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"": {"on": ["x"], "locked": ["night"]}}},
+		"players": [{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": true, "name": "Me", "color": "56b4e9"}]}))
+	await process_frame
+	if screen.popup_open() != "":
+		failures.append("readying left Your look open")
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+## Play of the round ring (#1128): ten minutes of frames (24 fps) never push the
+## ring past its frame count or its stated byte cap, and F9's ring stays at 120.
+func _scenario_play_of_round_buffer_stays_bounded() -> Array[String]:
+	var failures: Array[String] = []
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var rb: Node = script.new()
+	root.add_child(rb)
+	var cap: int = script.hi_memory_cap_bytes()
+	if cap > 64 * 1024 * 1024 or cap != 55296000:
+		failures.append("the sharp ring's cap is %d bytes, want 55296000 (<= 64 MiB)" % cap)
+	var img := Image.create(640, 360, false, Image.FORMAT_RGB8)
+	var worst: int = 0
+	for i in 10 * 60 * script.HI_FPS:
+		img.set_pixel(i % 640, 0, Color.WHITE)
+		rb.push_frame(img)
+		if i % 500 == 0:
+			worst = maxi(worst, rb.hi_memory_bytes())
+	worst = maxi(worst, rb.hi_memory_bytes())
+	if rb.hi_frame_count() != script.HI_MAX_FRAMES:
+		failures.append("sharp ring holds %d frames after 10 minutes, want %d" % [rb.hi_frame_count(), script.HI_MAX_FRAMES])
+	if worst > cap:
+		failures.append("sharp ring held %d bytes, over its %d cap" % [worst, cap])
+	if rb.frame_count() != script.MAX_FRAMES:
+		failures.append("F9 ring holds %d frames, want %d" % [rb.frame_count(), script.MAX_FRAMES])
+	rb.queue_free()
+	_scenario_completed = true
+	return failures
+## The replay is shown from 640x360 frames at 24 fps (12 distinct frames a second
+## at half speed), through linear filtering, from a real 1600x900 grab; the F9
+## ring still holds 256x144 RGB8 frames at 12 fps.
+func _scenario_play_of_round_frames_are_sharp_and_smooth_1128() -> Array[String]:
+	var failures: Array[String] = []
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var por_script := preload("res://scripts/PlayOfRound.gd")
+	var rb: Node = script.new()
+	root.add_child(rb)
+	for i in 30:
+		var big := Image.create(1600, 900, false, Image.FORMAT_RGBA8)
+		big.fill(Color(float(i) / 30.0, 0.3, 0.6))
+		rb._keep_hi_async(big)
+		await process_frame
+	if rb.hi_frame_size() != Vector2i(640, 360):
+		failures.append("a 1600x900 grab was kept at %s, want 640x360" % rb.hi_frame_size())
+	var frames: Array[Image] = rb.hi_frames_slice(0, 30)
+	if frames.size() != 30 or frames[0].get_size() != Vector2i(640, 360) or frames[0].get_format() != script.HI_FORMAT:
+		failures.append("sharp frames are not 640x360 packed frames")
+	if rb.hi_timestamps().size() != 30:
+		failures.append("sharp frames lost their timestamps")
+	if script.HI_FPS * por_script.SLOW_FACTOR < 12.0:
+		failures.append("the half-speed replay shows %.1f frames a second, want 12 or more" % (script.HI_FPS * por_script.SLOW_FACTOR))
+	if script.CAPTURE_FPS != 12 or script.FRAME_SIZE != Vector2i(256, 144) or script.GIF_DELAY_CS != 8:
+		failures.append("the F9 clip's size or fps changed")
+	var por: CanvasLayer = por_script.new()
+	root.add_child(por)
+	por.play(frames, "x", false)
+	await process_frame
+	var rect: TextureRect = por._rect
+	if rect.texture == null or rect.texture.get_size() != Vector2(640, 360):
+		failures.append("the replay does not show the 640x360 frames")
+	if rect.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR:
+		failures.append("the replay is not drawn with linear filtering")
+	por.dismiss()
+	por.queue_free()
+	rb.queue_free()
 	_scenario_completed = true
 	return failures
 

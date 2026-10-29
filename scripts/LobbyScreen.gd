@@ -412,8 +412,10 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	var target_kind: String = str(state.get("target_kind", "first_to"))
 	var target_text: String = tr(GameModesScript.target_status_key(target_kind)) % state["target"]
 	_picked_mode = mode_id
-	_lobby_target_label.text = "%s%s - %s - %s" % [GameModesScript.display_name(mode_id), " - " + tr("MODE_TEAMS") if teams else "", target_text, StagesRulesScreenScript.stage_count_text(mode_id)]
-	_stages_summary.text = StagesRulesScreenScript.summary(mode_id)
+	var joiner: bool = join_source != null and join_source.has_method("is_joiner_view") # the room's settings come in the frame (#1127)
+	var stage_text: String = StagesRulesScreenScript.stage_count_text_from_state(mode_id, state) if joiner else StagesRulesScreenScript.stage_count_text(mode_id)
+	_lobby_target_label.text = "%s%s - %s - %s" % [GameModesScript.display_name(mode_id), " - " + tr("MODE_TEAMS") if teams else "", target_text, stage_text]
+	_stages_summary.text = StagesRulesScreenScript.summary_from_state(mode_id, state) if joiner else StagesRulesScreenScript.summary(mode_id)
 	_host.set_target(target_kind, int(state["target"]))
 	_select_mode_card(mode_id)
 	_popups.set_mode(mode_id, target_kind, int(state["target"]))
@@ -552,7 +554,10 @@ func _on_invite_pressed() -> void:
 		_server.invite_steam_friends()
 
 func _on_card_clicked(slot: int) -> void:
-	if _server != null and _server.has_method("host_pc_slot") and slot == _server.host_pc_slot() and _server.host_picker_shown():
+	var source: Object = _server
+	if source == null and not _last_lobby_args.is_empty() and _last_lobby_args[2] != null and _last_lobby_args[2].has_method("is_joiner_view"):
+		source = _last_lobby_args[2] # an Online joiner opens its own Your look (#1127)
+	if source != null and source.has_method("host_pc_slot") and slot == source.host_pc_slot() and source.host_picker_shown():
 		set_popup("look")
 
 func _on_badge_pressed(slot: int) -> void:
@@ -796,6 +801,19 @@ func show_pause_banner(on: bool) -> void:
 
 func attach_controls(server: Object) -> void:
 	_host.attach(server)
+
+## An Online joiner's copy of this screen (#1127, `RemoteLobby.gd`): no host
+## controls, but the big room code and Copy code on the join card, whose button
+## calls `copy_pressed`.
+func attach_joiner(copy_pressed: Callable) -> void:
+	_host.attach_joiner(copy_pressed)
+
+## The right column the joiner's own buttons go into, and the top bar's left slot.
+func right_column() -> VBoxContainer:
+	return _lobby_right
+
+func top_left() -> HBoxContainer:
+	return _top_left
 
 func control_button(id: String) -> Button:
 	return _host.control_button(id)

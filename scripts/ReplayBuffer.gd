@@ -3,11 +3,25 @@ extends Node
 ## frames, written out as a PNG sequence plus an animated GIF (#502) when the
 ## host presses F9. The GIF is encoded on a worker thread.
 ##
-## Cost: one viewport grab + downscale every `CAPTURE_INTERVAL_SEC` (12 a
-## second), so a few ms spread over 5 frames at 60 fps. Memory is capped at
-## `MAX_FRAMES` x `FRAME_SIZE` RGB8, about 13 MB, whatever the match does.
+## Cost: one viewport grab every 1/`HI_FPS` s (24 a second); every second grab
+## is also shrunk into the F9 ring. Memory is capped at `MAX_FRAMES` x
+## `FRAME_SIZE` RGB8, about 13 MB, whatever the match does.
+##
+## Play of the round (#1128, ADR-0020 addendum) reads a second, separate ring:
+## the last `HI_SECONDS` s at `HI_SIZE` and `HI_FPS`, kept as RGB565 (2 bytes a
+## pixel), `hi_memory_cap_bytes()` = 55.3 MB at most. Its resize and conversion
+## run on the worker thread pool so the main thread only pays for the grab. The
+## F9 ring, its PNGs and clip.gif are untouched.
 
 const CAPTURE_FPS: int = 12
+## The Play of the round ring (#1128): sharp enough for a full-screen replay.
+const HI_FPS: int = 24
+const HI_SECONDS: int = 5
+const HI_MAX_FRAMES: int = HI_FPS * HI_SECONDS
+const HI_SIZE := Vector2i(640, 360)
+const HI_FORMAT := Image.FORMAT_RGB565
+## Resize jobs allowed in flight; past this the capture waits for the oldest.
+const HI_MAX_PENDING: int = 2
 const CLIP_SECONDS: int = 10
 const MAX_FRAMES: int = CAPTURE_FPS * CLIP_SECONDS
 const FRAME_SIZE := Vector2i(256, 144)
@@ -24,6 +38,10 @@ signal clip_saved(path: String)
 signal gif_saved(path: String)
 
 var _frames: Array[Image] = []
+## The Play of the round ring, oldest first: `{img, msec, task}`. `img` is null
+## until the pool job `task` (-1 once collected) has filled it.
+var _hi: Array[Dictionary] = []
+var _grabs: int = 0
 var _accum: float = 0.0
 var _toast: Label
 var _toast_timer: Timer
@@ -60,14 +78,22 @@ func _process(delta: float) -> void:
 		return
 	var tex := get_viewport().get_texture()
 	var img: Image = tex.get_image() if tex != null else null
-	if img != null and not img.is_empty():
-		_keep_frame(img) # fresh from get_image(): ours to shrink in place
+	if img == null or img.is_empty():
+		return
+	_grabs += 1
+	if _grabs % (HI_FPS / CAPTURE_FPS) == 0:
+		# The F9 ring: shrunk in place on the main thread, so the pool job
+		# gets its own copy.
+		_keep_hi_async(img.duplicate() as Image)
+		_keep_frame(img)
+	else:
+		_keep_hi_async(img)
 
-## Whether a frame is due after `delta` more seconds. The time past the
-## interval carries over (at most one interval of it, so a long hitch does not
-## bunch captures), or a 50 fps host would capture only 10 a second.
+## Whether a grab is due after `delta` more seconds (`HI_FPS` a second). The
+## time past the interval carries over (at most one interval of it, so a long
+## hitch does not bunch captures), or a 50 fps host would grab only 20 a second.
 func capture_due(delta: float) -> bool:
-	var interval: float = 1.0 / CAPTURE_FPS
+	var interval: float = 1.0 / HI_FPS
 	_accum += delta
 	if _accum < interval:
 		return false
@@ -79,6 +105,7 @@ func push_frame(img: Image) -> void:
 	if img == null or img.is_empty():
 		return
 	_keep_frame(img.duplicate() as Image)
+	_keep_hi_now(img)
 
 ## `push_frame` on an image nobody else holds: shrunk first, so the format
 ## conversion only touches FRAME_SIZE pixels.
@@ -89,6 +116,93 @@ func _keep_frame(small: Image) -> void:
 	_frames.append(small)
 	while _frames.size() > MAX_FRAMES:
 		_frames.pop_front()
+
+## `img` into the Play of the round ring on the pool: shrunk to `HI_SIZE` and
+## packed to RGB565 off the main thread. Takes ownership of `img`.
+func _keep_hi_async(img: Image) -> void:
+	var box: Array = [null]
+	var slot := {"img": null, "box": box, "msec": Time.get_ticks_msec(), "task": -1}
+	_hi.append(slot)
+	slot["task"] = WorkerThreadPool.add_task(_pack_hi.bind(img, box))
+	_trim_hi()
+	var pending: Array[Dictionary] = []
+	for h: Dictionary in _hi:
+		if int(h["task"]) >= 0:
+			pending.append(h)
+	while pending.size() > HI_MAX_PENDING:
+		_collect(pending.pop_front())
+
+## The same, inline (scenarios and tools feeding synthetic frames).
+func _keep_hi_now(img: Image) -> void:
+	var copy: Image = img.duplicate() as Image
+	var box: Array = [null]
+	_pack_hi(copy, box)
+	_hi.append({"img": box[0], "box": box, "msec": Time.get_ticks_msec(), "task": -1})
+	_trim_hi()
+
+func _trim_hi() -> void:
+	while _hi.size() > HI_MAX_FRAMES:
+		_collect(_hi.pop_front())
+
+## Runs on a pool thread: only touches `img` and its own result `box`.
+func _pack_hi(img: Image, box: Array) -> void:
+	# Bigger frames shrink to HI_SIZE; smaller ones (synthetic) stay as they are,
+	# so the ring never holds more than HI_SIZE per frame.
+	if img.get_width() > HI_SIZE.x or img.get_height() > HI_SIZE.y:
+		img.resize(HI_SIZE.x, HI_SIZE.y, Image.INTERPOLATE_BILINEAR)
+	img.convert(HI_FORMAT)
+	box[0] = img
+
+## Wait for a slot's job (once).
+func _collect(slot: Dictionary) -> void:
+	var task: int = int(slot["task"])
+	if task >= 0:
+		WorkerThreadPool.wait_for_task_completion(task)
+		slot["task"] = -1
+		slot["img"] = (slot["box"] as Array)[0]
+
+func _collect_all() -> void:
+	for h: Dictionary in _hi:
+		_collect(h)
+
+## Frames held for the Play of the round, at `HI_FPS` (#1128).
+func hi_frame_count() -> int:
+	return _hi.size()
+
+## A copy of the Play of the round frames `start` .. `start + count - 1`, oldest
+## first. They are RGB565; PlayOfRound converts each as it shows it.
+func hi_frames_slice(start: int, count: int) -> Array[Image]:
+	_collect_all()
+	var out: Array[Image] = []
+	for i in range(maxi(start, 0), mini(start + count, _hi.size())):
+		out.append(_hi[i]["img"])
+	return out
+
+## When (msec, `Time.get_ticks_msec`) each Play of the round frame was grabbed.
+func hi_timestamps() -> PackedInt64Array:
+	var out := PackedInt64Array()
+	for h: Dictionary in _hi:
+		out.append(int(h["msec"]))
+	return out
+
+## Size of the newest Play of the round frame, or (0, 0).
+func hi_frame_size() -> Vector2i:
+	if _hi.is_empty():
+		return Vector2i.ZERO
+	_collect(_hi[_hi.size() - 1])
+	return (_hi[_hi.size() - 1]["img"] as Image).get_size()
+
+## Worst-case bytes held by the Play of the round ring.
+static func hi_memory_cap_bytes() -> int:
+	return HI_MAX_FRAMES * HI_SIZE.x * HI_SIZE.y * 2
+
+## Bytes the Play of the round ring holds right now.
+func hi_memory_bytes() -> int:
+	_collect_all()
+	var total: int = 0
+	for h: Dictionary in _hi:
+		total += (h["img"] as Image).get_data().size()
+	return total
 
 func frame_count() -> int:
 	return _frames.size()
@@ -173,6 +287,7 @@ func _gif_done(path: String) -> void:
 	gif_saved.emit(path)
 
 func _exit_tree() -> void:
+	_collect_all()
 	if _gif_thread != null:
 		_gif_thread.wait_to_finish()
 		_gif_thread = null
