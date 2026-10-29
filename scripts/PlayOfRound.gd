@@ -68,6 +68,11 @@ static func _key_greater(a: Array, b: Array) -> bool:
 			return a[i] > b[i]
 	return false
 
+## A grab gap longer than this (host paused, window minimised) is a hole in the
+## ring: nothing from before it is ever shown, and a ring that stopped feeding
+## before the KO skips cleanly (#1141).
+const MAX_GAP_MSEC := 1000
+
 ## Which buffered frames to show: `{start, count}`. `stamps` is when each held
 ## frame was grabbed (`ReplayBuffer.hi_timestamps()`, oldest first, same clock as
 ## `now_msec`); the KO happened at `ko_msec`; `remaining_msec` is what is left of
@@ -75,11 +80,6 @@ static func _key_greater(a: Array, b: Array) -> bool:
 ## a host rendering below 24 fps (or hitching, or skipping grabs) still ends the
 ## clip `TAIL_MSEC` after the KO (#1139). The count is trimmed (from the start of
 ## the clip) so its slow-motion running time fits in the pause minus a margin.
-## A grab gap longer than this (host paused, window minimised) is a hole in the
-## ring: nothing from before it is ever shown, and a ring that stopped feeding
-## before the KO skips cleanly (#1141).
-const MAX_GAP_MSEC := 1000
-
 static func select_frames(stamps: PackedInt64Array, now_msec: int, ko_msec: int, remaining_msec: int) -> Dictionary:
 	var none := {"start": 0, "count": 0}
 	var total: int = stamps.size()
