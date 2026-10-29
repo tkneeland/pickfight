@@ -5,7 +5,8 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 
 - `accounts/<handle>.conf`: per-account settings (role, timezone, night hours, thresholds); `accounts/_shared.conf` holds shared thresholds.
 - `pf-env.sh`: sourced by all; resolves the account, conf, `PF_STATE` dir and helpers (`pf_budget_ok`, `pf_daynight`, `pf_is_triagemaster`).
-- `pf-at-mode.sh`: prints `AT·day`, `AT·night` or `MT`.
+- `pf-at-mode.sh`: prints `AT·day`, `AT·night` or `MT`, plus `·TM off` while the ticket-maker is off.
+- `pf-ticketmaker.sh [on|off]`: prints or sets the ticket-maker switch (rule 11).
 - `pf-triage-watch.sh`: zero-token poller; exits with one line (UNTRIAGED, MYTICKET, FEATURES? PR, PEER_BEACON, IDLE_SLOTS, AUSTIN_QUEUE_LOW, MSG) when Claude must act.
 - `pf-automerge.sh`: merges green mergeable PRs, comments on conflicting ones; leaves conflict-risk PRs to the triagemaster.
 - `pf-ship.sh <issue> "<title>" "<body>"`: merges main into the worktree branch, opens the PR with a Resource Usage section, waits for CI, merges.
