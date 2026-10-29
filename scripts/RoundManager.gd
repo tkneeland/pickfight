@@ -2265,7 +2265,7 @@ func _on_ko_eliminated(slot: int) -> void:
 		_flush_kos.call_deferred()
 	var dead: Variant = _players[slot] if slot >= 0 and slot < _players.size() else null
 	var hazard: Variant = dead.get("death_hazard") if is_instance_valid(dead) else null
-	_pending_kos.append([slot, GameClockScript.now_msec(), hazard is String and hazard != ""])
+	_pending_kos.append([slot, GameClockScript.now_msec(), hazard is String and hazard != "", Time.get_ticks_msec()])
 
 func _flush_kos() -> void:
 	var pending: Array = _pending_kos
@@ -2273,7 +2273,7 @@ func _flush_kos() -> void:
 	var feed: Control = kill_feed()
 	for entry: Array in pending:
 		var ko: Dictionary = _stats.record_elimination(entry[0], entry[1], bool(entry[2]))
-		_log_play_of_round_ko(ko, int(entry[1]))
+		_log_play_of_round_ko(ko, int(entry[1]), int(entry[3]))
 		_tally_career_ko(ko["victim"], ko["killer"])
 		_achievement_ko(ko["victim"], ko["killer"], int(entry[1]))
 		_timeline_703("ko", tr("STEAM_TL_KO") % _slot_name(int(ko["victim"])))
@@ -2306,7 +2306,7 @@ var _play_of_round: CanvasLayer
 ## This round's KOs: `{t, killer, victim, hazard, ranged}`, t in game msec.
 var _round_kos: Array = []
 
-func _log_play_of_round_ko(ko: Dictionary, t_msec: int) -> void:
+func _log_play_of_round_ko(ko: Dictionary, t_msec: int, wall_msec: int = -1) -> void:
 	var killer: int = ko["killer"]
 	var victim: int = ko["victim"]
 	if killer < 0 or killer == victim or killer >= _players.size() or victim < 0 or victim >= _players.size():
@@ -2317,7 +2317,7 @@ func _log_play_of_round_ko(ko: Dictionary, t_msec: int) -> void:
 		return
 	var hazard: Variant = victim_node.get("death_hazard")
 	var far: bool = (killer_node as Node2D).global_position.distance_to((victim_node as Node2D).global_position) > PlayOfRoundScript.RANGED_DISTANCE_PX
-	_round_kos.append({"t": t_msec, "killer": killer, "victim": victim,
+	_round_kos.append({"t": t_msec, "wall": wall_msec if wall_msec >= 0 else Time.get_ticks_msec(), "killer": killer, "victim": victim,
 		"hazard": hazard is String and hazard != "", "ranged": far})
 
 func _start_play_of_round() -> void:
@@ -2332,10 +2332,11 @@ func _start_play_of_round() -> void:
 	if best.is_empty():
 		return
 	var now: int = GameClockScript.now_msec()
-	# The ring is stamped in wall time, the KO in game time (it stops on Pause):
-	# hand over the KO's age against the wall clock.
+	# The ring is stamped in wall time and game time stops on Pause, so the KO
+	# carries its own wall stamp: a host pause since the KO must not shift it (#1141).
 	var wall: int = Time.get_ticks_msec()
-	var pick: Dictionary = PlayOfRoundScript.select_frames(_replay.hi_timestamps(), wall, wall - (now - int(best["t"])), _pause_until_msec - now)
+	var ko_wall: int = int(best["wall"])
+	var pick: Dictionary = PlayOfRoundScript.select_frames(_replay.hi_timestamps(), wall, ko_wall, _pause_until_msec - now)
 	if int(pick["count"]) <= 0:
 		return
 	if _play_of_round == null:
@@ -2346,7 +2347,7 @@ func _start_play_of_round() -> void:
 	# Streamer mode (#369) hides only the room code and join links; names stay.
 	var caption: String = tr("PLAY_OF_ROUND_CAPTION") % _slot_name(int(best["killer"]))
 	# The Online joiner plays the same moment from its own screen's frames (#976).
-	EffectStreamScript.record("por", {"age": now - int(best["t"]), "rem": _pause_until_msec - now, "cap": caption})
+	EffectStreamScript.record("por", {"age": wall - ko_wall, "rem": _pause_until_msec - now, "cap": caption})
 	_play_of_round.play(_replay.hi_frames_slice(int(pick["start"]), int(pick["count"])), caption, _shake_on())
 
 func _shake_on() -> bool:

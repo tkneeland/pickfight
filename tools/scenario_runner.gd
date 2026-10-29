@@ -1008,6 +1008,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"play_of_round_keeps_aspect_1137",
 	"replay_ring_never_blocks_and_caps_sources_1138",
 	"play_of_round_selects_by_timestamps_1139",
+	"play_of_round_survives_host_pause_1141",
+	"play_of_round_guards_unfed_ring_1141",
 	"play_of_round_no_ko_plays_nothing_704",
 	"play_of_round_leaves_the_pause_length_alone_704",
 	"play_of_round_skip_input_dismisses_704",
@@ -3739,6 +3741,8 @@ func _run_scenario(name: String) -> Array[String]:
 		"play_of_round_keeps_aspect_1137": return await _scenario_play_of_round_keeps_aspect_1137()
 		"replay_ring_never_blocks_and_caps_sources_1138": return await _scenario_replay_ring_never_blocks_and_caps_sources_1138()
 		"play_of_round_selects_by_timestamps_1139": return await _scenario_play_of_round_selects_by_timestamps_1139()
+		"play_of_round_survives_host_pause_1141": return await _scenario_play_of_round_survives_host_pause_1141()
+		"play_of_round_guards_unfed_ring_1141": return await _scenario_play_of_round_guards_unfed_ring_1141()
 		"play_of_round_no_ko_plays_nothing_704": return await _scenario_play_of_round_no_ko_plays_nothing_704()
 		"play_of_round_leaves_the_pause_length_alone_704": return await _scenario_play_of_round_leaves_the_pause_length_alone_704()
 		"play_of_round_skip_input_dismisses_704": return await _scenario_play_of_round_skip_input_dismisses_704()
@@ -50650,6 +50654,61 @@ func _scenario_play_of_round_selects_by_timestamps_1139() -> Array[String]:
 	if int(fresh["start"]) + int(fresh["count"]) != 50:
 		failures.append("a fresh KO did not end at the newest frame: %s" % fresh)
 	rb_ts_check_1139(failures)
+	_scenario_completed = true
+	return failures
+## A host pause between the KO and the round end must not shift the clip: the KO
+## carries its own wall stamp (game time stops on Pause), and the same wall age
+## goes to the Online client (#1141).
+func _scenario_play_of_round_survives_host_pause_1141() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_roster_round(2, PICKUP_LONG_INTERVAL_SEC, PLAY_OF_ROUND_PAUSE_SEC_704, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		await _teardown(loop["stage"])
+		return ["round never started"]
+	var before: int = Time.get_ticks_msec()
+	players[0].strike_landed.emit(players[1], 10.0, Vector2.ZERO, true)
+	players[1].eliminate()
+	await process_frame
+	await process_frame
+	var after: int = Time.get_ticks_msec()
+	if rm._round_kos.is_empty():
+		failures.append("the KO was not logged")
+	else:
+		var w: int = int(rm._round_kos[0].get("wall", -1))
+		if w < before or w > after:
+			failures.append("KO wall stamp %d outside [%d, %d]" % [w, before, after])
+	# Fed ring around the KO wall time; a 3 s wall gap later the clip still ends at KO + tail.
+	var ko_wall: int = 20000
+	var stamps: PackedInt64Array = _stamps_1139(60, 42.0, 20500)
+	var now: int = ko_wall + 3000
+	var r: Dictionary = PlayOfRoundScript704.select_frames(stamps, now, ko_wall, 10000)
+	if int(r["count"]) == 0 or absi(int(stamps[int(r["start"]) + int(r["count"]) - 1]) - 20500) > 100:
+		failures.append("a 3 s pause after the KO moved the clip: %s" % r)
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
+## A ring that stopped feeding (pause, minimised window) skips cleanly or shows
+## only frames inside the window and without a hole (#1141).
+func _scenario_play_of_round_guards_unfed_ring_1141() -> Array[String]:
+	var failures: Array[String] = []
+	var pick: Callable = PlayOfRoundScript704.select_frames
+	# (a) the ring ended 5 s before the KO: nothing.
+	var old: PackedInt64Array = _stamps_1139(60, 42.0, 10000)
+	if int(pick.call(old, 20000, 15000, 10000)["count"]) != 0:
+		failures.append("a ring unfed for 5 s before the KO still played")
+	# (b) a 5 s hole just before KO + tail: no frame from before the hole.
+	var hole: PackedInt64Array = _stamps_1139(40, 42.0, 10000)
+	hole.append_array(PackedInt64Array([15000, 15042, 15084, 15126, 15168, 15210, 15252, 15294, 15336, 15378, 15420, 15462, 15504, 15546, 15588, 15630, 15672, 15714, 15756, 15798, 15840, 15882, 15924, 15966, 16008, 16050, 16092, 16134, 16176, 16218, 16260, 16302, 16344, 16386, 16428, 16470, 16512, 16554, 16596, 16638]))
+	var r: Dictionary = pick.call(hole, 17000, 16000, 10000)
+	if int(r["count"]) > 0 and int(hole[int(r["start"])]) < 15000:
+		failures.append("the clip spans the 5 s hole: %s" % r)
+	# (c) hitch within the limit (1139 case) still plays.
+	var gap: PackedInt64Array = _stamps_1139(30, 100.0, 15500)
+	gap.append_array(PackedInt64Array([16200, 16300, 16400]))
+	if int(pick.call(gap, 16500, 15400, 10000)["count"]) == 0:
+		failures.append("a sub-limit hitch skipped the clip")
 	_scenario_completed = true
 	return failures
 func rb_ts_check_1139(failures: Array[String]) -> void:
