@@ -106,5 +106,5 @@ Repo facts that bite:
   - Don't ask what code or docs answer.
   - Put every "decide with Austin" item on #685.
   - Report times in ET.
-- **Helper scripts** (ship a PR, Atlas closeout, runner conflict fix) are in `tools/agent-scripts/` as reference copies with the owner's Mac paths. Adapt them before use.
+- **Helper scripts** (ship a PR, Atlas closeout, runner conflict fix) are in `tools/agents/` and run on any account (see its `README.md`). `tools/agent-scripts/` keeps only the owner's Mac install script and the dev-agent setup prompt.
 - **Steam code** (#298 invites, #538 names) shipped dormant on Oct 20, unparked by the owner. #703 (Timeline markers) is next. Real-Steam checks need the owner on app 480.

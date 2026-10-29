@@ -1008,6 +1008,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"play_of_round_keeps_aspect_1137",
 	"replay_ring_never_blocks_and_caps_sources_1138",
 	"play_of_round_selects_by_timestamps_1139",
+	"play_of_round_survives_host_pause_1141",
+	"play_of_round_online_matches_host_1141",
+	"play_of_round_guards_unfed_ring_1141",
 	"play_of_round_no_ko_plays_nothing_704",
 	"play_of_round_leaves_the_pause_length_alone_704",
 	"play_of_round_skip_input_dismisses_704",
@@ -3740,6 +3743,9 @@ func _run_scenario(name: String) -> Array[String]:
 		"play_of_round_keeps_aspect_1137": return await _scenario_play_of_round_keeps_aspect_1137()
 		"replay_ring_never_blocks_and_caps_sources_1138": return await _scenario_replay_ring_never_blocks_and_caps_sources_1138()
 		"play_of_round_selects_by_timestamps_1139": return await _scenario_play_of_round_selects_by_timestamps_1139()
+		"play_of_round_survives_host_pause_1141": return await _scenario_play_of_round_survives_host_pause_1141()
+		"play_of_round_online_matches_host_1141": return await _scenario_play_of_round_online_matches_host_1141()
+		"play_of_round_guards_unfed_ring_1141": return await _scenario_play_of_round_guards_unfed_ring_1141()
 		"play_of_round_no_ko_plays_nothing_704": return await _scenario_play_of_round_no_ko_plays_nothing_704()
 		"play_of_round_leaves_the_pause_length_alone_704": return await _scenario_play_of_round_leaves_the_pause_length_alone_704()
 		"play_of_round_skip_input_dismisses_704": return await _scenario_play_of_round_skip_input_dismisses_704()
@@ -50653,6 +50659,142 @@ func _scenario_play_of_round_selects_by_timestamps_1139() -> Array[String]:
 	if int(fresh["start"]) + int(fresh["count"]) != 50:
 		failures.append("a fresh KO did not end at the newest frame: %s" % fresh)
 	rb_ts_check_1139(failures)
+	_scenario_completed = true
+	return failures
+## One real round with a real host pause (the game's own `_pause_match`, which
+## pauses the tree) of 3 s between the KO and the round end. The ring is stamped
+## as a live one would be (24 fps up to now). Returns the host's clip (index of
+## its last frame, frame count), the `por` effect the Online client receives, the
+## ring stamps and the KO's wall stamp (#1141).
+func _run_pause_por_1141() -> Dictionary:
+	var out: Dictionary = {"ok": false, "host_last": -1, "host_count": 0, "ev": {}, "stamps": PackedInt64Array(), "ko_wall": 0}
+	var loop: Dictionary = _new_roster_round(2, PICKUP_LONG_INTERVAL_SEC, PLAY_OF_ROUND_PAUSE_SEC_704, PICKUP_STUB_POINTS)
+	var players: Array[RigidBody2D] = loop["players"]
+	var rm: Node = loop["round_manager"]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		await _teardown(loop["stage"])
+		return out
+	EffectStreamScript976.set_recording(true)
+	EffectStreamScript976.take()
+	players[0].strike_landed.emit(players[1], 10.0, Vector2.ZERO, true)
+	players[1].eliminate()
+	rm._pause_match()
+	await process_frame
+	await process_frame
+	if rm._round_kos.is_empty() or not paused:
+		await _teardown(loop["stage"])
+		EffectStreamScript976.set_recording(false)
+		return out
+	var ko_wall: int = int(rm._round_kos[0]["wall"])
+	# Wall time: --fixed-fps runs frames faster than real time, a timer would not wait 3 s.
+	while Time.get_ticks_msec() - ko_wall < 3000:
+		await process_frame
+	rm._resume_match()
+	# 110 frames, 24 fps, the newest now: the ring kept feeding through the pause.
+	var n: int = 110
+	for i in n:
+		var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
+		img.fill(Color(float(i) / float(n), 0.2, 0.4))
+		rm._replay.push_frame(img)
+	var now: int = Time.get_ticks_msec()
+	for i in n:
+		rm._replay._hi[i]["msec"] = now - int(round(1000.0 / 24.0 * (n - 1 - i)))
+	var deadline: int = Time.get_ticks_msec() + 15000
+	while Time.get_ticks_msec() < deadline:
+		await process_frame
+		var panel: Node = rm.play_of_round_panel()
+		if panel != null and panel.is_playing():
+			var frames: Array = panel._frames
+			out["host_count"] = frames.size()
+			out["host_last"] = _frame_index_1141(frames[frames.size() - 1], rm._replay)
+			out["ok"] = true
+			break
+	for ev: Dictionary in EffectStreamScript976.take():
+		if ev.get("k", "") == "por":
+			out["ev"] = ev
+	out["stamps"] = rm._replay.hi_timestamps()
+	out["ko_wall"] = ko_wall
+	EffectStreamScript976.set_recording(false)
+	await _teardown(loop["stage"])
+	return out
+## Where `img` sits in the ring (the panel holds the ring's own Image objects).
+func _frame_index_1141(img: Image, ring: Node) -> int:
+	for i in ring._hi.size():
+		if ring._hi[i]["img"] == img:
+			return i
+	return -1
+## A real 3 s host pause between the KO and the round end must not shift the
+## clip: it still ends at the KO plus the tail, not 3 s later (#1141).
+func _scenario_play_of_round_survives_host_pause_1141() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _run_pause_por_1141()
+	if not run["ok"]:
+		failures.append("the paused round never played a Play of the round")
+	else:
+		var stamps: PackedInt64Array = run["stamps"]
+		var end_t: int = int(run["ko_wall"]) + PlayOfRoundScript704.TAIL_MSEC
+		var want: int = -1
+		for i in stamps.size():
+			if stamps[i] <= end_t:
+				want = i
+		if run["host_last"] != want:
+			failures.append("the clip ends at frame %s, the KO + tail is frame %d (a pause shifted it)" % [run["host_last"], want])
+		if run["ev"].is_empty():
+			failures.append("no por effect was recorded for the Online client")
+	_scenario_completed = true
+	return failures
+## The Online client cuts its clip from the same `por` effect and its own ring:
+## fed the same frames it shows the same clip as the host, after a host pause (#1141).
+func _scenario_play_of_round_online_matches_host_1141() -> Array[String]:
+	var failures: Array[String] = []
+	var run: Dictionary = await _run_pause_por_1141()
+	if not run["ok"] or run["ev"].is_empty():
+		return ["no host clip or por effect to replay on the client"]
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var stamps: PackedInt64Array = run["stamps"]
+	var n: int = stamps.size()
+	for i in n:
+		var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
+		img.fill(Color(float(i) / float(n), 0.2, 0.4))
+		client.effects.replay.push_frame(img)
+	# The client's clock is its own and the event reaches it at once: its ring is
+	# the host's, shifted by how long ago the host sent the effect (KO wall + age).
+	var shift: int = Time.get_ticks_msec() - (int(run["ko_wall"]) + int(run["ev"]["age"]))
+	for i in n:
+		client.effects.replay._hi[i]["msec"] = int(stamps[i]) + shift
+	_fx_play_976(client, [run["ev"]])
+	var por: CanvasLayer = client.effects.play_of_round
+	if por == null or not por.is_playing():
+		failures.append("the Online client did not play the host's Play of the round")
+	else:
+		var frames: Array = por._frames
+		var last: int = _frame_index_1141(frames[frames.size() - 1], client.effects.replay)
+		if absi(last - int(run["host_last"])) > 1 or absi(frames.size() - int(run["host_count"])) > 1:
+			failures.append("client clip ends %d with %d frames, host %d with %d" % [last, frames.size(), run["host_last"], run["host_count"]])
+	await _rc_close_241(rig)
+	_scenario_completed = true
+	return failures
+## A ring that stopped feeding (pause, minimised window) skips cleanly or shows
+## only frames inside the window and without a hole (#1141).
+func _scenario_play_of_round_guards_unfed_ring_1141() -> Array[String]:
+	var failures: Array[String] = []
+	var pick: Callable = PlayOfRoundScript704.select_frames
+	# (a) the ring ended 5 s before the KO: nothing.
+	var old: PackedInt64Array = _stamps_1139(60, 42.0, 10000)
+	if int(pick.call(old, 20000, 15000, 10000)["count"]) != 0:
+		failures.append("a ring unfed for 5 s before the KO still played")
+	# (b) a 5 s hole just before KO + tail: no frame from before the hole.
+	var hole: PackedInt64Array = _stamps_1139(40, 42.0, 10000)
+	hole.append_array(PackedInt64Array([15000, 15042, 15084, 15126, 15168, 15210, 15252, 15294, 15336, 15378, 15420, 15462, 15504, 15546, 15588, 15630, 15672, 15714, 15756, 15798, 15840, 15882, 15924, 15966, 16008, 16050, 16092, 16134, 16176, 16218, 16260, 16302, 16344, 16386, 16428, 16470, 16512, 16554, 16596, 16638]))
+	var r: Dictionary = pick.call(hole, 17000, 16000, 10000)
+	if int(r["count"]) > 0 and int(hole[int(r["start"])]) < 15000:
+		failures.append("the clip spans the 5 s hole: %s" % r)
+	# (c) hitch within the limit (1139 case) still plays.
+	var gap: PackedInt64Array = _stamps_1139(30, 100.0, 15500)
+	gap.append_array(PackedInt64Array([16200, 16300, 16400]))
+	if int(pick.call(gap, 16500, 15400, 10000)["count"]) == 0:
+		failures.append("a sub-limit hitch skipped the clip")
 	_scenario_completed = true
 	return failures
 func rb_ts_check_1139(failures: Array[String]) -> void:
