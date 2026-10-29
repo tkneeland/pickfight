@@ -11,7 +11,7 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 - `pf-automerge.sh`: merges green mergeable PRs labelled `review-passed` (rule 12), comments on conflicting ones; leaves conflict-risk PRs to the triagemaster.
 - `pf-ship.sh <issue> "<title>" "<body>"`: merges main into the worktree branch, opens the PR with a Resource Usage section, waits for CI, merges.
 - `pf-atlas.sh`: Atlas bookkeeping (`accept`, `closeout`, `tests`, `run`).
-- `pf-rate.sh`: source it to set `PF_RATE` / `PF_WEEK` for PR bodies.
+- `pf-rate.sh`: source it to set `PF_RATE` / `PF_WEEK` for PR bodies. With no usable usage snapshot (missing, `{}`, or reset time out of range) it sets `PF_RATE="usage snapshot unavailable (no statusline data yet)"` and `PF_WEEK="unavailable"`, silently.
 - `pf-watch-peers.sh`: triagemaster watcher for peer activity, stale peers and unowned tickets.
 - `statusline-usage.sh`: Claude Code statusLine command; also saves the usage snapshot and updates the #432 beacon.
 - `pf-status-refresh.sh`: background cache for status-line lines 2+; run by `statusline-usage.sh`.
