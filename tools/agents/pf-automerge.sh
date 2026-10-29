@@ -31,7 +31,9 @@ while true; do
     fi
     [ "$m" = "MERGEABLE" ] && rm -f "$STUCK_DIR/$P"   # no longer conflicting
     [ "$m" = "MERGEABLE" ] || continue
-    gh pr view $P --repo $REPO --json labels --jq '.labels[].name' | grep -qx review-blocked && continue   # rule 12: confirmed reviewer finding
+    labels=$(gh pr view $P --repo $REPO --json labels --jq '.labels[].name')
+    echo "$labels" | grep -qx review-blocked && continue   # rule 12: confirmed reviewer finding
+    echo "$labels" | grep -qx review-passed || continue    # rule 12: no merge before a reviewer pass
     if gh pr view $P --repo $REPO --json labels --jq '.labels[].name' | grep -qx conflict-risk && ! pf_is_triagemaster; then continue; fi
     states=$(gh pr checks $P --repo $REPO --json state --jq '.[].state' 2>/dev/null)
     [ -n "$states" ] || continue
