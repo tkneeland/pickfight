@@ -282,7 +282,7 @@ func _play_of_round(ev: Dictionary) -> void:
 	if not HostSettingsScript.shared().play_of_round or replay.hi_frame_count() == 0:
 		return
 	var now: int = Time.get_ticks_msec()
-	var pick: Dictionary = PlayOfRoundScript.select_frames(replay.hi_frame_count(), now, now - int(ev.get("age", 0)), int(ev.get("rem", 0)))
+	var pick: Dictionary = PlayOfRoundScript.select_frames(replay.hi_timestamps(), now, now - int(ev.get("age", 0)), int(ev.get("rem", 0)))
 	if int(pick["count"]) <= 0:
 		return
 	if play_of_round == null:

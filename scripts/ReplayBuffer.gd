@@ -8,7 +8,7 @@ extends Node
 ## `FRAME_SIZE` RGB8, about 13 MB, whatever the match does.
 ##
 ## Play of the round (#1128, ADR-0020 addendum) reads a second, separate ring:
-## the last `HI_SECONDS` s at `HI_SIZE` and `HI_FPS`, kept as RGB565 (2 bytes a
+## the last `HI_SECONDS` s fitted inside `HI_SIZE` at `HI_FPS`, kept as RGB565 (2 bytes a
 ## pixel), `hi_memory_cap_bytes()` = 55.3 MB at most. Its resize and conversion
 ## run on the worker thread pool so the main thread only pays for the grab. The
 ## F9 ring, its PNGs and clip.gif are untouched.
@@ -18,9 +18,14 @@ const CAPTURE_FPS: int = 12
 const HI_FPS: int = 24
 const HI_SECONDS: int = 5
 const HI_MAX_FRAMES: int = HI_FPS * HI_SECONDS
+## The largest Play of the round frame (#1137): a bigger or differently shaped
+## window shrinks to fit inside it, keeping its aspect, so a frame never holds
+## more pixels than 640x360 (the ADR-0020 byte cap) and is never squashed.
 const HI_SIZE := Vector2i(640, 360)
 const HI_FORMAT := Image.FORMAT_RGB565
-## Resize jobs allowed in flight; past this the capture waits for the oldest.
+## Resize jobs allowed in flight (#1138). Past this a grab is skipped, never
+## waited for, so the main thread does not stall and at most this many
+## window-sized sources are alive.
 const HI_MAX_PENDING: int = 2
 const CLIP_SECONDS: int = 10
 const MAX_FRAMES: int = CAPTURE_FPS * CLIP_SECONDS
@@ -76,12 +81,15 @@ func _process(delta: float) -> void:
 		return
 	if not capture_due(delta):
 		return
+	_grabs += 1
+	var f9_due: bool = _grabs % (HI_FPS / CAPTURE_FPS) == 0
+	if not f9_due and not _hi_has_room():
+		return # the pool is behind: skip the grab itself (#1138)
 	var tex := get_viewport().get_texture()
 	var img: Image = tex.get_image() if tex != null else null
 	if img == null or img.is_empty():
 		return
-	_grabs += 1
-	if _grabs % (HI_FPS / CAPTURE_FPS) == 0:
+	if f9_due:
 		# The F9 ring: shrunk in place on the main thread, so the pool job
 		# gets its own copy.
 		_keep_hi_async(img.duplicate() as Image)
@@ -117,20 +125,33 @@ func _keep_frame(small: Image) -> void:
 	while _frames.size() > MAX_FRAMES:
 		_frames.pop_front()
 
-## `img` into the Play of the round ring on the pool: shrunk to `HI_SIZE` and
-## packed to RGB565 off the main thread. Takes ownership of `img`.
-func _keep_hi_async(img: Image) -> void:
+## Whether the pool can take another source frame (#1138): finished jobs are
+## collected (no waiting), and fewer than `HI_MAX_PENDING` may still be running.
+func _hi_has_room() -> bool:
+	var running: int = 0
+	for h: Dictionary in _hi:
+		var task: int = int(h["task"])
+		if task < 0:
+			continue
+		if WorkerThreadPool.is_task_completed(task):
+			_collect(h)
+		else:
+			running += 1
+	return running < HI_MAX_PENDING
+
+## `img` into the Play of the round ring on the pool: shrunk to fit `HI_SIZE`
+## and packed to RGB565 off the main thread. Takes ownership of `img`. When the
+## pool is already at `HI_MAX_PENDING` the grab is dropped (returns false): the
+## main thread never waits, and the gap shows in `hi_timestamps()`.
+func _keep_hi_async(img: Image) -> bool:
+	if not _hi_has_room():
+		return false
 	var box: Array = [null]
 	var slot := {"img": null, "box": box, "msec": Time.get_ticks_msec(), "task": -1}
 	_hi.append(slot)
 	slot["task"] = WorkerThreadPool.add_task(_pack_hi.bind(img, box))
 	_trim_hi()
-	var pending: Array[Dictionary] = []
-	for h: Dictionary in _hi:
-		if int(h["task"]) >= 0:
-			pending.append(h)
-	while pending.size() > HI_MAX_PENDING:
-		_collect(pending.pop_front())
+	return true
 
 ## The same, inline (scenarios and tools feeding synthetic frames).
 func _keep_hi_now(img: Image) -> void:
@@ -144,12 +165,21 @@ func _trim_hi() -> void:
 	while _hi.size() > HI_MAX_FRAMES:
 		_collect(_hi.pop_front())
 
+## The Play of the round frame size for a `src`-sized window (#1137): the
+## window shrunk to fit inside `HI_SIZE`, aspect kept; never enlarged.
+static func hi_size_for(src: Vector2i) -> Vector2i:
+	if src.x <= HI_SIZE.x and src.y <= HI_SIZE.y:
+		return src
+	var k: float = minf(float(HI_SIZE.x) / src.x, float(HI_SIZE.y) / src.y)
+	return Vector2i(clampi(roundi(src.x * k), 1, HI_SIZE.x), clampi(roundi(src.y * k), 1, HI_SIZE.y))
+
 ## Runs on a pool thread: only touches `img` and its own result `box`.
 func _pack_hi(img: Image, box: Array) -> void:
-	# Bigger frames shrink to HI_SIZE; smaller ones (synthetic) stay as they are,
-	# so the ring never holds more than HI_SIZE per frame.
-	if img.get_width() > HI_SIZE.x or img.get_height() > HI_SIZE.y:
-		img.resize(HI_SIZE.x, HI_SIZE.y, Image.INTERPOLATE_BILINEAR)
+	# Bigger frames shrink to fit HI_SIZE; smaller ones (synthetic) stay as they
+	# are, so the ring never holds more than HI_SIZE per frame.
+	var want: Vector2i = hi_size_for(img.get_size())
+	if want != img.get_size():
+		img.resize(want.x, want.y, Image.INTERPOLATE_BILINEAR)
 	img.convert(HI_FORMAT)
 	box[0] = img
 
@@ -285,6 +315,12 @@ func _gif_done(path: String) -> void:
 		_toast.visible = true
 		_toast_timer.start(TOAST_SEC)
 	gif_saved.emit(path)
+
+func _notification(what: int) -> void:
+	# A buffer freed outside the tree never gets _exit_tree; its pool jobs
+	# must still finish before their boxes go (#1138).
+	if what == NOTIFICATION_PREDELETE:
+		_collect_all()
 
 func _exit_tree() -> void:
 	_collect_all()

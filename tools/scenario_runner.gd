@@ -1005,6 +1005,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"play_of_round_trims_to_the_pause_or_plays_nothing_704",
 	"play_of_round_buffer_stays_bounded",
 	"play_of_round_frames_are_sharp_and_smooth_1128",
+	"play_of_round_keeps_aspect_1137",
+	"replay_ring_never_blocks_and_caps_sources_1138",
+	"play_of_round_selects_by_timestamps_1139",
 	"play_of_round_no_ko_plays_nothing_704",
 	"play_of_round_leaves_the_pause_length_alone_704",
 	"play_of_round_skip_input_dismisses_704",
@@ -3732,6 +3735,9 @@ func _run_scenario(name: String) -> Array[String]:
 		"play_of_round_trims_to_the_pause_or_plays_nothing_704": return await _scenario_play_of_round_trims_to_the_pause_or_plays_nothing_704()
 		"play_of_round_buffer_stays_bounded": return await _scenario_play_of_round_buffer_stays_bounded()
 		"play_of_round_frames_are_sharp_and_smooth_1128": return await _scenario_play_of_round_frames_are_sharp_and_smooth_1128()
+		"play_of_round_keeps_aspect_1137": return await _scenario_play_of_round_keeps_aspect_1137()
+		"replay_ring_never_blocks_and_caps_sources_1138": return await _scenario_replay_ring_never_blocks_and_caps_sources_1138()
+		"play_of_round_selects_by_timestamps_1139": return await _scenario_play_of_round_selects_by_timestamps_1139()
 		"play_of_round_no_ko_plays_nothing_704": return await _scenario_play_of_round_no_ko_plays_nothing_704()
 		"play_of_round_leaves_the_pause_length_alone_704": return await _scenario_play_of_round_leaves_the_pause_length_alone_704()
 		"play_of_round_skip_input_dismisses_704": return await _scenario_play_of_round_skip_input_dismisses_704()
@@ -50523,27 +50529,147 @@ func _scenario_play_of_round_best_moment_scoring_order_704() -> Array[String]:
 func _scenario_play_of_round_trims_to_the_pause_or_plays_nothing_704() -> Array[String]:
 	var failures: Array[String] = []
 	var pick: Callable = PlayOfRoundScript704.select_frames
-	# A KO 100 ms ago with 120 frames held and a 10 s pause: the whole 4 s clip (96 frames at 24 fps, #1128).
-	var full: Dictionary = pick.call(120, 20000, 19900, 10000)
-	if int(full["count"]) != 96 or int(full["start"]) + int(full["count"]) - 1 != 119:
+	# A KO 100 ms ago with 120 frames held (24 fps) and a 10 s pause: the whole 4 s clip (96 frames at 24 fps, #1128).
+	var full: Dictionary = pick.call(_stamps_1139(120, 1000.0 / 24.0, 20000), 20000, 19900, 10000)
+	if int(full["count"]) < 95 or int(full["count"]) > 97 or int(full["start"]) + int(full["count"]) - 1 != 119:
 		failures.append("a long pause did not show the whole clip: %s" % full)
 	# A 3 s pause: slow motion (0.5x of 24 fps) must fit with a margin.
-	var trimmed: Dictionary = pick.call(120, 20000, 19900, 3000)
+	var trimmed: Dictionary = pick.call(_stamps_1139(120, 1000.0 / 24.0, 20000), 20000, 19900, 3000)
 	var run_sec: float = float(trimmed["count"]) / 12.0
 	if int(trimmed["count"]) == 0 or run_sec > 3.0 - 0.25:
 		failures.append("a 3 s pause was not trimmed to fit: %s runs %.2f s" % [trimmed, run_sec])
 	# Under 1.5 s of clip fits: nothing.
-	if int(pick.call(120, 20000, 19900, 1700)["count"]) != 0:
+	if int(pick.call(_stamps_1139(120, 1000.0 / 24.0, 20000), 20000, 19900, 1700)["count"]) != 0:
 		failures.append("a 1.7 s pause still played a clip")
-	if int(pick.call(0, 20000, 19900, 10000)["count"]) != 0:
+	if int(pick.call(PackedInt64Array(), 20000, 19900, 10000)["count"]) != 0:
 		failures.append("an empty buffer played a clip")
 	_scenario_completed = true
 	return failures
+## `count` frame stamps `step` msec apart, the newest at `newest`.
+func _stamps_1139(count: int, step: float, newest: int) -> PackedInt64Array:
+	var out := PackedInt64Array()
+	for i in count:
+		out.append(newest - int(round(step * (count - 1 - i))))
+	return out
+## #1137: a 16:10, 4:3, ultrawide or 4K window keeps its aspect and stays within
+## the 640x360 pixel budget; a 16:9 one is 640x360; real packed frames match.
+func _scenario_play_of_round_keeps_aspect_1137() -> Array[String]:
+	var failures: Array[String] = []
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var budget: int = script.HI_SIZE.x * script.HI_SIZE.y
+	for src: Vector2i in [Vector2i(1280, 800), Vector2i(1024, 768), Vector2i(3440, 1440), Vector2i(3840, 2160), Vector2i(1600, 900), Vector2i(800, 1200)]:
+		var got: Vector2i = script.hi_size_for(src)
+		if got.x * got.y > budget or got.x > script.HI_SIZE.x or got.y > script.HI_SIZE.y:
+			failures.append("%s kept at %s, over the 640x360 budget" % [src, got])
+		if absf(float(got.x) / got.y - float(src.x) / src.y) > 0.02:
+			failures.append("%s squashed to %s" % [src, got])
+	if script.hi_size_for(Vector2i(1600, 900)) != Vector2i(640, 360):
+		failures.append("a 16:9 window is not 640x360")
+	if script.hi_size_for(Vector2i(320, 200)) != Vector2i(320, 200):
+		failures.append("a small frame was enlarged")
+	var rb: Node = script.new()
+	root.add_child(rb)
+	rb._keep_hi_async(Image.create(1280, 800, false, Image.FORMAT_RGBA8))
+	if rb.hi_frame_size() != Vector2i(576, 360):
+		failures.append("a real 1280x800 grab was kept at %s, want 576x360" % rb.hi_frame_size())
+	rb.queue_free()
+	_scenario_completed = true
+	return failures
+## #1138: with the pool full the grab is dropped, not waited for; at most
+## HI_MAX_PENDING jobs run; a buffer freed outside the tree collects its jobs.
+func _scenario_replay_ring_never_blocks_and_caps_sources_1138() -> Array[String]:
+	var failures: Array[String] = []
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var rb: Node = script.new()
+	root.add_child(rb)
+	var kept: int = 0
+	var dropped: int = 0
+	var srcs: Array[Image] = []
+	for i in 12:
+		srcs.append(Image.create(3840, 2160, false, Image.FORMAT_RGBA8))
+	var t0: int = Time.get_ticks_msec()
+	for i in 12:
+		if rb._keep_hi_async(srcs[i]):
+			kept += 1
+		else:
+			dropped += 1
+		var running: int = 0
+		for h: Dictionary in rb._hi:
+			if int(h["task"]) >= 0 and not WorkerThreadPool.is_task_completed(int(h["task"])):
+				running += 1
+		if running > script.HI_MAX_PENDING:
+			failures.append("%d resize jobs in flight, cap is %d" % [running, script.HI_MAX_PENDING])
+	if dropped == 0:
+		failures.append("twelve back-to-back 4K grabs were all queued; none dropped when the pool was behind")
+	if kept == 0 or rb.hi_frame_count() != kept:
+		failures.append("kept %d but the ring holds %d" % [kept, rb.hi_frame_count()])
+	# Dropping must be quick: the old wait on a 4K resize would cost far more.
+	var elapsed: int = Time.get_ticks_msec() - t0
+	print("replay 1138: kept %d dropped %d in %d ms" % [kept, dropped, elapsed])
+	rb.queue_free()
+	await process_frame
+	var orphan: Node = script.new()
+	orphan._keep_hi_async(Image.create(3840, 2160, false, Image.FORMAT_RGBA8))
+	var box: Array = orphan._hi[0]["box"]
+	orphan.free() # never in the tree: only PREDELETE can collect
+	if box[0] == null:
+		failures.append("a buffer freed outside the tree left its pool job unfinished")
+	_scenario_completed = true
+	return failures
+## #1139: the clip is cut by grab time. A host at 10 fps, with a hitch, still
+## ends 500 ms after the KO and starts about 4 s before that.
+func _scenario_play_of_round_selects_by_timestamps_1139() -> Array[String]:
+	var failures: Array[String] = []
+	var pick: Callable = PlayOfRoundScript704.select_frames
+	# 10 fps for 5 s (50 frames), newest at t=20000; KO 2000 ms before the newest.
+	var stamps: PackedInt64Array = _stamps_1139(50, 100.0, 20000)
+	var r: Dictionary = pick.call(stamps, 20000, 18000, 10000)
+	if int(r["count"]) == 0:
+		failures.append("a 10 fps ring played nothing")
+	else:
+		var last: int = int(r["start"]) + int(r["count"]) - 1
+		if absi(int(stamps[last]) - 18500) > 100:
+			failures.append("clip ends at t=%d, want about 18500 (KO + 500 ms)" % stamps[last])
+		if int(stamps[last]) - int(stamps[int(r["start"])]) > 4000:
+			failures.append("clip spans more than 4 s")
+	# A hitch: a 1.5 s gap in the grabs between the KO and now.
+	var gap: PackedInt64Array = _stamps_1139(30, 100.0, 15500)
+	gap.append_array(PackedInt64Array([17000, 17100, 17200]))
+	var h: Dictionary = pick.call(gap, 17300, 15400, 10000)
+	if int(h["count"]) == 0 or int(gap[int(h["start"]) + int(h["count"]) - 1]) != 15500:
+		failures.append("a hitch after the KO moved the clip window: %s" % h)
+	# KO older than the whole ring: nothing.
+	if int(pick.call(stamps, 20000, 1000, 10000)["count"]) != 0:
+		failures.append("a KO older than the ring still played")
+	# KO just now: the clip ends at the newest frame.
+	var fresh: Dictionary = pick.call(stamps, 20000, 19990, 10000)
+	if int(fresh["start"]) + int(fresh["count"]) != 50:
+		failures.append("a fresh KO did not end at the newest frame: %s" % fresh)
+	rb_ts_check_1139(failures)
+	_scenario_completed = true
+	return failures
+func rb_ts_check_1139(failures: Array[String]) -> void:
+	var script := preload("res://scripts/ReplayBuffer.gd")
+	var rb: Node = script.new()
+	for i in 3:
+		rb.push_frame(Image.create(64, 36, false, Image.FORMAT_RGB8))
+	var ts: PackedInt64Array = rb.hi_timestamps()
+	if ts.size() != rb.hi_frame_count() or ts.size() != 3:
+		failures.append("hi_timestamps does not line up with the frames")
+	rb.free()
 func _fake_frames_704(rm: Node, count: int) -> void:
 	for i in count:
 		var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
 		img.fill(Color(float(i) / float(count), 0.2, 0.4))
 		rm._replay.push_frame(img)
+	_space_hi_stamps_1139(rm._replay)
+## Frames pushed in a burst share one grab time; give them the 24 fps spacing a
+## live ring has, the newest at now, since Play of the round cuts by time (#1139).
+func _space_hi_stamps_1139(rb: Node) -> void:
+	var now: int = Time.get_ticks_msec()
+	var n: int = rb._hi.size()
+	for i in n:
+		rb._hi[i]["msec"] = now - int(round(1000.0 / 24.0 * (n - 1 - i)))
 ## One two-player round in a real RoundManager: P1 KOs P2 (when `with_ko`), then
 ## the round-end pause is watched. Returns the pause length in game msec, whether
 ## the play-of-the-round panel showed, and its caption; `during` runs once the
@@ -57505,6 +57631,7 @@ func _scenario_remote_effects_play_of_round_976() -> Array[String]:
 	var img := Image.create(64, 36, false, Image.FORMAT_RGB8)
 	for i in 120:
 		client.effects.replay.push_frame(img)
+	_space_hi_stamps_1139(client.effects.replay)
 	_fx_play_976(client, [{"k": "por", "age": 1000, "rem": 3000, "cap": "Play of the Round: Ann"}])
 	var por: CanvasLayer = client.effects.play_of_round
 	if por == null or not por.is_playing() or por.caption_text() != "Play of the Round: Ann":
@@ -60016,8 +60143,10 @@ func _scenario_play_of_round_frames_are_sharp_and_smooth_1128() -> Array[String]
 	for i in 30:
 		var big := Image.create(1600, 900, false, Image.FORMAT_RGBA8)
 		big.fill(Color(float(i) / 30.0, 0.3, 0.6))
-		rb._keep_hi_async(big)
-		await process_frame
+		for tries in 200:
+			if rb._keep_hi_async(big):
+				break
+			await process_frame # the pool is busy: a grab is dropped, so retry (#1138)
 	if rb.hi_frame_size() != Vector2i(640, 360):
 		failures.append("a 1600x900 grab was kept at %s, want 640x360" % rb.hi_frame_size())
 	var frames: Array[Image] = rb.hi_frames_slice(0, 30)

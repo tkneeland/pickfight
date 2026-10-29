@@ -2332,7 +2332,10 @@ func _start_play_of_round() -> void:
 	if best.is_empty():
 		return
 	var now: int = GameClockScript.now_msec()
-	var pick: Dictionary = PlayOfRoundScript.select_frames(_replay.hi_frame_count(), now, int(best["t"]), _pause_until_msec - now)
+	# The ring is stamped in wall time, the KO in game time (it stops on Pause):
+	# hand over the KO's age against the wall clock.
+	var wall: int = Time.get_ticks_msec()
+	var pick: Dictionary = PlayOfRoundScript.select_frames(_replay.hi_timestamps(), wall, wall - (now - int(best["t"])), _pause_until_msec - now)
 	if int(pick["count"]) <= 0:
 		return
 	if _play_of_round == null:
