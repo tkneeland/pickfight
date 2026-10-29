@@ -28,3 +28,27 @@ viewport textures can be empty in headless runs.
 ## Consequences
 
 Clips are low resolution and 12 fps, enough for sharing, not for broadcast.
+
+## Addendum (2026-10-29, #1128): a separate sharp ring for Play of the round
+
+Play of the round (#704) played the 256x144, 12 fps F9 ring full-screen, which
+looked pixelated (about 6x upscaled) and choppy (6 fps at half speed).
+
+Options weighed: a separate short high-res ring; compressed in-memory frames;
+a state replay re-rendered by the game. Chosen: **a separate short high-res
+ring** inside `ReplayBuffer.gd`. Compression costs CPU on the hot path and a
+state replay needs a deterministic re-sim the game does not have.
+
+- **What it holds:** the last 5 s (120 frames) at 640x360 and 24 fps, packed
+  as RGB565 (2 bytes a pixel). Frames are shown at half speed, so 12 distinct
+  frames a second, drawn with linear filtering.
+- **Memory cap:** 120 x 640 x 360 x 2 = 55,296,000 bytes (52.7 MiB, under the
+  64 MB target), fixed whatever the match does. While a grab is being shrunk
+  the pool holds at most 2 source frames on top (the window's size, transient).
+- **Cost:** the viewport grab runs at 24 a second (it ran at 12); the resize and
+  RGB565 pack run on `WorkerThreadPool`, not the main thread. Every second grab
+  also feeds the F9 ring as before.
+- **Unchanged:** the F9 ring (120 frames of 256x144 RGB8, 13 MB), its PNGs and
+  `clip.gif` (12 fps, 8 cs delay).
+- **Online:** `RemoteEffects` owns a `ReplayBuffer` too, so the joiner's replay
+  is the same code, size and fps as the host's.
