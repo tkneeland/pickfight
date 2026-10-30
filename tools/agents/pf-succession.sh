@@ -2,14 +2,15 @@
 # Works out who holds the triagemaster role and writes it to $PF_STATE/pf-triagemaster. Prints the holder.
 # Rank-1 holder keeps the role until its weekly used >= HANDOFF_WEEKLY_USED with more than RESET_GRACE_HOURS
 # until its reset, or >= HANDOFF_HARD_WEEKLY_USED (95%) at any time; then the next SUCCESSION_RANK with a beacon under 6h old and under HANDOFF_WEEKLY_USED holds it.
-# The role returns on its own once the original holder's weekly resets. Beacons are the #432 comments.
-# With --post, the stand-in itself posts "[TRIAGEMASTER] <handle> until <reset ISO>" on #432 when it takes over.
+# The role returns on its own once the original holder's weekly resets. Beacons are the newest USAGE message per account
+# in $PF_STATE/msg-inbox.log (pf_beacon), this account's own usage snapshot for itself; a missing or 6h-stale inbox is
+# backfilled from the channel first. With --post, the stand-in itself sends "TM <handle> until <reset ISO>" on the
+# private channel when it takes over.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 now=$(date +%s)
 iso2e() { pf_iso_to_epoch "$1" || echo 0; }
-comments=$(gh api "repos/$REPO/issues/432/comments?per_page=100" --paginate 2>/dev/null) || { pf_triagemaster; exit 0; }
-comments=$(echo "$comments" | jq -s add) || { pf_triagemaster; exit 0; }
-beacon() { pf_beacon "$1" "$comments"; }  # sets b_age b_used b_reset for handle $1 (pf-env.sh)
+pf_usage_backfill
+beacon() { pf_beacon "$1"; }  # sets b_age b_used b_reset for handle $1 (pf-env.sh)
 order=$(for h in $(pf_handles); do r=$(sed -n 's/^SUCCESSION_RANK=\([0-9]*\).*/\1/p' "$PF_DIR/accounts/$h.conf"); echo "$r $h"; done | sort -n | awk '{print $2}')
 first=$(echo "$order" | head -1)
 beacon "$first"; holder=$first; reset0=$b_reset
@@ -22,6 +23,6 @@ fi
 prev=$(cat "$PF_STATE/pf-triagemaster" 2>/dev/null)
 echo "$holder" > "$PF_STATE/pf-triagemaster"
 if [ "$holder" != "$prev" ] && [ "$holder" != "$first" ] && [ "$holder" = "$PF_ACCOUNT" ] && [ "${1:-}" = "--post" ] && [ -z "${PF_DRY_RUN:-}" ]; then
-  gh issue comment 432 -R "$REPO" --body "[TRIAGEMASTER] $holder until $reset0" >/dev/null 2>&1
+  bash "$PF_DIR/pf-msg.sh" send TM "$holder until $reset0" >/dev/null 2>&1
 fi
 echo "$holder"

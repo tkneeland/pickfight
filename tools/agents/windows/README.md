@@ -17,7 +17,7 @@ powershell -ExecutionPolicy Bypass -File tools\agents\windows\pf-stop.ps1   -Acc
   (or you) reads it with `pf-status.ps1`, which exits 10 while an unhandled wake line exists; `pf-status.ps1 -Ack`
   marks it handled. After a wake the supervisor waits 5 minutes before polling again.
 - `pf-supervise.sh automerge` keeps `pf-automerge.sh` running and appends to `automerge.log`.
-- `pf-supervise.sh beacon` runs `pf-beacon.sh` every 15 min to keep your #432 usage beacon current. The status
+- `pf-supervise.sh beacon` runs `pf-beacon.sh` every 15 min to keep your `USAGE` beacon on the private channel current (`pf-supervise.sh msg` must run too: it fills the inbox the other accounts' beacons are read from). The status
   line's own background beacon job can die with the status line process on Windows; failures go to `beacon.log`.
   The status line must still run, because it saves `usage-snapshot.json`, which the beacon reads.
 - `pf-supervise.sh msg` keeps `pf-msg.sh listen` alive and runs `pf-msg.sh heartbeat` every 60 s (HELLO to the private channel, wake line when a peer goes silent). It needs `pf-msg.conf` in the state folder (`pf-msg.sh init`, then share the topic out of band). `-Only msg` starts just this one; macOS: `screen -dmS pf-msg bash tools/agents/windows/pf-supervise.sh msg`.

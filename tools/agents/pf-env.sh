@@ -81,14 +81,37 @@ pf_daynight() {
   h=$(date +%H); h=$((10#$h)); u=$(cat "$PF_STATE/pf-day-until" 2>/dev/null || echo 0)
   if [ "$(date +%s)" -lt "$u" ] || { [ "$h" -ge "$NIGHT_END" ] && [ "$h" -lt "$NIGHT_START" ]; }; then echo day; else echo night; fi
 }
-# pf_beacon <handle> <#432 comments JSON>: sets b_age (s, 999999 if none) b_p5 b_r5 b_used b_reset (7d) from the handle's own
-# latest beacon comment. Percent values are floored; empty when the beacon shows "?". Resets are ISO strings.
+# pf_beacon <handle>: sets b_age (s, 999999 if none) b_p5 b_r5 b_used b_reset (7d) b_at (ISO stamp) from the handle's
+# newest USAGE message in $PF_STATE/msg-inbox.log ("<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> [at=<ISO>]",
+# filled by pf-msg.sh listen/backfill), or from this account's own usage-snapshot.json. Percent values are floored and
+# empty when unknown ("?", or a 1970 reset). The age is from at= (when the snapshot was taken) when present.
+# Run pf_usage_backfill first so a machine that was off does not decide on an empty or stale inbox.
 pf_beacon() {
-  local body ts e; body=$(echo "$2" | jq -r --arg h "$1" '[.[]|select(.user.login==$h and (.body|startswith("\($h) usage @")))]|last|.body // empty')
-  ts=$(echo "$body" | sed -n 's/.*usage @ \([0-9TZ:-]*\).*/\1/p' | head -1)
-  b_age=999999; [ -n "$ts" ] && e=$(pf_iso_to_epoch "$ts") && b_age=$(( $(date +%s) - e ))
-  b_p5=$(echo "$body" | sed -n 's/^5h: \([0-9.]*\)%.*/\1/p' | head -1); b_p5=${b_p5%.*}
-  b_r5=$(echo "$body" | sed -n 's/^5h:.*resets \([0-9TZ:-]*\)).*/\1/p' | head -1)
-  b_used=$(echo "$body" | sed -n 's/^7d: \([0-9.]*\)%.*/\1/p' | head -1); b_used=${b_used%.*}
-  b_reset=$(echo "$body" | sed -n 's/^7d:.*resets \([0-9TZ:-]*\)).*/\1/p' | head -1)
+  local line rest ts e w p7 r7; b_age=999999; b_p5=""; b_r5=""; b_used=""; b_reset=""; b_at=""
+  if [ "$1" = "$PF_ACCOUNT" ]; then
+    local snap=$PF_STATE/usage-snapshot.json; [ -s "$snap" ] || return 0
+    e=$(pf_mtime "$snap") || return 0
+    rest=$(jq -r '"\(.rate_limits.five_hour.used_percentage // "?"|if type=="number" then floor else . end)% \(.rate_limits.seven_day.used_percentage // "?"|if type=="number" then floor else . end)% \(.rate_limits.seven_day.resets_at // 0|floor|todate) r5=\(.rate_limits.five_hour.resets_at // 0|floor|todate)"' "$snap" 2>/dev/null) || return 0
+  else
+    line=$(awk -F'|' -v h="$1" '$2==h && $3=="USAGE" && $1+0>=m {m=$1+0; l=$0} END {print l}' "$PF_STATE/msg-inbox.log" 2>/dev/null)
+    [ -n "$line" ] || return 0
+    e=${line%%|*}; e=${e%.*}; rest=${line#*|*|*|}
+    ts=$(echo "$rest" | sed -n 's/.* at=\([0-9TZ:-]*\).*/\1/p'); [ -n "$ts" ] && { w=$(pf_iso_to_epoch "$ts") && e=$w; }
+  fi
+  b_age=$(( $(date +%s) - e )); b_at=$(TZ=UTC pf_epoch_fmt "$e" +%Y-%m-%dT%H:%M:%SZ)
+  set -- $rest
+  b_p5=${1%\%}; b_p5=${b_p5%.*}; p7=${2%\%}; p7=${p7%.*}; r7=$3
+  b_r5=$(echo "$rest" | sed -n 's/.*r5=\([0-9TZ:-]*\).*/\1/p')
+  case $b_p5 in ''|*[!0-9]*) b_p5="";; esac
+  case $b_r5 in 1970-01-01*) b_p5=""; b_r5="";; esac
+  case $p7 in ''|*[!0-9]*) p7="";; esac
+  case $r7 in 1970-01-01*|'') p7=""; r7="";; esac
+  b_used=$p7; b_reset=$r7
+}
+# pf_usage_backfill: when msg-inbox.log is missing or not written in the last 6h (listener down, machine was off),
+# fills it from the channel's cache (pf-msg.sh backfill: ntfy poll of the last 12h) before anyone reads beacons.
+pf_usage_backfill() {
+  local m; m=$(pf_mtime "$PF_STATE/msg-inbox.log" || true)
+  [ -n "$m" ] && [ $(( $(date +%s) - m )) -lt 21600 ] && return 0
+  bash "$PF_DIR/pf-msg.sh" backfill >/dev/null 2>&1 || true
 }

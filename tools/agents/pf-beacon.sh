@@ -1,8 +1,9 @@
 #!/bin/bash
-# Writes this account's #432 usage beacon once, in the foreground, from $PF_STATE/usage-snapshot.json
-# (saved by statusline-usage.sh). Edits the account's existing beacon comment; finds it on #432 when
-# .beacon-comment-id is missing, and posts a new one only if none exists. Errors go to $PF_STATE/beacon.log.
-# Run by statusline-usage.sh every 15 min, and by `windows/pf-supervise.sh beacon`, which outlives the status line.
+# Sends this account's usage beacon once, in the foreground: a USAGE message on the private channel (pf-msg.sh), the only
+# usage beacon (#1153; the old issue comments are retired). Built from $PF_STATE/usage-snapshot.json (saved by
+# statusline-usage.sh or pf-usage.sh). Format: "<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> at=<snapshot ISO>".
+# Errors go to $PF_STATE/beacon.log; exit 1 when nothing was sent.
+# Run by statusline-usage.sh every 15 min, pf-usage.sh, and `windows/pf-supervise.sh beacon`, which outlives the status line.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >> "$PF_STATE/beacon.log"; }
 snap=$PF_STATE/usage-snapshot.json
@@ -12,21 +13,7 @@ snap=$PF_STATE/usage-snapshot.json
 sat=$(pf_mtime "$snap")
 # running worker agents = live worktrees on an issue branch (pf_live_agents; the status line counts them the same way)
 agents=$(pf_live_agents | wc -l | tr -d " ")
-body=$(jq -r --arg a "$PF_ACCOUNT" --argjson sat "$sat" --argjson ag "${agents:-0}" '
-  "\($a) usage @ \($sat|todate)\n5h: \(.rate_limits.five_hour.used_percentage // "?")% (resets \(.rate_limits.five_hour.resets_at // 0|todate))\n7d: \(.rate_limits.seven_day.used_percentage // "?")% (resets \(.rate_limits.seven_day.resets_at // 0|todate))\nagents: \($ag)\n<!-- usage \({account:$a, at:$sat, posted:(now|floor), agents:$ag, five_hour:.rate_limits.five_hour, seven_day:.rate_limits.seven_day}|tojson) -->"' "$snap") \
+msg=$(jq -r --arg ag "${agents:-0}" --argjson sat "${sat:-0}" '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate) r5=\(.rate_limits.five_hour.resets_at // 0|floor|todate) agents=\($ag) at=\($sat|todate)"' "$snap") \
   || { log "bad snapshot"; exit 1; }
-idf=$PF_STATE/.beacon-comment-id; id=$(cat "$idf" 2>/dev/null)
-if [ -z "$id" ]; then
-  id=$(gh api "repos/$REPO/issues/432/comments?per_page=100" --paginate \
-    --jq ".[]|select(.user.login==\"$PF_ACCOUNT\" and (.body|startswith(\"$PF_ACCOUNT usage @\")))|.id" 2>>"$PF_STATE/beacon.log" | tail -n 1)
-  [ -n "$id" ] && echo "$id" > "$idf"
-fi
-if [ -n "$id" ]; then
-  gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" >/dev/null 2>>"$PF_STATE/beacon.log" || { log "PATCH $id failed"; exit 1; }
-else
-  id=$(gh api "repos/$REPO/issues/432/comments" -f body="$body" -q .id 2>>"$PF_STATE/beacon.log") || { log "POST failed"; exit 1; }
-  echo "$id" > "$idf"
-fi
-# Also send it on the private channel: the triagemaster's status line reads the newest USAGE message first and falls
-# back to this #432 comment. Format: "<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n>". Never fails the beacon.
-bash "$PF_DIR/pf-msg.sh" send USAGE "$(jq -r --arg ag "${agents:-0}" '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate) r5=\(.rate_limits.five_hour.resets_at // 0|floor|todate) agents=\($ag)"' "$snap")" >/dev/null 2>&1 || true
+[ -f "$PF_STATE/pf-msg.conf" ] || { log "no channel configured (pf-msg.sh init); USAGE not sent"; exit 1; }
+bash "$PF_DIR/pf-msg.sh" send USAGE "$msg" >/dev/null 2>>"$PF_STATE/beacon.log" || { log "USAGE send failed"; exit 1; }

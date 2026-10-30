@@ -13,11 +13,11 @@
 - `MIN_WEEKLY_REMAINING_FOR_TICKETS`: your account gets no new tickets when its remaining weekly percent is at or below this (tommykneeland: 50).
 - `SUCCESSION_RANK`: who stands in as triagemaster when `tkneeland` runs low (Austin 2, tommykneeland 3).
 
-**What your Claude does on its own:** starts workers on tickets assigned to you, ships and merges your PRs, keeps your usage beacon on issue #432 current, and shows the status line. **What it won't do:** file tickets itself (unless `AUTO_FILE=1`), or merge a `conflict-risk` PR. Those are for the triagemaster, which is `tkneeland` or, when that account is low on weekly budget, the next account in rank (it posts `[TRIAGEMASTER] ...` on #432).
+**What your Claude does on its own:** starts workers on tickets assigned to you, ships and merges your PRs, keeps your usage beacon (a `USAGE` message on the private channel) current, and shows the status line. **What it won't do:** file tickets itself (unless `AUTO_FILE=1`), or merge a `conflict-risk` PR. Those are for the triagemaster, which is `tkneeland` or, when that account is low on weekly budget, the next account in rank (it sends a `TM ...` message on the private channel).
 
 **Quality gates.** Every ticket is built through Atlas (`/atlas-implement`, with `/atlas-plan` first for risky or p1 tickets). Before any PR merges, including yours, a reviewer agent checks it against repo standards, the ticket, and for correctness bugs. A confirmed bug or spec miss blocks the merge until your Claude fixes it. Style notes are advisory. Bugs it spots elsewhere become new tickets automatically.
 
-**Requesting tickets.** Ask the owner or the triagemaster, or comment on #432 with what you need. Before asking, your Claude runs `tools/agents/pf-dupe-check.sh "<keywords>"` so you do not request something that exists.
+**Requesting tickets.** Ask the owner or the triagemaster, or send an `ASK` on the private channel with what you need. Before asking, your Claude runs `tools/agents/pf-dupe-check.sh "<keywords>"` so you do not request something that exists.
 
 **Switching modes.** Tell your Claude "MT mode" to make it act only when asked, or "AT mode" to switch back (it writes `AT` or `MT` to `~/.claude/pf/<handle>/pf-at-mode`). "Day mode for 3 hours" overrides night.
 
@@ -32,7 +32,7 @@ Line 1 is the model, 5-hour and 7-day usage with reset times, and the mode. Line
 ## Adopt it (for your Claude)
 
 1. `git pull` main so `tools/agents/` and your `accounts/<handle>.conf` exist. Ask your human to confirm the `TZ` and `AUTO_FILE` values and commit any change.
-2. Set your handle and point the status line at the script, in your Claude settings (`statusLine` command): `PF_ACCOUNT=<handle> bash <repo>/tools/agents/statusline-usage.sh`. It also writes your #432 beacon.
+2. Set your handle and point the status line at the script, in your Claude settings (`statusLine` command): `PF_ACCOUNT=<handle> bash <repo>/tools/agents/statusline-usage.sh`. It also sends your `USAGE` beacon on the private channel.
 3. Check it: `PF_ACCOUNT=<handle> bash tools/agents/pf-at-mode.sh` prints `AT·day` or `AT·night`.
 4. Start the watchers in `screen`, each with `PF_ACCOUNT=<handle>`: `pf-triage-watch.sh` (exits with one line when you must act; restart after each wake) and `pf-automerge.sh` (merges green PRs, leaves `conflict-risk` ones alone).
 5. Use `pf-ship.sh <issue> "<title>" "<body>"` to ship and `pf-dupe-check.sh` before any ticket request.

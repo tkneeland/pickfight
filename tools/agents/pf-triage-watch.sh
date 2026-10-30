@@ -4,7 +4,7 @@
 #   UNTRIAGED <n...>   (triagemaster only) open issue missing a p1/p2/p3 label or an assignee
 #   MYTICKET <n>       ready-for-agent ticket assigned to this account and no worktree in progress
 #   FEATURES? PR <n>   (triagemaster only) open PR changes scripts/ or controller/ without docs/FEATURES.md (once per PR)
-#   PEER_BEACON        a WATCH_PEERS account's #432 usage beacon became fresh (once)
+#   PEER_BEACON        a WATCH_PEERS account's USAGE beacon (private channel, msg-inbox.log) became fresh (once)
 #   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than pf_worker_target (day DAY_AGENTS, night
 #                      NIGHT_AGENTS, 1 past FIVE_H_SLOW_USED, 0 past FIVE_H_STOP_USED or the weekly stop)
 #   AUSTIN_QUEUE_LOW <n>  (triagemaster only, ticket-maker on) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
@@ -19,7 +19,7 @@ while true; do
   [ "$issues" = "[]" ] && issues=""
   if [ -n "$issues" ]; then
     if pf_is_triagemaster; then
-      u=$(echo "$issues" | jq -r '.[] | select(.pull_request==null and .number!=432) | select(((.labels|map(.name)|map(test("^p[123]$"))|any)|not) or ((.assignees|length)==0)) | .number' | tr '\n' ' ')
+      u=$(echo "$issues" | jq -r '.[] | select(.pull_request==null) | select(((.labels|map(.name)|map(test("^p[123]$"))|any)|not) or ((.assignees|length)==0)) | .number' | tr '\n' ' ')
       [ -n "${u// /}" ] && { echo "UNTRIAGED $u"; exit 0; }
     fi
     for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | select(any(.labels[]; .name=="ready-for-agent")) | .number'); do
@@ -39,12 +39,12 @@ while true; do
       done
     fi
   fi
+  pf_usage_backfill
   for peer in ${WATCH_PEERS:-agage-JG}; do
     grep -qx "beacon-$peer" "$SEEN" && continue
-    # every page, oldest first: the last match is the peer's newest beacon
-    t=$(gh api --paginate "repos/$REPO/issues/432/comments?per_page=100" --jq ".[] | select(.user.login==\"$peer\") | .body" 2>/dev/null | sed -n 's/.*usage @ \([0-9TZ:-]*\).*/\1/p' | tail -1)
-    if [ -n "$t" ] && [ $(( $(date +%s) - $(pf_iso_to_epoch "$t" || echo 0) )) -lt 21600 ]; then
-      echo "beacon-$peer" >> "$SEEN"; echo "PEER_BEACON $peer fresh at $t"; exit 0
+    pf_beacon "$peer"   # newest USAGE message from the peer
+    if [ "$b_age" -lt 21600 ]; then
+      echo "beacon-$peer" >> "$SEEN"; echo "PEER_BEACON $peer fresh at $b_at"; exit 0
     fi
   done
   # hourly productivity check: fewer active work packages than this mode's minimum -> wake Claude to start more

@@ -1,9 +1,12 @@
 #!/bin/bash
 # Private account-to-account doorbell over an ntfy topic. The channel only nudges; verify everything on GitHub.
 #   pf-msg.sh init                  create $PF_STATE/pf-msg.conf with a random secret topic (never commit it)
-#   pf-msg.sh send <TYPE> <text>    TYPE: CLAIM RELEASE USAGE ASK ANSWER INFO FIRE HELLO
+#   pf-msg.sh send <TYPE> <text>    TYPE: CLAIM RELEASE USAGE ASK ANSWER INFO FIRE HELLO TM
+#                                   USAGE is the only usage beacon (pf-beacon.sh); TM "<handle> until <reset ISO>" (pf-succession.sh --post)
 #   pf-msg.sh claim|release <n>     send CLAIM / RELEASE <n>
 #   pf-msg.sh listen                long-lived: appends to msg-inbox.log, writes CLAIM/ASK/FIRE lines to msg-wake.txt
+#   pf-msg.sh backfill              one pass: append the channel's cached last 12h (ntfy poll) to msg-inbox.log, skipping
+#                                   lines already there; pf_usage_backfill runs it when the inbox is missing or 6h+ stale
 #   pf-msg.sh claimed <n>           exit 0 when another account CLAIMed <n> in the last 24h and has not RELEASEd it
 #   pf-msg.sh heartbeat             one pass: send HELLO every 15 min; wake (MSG FIRE peer-silent) when a peer is silent 1h+;
 #                                   ASK a peer whose USAGE has no real numbers to fix its status line (every 6h at most)
@@ -27,7 +30,7 @@ load_conf() {
 topic_url_conf() { printf 'url = "%s/%s%s"\n' "$PF_MSG_SERVER" "$PF_MSG_TOPIC" "${1:-}"; }
 send() {  # send <TYPE> <text...>
   local type=$1; shift
-  case $type in CLAIM|RELEASE|USAGE|ASK|ANSWER|INFO|FIRE|HELLO) ;; *) echo "pf-msg: bad type '$type'" >&2; return 2;; esac
+  case $type in CLAIM|RELEASE|USAGE|ASK|ANSWER|INFO|FIRE|HELLO|TM) ;; *) echo "pf-msg: bad type '$type'" >&2; return 2;; esac
   load_conf || { echo "pf-msg: no topic configured (run pf-msg.sh init); not sent" >&2; return 0; }
   case "$*" in *"$PF_MSG_TOPIC"*) echo "pf-msg: refusing to send text containing the topic" >&2; return 1;; esac
   topic_url_conf | curl -sf -m 5 -K - -d "$PF_ACCOUNT $type $*" >/dev/null 2>&1 || return 1
@@ -77,6 +80,15 @@ EOT
       [ $(( $(date -u +%s) - began )) -gt 60 ] && delay=5
       sleep "$delay"; delay=$((delay*2)); [ "$delay" -gt 60 ] && delay=60
     done;;
+  backfill)
+    load_conf || { echo "pf-msg: no topic configured; nothing to backfill" >&2; exit 3; }
+    got=$(topic_url_conf "/json?poll=1&since=12h" | curl -sf -m 15 -K - 2>/dev/null) || { echo "pf-msg: backfill poll failed" >&2; exit 1; }
+    touch "$INBOX"
+    printf '%s\n' "$got" | jq -r --arg me "$PF_ACCOUNT" 'select(.event=="message") | (.message|gsub("[[:cntrl:]]";" ")|.[0:300]) as $m
+      | ($m|split(" ")) as $w | select($w[0] != $me and ($w|length) >= 2)
+      | "\(.time)|\($w[0])|\($w[1])|\($w[2:]|join(" "))"' 2>/dev/null |
+      while IFS= read -r l; do grep -qxF -- "$l" "$INBOX" || echo "$l" >> "$INBOX"; done
+    exit 0;;
   claimed)
     n=${1:?usage: pf-msg.sh claimed <n>}; n=${n#\#}
     [ -f "$INBOX" ] || exit 1
@@ -111,5 +123,5 @@ EOT
       echo "$line" > "$WAKE"; echo "$last" > "$PF_STATE/.msg-silent-$peer"; echo "$line"
     done
     exit 0;;
-  *) echo "usage: pf-msg.sh init|send <TYPE> <text>|claim <n>|release <n>|listen|claimed <n>|heartbeat" >&2; exit 2;;
+  *) echo "usage: pf-msg.sh init|send <TYPE> <text>|claim <n>|release <n>|listen|backfill|claimed <n>|heartbeat" >&2; exit 2;;
 esac

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Zero-token usage refresh for sessions with no status line (headless `claude -p`, launchd jobs): reads the 5h and 7d
 # utilization from Anthropic's OAuth usage endpoint with this machine's own Claude Code login, writes the rate_limits
-# part of $PF_STATE/usage-snapshot.json in the status line's format, then refreshes the #432 beacon (pf-beacon.sh) when
+# part of $PF_STATE/usage-snapshot.json in the status line's format, then sends the USAGE beacon (pf-beacon.sh) when
 # the numbers changed or an hour passed. The token is read from the macOS keychain or ~/.claude/.credentials.json and is
 # never printed, logged or put on a command line. An expired login is skipped, not refreshed (refresh tokens rotate and
 # would log Claude Code out): an idle account's usage doesn't change, and any running Claude session refreshes the login.

@@ -1,6 +1,8 @@
 #!/bin/bash
 # Background cache for the status line (lines 2+). Run by statusline-usage.sh at most every 60 s.
-# Line 2: agents n/min · ready me N / <peer> N · PRs · last merge · tm <triagemaster>; then "  #N title" per running agent.
+# Line 2: agents n/min · ready me N / <peer> N · PRs · last merge · tm <triagemaster>
+# Line 3: peers' usage from their newest USAGE message on the private channel (msg-inbox.log; no GitHub call)
+# Then "  #N title" per running agent.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 R=$ROOT; out=$PF_STATE/pf-status-cache.txt
 bash "$PF_DIR/pf-succession.sh" --post >/dev/null 2>&1   # keeps $PF_STATE/pf-triagemaster current
@@ -20,4 +22,13 @@ for i in $(pf_live_agents); do
   [ -z "$t" ] && continue   # issue closed: not a running agent
   n=$((n+1)); agents+=$'\n'"  #$i $t"
 done
+# peers' usage, "<handle> 5h N% 7d N%" with the beacon's age once it is an hour old ("?" = no beacon or unknown)
+pu=""
+for h in $(pf_handles); do
+  [ "$h" = "$PF_ACCOUNT" ] && continue
+  pf_beacon "$h"
+  if [ "$b_age" -ge 999999 ]; then pu+=" · $h ?"; continue; fi
+  pu+=" · $h 5h ${b_p5:-?}% 7d ${b_used:-?}%"; [ "$b_age" -ge 3600 ] && pu+=" ($((b_age / 3600))h old)"
+done
+agents=$'\n'"peers${pu# ·}$agents"
 printf 'agents %d/%s · %s · PRs %s · last merge #%s %s · tm %s%s\n' "$n" "$min" "$rd" "$prs" "${lm%% *}" "$ago" "$tm" "$agents" > $out.tmp && mv $out.tmp $out
