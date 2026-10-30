@@ -34,7 +34,7 @@ log() { echo "$(date -u +%FT%TZ) $*" >> "$PF_STATE/reserve.log"; }
 [ "$(cat "$PF_STATE/pf-at-mode" 2>/dev/null || echo AT)" = MT ] && exit 0
 SESSION=pf-at-$PF_ACCOUNT
 if [ "$DRY" = 0 ]; then
-  # no status line here or in the headless session: refresh the usage snapshot and #432 beacon from the usage endpoint
+  # no status line here or in the headless session: refresh the usage snapshot and USAGE beacon from the usage endpoint
   bash "$PF_DIR/pf-usage.sh" || log "usage refresh failed (see beacon.log)"
   # the automerger is cheap and should outlive reboots too
   screen -ls 2>/dev/null | grep -q "\.pf-automerge-$PF_ACCOUNT[[:space:]]" ||
@@ -45,8 +45,8 @@ fi
 git -C "$ROOT" fetch -q origin 2>/dev/null
 
 now=$(date +%s)
-raw=$(gh api "repos/$REPO/issues/432/comments?per_page=100" --paginate 2>/dev/null) || { log "beacon read failed"; exit 0; }
-comments=$(echo "$raw" | jq -s 'add') || { log "beacon parse failed"; exit 0; }
+# beacons: each account's newest USAGE message in msg-inbox.log, backfilled from the channel when missing or stale
+pf_usage_backfill
 # able: fresh beacon (<6h); under the weekly handoff % or inside its reset grace window (rule 3); 5h not full with >1h to go.
 # An unknown 7d ("?", e.g. just after a reset) counts as able but ranks last for hand-backs.
 able() {
@@ -60,7 +60,7 @@ able() {
 needed=0; best=""; bestp=999; who=""
 for h in $(pf_handles); do
   grep -q '^RESERVE=1' "$PF_DIR/accounts/$h.conf" && continue
-  pf_beacon "$h" "$comments"
+  pf_beacon "$h"
   if able; then p=${b_used:-100}; [ "$p" -lt "$bestp" ] && { best=$h; bestp=$p; }; who+="$h:able "
   else needed=1; who+="$h:unable "; fi
 done

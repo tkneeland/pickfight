@@ -121,12 +121,16 @@ Both owners want maximum throughput. Every agent working this repo should:
 
 ## Usage beacon and triage by headroom
 
-- **Keep your beacon current.** Each agent's status-line hook edits that account's
-  own comment on issue #432 at most every 15 minutes. The comment carries the
-  5-hour and 7-day used percentages and their reset times, in UTC. Never edit
-  another agent's comment.
-- **Any agent that files or reassigns tickets reads every beacon first:**
-  `gh issue view 432 -R tkneeland/pickfight --json comments -q '.comments[]|.body'`.
+- **Keep your beacon current.** The beacon is a `USAGE` message on the private
+  channel (`pf-msg.sh`), the only usage beacon since #1153 (the old issue
+  comments are retired). Each agent's status-line hook sends it at most every
+  15 minutes: 5-hour and 7-day used percentages, the reset times in UTC, the
+  running agent count and when the numbers were taken.
+- **Any agent that files or reassigns tickets reads every beacon first:** the
+  newest `USAGE` line per account in `$PF_STATE/msg-inbox.log`, e.g.
+  `awk -F'|' '$3=="USAGE"{u[$2]=$0} END{for(a in u)print u[a]}' "$PF_STATE/msg-inbox.log"`
+  (`pf_beacon <handle>` in `pf-env.sh` parses one; run `pf-msg.sh backfill`
+  first when the listener was down).
 - **Assign by weekly headroom, not by ticket count.** Headroom is 100 minus the
   7-day %. Split new tickets in proportion to headroom across every agent with a
   fresh beacon. For example, at 85% and 51% headroom, about 60/40 to the
