@@ -47,6 +47,9 @@ git -C "$ROOT" fetch -q origin 2>/dev/null
 now=$(date +%s)
 # beacons: each account's newest USAGE message in msg-inbox.log, backfilled from the channel when missing or stale
 pf_usage_backfill
+# no fresh beacon from any other account (no channel configured, listener down and backfill failed): no evidence that
+# the devs cannot work, so make no decision rather than treat them all as unable
+pf_channel_fresh || { [ "$DRY" = 1 ] && echo "no fresh channel data: no decision"; log "no fresh USAGE beacons on the channel (pf-msg.conf missing or listener down?); no decision"; exit 0; }
 # able: fresh beacon (<6h); under the weekly handoff % or inside its reset grace window (rule 3); 5h not full with >1h to go.
 # An unknown 7d ("?", e.g. just after a reset) counts as able but ranks last for hand-backs.
 able() {

@@ -83,11 +83,16 @@ EOT
   backfill)
     load_conf || { echo "pf-msg: no topic configured; nothing to backfill" >&2; exit 3; }
     got=$(topic_url_conf "/json?poll=1&since=12h" | curl -sf -m 15 -K - 2>/dev/null) || { echo "pf-msg: backfill poll failed" >&2; exit 1; }
-    touch "$INBOX"
+    touch "$INBOX"; : > "$INBOX.new"
     printf '%s\n' "$got" | jq -r --arg me "$PF_ACCOUNT" 'select(.event=="message") | (.message|gsub("[[:cntrl:]]";" ")|.[0:300]) as $m
       | ($m|split(" ")) as $w | select($w[0] != $me and ($w|length) >= 2)
       | "\(.time)|\($w[0])|\($w[1])|\($w[2:]|join(" "))"' 2>/dev/null |
-      while IFS= read -r l; do grep -qxF -- "$l" "$INBOX" || echo "$l" >> "$INBOX"; done
+      while IFS= read -r l; do grep -qxF -- "$l" "$INBOX" || echo "$l" >> "$INBOX.new"; done
+    # merge keeping the inbox time-ordered (claimed/heartbeat read it in file order); stable, so ties keep their order
+    if [ -s "$INBOX.new" ]; then
+      cat "$INBOX" "$INBOX.new" | sort -s -t'|' -k1,1n > "$INBOX.tmp" && mv "$INBOX.tmp" "$INBOX"
+    fi
+    rm -f "$INBOX.new"
     exit 0;;
   claimed)
     n=${1:?usage: pf-msg.sh claimed <n>}; n=${n#\#}

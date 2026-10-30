@@ -93,7 +93,27 @@ check "reserve all able" "$(reserve)" "agage-JG:able schans2:able tkneeland:able
 check "reserve unable" "$(reserve)" "agage-JG:unable schans2:unable tkneeland:unable needed=1"
 { usage $fresh tkneeland 10 95 "$soon"; usage $fresh agage-JG 10 20 "$far"; usage $fresh schans2 5 10 "$far"; } > "$INBOX"
 check "reserve grace" "$(reserve)" "agage-JG:able schans2:able tkneeland:able needed=0"
-# 11 status line: peers' usage from the inbox (line 3); nothing anywhere touched issue 432
+# 11 no fresh channel data -> no decision: reserve exits quietly, succession keeps the current holder
+nodec() { rm -f "$T/state/pf-triagemaster"; echo agage-JG > "$T/state/pf-triagemaster"; PF_ACCOUNT=tommykneeland bash "$AG/pf-succession.sh"; }
+# A: no channel configured, empty inbox
+mv "$T/state/pf-msg.conf" "$T/conf.bak"; rm -f "$INBOX" "$T/state/.msg-backfill-last"
+check "A reserve no decision" "$(reserve)" "no fresh channel data: no decision"
+check "A succession keeps holder" "$(nodec)" agage-JG
+mv "$T/conf.bak" "$T/state/pf-msg.conf"
+# B: listener down; a backfill 10 min ago found nothing new; newest peer USAGE now 6h05m old
+old=$((now - 6 * 3600 - 300))
+{ usage $old tkneeland 10 95 "$far"; usage $old agage-JG 10 20 "$far"; usage $old schans2 5 10 "$far"; } > "$INBOX"
+touch "$T/state/.msg-backfill-last"; : > "$PF_TEST_LOG"
+check "B reserve no decision" "$(reserve)" "no fresh channel data: no decision"
+check "B succession keeps holder" "$(nodec)" agage-JG
+check "B rate-limited: no poll" "$(grep -c 'poll=1' "$PF_TEST_LOG")" 0
+# B2: same inbox, 15 min later (stamp gone): backfill polls again, finds fresh lines, merges them in time order
+rm -f "$T/state/.msg-backfill-last"
+check "B2 succession decides" "$(tm tommykneeland)" agage-JG
+check "B2 polled" "$(grep -c 'poll=1' "$PF_TEST_LOG")" 1
+check "B2 inbox time-ordered" "$(cut -d'|' -f1 "$INBOX" | sort -n | tr '\n' ' ')" "$(cut -d'|' -f1 "$INBOX" | tr '\n' ' ')"
+check "B2 merged" "$(wc -l < "$INBOX" | tr -d ' ')" 6
+# 12 status line: peers' usage from the inbox (line 3); nothing anywhere touched issue 432
 { usage $fresh agage-JG 12 34 "$far"; usage $stale schans2 5 10 "$far"; } > "$INBOX"
 PF_ACCOUNT=tkneeland bash "$AG/pf-status-refresh.sh"
 check "status peers" "$(sed -n 2p "$T/state/pf-status-cache.txt")" "peers agage-JG 5h 12% 7d 34% · schans2 5h 5% 7d 10% (7h old) · tommykneeland ?"

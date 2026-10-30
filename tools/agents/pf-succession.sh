@@ -10,6 +10,8 @@
 now=$(date +%s)
 iso2e() { pf_iso_to_epoch "$1" || echo 0; }
 pf_usage_backfill
+# no fresh beacon from any other account (no channel, listener down and backfill failed): make no decision
+pf_channel_fresh || { pf_triagemaster; exit 0; }
 beacon() { pf_beacon "$1"; }  # sets b_age b_used b_reset for handle $1 (pf-env.sh)
 order=$(for h in $(pf_handles); do r=$(sed -n 's/^SUCCESSION_RANK=\([0-9]*\).*/\1/p' "$PF_DIR/accounts/$h.conf"); echo "$r $h"; done | sort -n | awk '{print $2}')
 first=$(echo "$order" | head -1)
