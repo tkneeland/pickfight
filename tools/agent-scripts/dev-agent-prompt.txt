@@ -116,7 +116,7 @@ The owner's integrator has agreed to leave these tickets to you. Work them in th
 
 **Hands off** (someone else owns or is fixing these):
 - #507 (UI overhaul), #509, #510, #511, #512, #513, #514, #518, #519, #520, #522
-- #212 and #432 (agent-only beacon; never touch it)
+- #212 and #432 (retired usage-beacon issue, #1153; never touch it)
 - Anything assigned to agage-JG
 - Anything labelled ready-for-human or needs-triage
 

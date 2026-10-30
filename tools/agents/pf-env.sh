@@ -99,8 +99,10 @@ pf_beacon() {
     ts=$(echo "$rest" | sed -n 's/.* at=\([0-9TZ:-]*\).*/\1/p'); [ -n "$ts" ] && { w=$(pf_iso_to_epoch "$ts") && e=$w; }
   fi
   b_age=$(( $(date +%s) - e )); b_at=$(TZ=UTC pf_epoch_fmt "$e" +%Y-%m-%dT%H:%M:%SZ)
-  set -- $rest
-  b_p5=${1%\%}; b_p5=${b_p5%.*}; p7=${2%\%}; p7=${p7%.*}; r7=$3
+  read -r b_p5 p7 r7 _ <<EOT
+$rest
+EOT
+  b_p5=${b_p5%\%}; b_p5=${b_p5%.*}; p7=${p7%\%}; p7=${p7%.*}
   b_r5=$(echo "$rest" | sed -n 's/.*r5=\([0-9TZ:-]*\).*/\1/p')
   case $b_p5 in ''|*[!0-9]*) b_p5="";; esac
   case $b_r5 in 1970-01-01*) b_p5=""; b_r5="";; esac
@@ -108,10 +110,21 @@ pf_beacon() {
   case $r7 in 1970-01-01*|'') p7=""; r7="";; esac
   b_used=$p7; b_reset=$r7
 }
-# pf_usage_backfill: when msg-inbox.log is missing or not written in the last 6h (listener down, machine was off),
-# fills it from the channel's cache (pf-msg.sh backfill: ntfy poll of the last 12h) before anyone reads beacons.
+# pf_usage_backfill: when the inbox's newest USAGE line is missing or 30+ min old (listener down, machine was off; a
+# live listener gets one every 15 min per account), fills it from the channel's cache (pf-msg.sh backfill: ntfy poll of
+# the last 12h) before anyone reads beacons. At most one poll per 15 min (stamp file), so a failing poll is not retried
+# every tick and a backfill that found nothing is retried soon, not after 6h.
 pf_usage_backfill() {
-  local m; m=$(pf_mtime "$PF_STATE/msg-inbox.log" || true)
-  [ -n "$m" ] && [ $(( $(date +%s) - m )) -lt 21600 ] && return 0
+  local n m s; n=$(date +%s)
+  m=$(awk -F'|' '$3=="USAGE" && $1+0>m {m=$1+0} END {print m+0}' "$PF_STATE/msg-inbox.log" 2>/dev/null); m=${m:-0}
+  [ $(( n - ${m%.*} )) -lt 1800 ] && return 0
+  s=$(pf_mtime "$PF_STATE/.msg-backfill-last" || true); s=${s:-0}
+  [ $(( n - s )) -lt 900 ] && return 0
+  touch "$PF_STATE/.msg-backfill-last"
   bash "$PF_DIR/pf-msg.sh" backfill >/dev/null 2>&1 || true
+}
+# pf_channel_fresh: 0 when the inbox holds at least one other account's USAGE line under 6h old. With none (no channel
+# configured, listener down and backfill failed) there is no beacon evidence: callers make no decision.
+pf_channel_fresh() {
+  awk -F'|' -v me="$PF_ACCOUNT" -v now="$(date +%s)" '$3=="USAGE" && $2!=me && now-$1<21600 {f=1} END {exit !f}' "$PF_STATE/msg-inbox.log" 2>/dev/null
 }
