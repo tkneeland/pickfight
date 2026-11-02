@@ -1,6 +1,6 @@
 #!/bin/bash
 # Usage: pf-ship.sh <issue> "<title>" "<summary body>"
-# Merges main into the issue's worktree branch, opens the PR with a Resource Usage section, waits for CI, merges, installs.
+# Merges main into the issue's worktree branch, opens the PR (or reuses the branch's open one on a re-run) with a Resource Usage section, waits for CI, merges, installs.
 # Opens but does not merge a conflict-risk PR unless this account is the current triagemaster.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 i=$1; t=$2; b=$3; R=$ROOT; W=$R/.claude/worktrees/$i/pickfight
@@ -24,7 +24,7 @@ p5=$(echo "$S" | jq -r .five_hour.used_percentage); p7=$(echo "$S" | jq -r .seve
 r5=$(pf_epoch_fmt "$(echo "$S" | jq -r .five_hour.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
 r7=$(pf_epoch_fmt "$(echo "$S" | jq -r .seven_day.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
 rate=${PF_RATE:-unknown}; week=${PF_WEEK:-unknown}
-pr=$(set -o pipefail; gh pr create --title "$t" --body "Closes #$i.
+body="Closes #$i.
 
 $b
 
@@ -34,8 +34,12 @@ $b
 - *5-hour window resets:* $r5 (${p5}% used)
 - *Weekly window resets:* $r7 (${p7}% used)
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)" | tail -1) || { echo "ABORT $i: gh pr create failed: $pr"; exit 1; }
-n=${pr##*/}; case $n in ''|*[!0-9]*) echo "ABORT $i: no PR number in '$pr'"; exit 1;; esac; echo "PR $pr"
+🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+# Re-run after a CI fix: reuse the branch's open PR (refreshing its body) instead of failing on create (#1148). A closed PR does not count.
+n=$(gh pr list --head "$(git branch --show-current)" --state open --json number -q '.[0].number' 2>/dev/null); case $n in ''|*[!0-9]*) n=;; esac
+if [ -n "$n" ]; then echo "reusing PR $n"; gh pr edit $n --body "$body" >/dev/null 2>&1 || echo "WARN $i: could not refresh PR $n body"; pr=$(gh pr view $n --json url -q .url 2>/dev/null); pr=${pr:-$n}
+else pr=$(set -o pipefail; gh pr create --title "$t" --body "$body" | tail -1) || { echo "ABORT $i: gh pr create failed: $pr"; exit 1; }
+n=${pr##*/}; case $n in ''|*[!0-9]*) echo "ABORT $i: no PR number in '$pr'"; exit 1;; esac; fi; echo "PR $pr"
 if gh pr view $n --json labels -q '.labels[].name' | grep -qx conflict-risk && ! pf_is_triagemaster; then echo "CONFLICT-RISK PR $n opened; only the triagemaster ($(pf_triagemaster)) merges it. Not merging."; exit 0; fi
 sleep 20; i=0; until s=$(gh pr checks $n 2>&1); ! echo "$s" | grep -qE "pending|no checks"; do i=$((i+1)); [ $i -gt 60 ] && { echo "CI TIMEOUT $n (conflict?)"; exit 1; }; sleep 30; done
 if gh pr checks $n 2>&1 | grep -qE "[[:space:]]fail[[:space:]]"; then echo "CI FAILED $n"; gh pr checks $n | grep -E "[[:space:]]fail[[:space:]]"; exit 1; fi
