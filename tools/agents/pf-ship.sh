@@ -1,6 +1,7 @@
 #!/bin/bash
 # Usage: pf-ship.sh <issue> "<title>" "<summary body>" [--refs]
 #   --refs (last argument): the PR only partly fixes the ticket. The body says "Refs #N." instead of "Closes #N.", so the ticket stays open after merge.
+#     On a re-run that cannot refresh an old "Closes" body, it aborts and turns the PR into a draft so nothing merges it.
 # Merges main into the issue's worktree branch, opens the PR (or reuses the branch's open one on a re-run) with a Resource Usage section, waits for CI, merges, installs.
 # Opens but does not merge a conflict-risk PR unless this account is the current triagemaster.
 . "$(dirname "$0")/pf-env.sh" || exit 1
@@ -39,7 +40,19 @@ $b
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 # Re-run after a CI fix: reuse the branch's open PR (refreshing its body) instead of failing on create (#1148). A closed PR does not count.
 n=$(gh pr list --head "$(git branch --show-current)" --state open --json number -q '.[0].number' 2>/dev/null); case $n in ''|*[!0-9]*) n=;; esac
-if [ -n "$n" ]; then echo "reusing PR $n"; gh pr edit $n --body "$body" >/dev/null 2>&1 || echo "WARN $i: could not refresh PR $n body"; pr=$(gh pr view $n --json url -q .url 2>/dev/null); pr=${pr:-$n}
+if [ -n "$n" ]; then echo "reusing PR $n"
+# --refs must never merge a stale body: a PR first opened without --refs still says "Closes #N." (#1149)
+if ! e=$(gh pr edit $n --body "$body" 2>&1); then
+  if [ "$kw" = Refs ] && [ "$(gh pr view $n --json body -q .body 2>/dev/null | head -1)" != "Refs #$i." ]; then
+    # stopping here is not enough: the pushed PR stays open, so make it a draft, which no merger (pf-automerge.sh, a peer's) can merge
+    gh pr ready $n --undo >/dev/null 2>&1 && d="marked it draft; re-run with --refs to refresh it and mark it ready" || d="could NOT mark it draft: fix its body by hand or close it"
+    echo "ABORT $i: could not refresh PR $n body to 'Refs #$i' (${e##*$'\n'}); its old body would close the ticket, so $d."; exit 1
+  fi
+  echo "WARN $i: could not refresh PR $n body (${e##*$'\n'})"
+elif [ "$(gh pr view $n --json isDraft -q .isDraft 2>/dev/null)" = true ]; then
+  gh pr ready $n >/dev/null 2>&1 && echo "PR $n was a draft (as an earlier --refs abort leaves it); body refreshed, marked ready"
+fi
+pr=$(gh pr view $n --json url -q .url 2>/dev/null); pr=${pr:-$n}
 else pr=$(set -o pipefail; gh pr create --title "$t" --body "$body" | tail -1) || { echo "ABORT $i: gh pr create failed: $pr"; exit 1; }
 n=${pr##*/}; case $n in ''|*[!0-9]*) echo "ABORT $i: no PR number in '$pr'"; exit 1;; esac; fi; echo "PR $pr"
 [ "$kw" = Refs ] && echo "REFS: PR $n says 'Refs #$i'; ticket #$i stays open after merge (no close or transition step runs)."
