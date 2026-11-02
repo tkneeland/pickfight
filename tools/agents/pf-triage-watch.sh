@@ -9,6 +9,19 @@
 #                      NIGHT_AGENTS, 1 past FIVE_H_SLOW_USED, 0 past FIVE_H_STOP_USED or the weekly stop)
 #   AUSTIN_QUEUE_LOW <n>  (triagemaster only, ticket-maker on) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
 #   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
+# Tickets the open PRs are working on, space-separated: Closes|Fixes|Resolves|Refs #N in a title or body (one PR may
+# close several tickets, #1147), or a head branch named for the ticket. $1 = gh pr list --json number,body,title,headRefName
+pf_pr_tickets() {
+  echo "$1" | jq -r '[.[] | ((((.title // "") + "\n" + (.body // "")) | scan("(?i)(?<![a-z])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?)[:\\s]+#([0-9]+)") | .[0]),
+    ((.headRefName // "") | scan("issue-([0-9]+)-|(?:^|/)([0-9]+)-") | map(select(. != null))[0]))] | unique | join(" ")' 2>/dev/null
+}
+# pf_ticket_in_progress <n> <pf_pr_tickets output>: an open PR is on it, or a local or remote branch for it exists
+# (feat/issue-N-slug from workers, fix/N-slug from the owner's main terminal). The MYTICKET filter and IDLE_SLOTS count use it.
+pf_ticket_in_progress() {
+  case " $2 " in *" $1 "*) return 0;; esac
+  git -C "$ROOT" branch -a --list "*issue-$1-*" "*/$1-*" | grep -q .
+}
+[ "${1:-}" = --functions ] && { return 0 2>/dev/null || exit 0; }   # tests/triage-watch-in-progress.sh sources the helpers only
 . "$(dirname "$0")/pf-env.sh" || exit 1
 SEEN=$PF_STATE/.pf-triage-seen; touch "$SEEN"
 # first run: a wake file older than this watcher counts as handled
@@ -17,15 +30,16 @@ META_TICKETS=${META_TICKETS:-"702 720 619"}   # meta tickets that never count as
 while true; do
   issues=$(gh api --paginate "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null | jq -s 'add // []' 2>/dev/null)   # every page, one array
   [ "$issues" = "[]" ] && issues=""
+  # open PRs once per poll, not per ticket (empty on failure: then only branches count)
+  pr_tickets=$(pf_pr_tickets "$(gh pr list --repo "$REPO" --state open -L 200 --json number,body,title,headRefName 2>/dev/null)")
   if [ -n "$issues" ]; then
     if pf_is_triagemaster; then
       u=$(echo "$issues" | jq -r '.[] | select(.pull_request==null) | select(((.labels|map(.name)|map(test("^p[123]$"))|any)|not) or ((.assignees|length)==0)) | .number' | tr '\n' ' ')
       [ -n "${u// /}" ] && { echo "UNTRIAGED $u"; exit 0; }
     fi
     for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | select(any(.labels[]; .name=="ready-for-agent")) | .number'); do
-      # skip tickets already in progress: a local or remote branch for the issue exists
-      # (feat/issue-N-slug from workers, or fix/N-slug from the owner's main terminal)
-      git -C "$ROOT" branch -a --list "*issue-$n-*" "*/$n-*" | grep -q . && continue
+      # skip tickets already in progress: a branch for the issue, or an open PR that closes or refs it
+      pf_ticket_in_progress "$n" "$pr_tickets" && continue
       # only when I am idle: no Atlas state file (removed at closeout)
       [ -z "$(ls "$ROOT"/.claude/atlas-state/*.json 2>/dev/null)" ] && { echo "MYTICKET $n"; exit 0; }
     done
@@ -53,9 +67,9 @@ while true; do
     date +%s > "$PF_STATE/.pf-slots-last"
     min=$(pf_worker_target)
     active=$(ls "$ROOT"/.claude/atlas-state/*.json 2>/dev/null | wc -l | tr -d ' ')
-    # plus tickets of mine in flight outside Atlas: open, assigned to me, a branch exists
+    # plus tickets of mine in flight outside Atlas: open, assigned to me, a branch or open PR on it
     for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | .number'); do
-      git -C "$ROOT" branch -a --list "*issue-$n-*" | grep -q . && active=$((active+1))
+      pf_ticket_in_progress "$n" "$pr_tickets" && active=$((active+1))
     done
     if [ "$active" -lt "$min" ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
     if pf_is_triagemaster && pf_budget_ok && [ "$(bash "$(dirname "$0")/pf-ticketmaker.sh")" = on ]; then
