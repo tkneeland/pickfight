@@ -39,7 +39,9 @@ $b
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 # Re-run after a CI fix: reuse the branch's open PR (refreshing its body) instead of failing on create (#1148). A closed PR does not count.
 n=$(gh pr list --head "$(git branch --show-current)" --state open --json number -q '.[0].number' 2>/dev/null); case $n in ''|*[!0-9]*) n=;; esac
-if [ -n "$n" ]; then echo "reusing PR $n"; gh pr edit $n --body "$body" >/dev/null 2>&1 || echo "WARN $i: could not refresh PR $n body"; pr=$(gh pr view $n --json url -q .url 2>/dev/null); pr=${pr:-$n}
+if [ -n "$n" ]; then echo "reusing PR $n"
+# --refs must not merge a stale body: one first opened without --refs still says "Closes #N." (#1149)
+if ! gh pr edit $n --body "$body" >/dev/null 2>&1; then [ "$kw" = Refs ] && { echo "ABORT $i: could not refresh PR $n body to 'Refs #$i'; its old body may close the ticket. Not merging."; exit 1; }; echo "WARN $i: could not refresh PR $n body"; fi; pr=$(gh pr view $n --json url -q .url 2>/dev/null); pr=${pr:-$n}
 else pr=$(set -o pipefail; gh pr create --title "$t" --body "$body" | tail -1) || { echo "ABORT $i: gh pr create failed: $pr"; exit 1; }
 n=${pr##*/}; case $n in ''|*[!0-9]*) echo "ABORT $i: no PR number in '$pr'"; exit 1;; esac; fi; echo "PR $pr"
 [ "$kw" = Refs ] && echo "REFS: PR $n says 'Refs #$i'; ticket #$i stays open after merge (no close or transition step runs)."
