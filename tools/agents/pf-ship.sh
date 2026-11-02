@@ -1,9 +1,11 @@
 #!/bin/bash
-# Usage: pf-ship.sh <issue> "<title>" "<summary body>"
+# Usage: pf-ship.sh <issue> "<title>" "<summary body>" [--refs]
+#   --refs (last argument): the PR only partly fixes the ticket. The body says "Refs #N." instead of "Closes #N.", so the ticket stays open after merge.
 # Merges main into the issue's worktree branch, opens the PR (or reuses the branch's open one on a re-run) with a Resource Usage section, waits for CI, merges, installs.
 # Opens but does not merge a conflict-risk PR unless this account is the current triagemaster.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 i=$1; t=$2; b=$3; R=$ROOT; W=$R/.claude/worktrees/$i/pickfight
+kw=Closes; case ${4:-} in '') ;; --refs) kw=Refs;; *) echo "ABORT $i: unknown option '$4' (usage: pf-ship.sh <issue> \"<title>\" \"<summary body>\" [--refs])"; exit 1;; esac
 FIXER=${FIX_RUNNER:-$HOME/.claude/pf-fix-runner.sh}   # optional helper that repairs tools/scenario_runner.gd conflicts
 # Agent worktrees (.claude/worktrees/agent-*) work too: fall back to the current checkout when its branch names the issue.
 [ -d "$W" ] || { c=$(git rev-parse --show-toplevel 2>/dev/null) && git -C "$c" branch --show-current | grep -q "issue-$i-" && W=$c; }
@@ -24,7 +26,7 @@ p5=$(echo "$S" | jq -r .five_hour.used_percentage); p7=$(echo "$S" | jq -r .seve
 r5=$(pf_epoch_fmt "$(echo "$S" | jq -r .five_hour.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
 r7=$(pf_epoch_fmt "$(echo "$S" | jq -r .seven_day.resets_at)" "+%a %b %-d, %-I:%M %p $TZ_LABEL")
 rate=${PF_RATE:-unknown}; week=${PF_WEEK:-unknown}
-body="Closes #$i.
+body="$kw #$i.
 
 $b
 
@@ -40,6 +42,7 @@ n=$(gh pr list --head "$(git branch --show-current)" --state open --json number 
 if [ -n "$n" ]; then echo "reusing PR $n"; gh pr edit $n --body "$body" >/dev/null 2>&1 || echo "WARN $i: could not refresh PR $n body"; pr=$(gh pr view $n --json url -q .url 2>/dev/null); pr=${pr:-$n}
 else pr=$(set -o pipefail; gh pr create --title "$t" --body "$body" | tail -1) || { echo "ABORT $i: gh pr create failed: $pr"; exit 1; }
 n=${pr##*/}; case $n in ''|*[!0-9]*) echo "ABORT $i: no PR number in '$pr'"; exit 1;; esac; fi; echo "PR $pr"
+[ "$kw" = Refs ] && echo "REFS: PR $n says 'Refs #$i'; ticket #$i stays open after merge (no close or transition step runs)."
 if gh pr view $n --json labels -q '.labels[].name' | grep -qx conflict-risk && ! pf_is_triagemaster; then echo "CONFLICT-RISK PR $n opened; only the triagemaster ($(pf_triagemaster)) merges it. Not merging."; exit 0; fi
 sleep 20; i=0; until s=$(gh pr checks $n 2>&1); ! echo "$s" | grep -qE "pending|no checks"; do i=$((i+1)); [ $i -gt 60 ] && { echo "CI TIMEOUT $n (conflict?)"; exit 1; }; sleep 30; done
 if gh pr checks $n 2>&1 | grep -qE "[[:space:]]fail[[:space:]]"; then echo "CI FAILED $n"; gh pr checks $n | grep -E "[[:space:]]fail[[:space:]]"; exit 1; fi
