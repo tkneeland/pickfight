@@ -9,7 +9,7 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 - `pf-ticketmaker.sh [on|off]`: prints or sets the ticket-maker switch (rule 11).
 - `pf-triage-watch.sh`: zero-token poller; exits with one line (UNTRIAGED, MYTICKET, FEATURES? PR, PEER_BEACON, IDLE_SLOTS, AUSTIN_QUEUE_LOW, MSG) when Claude must act.
 - `pf-automerge.sh`: merges green mergeable PRs labelled `review-passed` (rule 12), comments on conflicting ones; leaves conflict-risk PRs to the triagemaster.
-- `pf-ship.sh <issue> "<title>" "<body>" [--refs]`: merges main into the worktree branch, opens the PR (or reuses the branch's open one on a re-run) with a Resource Usage section, waits for CI, merges. `--refs` writes `Refs #N.` instead of `Closes #N.` for a partial fix, so the ticket stays open.
+- `pf-ship.sh <issue> "<title>" "<body>" [--refs]`: merges main into the worktree branch, opens the PR (or reuses the branch's open one on a re-run) with a Resource Usage section, waits for CI, merges. `--refs` writes `Refs #N.` instead of `Closes #N.` for a partial fix, so the ticket stays open; if a re-run can't refresh an old `Closes` body, it aborts and drafts the PR so nothing merges it.
 - `pf-atlas.sh`: Atlas bookkeeping (`accept`, `closeout`, `tests`, `run`).
 - `pf-rate.sh`: source it to set `PF_RATE` / `PF_WEEK` for PR bodies. With no usable usage snapshot (missing, `{}`, or reset time out of range) it sets `PF_RATE="usage snapshot unavailable (no statusline data yet)"` and `PF_WEEK="unavailable"`, silently.
 - `pf-watch-peers.sh`: triagemaster watcher for peer activity, stale peers and unowned tickets.
