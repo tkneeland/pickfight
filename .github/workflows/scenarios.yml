@@ -1,6 +1,8 @@
 # Runs the headless scenario suite on every PR and on pushes to main (#186).
 #
-# check:  installs Godot (cached), imports the project once, runs the boot
+# check:  checks SCENARIO_NAMES against the runner's match arms
+#         (tools/list_scenarios.sh --check, #1150), installs Godot (cached),
+#         imports the project once, runs the boot
 #         check and the runner parse check, and hands the imported .godot/
 #         to the shards.
 # suite:  4 parallel shards, each a contiguous slice of SCENARIO_NAMES
@@ -50,6 +52,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Scenario list check (#1150)
+        run: bash tools/list_scenarios.sh --check
 
       - name: Cache Godot
         id: godot-cache
