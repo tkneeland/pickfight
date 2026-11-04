@@ -1297,6 +1297,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"music_volume_written_only_on_change_1165",
 	"online_joiner_hot_potato_stage_count_matches_host_1163",
 	"online_joiner_hot_potato_rules_match_host_1163",
+	"online_joiner_lobby_focus_follows_pad_1170",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4316,6 +4317,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_online_joiner_hot_potato_stage_count_matches_host_1163()
 		"online_joiner_hot_potato_rules_match_host_1163":
 			return _scenario_online_joiner_hot_potato_rules_match_host_1163()
+		"online_joiner_lobby_focus_follows_pad_1170":
+			return await _scenario_online_joiner_lobby_focus_follows_pad_1170()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -58323,6 +58326,7 @@ func _scenario_online_client_lobby_copy_code() -> Array[String]:
 	var normal: String = button.text
 	if normal != client.tr("LOBBY_COPY_CODE_PAD"):
 		failures.append("Copy code reads '%s', not the host's label '%s'" % [normal, client.tr("LOBBY_COPY_CODE_PAD")])
+	client._sync_pad_at_build(true) # Copy code is in the focus chain only under a pad, as the host's (#1170)
 	if button.focus_mode == Control.FOCUS_NONE:
 		failures.append("Copy code is outside the gamepad focus chain")
 	button.pressed.emit()
@@ -58371,6 +58375,7 @@ func _scenario_online_client_attention_on_countdown() -> Array[String]:
 	var normal: String = button.text
 	if normal != client.tr("LOBBY_COPY_CODE_PAD"):
 		failures.append("Copy code reads '%s', not the host's label '%s'" % [normal, client.tr("LOBBY_COPY_CODE_PAD")])
+	client._sync_pad_at_build(true) # Copy code is in the focus chain only under a pad, as the host's (#1170)
 	if button.focus_mode == Control.FOCUS_NONE:
 		failures.append("Copy code is outside the gamepad focus chain")
 	button.pressed.emit()
@@ -60899,5 +60904,33 @@ func _scenario_online_joiner_hot_potato_rules_match_host_1163() -> Array[String]
 	settings.disabled_stages_by_mode = was_disabled
 	settings.known_stages = was_known
 	demo.forced = was_forced
+	_scenario_completed = true
+	return failures
+
+## #1170: the joiner's Copy code, Your look and How to play share one focus rule,
+## the host's: focusable only while a pad is the active input, including a pad
+## already present when the lobby builds.
+func _scenario_online_joiner_lobby_focus_follows_pad_1170() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = await _joiner_1132(_classic_frame_1132([{"slot": 1, "ready": false, "name": "Me", "color": "56b4e9"}]))
+	var lobby: RefCounted = client._lobby
+	var buttons: Dictionary = {"Copy code": lobby.screen.control_button("copy_code"), "Your look": lobby.look_button, "How to play": lobby.help_button}
+	for label: String in buttons:
+		if (buttons[label] as Button).focus_mode != Control.FOCUS_NONE:
+			failures.append("%s is focusable with no pad active" % label)
+	client._sync_pad_at_build(true)
+	for label: String in buttons:
+		if (buttons[label] as Button).focus_mode != Control.FOCUS_ALL:
+			failures.append("%s is not focusable with a pad present at lobby build" % label)
+	client._input(_key_1132(KEY_SPACE))
+	for label: String in buttons:
+		if (buttons[label] as Button).focus_mode != Control.FOCUS_NONE:
+			failures.append("%s stayed focusable after a key press" % label)
+	client._input(_pad_1132(JOY_BUTTON_DPAD_DOWN))
+	for label: String in buttons:
+		if (buttons[label] as Button).focus_mode != Control.FOCUS_ALL:
+			failures.append("%s is not focusable after a pad press" % label)
+	client.queue_free()
+	await process_frame
 	_scenario_completed = true
 	return failures
