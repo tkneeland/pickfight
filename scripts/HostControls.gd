@@ -585,8 +585,10 @@ func set_pad_menu(on: bool) -> void:
 		return
 	_pad_menu_open = on
 	PadMenuScript.set_open("lobby", on)
+	var buttons: Array[Button] = []
 	for id: String in _controls:
-		(_controls[id] as Button).focus_mode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
+		buttons.append(_controls[id] as Button)
+	set_buttons_pad_focus(buttons, on)
 	if on:
 		_focus_signature = ""
 		_chain_pad_focus()
@@ -600,6 +602,15 @@ func set_pad_menu(on: bool) -> void:
 		var focused: Control = _screen.get_viewport().gui_get_focus_owner()
 		if focused != null:
 			focused.release_focus()
+
+## The one focus rule for lobby buttons: in the focus chain only while a gamepad
+## drives, out of it (and unfocused) otherwise, so a click or Tab leaves nothing
+## for Space to press. The host's pad menu and the Online joiner both call it (#1170).
+static func set_buttons_pad_focus(buttons: Array[Button], on: bool) -> void:
+	for button: Button in buttons:
+		button.focus_mode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
+		if not on and button.has_focus():
+			button.release_focus()
 
 ## Sets a button's theme variation only when it changes (it costs a theme lookup).
 static func _set_variation(button: Control, variation: StringName) -> void:

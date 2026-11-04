@@ -15,6 +15,7 @@ extends RefCounted
 const LobbyScreenScript: GDScript = preload("res://scripts/LobbyScreen.gd")
 const ScreenKitScript: GDScript = preload("res://scripts/ScreenKit.gd")
 const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
+const HostControlsScript: GDScript = preload("res://scripts/HostControls.gd")
 
 ## Above the host's screens the joiner mirrors (HUD 1, victory 5, cards 10-12, flash 50),
 ## below its own menu and join panels (layer 60).
@@ -106,11 +107,9 @@ signal toggle_mode
 ## input, as the host's buttons do only under its pad menu (HostControls.set_pad_menu),
 ## so a mouse click leaves no focus for Space (ui_accept) to reopen a popup with (#1132).
 func set_pad_focus(on: bool) -> void:
-	# One rule for all three, as the host's set_pad_menu does for its buttons (#1170).
-	for button: Button in [look_button, help_button, screen.control_button("copy_code")]:
-		button.focus_mode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
-		if not on and button.has_focus():
-			button.release_focus()
+	# The host's own rule, called not copied (#1170).
+	var buttons: Array[Button] = [look_button, help_button, screen.control_button("copy_code")]
+	HostControlsScript.set_buttons_pad_focus(buttons, on)
 
 ## The button that opens the open popup, which gets focus back when a pad user closes it (#1132).
 func popup_opener() -> Control:
