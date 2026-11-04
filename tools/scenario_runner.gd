@@ -25586,7 +25586,7 @@ const TeamsScript236 := preload("res://scripts/Teams.gd")
 const BotScript236 := preload("res://scripts/Bot.gd")
 ## The keys a free-for-all lobby state has always had, and only those.
 const FFA_LOBBY_KEYS_236: PackedStringArray = [
-	"phase", "host", "target", "players", "count", "winner", "round", "in_round", "alive", "next", "paused", "rules", "stages_by_mode"]
+	"phase", "host", "target", "players", "count", "winner", "round", "in_round", "alive", "next", "paused", "rules", "stages_by_mode", "rules_modes"]
 const FFA_PLAYER_KEYS_236: PackedStringArray = ["slot", "ready", "name", "color"]
 ## How long a round-end pause the Teams round scenarios hold, to look at it.
 const TEAM_ROUND_PAUSE_SEC_236: float = 1.5
@@ -37077,13 +37077,13 @@ func _scenario_rules_modifier_toggles_persist_across_reload() -> Array[String]:
 	if not first.is_modifier_enabled("", "gale"):
 		failures.append("a fresh store should have every modifier on")
 	first.set_modifier_enabled("", "gale", false)
-	first.set_modifier_enabled("hot_potato", "bouncy", false)
+	first.set_modifier_enabled("sudden_death", "bouncy", false)
 	var second: RefCounted = script.new()
 	second.path = path
 	second.load_settings()
-	if second.is_modifier_enabled("", "gale") or second.is_modifier_enabled("hot_potato", "bouncy"):
+	if second.is_modifier_enabled("", "gale") or second.is_modifier_enabled("sudden_death", "bouncy"):
 		failures.append("a switched-off modifier came back on after a reload")
-	if not second.is_modifier_enabled("hot_potato", "gale") or not second.is_modifier_enabled("", "bouncy"):
+	if not second.is_modifier_enabled("sudden_death", "gale") or not second.is_modifier_enabled("", "bouncy"):
 		failures.append("a modifier switched off in one mode was off in another")
 	second.set_modifier_enabled("", "gale", true)
 	var third: RefCounted = script.new()
