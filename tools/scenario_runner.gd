@@ -1291,6 +1291,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_joiner_classic_stage_count_matches_host_1132",
 	"online_joiner_cards_use_slot_colours_1132",
 	"online_joiner_popup_owns_esc_enter_pad_1132",
+	"online_joiner_popup_lets_held_input_go_1132",
 	"agent_scripts_stay_portable",
 	"audio_mix_thread_waits_out_bus_swaps_1112",
 ]
@@ -4296,6 +4297,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_joiner_cards_use_slot_colours_1132()
 		"online_joiner_popup_owns_esc_enter_pad_1132":
 			return await _scenario_online_joiner_popup_owns_esc_enter_pad_1132()
+		"online_joiner_popup_lets_held_input_go_1132":
+			return await _scenario_online_joiner_popup_lets_held_input_go_1132()
 		"agent_scripts_stay_portable":
 			return _scenario_agent_scripts_stay_portable()
 		"audio_mix_thread_waits_out_bus_swaps_1112":
@@ -60556,7 +60559,7 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 	if client._ready_button.button_pressed != before_ready:
 		failures.append("Enter inside How to play toggled Ready")
 	# A pad user closing a popup gets focus back on the button that opened it, so the D-pad still works.
-	client._pad_active = true
+	client._input(_pad_1132(JOY_BUTTON_X)) # a pad becomes the active input
 	for which: String in ["look", "help"]:
 		screen.set_popup(which)
 		screen.focus_popup()
@@ -60564,7 +60567,7 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 		var opener: Control = client._lobby.look_button if which == "look" else client._lobby.help_button
 		if screen.popup_open() != "" or not opener.has_focus():
 			failures.append("pad B on %s left focus on '%s', want its opener" % [which, client.get_viewport().gui_get_focus_owner()])
-	client._pad_active = false
+	client._input(_key_1132(KEY_SHIFT)) # the keyboard takes over again
 	# With no popup, Esc opens the menu and Enter readies as before.
 	client._input(_key_1132(KEY_ESCAPE))
 	if not client.menu_open:
@@ -60576,6 +60579,63 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 	client._input(_key_1132(KEY_ENTER))
 	if client._ready_button.button_pressed == was:
 		failures.append("Enter with no popup did not toggle Ready")
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## #1166 review: on the joiner a popup must not swallow releases. A Space, click or
+## shoulder held as the popup opens and let go inside it is not still held after;
+## Your look / How to play take focus only while a pad is the active input (as on
+## the host), so a click then Space does not reopen a popup; and after pad B closes
+## a popup (focus back on its opener) pad A still readies, as #518 says.
+func _scenario_online_joiner_popup_lets_held_input_go_1132() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = await _joiner_1132(_classic_frame_1132([{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9"}]))
+	var screen: Node = client._lobby.screen
+	# Held into a popup, let go inside it.
+	var space := _key_1132(KEY_SPACE)
+	client._input(space)
+	var shoulder := _pad_1132(JOY_BUTTON_RIGHT_SHOULDER)
+	client._input(shoulder)
+	screen.set_popup("help")
+	var space_up := _key_1132(KEY_SPACE)
+	space_up.pressed = false
+	client._input(space_up)
+	var shoulder_up := _pad_1132(JOY_BUTTON_RIGHT_SHOULDER)
+	shoulder_up.pressed = false
+	client._input(shoulder_up)
+	if client._action_down.has(-KEY_SPACE):
+		failures.append("a Space let go inside the popup is still held")
+	if client._pad_shoulder_held:
+		failures.append("a shoulder let go inside the popup is still held")
+	screen.set_popup("")
+	# Mouse / keyboard: the popup buttons take no focus, so Space cannot reopen one.
+	client._input(_key_1132(KEY_SHIFT))
+	if client._lobby.look_button.focus_mode != Control.FOCUS_NONE or client._lobby.help_button.focus_mode != Control.FOCUS_NONE:
+		failures.append("Your look / How to play are focusable with no pad active")
+	client._lobby.help_button.grab_focus()
+	if client._lobby.help_button.has_focus():
+		failures.append("How to play took focus with no pad active")
+	# Pad: B closes back onto the opener, then A readies (#518), not reopens.
+	client._input(_pad_1132(JOY_BUTTON_X))
+	if client._lobby.look_button.focus_mode != Control.FOCUS_ALL:
+		failures.append("Your look is not focusable with a pad active")
+	screen.set_popup("look")
+	screen.focus_popup()
+	client._input(_pad_1132(JOY_BUTTON_B))
+	if not client._lobby.look_button.has_focus():
+		failures.append("pad B did not give focus back to Your look")
+	var was: bool = client._ready_button.button_pressed
+	client._input(_pad_1132(JOY_BUTTON_A))
+	if client._ready_button.button_pressed == was:
+		failures.append("pad A after B did not toggle Ready")
+	if screen.popup_open() != "":
+		failures.append("pad A after B reopened '%s'" % screen.popup_open())
+	# Back to the keyboard: the buttons let go of focus.
+	client._input(_key_1132(KEY_SHIFT))
+	if client._lobby.look_button.has_focus():
+		failures.append("Your look kept focus after the keyboard took over")
 	client.queue_free()
 	await process_frame
 	_scenario_completed = true
