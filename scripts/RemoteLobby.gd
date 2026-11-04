@@ -106,7 +106,8 @@ signal toggle_mode
 ## input, as the host's buttons do only under its pad menu (HostControls.set_pad_menu),
 ## so a mouse click leaves no focus for Space (ui_accept) to reopen a popup with (#1132).
 func set_pad_focus(on: bool) -> void:
-	for button: Button in [look_button, help_button]:
+	# One rule for all three, as the host's set_pad_menu does for its buttons (#1170).
+	for button: Button in [look_button, help_button, screen.control_button("copy_code")]:
 		button.focus_mode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
 		if not on and button.has_focus():
 			button.release_focus()

@@ -528,6 +528,13 @@ func _track_pad_active(event: InputEvent) -> void:
 		if _lobby != null and _lobby.screen != null:
 			_lobby.set_pad_focus(_pad_active) # as the host's pad menu does for its buttons (#1132)
 
+## A pad already plugged in when the lobby builds counts as the active input:
+## Ready's caption and the lobby buttons' focus follow it, not only changes (#1170).
+func _sync_pad_at_build(connected: bool) -> void:
+	_pad_active = connected
+	_lobby.set_pad_focus(connected)
+	_sync_ready_caption()
+
 func _sync_ready_caption() -> void:
 	if _ready_button != null:
 		_ready_button.text = tr("JOIN_READY" if _pad_active else "JOIN_READY_KEY")
@@ -1748,7 +1755,6 @@ func _build_lobby_panel() -> void:
 	_lobby_panel.visible = false
 	_lobby_title = _lobby.title
 	_copy_button = _lobby.screen.control_button("copy_code")
-	_copy_button.focus_mode = Control.FOCUS_ALL # in the gamepad focus chain (#1033)
 	_sync_copy_button()
 	_career_button = _lobby.career_button
 	_career_button.pressed.connect(func() -> void:
@@ -1759,8 +1765,7 @@ func _build_lobby_panel() -> void:
 	_cosmetics_panel.picked.connect(_on_cosmetic_picked)
 	_cosmetics_panel.visible = true
 	_ready_button = _lobby.ready_button
-	_pad_active = not Input.get_connected_joypads().is_empty()
-	_sync_ready_caption()
+	_sync_pad_at_build(not Input.get_connected_joypads().is_empty())
 	_ready_button.toggled.connect(func(on: bool) -> void:
 		_ready_want = 1 if on else 0
 		_ready_want_msec = GameClockScript.now_msec()
