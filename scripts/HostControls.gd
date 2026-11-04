@@ -606,7 +606,7 @@ static func _set_variation(button: Control, variation: StringName) -> void:
 	if button.theme_type_variation != variation:
 		button.theme_type_variation = variation
 
-## After a popup closes under an open gamepad menu, focus goes back to the control that opened it.
+## The control that opened the popup: under an open gamepad menu, focus goes back to it on close.
 var _popup_opener: String = "how_to_play"
 
 ## Join swaps Main for the PC client under an open pad menu: let go of
