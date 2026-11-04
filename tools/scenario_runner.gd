@@ -58320,6 +58320,7 @@ func _scenario_online_client_lobby_copy_code() -> Array[String]:
 	var normal: String = button.text
 	if normal != client.tr("LOBBY_COPY_CODE_PAD"):
 		failures.append("Copy code reads '%s', not the host's label '%s'" % [normal, client.tr("LOBBY_COPY_CODE_PAD")])
+	client._sync_pad_at_build(true) # Copy code is in the focus chain only under a pad, as the host's (#1170)
 	if button.focus_mode == Control.FOCUS_NONE:
 		failures.append("Copy code is outside the gamepad focus chain")
 	button.pressed.emit()
@@ -58368,6 +58369,7 @@ func _scenario_online_client_attention_on_countdown() -> Array[String]:
 	var normal: String = button.text
 	if normal != client.tr("LOBBY_COPY_CODE_PAD"):
 		failures.append("Copy code reads '%s', not the host's label '%s'" % [normal, client.tr("LOBBY_COPY_CODE_PAD")])
+	client._sync_pad_at_build(true) # Copy code is in the focus chain only under a pad, as the host's (#1170)
 	if button.focus_mode == Control.FOCUS_NONE:
 		failures.append("Copy code is outside the gamepad focus chain")
 	button.pressed.emit()
