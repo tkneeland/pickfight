@@ -1288,6 +1288,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"sfx_call_site_check_flags_bad_fixture_1120",
 	"look_picker_buttons_show_icons",
 	"online_client_shows_the_host_lobby_1127",
+	"online_joiner_classic_stage_count_matches_host_1132",
+	"online_joiner_cards_use_slot_colours_1132",
+	"online_joiner_popup_owns_esc_enter_pad_1132",
 	"agent_scripts_stay_portable",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4290,6 +4293,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_look_picker_buttons_show_icons()
 		"online_client_shows_the_host_lobby_1127":
 			return await _scenario_online_client_shows_the_host_lobby_1127()
+		"online_joiner_classic_stage_count_matches_host_1132":
+			return await _scenario_online_joiner_classic_stage_count_matches_host_1132()
+		"online_joiner_cards_use_slot_colours_1132":
+			return await _scenario_online_joiner_cards_use_slot_colours_1132()
+		"online_joiner_popup_owns_esc_enter_pad_1132":
+			return await _scenario_online_joiner_popup_owns_esc_enter_pad_1132()
 		"agent_scripts_stay_portable":
 			return _scenario_agent_scripts_stay_portable()
 		_:
@@ -60213,7 +60222,7 @@ func _scenario_online_client_shows_the_host_lobby_1127() -> Array[String]:
 	client._on_host_text(JSON.stringify({"slot": 1}))
 	client._on_host_text(JSON.stringify({"t": "looks", "palette": ["#e69f00", "#56b4e9", "#009e73"], "looks": [
 		{"slot": 0, "hat": "crown", "eyes": "angry", "color": 0}, {"slot": 1, "hat": "viking", "eyes": "wide", "color": 1}]}))
-	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"": {"on": ["x"], "locked": ["night"]}}},
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"classic": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"classic": {"on": ["x"], "locked": ["night"]}}},
 		"players": [{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9", "ping": 40}]}))
 	await process_frame
 	var screen: Node = client._lobby.screen
@@ -60244,7 +60253,7 @@ func _scenario_online_client_shows_the_host_lobby_1127() -> Array[String]:
 	if screen.popup_open() != "look":
 		failures.append("clicking the own card did not open Your look (open: '%s')" % screen.popup_open())
 	client._ready_button.button_pressed = true
-	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"": {"on": ["x"], "locked": ["night"]}}},
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "stages_by_mode": {"classic": {"all": ["A", "B", "C"], "on": ["A", "B"]}}, "rules": {"modifiers": ["x", "y", "night"], "modes": {"classic": {"on": ["x"], "locked": ["night"]}}},
 		"players": [{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": true, "name": "Me", "color": "56b4e9"}]}))
 	await process_frame
 	if screen.popup_open() != "":
@@ -60457,5 +60466,168 @@ func _scenario_agent_scripts_stay_portable() -> Array[String]:
 	var no_shebang: Array[String] = _agent_script_problems_1135("bare.sh", "echo hi\n".to_utf8_buffer(), true)
 	if no_shebang.size() != 1 or not no_shebang[0].begins_with("bare.sh:1: no shebang"):
 		failures.append("a script with no shebang gave %s" % [no_shebang])
+	_scenario_completed = true
+	return failures
+
+## #1132: an Online joiner fed a lobby frame. Returns the client, in its lobby.
+func _joiner_1132(frame: Dictionary) -> Node:
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	client.room_code = "WXYZ"
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 1}))
+	client._on_host_text(JSON.stringify({"t": "looks", "palette": [], "looks": []}))
+	client._on_host_text(JSON.stringify(frame))
+	await process_frame
+	return client
+
+## The lobby frame exactly as the host builds it for Classic: the round's mode is
+## "" but RoundManager keys `stages_by_mode` and `rules.modes` "classic".
+func _classic_frame_1132(players: Array) -> Dictionary:
+	var state: Dictionary = {"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": ""}
+	state["stages_by_mode"] = {"classic": {"all": ["A", "B", "C", "D"], "on": ["A", "B", "C"]}, "stock": {"all": ["A"], "on": []}}
+	state["rules"] = {"modifiers": ["x", "y", "z", "night"], "modes": {"classic": {"on": ["x", "y"], "locked": ["night"]}}}
+	state["players"] = players
+	return state
+
+## #1132: the joiner reads Classic's stage count and modifiers from the "classic"
+## key the host sends, so its summary and status line match the host's, not "0 stages".
+func _scenario_online_joiner_classic_stage_count_matches_host_1132() -> Array[String]:
+	var failures: Array[String] = []
+	var frame: Dictionary = _classic_frame_1132([{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9"}])
+	var client: Node = await _joiner_1132(frame)
+	var screen: Node = client._lobby.screen
+	var count: String = TranslationServer.translate("SR_STAGE_COUNT") % 3
+	var want: String = TranslationServer.translate("SR_SUMMARY") % [count, TranslationServer.translate("SR_MODS_SOME") % [2, 3]]
+	if screen._stages_summary.text != want:
+		failures.append("the joiner's Classic summary reads '%s', want the host's '%s'" % [screen._stages_summary.text, want])
+	if not screen._lobby_target_label.text.contains(count):
+		failures.append("the joiner's status line lacks '%s': '%s'" % [count, screen._lobby_target_label.text])
+	var zero: String = TranslationServer.translate("SR_STAGE_COUNT") % 0
+	if screen._stages_summary.text.contains(zero) or screen._lobby_target_label.text.contains(zero):
+		failures.append("the joiner still shows '%s' for Classic" % zero)
+	# Both spellings of Classic read the same entry; another mode reads its own.
+	var sr: GDScript = preload("res://scripts/StagesRulesScreen.gd")
+	if sr.summary_from_state("", frame) != sr.summary_from_state("classic", frame):
+		failures.append("\"\" and \"classic\" read different Classic settings")
+	if sr.stage_count_text_from_state("stock", frame) != zero:
+		failures.append("Stock did not read its own (empty) list: '%s'" % sr.stage_count_text_from_state("stock", frame))
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## #1132: the joiner's player cards take each seat's colour from the frame (the
+## host's `_slot_color`), as the host's cards do, instead of all white.
+func _scenario_online_joiner_cards_use_slot_colours_1132() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = await _joiner_1132(_classic_frame_1132([{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9"}]))
+	var screen: Node = client._lobby.screen
+	var want: Dictionary = {0: Color.html("e69f00"), 1: Color.html("56b4e9")}
+	if screen.player_cards().size() != 2:
+		failures.append("expected 2 player cards, got %d" % screen.player_cards().size())
+	else:
+		for slot: int in want:
+			var got: Color = screen.player_card(slot)._strip_color
+			if not got.is_equal_approx(want[slot]):
+				failures.append("seat %d's card is %s, want the host's %s" % [slot, got.to_html(false), (want[slot] as Color).to_html(false)])
+	# A colour change on the host reaches the joiner's card on the next frame.
+	client._on_host_text(JSON.stringify(_classic_frame_1132([{"slot": 0, "ready": true, "name": "Hosty", "color": "009e73"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9"}])))
+	await process_frame
+	if screen.player_cards().size() == 2 and not screen.player_card(0)._strip_color.is_equal_approx(Color.html("009e73")):
+		failures.append("a host colour change did not reach the joiner's card")
+	# A seat the frame lists without a colour, or a bad one, is white, as on the host.
+	if client._lobby._slot_color(7) != Color.WHITE:
+		failures.append("an unknown seat is not white")
+	client._lobby.set_players([{"slot": 3, "color": "not-a-colour"}])
+	if client._lobby._slot_color(3) != Color.WHITE:
+		failures.append("a bad colour string is not white")
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+func _key_1132(code: Key) -> InputEventKey:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = code
+	ev.keycode = code
+	ev.pressed = true
+	return ev
+
+func _pad_1132(button: JoyButton) -> InputEventJoypadButton:
+	var ev := InputEventJoypadButton.new()
+	ev.button_index = button
+	ev.pressed = true
+	return ev
+
+## #1132: on the joiner an open popup (How to play, Your look) owns the keys, as
+## on the host: Esc and pad B close it and never open the Esc menu; Enter and pad
+## A / Start act inside it and never toggle Ready. With no popup, Esc still opens
+## the menu and Enter still readies (#1035, #518).
+func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = await _joiner_1132(_classic_frame_1132([{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9"}]))
+	var screen: Node = client._lobby.screen
+	if not client._ready_button.is_visible_in_tree():
+		failures.append("the joiner's lobby has no visible Ready")
+		client.queue_free()
+		await process_frame
+		_scenario_completed = true
+		return failures
+	for which: String in ["help", "look"]:
+		# Esc closes, menu stays shut.
+		screen.set_popup(which)
+		client._input(_key_1132(KEY_ESCAPE))
+		if screen.popup_open() != "":
+			failures.append("Esc left %s open" % which)
+		if client.menu_open:
+			failures.append("Esc over %s opened the Esc menu" % which)
+			client.toggle_menu()
+		# Pad B closes.
+		screen.set_popup(which)
+		client._input(_pad_1132(JOY_BUTTON_B))
+		if screen.popup_open() != "":
+			failures.append("pad B left %s open" % which)
+		# Enter, A and Start never toggle Ready while it is open.
+		screen.set_popup(which)
+		var before: bool = client._ready_button.button_pressed
+		for ev: InputEvent in [_key_1132(KEY_ENTER), _pad_1132(JOY_BUTTON_A), _pad_1132(JOY_BUTTON_START), _key_1132(KEY_KP_ENTER)]:
+			client._input(ev)
+			if client._ready_button.button_pressed != before:
+				failures.append("%s toggled Ready with %s open" % [ev.as_text(), which])
+				client._ready_button.set_pressed_no_signal(before)
+		if not screen.popup_has_focus():
+			failures.append("Enter / A with %s open did not move focus into it" % which)
+		screen.set_popup("")
+	# Enter with focus inside How to play acts there: it presses the focused Close.
+	screen.set_popup("help")
+	screen.focus_popup()
+	if not screen.popup_has_focus():
+		failures.append("How to play took no focus")
+	var before_ready: bool = client._ready_button.button_pressed
+	get_root().push_input(_key_1132(KEY_ENTER))
+	var up := _key_1132(KEY_ENTER)
+	up.pressed = false
+	get_root().push_input(up)
+	await process_frame
+	if screen.popup_open() != "":
+		failures.append("Enter on How to play's focused Close did not close it")
+	if client._ready_button.button_pressed != before_ready:
+		failures.append("Enter inside How to play toggled Ready")
+	# With no popup, Esc opens the menu and Enter readies as before.
+	client._input(_key_1132(KEY_ESCAPE))
+	if not client.menu_open:
+		failures.append("Esc with no popup did not open the Esc menu")
+	else:
+		client.toggle_menu()
+	client.get_viewport().gui_release_focus()
+	var was: bool = client._ready_button.button_pressed
+	client._input(_key_1132(KEY_ENTER))
+	if client._ready_button.button_pressed == was:
+		failures.append("Enter with no popup did not toggle Ready")
+	client.queue_free()
+	await process_frame
 	_scenario_completed = true
 	return failures
