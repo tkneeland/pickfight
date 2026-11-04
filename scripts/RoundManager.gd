@@ -1504,6 +1504,7 @@ func _publish_lobby_state() -> void:
 			"stage": _stock_single_stage(), "stages": _stage_rotation.picker_rows(),
 		}
 	state["stages_by_mode"] = _stages_by_mode()
+	state["rules_modes"] = HostSettingsScript.known_modes()  # the phone's Rules tabs (#1172)
 	state["rules"] = _rules_state()
 	# Hat and eyes are not in "state" (the cards read them from the server), so a pick of
 	# either must still redraw them; the phones are only re-sent a state that changed (#714).
@@ -2580,7 +2581,7 @@ func _stock_single_stage() -> String:
 	return on[0] if on.size() == 1 else ""
 
 ## Every mode the host can run, Classic as "classic" (the frame's key): wider than
-## `HostSettings.KNOWN_MODES`, which is only what phones may edit (#1163).
+## `HostSettings.known_modes()`, which is only what phones may edit (#1163).
 func _runnable_modes() -> PackedStringArray:
 	var out := PackedStringArray([HostSettingsScript.CLASSIC_ID])
 	out.append_array(GameModesScript.IDS)

@@ -1298,6 +1298,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_joiner_hot_potato_stage_count_matches_host_1163",
 	"online_joiner_hot_potato_rules_match_host_1163",
 	"online_joiner_lobby_focus_follows_pad_1170",
+	"mode_lists_derive_from_game_modes_1172",
+	"retired_mode_saved_lists_dropped_1172",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4319,6 +4321,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_online_joiner_hot_potato_rules_match_host_1163()
 		"online_joiner_lobby_focus_follows_pad_1170":
 			return await _scenario_online_joiner_lobby_focus_follows_pad_1170()
+		"mode_lists_derive_from_game_modes_1172":
+			return _scenario_mode_lists_derive_from_game_modes_1172()
+		"retired_mode_saved_lists_dropped_1172":
+			return _scenario_retired_mode_saved_lists_dropped_1172()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -60932,5 +60938,69 @@ func _scenario_online_joiner_lobby_focus_follows_pad_1170() -> Array[String]:
 			failures.append("%s is not focusable after a pad press" % label)
 	client.queue_free()
 	await process_frame
+	_scenario_completed = true
+	return failures
+
+## #1172: the settings' known modes and the phone's Rules tabs both come from `GameModes`:
+## Classic plus every id in `GameModes.IDS` that is not retired.
+func _scenario_mode_lists_derive_from_game_modes_1172() -> Array[String]:
+	var failures: Array[String] = []
+	var gm: GDScript = load("res://scripts/GameModes.gd") as GDScript
+	var hs: GDScript = load("res://scripts/HostSettings.gd") as GDScript
+	var want: Array[String] = ["classic"]
+	for id: String in gm.IDS:
+		if not bool(gm.entry(id).get("retired", false)):
+			want.append(id)
+	var known: PackedStringArray = hs.known_modes()
+	if Array(known) != want:
+		failures.append("known_modes() is %s, want %s" % [known, want])
+	for id: String in gm.IDS:
+		if hs.is_known_mode(id) == bool(gm.entry(id).get("retired", false)):
+			failures.append("is_known_mode('%s') disagrees with GameModes' retired flag" % id)
+	var rm: Node = preload("res://scripts/RoundManager.gd").new()
+	var frame: Dictionary = JSON.parse_string(JSON.stringify({"rules_modes": hs.known_modes()}))
+	rm.free()
+	if Array(frame["rules_modes"]) != want:
+		failures.append("the phone's rules_modes is %s, want %s" % [frame["rules_modes"], want])
+	var html: String = FileAccess.get_file_as_string("res://controller/index.html")
+	if html.contains("RULES_MODES"):
+		failures.append("the controller page still carries a hand-copied RULES_MODES list")
+	_scenario_completed = true
+	return failures
+
+## #1172 (review of #1174): a saved Hot Potato stage or modifier list cannot be edited from
+## any screen, so loading drops it and a forced Hot Potato round plays the defaults.
+func _scenario_retired_mode_saved_lists_dropped_1172() -> Array[String]:
+	var failures: Array[String] = []
+	var hs: GDScript = load("res://scripts/HostSettings.gd") as GDScript
+	var path: String = "user://scenario_retired_lists_1172.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var config := ConfigFile.new()
+	config.set_value(hs.SECTION, "stage_lists", {"hot_potato": PackedStringArray(["StageA"]), "king_of_the_hill": PackedStringArray(["StageB"])})
+	config.set_value(hs.SECTION, "disabled_modifiers", {"hot_potato": PackedStringArray(["night"]), "sudden_death": PackedStringArray(["night"])})
+	config.save(path)
+	var loaded: RefCounted = hs.new()
+	loaded.path = path
+	loaded.load_settings()
+	if loaded.disabled_stages_by_mode.has("hot_potato") or not loaded.disabled_stages_by_mode.has("king_of_the_hill"):
+		failures.append("stage lists after load: %s" % [loaded.disabled_stages_by_mode.keys()])
+	if loaded.disabled_modifiers.has("hot_potato") or not loaded.disabled_modifiers.has("sudden_death"):
+		failures.append("modifier lists after load: %s" % [loaded.disabled_modifiers.keys()])
+	# An old file with one global list seeds the general modes but not retired Hot Potato.
+	config = ConfigFile.new()
+	config.set_value(hs.SECTION, "disabled_stages", PackedStringArray(["StageA"]))
+	config.save(path)
+	loaded = hs.new()
+	loaded.path = path
+	loaded.load_settings()
+	if loaded.disabled_stages_by_mode.has("hot_potato"):
+		failures.append("the old global list was seeded into retired Hot Potato")
+	for id: String in ["classic", "king_of_the_hill", "sudden_death"]:
+		if not loaded.disabled_stages_by_mode.has(id):
+			failures.append("the old global list did not seed %s" % id)
+	for id: String in ["stock", "soccer", "capture_the_flag"]:
+		if loaded.disabled_stages_by_mode.has(id):
+			failures.append("the old global list wrongly seeded %s" % id)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	_scenario_completed = true
 	return failures
