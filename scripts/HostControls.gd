@@ -585,8 +585,10 @@ func set_pad_menu(on: bool) -> void:
 		return
 	_pad_menu_open = on
 	PadMenuScript.set_open("lobby", on)
+	var buttons: Array = []
 	for id: String in _controls:
-		(_controls[id] as Button).focus_mode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
+		buttons.append(_controls[id])
+	PadMenuScript.set_buttons_focus(buttons, on)
 	if on:
 		_focus_signature = ""
 		_chain_pad_focus()
