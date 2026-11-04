@@ -33,9 +33,25 @@ var ready_button: Button
 
 var own_slot: int = -1
 var _looks: Array = []
+var _colors: Dictionary = {} # slot -> Color, from the lobby frame's players[].color
+
+## Reads each seat's colour from the lobby frame's `players` (the host's
+## `_slot_color`, sent as hex), so the joiner's cards match the host's (#1132).
+func set_players(players: Variant) -> void:
+	_colors.clear()
+	if not players is Array:
+		return
+	for entry: Variant in players:
+		if entry is Dictionary and entry.has("slot"):
+			var hex: String = str(entry.get("color", ""))
+			_colors[int(entry["slot"])] = Color.html(hex) if Color.html_is_valid(hex) else Color.WHITE
+
+## White for a seat the frame does not list, as the host's own fallback.
+func _slot_color(slot: int) -> Color:
+	return _colors.get(slot, Color.WHITE)
 
 func build(parent: Node, copy_pressed: Callable) -> void:
-	screen = LobbyScreenScript.new()
+	screen = LobbyScreenScript.new(Callable(), _slot_color) # cards in the host's slot colours (#1132)
 	screen.layer = SCREEN_LAYER
 	parent.add_child(screen)
 	screen.build_panels()

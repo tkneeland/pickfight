@@ -139,6 +139,7 @@ static func summary(mode_id: String) -> String:
 ## The same two lines read from a lobby frame's `stages_by_mode` and `rules` (#1127), for an
 ## Online joiner, whose own saved settings are not the room's. Read only.
 static func stage_count_text_from_state(mode_id: String, state: Dictionary) -> String:
+	mode_id = HostSettingsScript.mode_key(mode_id) # the frame keys Classic "classic", the round "" (#1132)
 	var by_mode: Variant = state.get("stages_by_mode", {})
 	var entry: Variant = by_mode.get(mode_id, {}) if by_mode is Dictionary else {}
 	var on: Variant = entry.get("on", []) if entry is Dictionary else []
@@ -146,6 +147,7 @@ static func stage_count_text_from_state(mode_id: String, state: Dictionary) -> S
 	return TranslationServer.translate("SR_STAGE_COUNT_ONE" if count == 1 else "SR_STAGE_COUNT") % count
 
 static func summary_from_state(mode_id: String, state: Dictionary) -> String:
+	mode_id = HostSettingsScript.mode_key(mode_id) # the frame keys Classic "classic", the round "" (#1132)
 	var rules: Variant = state.get("rules", {})
 	var modes: Variant = rules.get("modes", {}) if rules is Dictionary else {}
 	var entry: Variant = modes.get(mode_id, {}) if modes is Dictionary else {}

@@ -380,6 +380,14 @@ func stages_summary_label() -> Label:
 func popup_open() -> String:
 	return _popups.current() if _popups != null else ""
 
+## Focus into the open popup (#1132), and whether it already holds focus.
+func focus_popup() -> void:
+	if _popups != null:
+		_popups.focus_into(_popups.current())
+
+func popup_has_focus() -> bool:
+	return _popups != null and _popups.owns_focus()
+
 ## Which full-screen panel shows: "lobby", "victory" or neither ("").
 ## The how-to-play demos run only while their popup is open: they are built
 ## when it opens and freed the moment it closes or the lobby goes (#219), so no
