@@ -1295,6 +1295,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"agent_scripts_stay_portable",
 	"audio_mix_thread_waits_out_bus_swaps_1112",
 	"music_volume_written_only_on_change_1165",
+	"online_joiner_hot_potato_stage_count_matches_host_1163",
 	"online_joiner_lobby_focus_follows_pad_1170",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4311,6 +4312,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_audio_mix_thread_waits_out_bus_swaps_1112()
 		"music_volume_written_only_on_change_1165":
 			return await _scenario_music_volume_written_only_on_change_1165()
+		"online_joiner_hot_potato_stage_count_matches_host_1163":
+			return _scenario_online_joiner_hot_potato_stage_count_matches_host_1163()
 		"online_joiner_lobby_focus_follows_pad_1170":
 			return await _scenario_online_joiner_lobby_focus_follows_pad_1170()
 		_:
@@ -60829,6 +60832,31 @@ func _scenario_music_volume_written_only_on_change_1165() -> Array[String]:
 		failures.append("the voice's volume_db does not match the last value set")
 	music._duck_db = 0.0
 	music.stop()
+	_scenario_completed = true
+	return failures
+
+## #1163: the lobby frame carries Hot Potato's stage list and modifier row, so an Online
+## joiner in a forced Hot Potato round reads the host's counts, not "0 stages".
+func _scenario_online_joiner_hot_potato_stage_count_matches_host_1163() -> Array[String]:
+	var failures: Array[String] = []
+	var rm: Node = preload("res://scripts/RoundManager.gd").new()
+	var settings: RefCounted = preload("res://scripts/HostSettings.gd").shared()
+	var was_known: PackedStringArray = settings.known_stages
+	settings.known_stages = PackedStringArray(["hp1163_a", "hp1163_b"])
+	# Through JSON, as the wire carries it to the joiner.
+	var frame: Dictionary = JSON.parse_string(JSON.stringify({"stages_by_mode": rm._stages_by_mode(), "rules": rm._rules_state()}))
+	rm.free()
+	var want_on: int = settings.on_stages_for("hot_potato").size()
+	if want_on == 0:
+		failures.append("the host has no Hot Potato stages on, the check proves nothing")
+	var sr: GDScript = preload("res://scripts/StagesRulesScreen.gd")
+	var count: String = TranslationServer.translate("SR_STAGE_COUNT") % want_on
+	if sr.stage_count_text_from_state("hot_potato", frame) != count:
+		failures.append("the joiner's Hot Potato count reads '%s', want the host's '%s'" % [sr.stage_count_text_from_state("hot_potato", frame), count])
+	var host_row: Dictionary = (frame["rules"]["modes"] as Dictionary).get("hot_potato", {})
+	if host_row.is_empty():
+		failures.append("the rules frame has no hot_potato row")
+	settings.known_stages = was_known
 	_scenario_completed = true
 	return failures
 
