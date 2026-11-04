@@ -162,6 +162,14 @@ func refresh_internet(server: Object) -> void:
 func look_panel() -> Control:
 	return _look_panel
 
+## Whether the focused control sits inside the open popup (#1132).
+func owns_focus() -> bool:
+	var overlay: Control = {"help": _help, "look": _look, "stages": _stages, "join_help": _join_help}.get(_open, null)
+	if overlay == null or not overlay.is_inside_tree():
+		return false
+	var focused: Control = overlay.get_viewport().gui_get_focus_owner()
+	return focused != null and overlay.is_ancestor_of(focused)
+
 ## "help", "look", "stages", "join_help" or "" for none.
 func current() -> String:
 	return _open
@@ -216,7 +224,13 @@ func open(which: String) -> void:
 
 ## With the gamepad menu open, focus goes into the popup so A and B work there.
 func _focus_for_pad(which: String) -> void:
-	if not _screen.pad_menu_open() or which == "":
+	if _screen.pad_menu_open():
+		focus_into(which)
+
+## Puts keyboard / pad focus on popup `which`'s first control, so A and Enter act
+## inside it. The Online joiner calls it directly (#1132): it has no host pad menu.
+func focus_into(which: String) -> void:
+	if which == "":
 		return
 	var target: Control = _close_button if which == "help" else _look_panel.focus_target()
 	if which == "stages":

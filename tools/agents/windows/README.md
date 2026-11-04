@@ -23,7 +23,9 @@ powershell -ExecutionPolicy Bypass -File tools\agents\windows\pf-stop.ps1   -Acc
 - `pf-supervise.sh msg` keeps `pf-msg.sh listen` alive and runs `pf-msg.sh heartbeat` every 60 s (HELLO to the private channel, wake line when a peer goes silent). It needs `pf-msg.conf` in the state folder (`pf-msg.sh init`, then share the topic out of band). `-Only msg` starts just this one; macOS: `screen -dmS pf-msg bash tools/agents/windows/pf-supervise.sh msg`.
 - `pf-stop.ps1` kills the supervisors and sweeps any leftover `pf-*.sh` watcher process on the machine.
 
-## Start at logon (Task Scheduler), optional
+## Keep the watchers alive (Task Scheduler), required
+
+Run once: `powershell -ExecutionPolicy Bypass -File tools\agents\windows\pf-install-task.ps1 -Account <handle>`. It registers the task below with a logon trigger plus a 5-minute repeat, so a dead listener is back within 5 minutes, and turns off sleep on AC power (owner, 2026-11-04). The manual version, for reference:
 
 Nothing here registers anything. To start the watchers whenever you sign in, run once in PowerShell:
 
