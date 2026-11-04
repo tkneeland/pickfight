@@ -126,6 +126,11 @@ var _voices: Array[AudioStreamPlayer] = []
 var _levels: Array[float] = [0.0, 0.0]
 var _targets: Array[float] = [0.0, 0.0]
 var _track_db: Array[float] = [0.0, 0.0]
+## The last `volume_db` each voice was given, and how many writes there have been
+## (#1165). Assigning `volume_db` swaps the playback's bus details, so a steady
+## level must not rewrite it every frame.
+var _last_db: Array[float] = [NAN, NAN]
+var volume_db_writes: int = 0
 var _active: int = 0
 var _duck_db: float = 0.0
 var _duck_hold_left: float = 0.0
@@ -196,10 +201,18 @@ func _process(delta: float) -> void:
 	for i in _voices.size():
 		_levels[i] = move_toward(_levels[i], _targets[i], rate)
 		var voice: AudioStreamPlayer = _voices[i]
-		voice.volume_db = _track_db[i] + linear_to_db(maxf(_levels[i], SILENT)) + _duck_db
+		_set_voice_db(i, _track_db[i] + linear_to_db(maxf(_levels[i], SILENT)) + _duck_db)
 		if _targets[i] == 0.0 and _levels[i] <= 0.0 and voice.playing:
 			voice.stop()
 	_wrap_trimmed_loop()
+
+## Sets voice `i`'s volume only when it differs from the last value set (#1165).
+func _set_voice_db(i: int, db: float) -> void:
+	if is_equal_approx(_last_db[i], db):
+		return
+	_last_db[i] = db
+	volume_db_writes += 1
+	_voices[i].volume_db = db
 
 # --- The API the lobby/match flow calls -------------------------------------
 
@@ -383,7 +396,7 @@ func _switch_to(track: String) -> void:
 	_track_db[_active] = float(TRACKS[track].get("db", 0.0))
 	_levels[_active] = 0.0
 	_targets[_active] = 1.0
-	voice.volume_db = _track_db[_active] + linear_to_db(SILENT) + _duck_db
+	_set_voice_db(_active, _track_db[_active] + linear_to_db(SILENT) + _duck_db)
 	voice.play(loop_window(track).x)
 
 ## The part of `track` that loops, as (start, end) seconds into the file. The
