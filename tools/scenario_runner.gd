@@ -60868,7 +60868,12 @@ func _scenario_online_joiner_lobby_focus_follows_pad_1170() -> Array[String]:
 	var client: Node = await _joiner_1132(_classic_frame_1132([{"slot": 1, "ready": false, "name": "Me", "color": "56b4e9"}]))
 	var lobby: RefCounted = client._lobby
 	var buttons: Dictionary = {"Copy code": lobby.screen.control_button("copy_code"), "Your look": lobby.look_button, "How to play": lobby.help_button}
-	client._sync_pad_at_build(false) # the build read Input.get_connected_joypads(): pin "no pad" whatever is attached
+	# The real build path: focus follows whatever pads this machine has, with or without one.
+	var want_build: int = Control.FOCUS_ALL if not Input.get_connected_joypads().is_empty() else Control.FOCUS_NONE
+	for label: String in buttons:
+		if (buttons[label] as Button).focus_mode != want_build:
+			failures.append("%s focus at lobby build ignores the pads present" % label)
+	client._sync_pad_at_build(false)
 	for label: String in buttons:
 		if (buttons[label] as Button).focus_mode != Control.FOCUS_NONE:
 			failures.append("%s is focusable with no pad active" % label)
@@ -60876,21 +60881,36 @@ func _scenario_online_joiner_lobby_focus_follows_pad_1170() -> Array[String]:
 	for label: String in buttons:
 		if (buttons[label] as Button).focus_mode != Control.FOCUS_ALL:
 			failures.append("%s is not focusable with a pad present at lobby build" % label)
+	# A pad press focuses one; a key press must let it go and put all three out of the chain.
+	(buttons["Your look"] as Button).grab_focus()
 	client._input(_key_1132(KEY_SPACE))
 	for label: String in buttons:
-		if (buttons[label] as Button).focus_mode != Control.FOCUS_NONE:
-			failures.append("%s stayed focusable after a key press" % label)
-	# Pad hot-plug changes nothing, as on the host: focus follows input events only.
-	Input.joy_connection_changed.emit(0, true)
-	Input.joy_connection_changed.emit(0, false)
-	for label: String in buttons:
-		if (buttons[label] as Button).focus_mode != Control.FOCUS_NONE:
-			failures.append("%s changed focus on pad hot-plug" % label)
-	# Tab reaches none of them under keyboard, as on the host (they are out of the focus chain).
-	client._input(_key_1132(KEY_TAB))
-	var owner_after_tab: Control = client.get_viewport().gui_get_focus_owner()
-	if owner_after_tab != null and buttons.values().has(owner_after_tab):
-		failures.append("Tab focused %s under keyboard" % owner_after_tab.name)
+		var button: Button = buttons[label]
+		if button.focus_mode != Control.FOCUS_NONE or button.has_focus():
+			failures.append("%s stayed focusable or focused after a key press" % label)
+	# Hot-plug parity: neither the joiner nor the host's lobby listens to joy_connection_changed
+	# (only ControllerServer's seats do), so a pad plugged in or out moves focus on neither.
+	for connection: Dictionary in Input.joy_connection_changed.get_connections():
+		var target: Object = (connection["callable"] as Callable).get_object()
+		if target == client or target == lobby or target == lobby.screen or target is Button:
+			failures.append("%s listens to joy_connection_changed; the host's lobby does not" % target)
+	# Tab really walks the focus chain: none of the three may be reached under keyboard.
+	var ready_button: Button = client._ready_button
+	ready_button.grab_focus()
+	var tab := InputEventKey.new()
+	tab.keycode = KEY_TAB
+	tab.physical_keycode = KEY_TAB
+	tab.pressed = true
+	var steps: Array[String] = []
+	for _i in 16:
+		client.get_viewport().push_input(tab)
+		var focused: Control = client.get_viewport().gui_get_focus_owner()
+		if focused != null:
+			steps.append(str(focused.name))
+			if buttons.values().has(focused):
+				failures.append("Tab reached %s under keyboard" % focused.name)
+	if steps.size() < 2:
+		failures.append("Tab moved no focus at all (%s): the check is not exercising the chain" % [steps])
 	client._input(_pad_1132(JOY_BUTTON_DPAD_DOWN))
 	for label: String in buttons:
 		if (buttons[label] as Button).focus_mode != Control.FOCUS_ALL:

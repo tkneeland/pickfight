@@ -22,6 +22,15 @@ static func is_open() -> bool:
 static func reset() -> void:
 	_open.clear()
 
+## The one focus rule for lobby buttons: in the focus chain only while a gamepad
+## drives, out of it (and unfocused) otherwise, so a click or Tab leaves nothing
+## for Space to press (FOCUS_NONE drops a held focus itself). The host's pad menu and the Online joiner both call it (#1170).
+static func set_buttons_focus(buttons: Array, on: bool) -> void:
+	for button: Button in buttons:
+		if button == null:
+			continue
+		button.focus_mode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
+
 ## True when `event` is a pressed gamepad button `button`.
 static func pressed(event: InputEvent, button: int) -> bool:
 	var pad := event as InputEventJoypadButton
