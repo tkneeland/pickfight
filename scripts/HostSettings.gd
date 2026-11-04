@@ -163,10 +163,18 @@ static func mode_key(mode_id: String) -> String:
 
 ## The ids the Stages & Rules screens (PC and phone) edit: Classic as "classic"
 ## (which `mode_key` also reads from the round's ""), plus the modes with lists.
-const KNOWN_MODES: PackedStringArray = ["classic", "king_of_the_hill", "sudden_death", "stock", "soccer", "capture_the_flag"]
+## Derived from `GameModes.IDS` minus the retired ones (#1172), so a new or retired
+## mode is one edit there. The phone's Stages & Rules tabs come from this list too.
+static func known_modes() -> PackedStringArray:
+	var modes := load("res://scripts/GameModes.gd") as GDScript
+	var out := PackedStringArray([CLASSIC_ID])
+	for id: String in modes.IDS:
+		if modes.selectable(id):
+			out.append(id)
+	return out
 
 static func is_known_mode(mode_id: String) -> bool:
-	return KNOWN_MODES.has(mode_key(mode_id))
+	return known_modes().has(mode_key(mode_id))
 
 ## `GameModes`' own id for a settings key: Classic is "" there.
 static func game_mode_id(mode_id: String) -> String:
@@ -531,13 +539,16 @@ func _load_stage_lists(config: ConfigFile) -> void:
 	var stored: Variant = config.get_value(SECTION, "stage_lists", "none")
 	if stored is Dictionary:
 		for mode_id: Variant in stored:
-			disabled_stages_by_mode[mode_key(str(mode_id))] = _strings(stored[mode_id])
+			if is_known_mode(str(mode_id)):  # a retired mode's saved list is uneditable, so drop it (#1172)
+				disabled_stages_by_mode[mode_key(str(mode_id))] = _strings(stored[mode_id])
 		stock_stages_on = _strings(config.get_value(SECTION, "stock_stages_on", PackedStringArray()))
 		return
 	var old := _strings(config.get_value(SECTION, "disabled_stages", PackedStringArray()))
 	if not old.is_empty():
-		for mode_id: String in [CLASSIC_ID, "king_of_the_hill", "sudden_death", "hot_potato"]:
-			disabled_stages_by_mode[mode_id] = old.duplicate()
+		var modes := _game_modes()
+		for mode_id: String in known_modes():  # the general modes the global list used to cover
+			if mode_id != "stock" and (mode_id == CLASSIC_ID or not modes.needs_own_stages(mode_id)):
+				disabled_stages_by_mode[mode_id] = old.duplicate()
 	var pick: String = str(config.get_value(SECTION, "stock_stage", ""))
 	if pick != "":
 		stock_stages_on = PackedStringArray([pick])
@@ -560,7 +571,7 @@ func load_settings() -> void:
 		if stored is Dictionary:
 			for mode_id: Variant in stored:
 				var ids := _strings(stored[mode_id])
-				if not ids.is_empty():
+				if not ids.is_empty() and is_known_mode(str(mode_id)):  # retired modes' lists dropped (#1172)
 					disabled_modifiers[mode_key(str(mode_id))] = ids
 		var share: Variant = config.get_value(SECTION, "share_stats", true)
 		share_stats = share if share is bool else true

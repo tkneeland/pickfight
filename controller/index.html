@@ -3462,7 +3462,8 @@
   // (lobby.stages_by_mode: {mode: {all, on}}) and the Rules (lobby.rules); a
   // tap sends stage_mode_toggle / stage_mode_all / modifier_toggle /
   // weapon_toggle. Names only: a phone shows no preview images.
-  var RULES_MODES = ["classic", "king_of_the_hill", "sudden_death", "stock", "soccer", "capture_the_flag"];
+  // The tab ids come from the host (lobby.rules_modes, #1172), never a copy here.
+  function rulesModes() { return (lobby && lobby.rules_modes) || ["classic"]; }
   var rulesTab = "classic";
   var rulesTabsEl = document.getElementById("rules-tabs");
   var rulesStagesEl = document.getElementById("rules-stages");
@@ -3493,9 +3494,10 @@
   function rulesEditable() { return amHost() && lobby.phase !== "playing" && lobby.phase !== "round_end"; }
   // The first mode with stages to pick from but none on (the PC's empty_tabs()).
   function emptyRulesMode() {
-    for (var i = 0; i < RULES_MODES.length; i++) {
-      var s = modeStages(RULES_MODES[i]);
-      if (s.all.length > 0 && s.on.length === 0) { return RULES_MODES[i]; }
+    var ids = rulesModes();
+    for (var i = 0; i < ids.length; i++) {
+      var s = modeStages(ids[i]);
+      if (s.all.length > 0 && s.on.length === 0) { return ids[i]; }
     }
     return "";
   }
@@ -3531,7 +3533,7 @@
     if (key !== rulesFooterEl.dataset.key) {
       rulesFooterEl.dataset.key = key;
       rulesTabsEl.innerHTML = rulesStagesEl.innerHTML = rulesSwitchesEl.innerHTML = rulesWeaponsEl.innerHTML = "";
-      RULES_MODES.forEach(function (id) {
+      rulesModes().forEach(function (id) {
         var tab = document.createElement("button");
         tab.type = "button";
         tab.textContent = rulesModeName(id);
@@ -3567,7 +3569,7 @@
   }
   document.getElementById("menu-rules-open").addEventListener("click", function () {
     rulesTab = currentRulesMode();
-    if (RULES_MODES.indexOf(rulesTab) === -1) { rulesTab = "classic"; }
+    if (rulesModes().indexOf(rulesTab) === -1) { rulesTab = "classic"; }
     rulesFooterEl.dataset.key = "";
     showMenuView("menu-rules");
     renderRules();
