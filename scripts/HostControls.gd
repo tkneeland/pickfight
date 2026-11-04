@@ -506,19 +506,9 @@ func input(event: InputEvent) -> void:
 	if _screen._server == null or lobby_panel == null or not lobby_panel.visible or _screen.title_visible():
 		return
 	var popup: String = _screen.popup_open()
-	var key := event as InputEventKey
-	if popup != "" and key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
-		# Esc closes just the open popup, never opens the Settings panel behind it (owner decision);
-		# Stages & Rules stays up with a mode on no stage (#647)
-		if _screen.request_close_popup():
-			_restore_focus_after_popup()
-		_screen.get_viewport().set_input_as_handled()
-	elif popup == "stages" and _screen.stages_rules().handle_pad(event):
-		_screen.get_viewport().set_input_as_handled() # LB / RB step the tabs
-	elif PadMenuScript.pressed(event, JOY_BUTTON_B) and popup != "":
-		if _screen.request_close_popup(): # B leaves a popup first, then the menu
-			_restore_focus_after_popup()
-		_screen.get_viewport().set_input_as_handled()
+	# Esc / B leave a popup first, then the menu; shared with the Online joiner (#1132).
+	if _screen.popup_input(event, _pad_menu_open, _controls.get(_popup_opener) as Button):
+		return
 	elif PadMenuScript.pressed(event, JOY_BUTTON_Y) and popup == "":
 		set_pad_menu(not _pad_menu_open)
 		_screen.get_viewport().set_input_as_handled()
@@ -617,13 +607,6 @@ static func _set_variation(button: Control, variation: StringName) -> void:
 		button.theme_type_variation = variation
 
 ## After a popup closes under an open gamepad menu, focus goes back to the control that opened it.
-func _restore_focus_after_popup() -> void:
-	if not _pad_menu_open:
-		return
-	var back: Button = _controls.get(_popup_opener) as Button
-	if back != null and back.is_visible_in_tree():
-		back.grab_focus()
-
 var _popup_opener: String = "how_to_play"
 
 ## Join swaps Main for the PC client under an open pad menu: let go of

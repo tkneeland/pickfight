@@ -162,9 +162,18 @@ func refresh_internet(server: Object) -> void:
 func look_panel() -> Control:
 	return _look_panel
 
+## Popup `which`'s overlay, or null for "" or before the lobby was built.
+func _overlay_of(which: String) -> Control:
+	match which:
+		"help": return _help
+		"look": return _look
+		"stages": return _stages
+		"join_help": return _join_help
+	return null
+
 ## Whether the focused control sits inside the open popup (#1132).
 func owns_focus() -> bool:
-	var overlay: Control = {"help": _help, "look": _look, "stages": _stages, "join_help": _join_help}.get(_open, null)
+	var overlay: Control = _overlay_of(_open)
 	if overlay == null or not overlay.is_inside_tree():
 		return false
 	var focused: Control = overlay.get_viewport().gui_get_focus_owner()
