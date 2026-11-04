@@ -60616,6 +60616,16 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 		failures.append("Enter on How to play's focused Close did not close it")
 	if client._ready_button.button_pressed != before_ready:
 		failures.append("Enter inside How to play toggled Ready")
+	# A pad user closing a popup gets focus back on the button that opened it, so the D-pad still works.
+	client._pad_active = true
+	for which: String in ["look", "help"]:
+		screen.set_popup(which)
+		screen.focus_popup()
+		client._input(_pad_1132(JOY_BUTTON_B))
+		var opener: Control = client._lobby.look_button if which == "look" else client._lobby.help_button
+		if screen.popup_open() != "" or not opener.has_focus():
+			failures.append("pad B on %s left focus on '%s', want its opener" % [which, client.get_viewport().gui_get_focus_owner()])
+	client._pad_active = false
 	# With no popup, Esc opens the menu and Enter readies as before.
 	client._input(_key_1132(KEY_ESCAPE))
 	if not client.menu_open:

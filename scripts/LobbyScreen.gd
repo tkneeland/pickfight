@@ -40,6 +40,7 @@ const TitleScreenScript := preload("res://scripts/TitleScreen.gd")
 const VictoryScreenScript := preload("res://scripts/VictoryScreen.gd")
 const RoundCardsScript := preload("res://scripts/RoundCards.gd")
 const HostControlsScript := preload("res://scripts/HostControls.gd")
+const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const LobbyCardsScript := preload("res://scripts/LobbyCards.gd")
 const LobbyPopupsScript := preload("res://scripts/LobbyPopups.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
@@ -387,6 +388,35 @@ func focus_popup() -> void:
 
 func popup_has_focus() -> bool:
 	return _popups != null and _popups.owns_focus()
+
+## The keys an open popup owns, for the host (HostControls) and the Online joiner
+## (RemoteClient) alike, so the two cannot drift (#1132): Esc and pad B close it
+## (never the Settings / Esc menu behind it; Stages & Rules stays up with a mode
+## on no stage, #647) and, for a pad user (`pad_mode`), give focus back to
+## `opener`; LB / RB step Stages & Rules' tabs; Enter or pad A with focus outside
+## the popup moves focus in, after which they reach its focused control as
+## ui_accept. True when it took the event (marked handled).
+func popup_input(event: InputEvent, pad_mode: bool, opener: Control) -> bool:
+	var popup: String = popup_open()
+	if popup == "":
+		return false
+	var key := event as InputEventKey
+	var key_down: bool = key != null and key.pressed and not key.echo
+	var back: bool = (key_down and key.physical_keycode == KEY_ESCAPE)
+	if not back and popup == "stages" and stages_rules().handle_pad(event):
+		get_viewport().set_input_as_handled() # LB / RB step the tabs
+		return true
+	if back or PadMenuScript.pressed(event, JOY_BUTTON_B):
+		if request_close_popup() and pad_mode and opener != null and opener.is_visible_in_tree():
+			opener.grab_focus() # the closed popup took the focus with it: the D-pad needs it back
+		get_viewport().set_input_as_handled()
+		return true
+	var accept: bool = (key_down and (key.physical_keycode == KEY_ENTER or key.physical_keycode == KEY_KP_ENTER)) or PadMenuScript.pressed(event, JOY_BUTTON_A)
+	if accept and not popup_has_focus():
+		focus_popup()
+		get_viewport().set_input_as_handled()
+		return true
+	return false
 
 ## Which full-screen panel shows: "lobby", "victory" or neither ("").
 ## The how-to-play demos run only while their popup is open: they are built
