@@ -1296,6 +1296,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"audio_mix_thread_waits_out_bus_swaps_1112",
 	"music_volume_written_only_on_change_1165",
 	"online_joiner_hot_potato_stage_count_matches_host_1163",
+	"online_joiner_hot_potato_rules_match_host_1163",
 	"online_joiner_lobby_focus_follows_pad_1170",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4314,6 +4315,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_music_volume_written_only_on_change_1165()
 		"online_joiner_hot_potato_stage_count_matches_host_1163":
 			return _scenario_online_joiner_hot_potato_stage_count_matches_host_1163()
+		"online_joiner_hot_potato_rules_match_host_1163":
+			return _scenario_online_joiner_hot_potato_rules_match_host_1163()
 		"online_joiner_lobby_focus_follows_pad_1170":
 			return await _scenario_online_joiner_lobby_focus_follows_pad_1170()
 		_:
@@ -60857,6 +60860,50 @@ func _scenario_online_joiner_hot_potato_stage_count_matches_host_1163() -> Array
 	if host_row.is_empty():
 		failures.append("the rules frame has no hot_potato row")
 	settings.known_stages = was_known
+	_scenario_completed = true
+	return failures
+
+## #1163 follow-up: the joiner's stage count and modifier summary for every runnable mode
+## (Hot Potato included) equal the host's own, and a phone command still cannot edit the
+## retired Hot Potato's settings.
+func _scenario_online_joiner_hot_potato_rules_match_host_1163() -> Array[String]:
+	var failures: Array[String] = []
+	var settings: RefCounted = preload("res://scripts/HostSettings.gd").shared()
+	var demo: GDScript = preload("res://scripts/DemoBuild.gd")
+	var was_known: PackedStringArray = settings.known_stages
+	var was_forced: int = demo.forced
+	var was_disabled: Dictionary = settings.disabled_stages_by_mode.duplicate(true)
+	demo.forced = 0
+	settings.known_stages = PackedStringArray(["hp1163_a", "hp1163_b"])
+	var rm: Node = preload("res://scripts/RoundManager.gd").new()
+	var frame: Dictionary = JSON.parse_string(JSON.stringify({"stages_by_mode": rm._stages_by_mode(), "rules": rm._rules_state()}))
+	rm.free()
+	var sr: GDScript = preload("res://scripts/StagesRulesScreen.gd")
+	var modes: Array = [""]
+	modes.append_array(Array(preload("res://scripts/GameModes.gd").IDS))
+	for mode_id: String in modes:
+		var host_text: String = sr.summary(mode_id)
+		var joiner_text: String = sr.summary_from_state(mode_id, frame)
+		if host_text != joiner_text:
+			failures.append("mode '%s': the joiner reads '%s', the host '%s'" % [mode_id, joiner_text, host_text])
+	if sr.stage_count_text("hot_potato") != sr.stage_count_text_from_state("hot_potato", frame):
+		failures.append("Hot Potato stage count differs between host and joiner")
+	if sr.stage_count_text_from_state("hot_potato", frame) == TranslationServer.translate("SR_STAGE_COUNT") % 0:
+		failures.append("the joiner still shows 0 stages for Hot Potato")
+	# Phones may not edit the retired mode.
+	var server: Node = preload("res://scripts/ControllerServer.gd").new()
+	if server.apply_host_command("stage_mode_toggle", {"mode": "hot_potato", "stage": "hp1163_a", "on": false}):
+		failures.append("a phone toggled a Hot Potato stage")
+	if server.apply_host_command("stage_mode_all", {"mode": "hot_potato", "on": false}):
+		failures.append("a phone switched all Hot Potato stages")
+	if server.apply_host_command("modifier_toggle", {"mode": "hot_potato", "id": "night", "on": true}):
+		failures.append("a phone toggled a Hot Potato modifier")
+	if settings.disabled_stages_by_mode.has("hot_potato") and settings.disabled_stages_by_mode != was_disabled:
+		failures.append("a phone command changed Hot Potato's saved settings")
+	server.free()
+	settings.disabled_stages_by_mode = was_disabled
+	settings.known_stages = was_known
+	demo.forced = was_forced
 	_scenario_completed = true
 	return failures
 

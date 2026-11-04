@@ -2579,12 +2579,19 @@ func _stock_single_stage() -> String:
 	var on: PackedStringArray = HostSettingsScript.shared().enabled_stages_for(GameModesScript.STOCK)
 	return on[0] if on.size() == 1 else ""
 
+## Every mode the host can run, Classic as "classic" (the frame's key): wider than
+## `HostSettings.KNOWN_MODES`, which is only what phones may edit (#1163).
+func _runnable_modes() -> PackedStringArray:
+	var out := PackedStringArray([HostSettingsScript.CLASSIC_ID])
+	out.append_array(GameModesScript.IDS)
+	return out
+
 ## Every mode's stage list for the phone / PC remote (#647):
 ## {mode id: {all: [stages the mode can use], on: [the ones switched on]}}.
 func _stages_by_mode() -> Dictionary:
 	var settings: RefCounted = HostSettingsScript.shared()
 	var out: Dictionary = {}
-	for mode_id: String in HostSettingsScript.KNOWN_MODES:
+	for mode_id: String in _runnable_modes():
 		out[mode_id] = {"all": settings.stages_for_mode(mode_id), "on": settings.on_stages_for(mode_id)}
 	return out
 
@@ -2601,7 +2608,7 @@ func _rules_state() -> Dictionary:
 	ids.append("night")
 	titles["night"] = "Night Stages"
 	var modes: Dictionary = {}
-	for mode_id: String in HostSettingsScript.KNOWN_MODES:
+	for mode_id: String in _runnable_modes():
 		var on: Array = []
 		var locked: Array = []
 		for id: String in ids:
