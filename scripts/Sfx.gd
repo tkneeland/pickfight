@@ -532,6 +532,7 @@ func _ready() -> void:
 	announcer.sfx = self
 	add_child(announcer)
 	_start_decoding()
+	get_tree().process_frame.connect(mix_thread_barrier)
 	# Leaving fullscreen through the OS resizes the window.
 	get_tree().root.size_changed.connect(_on_window_size_changed)
 	# The game's own scene is only current once autoloads have all readied.
@@ -1065,6 +1066,23 @@ func _stop_decoding() -> void:
 
 func _exit_tree() -> void:
 	_stop_decoding()
+	if get_tree().process_frame.is_connected(mix_thread_barrier):
+		get_tree().process_frame.disconnect(mix_thread_barrier)
+
+## Wait, once a frame, for the audio mix step in progress to end (#1112).
+## Works around an engine race (godotengine/godot#124217): every volume or pan
+## change (`volume_db`, `AudioStreamPlayer2D` panning) makes the AudioServer
+## swap the playback's bus details and free the old copy two main-loop
+## frames later, whether or not the mix thread is done reading it. The mix
+## thread holds the driver lock for its whole step, so taking that lock once
+## per frame, between the server's frees, means any step that could still hold
+## an old copy has finished before it is freed. Without it a mix thread
+## descheduled mid-step reads freed memory and the game dies with signal 11
+## (CI run 40074228396; `--fixed-fps` runs frames far faster than real time,
+## which widens the window). Costs at most one mix step's wait per frame.
+func mix_thread_barrier() -> void:
+	AudioServer.lock()
+	AudioServer.unlock()
 
 ## Worker thread. Touches nothing of this node's but `_pcm` and the flags,
 ## and those only under the mutex.
