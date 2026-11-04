@@ -1293,6 +1293,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_joiner_popup_owns_esc_enter_pad_1132",
 	"agent_scripts_stay_portable",
 	"audio_mix_thread_waits_out_bus_swaps_1112",
+	"music_volume_written_only_on_change_1165",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4300,6 +4301,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_agent_scripts_stay_portable()
 		"audio_mix_thread_waits_out_bus_swaps_1112":
 			return await _scenario_audio_mix_thread_waits_out_bus_swaps_1112()
+		"music_volume_written_only_on_change_1165":
+			return await _scenario_music_volume_written_only_on_change_1165()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -60578,5 +60581,34 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 		failures.append("Enter with no popup did not toggle Ready")
 	client.queue_free()
 	await process_frame
+	_scenario_completed = true
+	return failures
+
+## #1165: Music assigns a voice's volume_db only when the level changes.
+func _scenario_music_volume_written_only_on_change_1165() -> Array[String]:
+	var failures: Array[String] = []
+	var music: Node = _music()
+	if music == null:
+		return ["the Music autoload is missing"]
+	music.stop()
+	music.play_lobby()
+	# Let the fade-in finish so every level is steady.
+	for i in 400:
+		music._process(0.1)
+	var before: int = music.volume_db_writes
+	for i in 30:
+		music._process(1.0 / 60.0)
+	if music.volume_db_writes != before:
+		failures.append("steady-level frames wrote volume_db %d times" % (music.volume_db_writes - before))
+	# A level change still reaches the voice.
+	music._duck_db = -6.0
+	music._process(1.0 / 60.0)
+	if music.volume_db_writes == before:
+		failures.append("a ducking change did not write volume_db")
+	var active: AudioStreamPlayer = music._voices[music._active]
+	if not is_equal_approx(active.volume_db, music._last_db[music._active]):
+		failures.append("the voice's volume_db does not match the last value set")
+	music._duck_db = 0.0
+	music.stop()
 	_scenario_completed = true
 	return failures
