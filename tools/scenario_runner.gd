@@ -1293,6 +1293,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_joiner_popup_owns_esc_enter_pad_1132",
 	"agent_scripts_stay_portable",
 	"audio_mix_thread_waits_out_bus_swaps_1112",
+	"music_volume_written_only_on_change_1165",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4304,6 +4305,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_agent_scripts_stay_portable()
 		"audio_mix_thread_waits_out_bus_swaps_1112":
 			return await _scenario_audio_mix_thread_waits_out_bus_swaps_1112()
+		"music_volume_written_only_on_change_1165":
+			return await _scenario_music_volume_written_only_on_change_1165()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -60472,6 +60475,98 @@ func _scenario_agent_scripts_stay_portable() -> Array[String]:
 	_scenario_completed = true
 	return failures
 
+## Issue #1112, the real cause: the signal 11 was on the audio mix thread
+## (AudioDriverDummy::thread_func -> AudioServer::_mix_step copying a
+## playback's bus details, crashing in the StringName copy), not a game
+## thread. Each volume or pan change swaps a playback's bus details and the
+## engine frees the old copy two frames later, with no wait on the mix thread
+## (godotengine/godot#124217). Sfx takes the driver lock once a frame
+## (`mix_thread_barrier`) so a step still holding an old copy ends first. The
+## race needs the mix thread descheduled at one exact instruction, so this
+## cannot crash on demand; it checks the barrier is wired for the autoload and
+## for a fresh Sfx (and unwired when it leaves), that it really waits on the
+## lock the mix thread holds, and that a churn of playing voices, retuned every
+## frame and freed and rebuilt mid-play, logs no thread error.
+func _scenario_audio_mix_thread_waits_out_bus_swaps_1112() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	if not process_frame.is_connected(sfx.mix_thread_barrier):
+		failures.append("the Sfx autoload does not run mix_thread_barrier every frame")
+	var sfx_script: GDScript = load("res://scripts/Sfx.gd") as GDScript
+	var tmp: String = OS.get_temp_dir().path_join("pf_1112_mix")
+	DirAccess.make_dir_recursive_absolute(tmp)
+	var extra: Node = sfx_script.new()
+	extra.name = "SfxBarrier1112"
+	extra.persist_settings = false
+	extra.settings_path = tmp.path_join("sfx.cfg")
+	root.add_child(extra)
+	var wired: bool = process_frame.is_connected(extra.mix_thread_barrier)
+	root.remove_child(extra)
+	var unwired: bool = not process_frame.is_connected(extra.mix_thread_barrier)
+	extra.free()
+	if not wired or not unwired:
+		failures.append("a fresh Sfx wired its barrier: %s, unwired it on leaving: %s" % [wired, unwired])
+	# The barrier must block while someone holds the driver lock, as the mix
+	# thread does for a whole step.
+	var held: Array = [false]
+	var holder: int = WorkerThreadPool.add_task(func() -> void:
+		AudioServer.lock()
+		held[0] = true
+		OS.delay_msec(60)
+		AudioServer.unlock(), false, "1112 lock holder")
+	var t0: int = Time.get_ticks_msec()
+	while not held[0] and Time.get_ticks_msec() - t0 < 2000:
+		OS.delay_msec(1)
+	var start: int = Time.get_ticks_msec()
+	sfx.mix_thread_barrier()
+	var waited: int = Time.get_ticks_msec() - start
+	WorkerThreadPool.wait_for_task_completion(holder)
+	if not held[0] or waited < 30:
+		failures.append("mix_thread_barrier did not wait for the driver lock (held: %s, waited %d ms)" % [held[0], waited])
+	# Churn: playing voices retuned every frame, freed and rebuilt mid-play.
+	var logger := ThreadErrorLogger.new()
+	OS.add_logger(logger)
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = 22050
+	var pcm := PackedByteArray()
+	pcm.resize(22050 * 2)
+	for i in 22050:
+		pcm.encode_s16(i * 2, int(sin(i * 0.05) * 4000.0))
+	wav.data = pcm
+	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_end = 22050
+	var voices: Array[Node] = []
+	for wave in 3:
+		for i in 16:
+			var v: AudioStreamPlayer2D = AudioStreamPlayer2D.new()
+			v.stream = wav
+			v.volume_db = -80.0
+			root.add_child(v)
+			v.play()
+			voices.append(v)
+		for f in 40:
+			for v: Node in voices:
+				(v as AudioStreamPlayer2D).volume_db = -80.0 + float((f * 7) % 20)
+				(v as AudioStreamPlayer2D).position = Vector2(float(f * 13 % 640), 0.0)
+			await process_frame
+		for v: Node in voices:
+			(v as AudioStreamPlayer2D).stop()
+			v.queue_free()
+		voices.clear()
+		await process_frame
+	await sfx_script.wait_for_release(sfx, 0.3)
+	for complaint: String in logger.thread_complaints():
+		failures.append("the engine logged a thread error: %s" % complaint)
+	OS.remove_logger(logger)
+	for f: String in DirAccess.get_files_at(tmp):
+		DirAccess.remove_absolute(tmp.path_join(f))
+	DirAccess.remove_absolute(tmp)
+	_scenario_completed = true
+	return failures
+
 ## #1132: an Online joiner fed a lobby frame. Returns the client, in its lobby.
 func _joiner_1132(frame: Dictionary) -> Node:
 	var client: Node = RemoteClientScene241.instantiate()
@@ -60619,6 +60714,16 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 		failures.append("Enter on How to play's focused Close did not close it")
 	if client._ready_button.button_pressed != before_ready:
 		failures.append("Enter inside How to play toggled Ready")
+	# A pad user closing a popup gets focus back on the button that opened it, so the D-pad still works.
+	client._pad_active = true
+	for which: String in ["look", "help"]:
+		screen.set_popup(which)
+		screen.focus_popup()
+		client._input(_pad_1132(JOY_BUTTON_B))
+		var opener: Control = client._lobby.look_button if which == "look" else client._lobby.help_button
+		if screen.popup_open() != "" or not opener.has_focus():
+			failures.append("pad B on %s left focus on '%s', want its opener" % [which, client.get_viewport().gui_get_focus_owner()])
+	client._pad_active = false
 	# With no popup, Esc opens the menu and Enter readies as before.
 	client._input(_key_1132(KEY_ESCAPE))
 	if not client.menu_open:
@@ -60635,94 +60740,31 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 	_scenario_completed = true
 	return failures
 
-## Issue #1112, the real cause: the signal 11 was on the audio mix thread
-## (AudioDriverDummy::thread_func -> AudioServer::_mix_step copying a
-## playback's bus details, crashing in the StringName copy), not a game
-## thread. Each volume or pan change swaps a playback's bus details and the
-## engine frees the old copy two frames later, with no wait on the mix thread
-## (godotengine/godot#124217). Sfx takes the driver lock once a frame
-## (`mix_thread_barrier`) so a step still holding an old copy ends first. The
-## race needs the mix thread descheduled at one exact instruction, so this
-## cannot crash on demand; it checks the barrier is wired for the autoload and
-## for a fresh Sfx (and unwired when it leaves), that it really waits on the
-## lock the mix thread holds, and that a churn of playing voices, retuned every
-## frame and freed and rebuilt mid-play, logs no thread error.
-func _scenario_audio_mix_thread_waits_out_bus_swaps_1112() -> Array[String]:
+## #1165: Music assigns a voice's volume_db only when the level changes.
+func _scenario_music_volume_written_only_on_change_1165() -> Array[String]:
 	var failures: Array[String] = []
-	var sfx: Node = _sfx()
-	if sfx == null:
-		return ["the Sfx autoload is missing"]
-	if not process_frame.is_connected(sfx.mix_thread_barrier):
-		failures.append("the Sfx autoload does not run mix_thread_barrier every frame")
-	var sfx_script: GDScript = load("res://scripts/Sfx.gd") as GDScript
-	var tmp: String = OS.get_temp_dir().path_join("pf_1112_mix")
-	DirAccess.make_dir_recursive_absolute(tmp)
-	var extra: Node = sfx_script.new()
-	extra.name = "SfxBarrier1112"
-	extra.persist_settings = false
-	extra.settings_path = tmp.path_join("sfx.cfg")
-	root.add_child(extra)
-	var wired: bool = process_frame.is_connected(extra.mix_thread_barrier)
-	root.remove_child(extra)
-	var unwired: bool = not process_frame.is_connected(extra.mix_thread_barrier)
-	extra.free()
-	if not wired or not unwired:
-		failures.append("a fresh Sfx wired its barrier: %s, unwired it on leaving: %s" % [wired, unwired])
-	# The barrier must block while someone holds the driver lock, as the mix
-	# thread does for a whole step.
-	var held: Array = [false]
-	var holder: int = WorkerThreadPool.add_task(func() -> void:
-		AudioServer.lock()
-		held[0] = true
-		OS.delay_msec(60)
-		AudioServer.unlock(), false, "1112 lock holder")
-	var t0: int = Time.get_ticks_msec()
-	while not held[0] and Time.get_ticks_msec() - t0 < 2000:
-		OS.delay_msec(1)
-	var start: int = Time.get_ticks_msec()
-	sfx.mix_thread_barrier()
-	var waited: int = Time.get_ticks_msec() - start
-	WorkerThreadPool.wait_for_task_completion(holder)
-	if not held[0] or waited < 30:
-		failures.append("mix_thread_barrier did not wait for the driver lock (held: %s, waited %d ms)" % [held[0], waited])
-	# Churn: playing voices retuned every frame, freed and rebuilt mid-play.
-	var logger := ThreadErrorLogger.new()
-	OS.add_logger(logger)
-	var wav := AudioStreamWAV.new()
-	wav.format = AudioStreamWAV.FORMAT_16_BITS
-	wav.mix_rate = 22050
-	var pcm := PackedByteArray()
-	pcm.resize(22050 * 2)
-	for i in 22050:
-		pcm.encode_s16(i * 2, int(sin(i * 0.05) * 4000.0))
-	wav.data = pcm
-	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	wav.loop_end = 22050
-	var voices: Array[Node] = []
-	for wave in 3:
-		for i in 16:
-			var v: AudioStreamPlayer2D = AudioStreamPlayer2D.new()
-			v.stream = wav
-			v.volume_db = -80.0
-			root.add_child(v)
-			v.play()
-			voices.append(v)
-		for f in 40:
-			for v: Node in voices:
-				(v as AudioStreamPlayer2D).volume_db = -80.0 + float((f * 7) % 20)
-				(v as AudioStreamPlayer2D).position = Vector2(float(f * 13 % 640), 0.0)
-			await process_frame
-		for v: Node in voices:
-			(v as AudioStreamPlayer2D).stop()
-			v.queue_free()
-		voices.clear()
-		await process_frame
-	await sfx_script.wait_for_release(sfx, 0.3)
-	for complaint: String in logger.thread_complaints():
-		failures.append("the engine logged a thread error: %s" % complaint)
-	OS.remove_logger(logger)
-	for f: String in DirAccess.get_files_at(tmp):
-		DirAccess.remove_absolute(tmp.path_join(f))
-	DirAccess.remove_absolute(tmp)
+	var music: Node = _music()
+	if music == null:
+		return ["the Music autoload is missing"]
+	music.stop()
+	music.play_lobby()
+	# Let the fade-in finish so every level is steady.
+	for i in 400:
+		music._process(0.1)
+	var before: int = music.volume_db_writes
+	for i in 30:
+		music._process(1.0 / 60.0)
+	if music.volume_db_writes != before:
+		failures.append("steady-level frames wrote volume_db %d times" % (music.volume_db_writes - before))
+	# A level change still reaches the voice.
+	music._duck_db = -6.0
+	music._process(1.0 / 60.0)
+	if music.volume_db_writes == before:
+		failures.append("a ducking change did not write volume_db")
+	var active: AudioStreamPlayer = music._voices[music._active]
+	if not is_equal_approx(active.volume_db, music._last_db[music._active]):
+		failures.append("the voice's volume_db does not match the last value set")
+	music._duck_db = 0.0
+	music.stop()
 	_scenario_completed = true
 	return failures
