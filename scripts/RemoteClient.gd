@@ -443,7 +443,7 @@ func _input(event: InputEvent) -> void:
 		return
 	var pad_button := event as InputEventJoypadButton
 	if pad_button != null and pad_button.pressed and not menu_open and (pad_button.button_index == JOY_BUTTON_A or pad_button.button_index == JOY_BUTTON_START) and _ready_button != null and _ready_button.is_visible_in_tree() \
-			and not (pad_button.button_index == JOY_BUTTON_A and _pad_presses_focused_button()):
+			and not (pad_button.button_index == JOY_BUTTON_A and _copy_button != null and _copy_button.has_focus()):
 		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
 		get_viewport().set_input_as_handled() # else a focused Ready also takes it as ui_accept and flips back (#550)
 		return
@@ -484,20 +484,23 @@ func _input(event: InputEvent) -> void:
 		toggle_menu()
 		get_viewport().set_input_as_handled()
 
-## A on a focused lobby button (Copy code #1033, Your look / How to play #1132) presses it, not Ready.
-func _pad_presses_focused_button() -> bool:
-	var focused: Control = get_viewport().gui_get_focus_owner()
-	return focused is Button and focused != _ready_button and focused.is_visible_in_tree()
-
 ## Issue #1132: while a lobby popup (How to play, Your look) is open it owns the
 ## keys through the host's own handler (`LobbyScreen.popup_input`), and the
-## lobby's keys wait, as on the host: Enter, pad A and Start never toggle Ready,
-## and Esc never opens the Esc menu. True while a popup is open.
+## lobby's keys wait, as on the host: a pressed Enter, pad A or Start never
+## toggles Ready, and Esc never opens the Esc menu. Releases and every other
+## event fall through, so a Space, click, stick or shoulder held when the popup
+## opened is let go as usual and never stays held into the round. True when the
+## event must not reach the lobby's own keys.
 func _popup_input(event: InputEvent) -> bool:
 	if _lobby == null or _lobby.screen == null or menu_open or _lobby.screen.popup_open() == "":
 		return false
-	_lobby.screen.popup_input(event, _pad_active, _lobby.popup_opener())
-	return true # unhandled A / Enter reach the popup's focused control as ui_accept
+	if _lobby.screen.popup_input(event, _pad_active, _lobby.popup_opener()):
+		return true
+	var key := event as InputEventKey
+	if key != null and key.pressed and (key.physical_keycode == KEY_ENTER or key.physical_keycode == KEY_KP_ENTER or key.physical_keycode == KEY_ESCAPE):
+		return true # unhandled: reaches the popup's focused control as ui_accept
+	var pad := event as InputEventJoypadButton
+	return pad != null and pad.pressed and (pad.button_index == JOY_BUTTON_A or pad.button_index == JOY_BUTTON_START)
 
 ## Issue #1035: Enter toggles Ready in the lobby, as the button and the pad's A /
 ## Start do. Not while a text field has focus, the Esc menu is open, or Ready
@@ -522,6 +525,8 @@ func _track_pad_active(event: InputEvent) -> void:
 		_pad_active = false
 	if was != _pad_active:
 		_sync_ready_caption()
+		if _lobby != null and _lobby.screen != null:
+			_lobby.set_pad_focus(_pad_active) # as the host's pad menu does for its buttons (#1132)
 
 func _sync_ready_caption() -> void:
 	if _ready_button != null:

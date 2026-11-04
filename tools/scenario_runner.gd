@@ -1291,6 +1291,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_joiner_classic_stage_count_matches_host_1132",
 	"online_joiner_cards_use_slot_colours_1132",
 	"online_joiner_popup_owns_esc_enter_pad_1132",
+	"online_joiner_popup_lets_held_input_go_1132",
 	"agent_scripts_stay_portable",
 	"audio_mix_thread_waits_out_bus_swaps_1112",
 	"music_volume_written_only_on_change_1165",
@@ -4250,6 +4251,7 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_hill_taken_banner_names_holder()
 		"stage_builder_rebuilds_stages_from_definitions_1046":
 			return await _scenario_stage_builder_rebuilds_stages_from_definitions_1046()
+
 		"heckler_award_for_most_landed_boos_1085":
 			return await _scenario_heckler_award_for_most_landed_boos_1085()
 		"crumbling_ledge_plays_crack_once_per_cycle_1083":
@@ -4274,14 +4276,17 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_umbrella_open_plays_a_soft_sound_1095()
 		"koth_kicked_leader_cannot_win_on_clock":
 			return await _scenario_koth_kicked_leader_cannot_win_on_clock()
+
 		"pickup_refalls_when_platform_removed_1103":
 			return await _scenario_pickup_refalls_when_platform_removed_1103()
+
 		"soccer_overtime_cancels_pending_respawns":
 			return await _scenario_soccer_overtime_cancels_pending_respawns()
 		"background_threads_never_touch_the_tree_1112":
 			return await _scenario_background_threads_never_touch_the_tree_1112()
 		"ghost_pickup_grab_and_drop_play_cues":
 			return await _scenario_ghost_pickup_grab_and_drop_play_cues()
+
 		"ctf_flag_drop_and_return_play_cues":
 			return await _scenario_ctf_flag_drop_and_return_play_cues()
 		"sfx_call_sites_name_real_sounds_1120":
@@ -4298,6 +4303,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_joiner_cards_use_slot_colours_1132()
 		"online_joiner_popup_owns_esc_enter_pad_1132":
 			return await _scenario_online_joiner_popup_owns_esc_enter_pad_1132()
+		"online_joiner_popup_lets_held_input_go_1132":
+			return await _scenario_online_joiner_popup_lets_held_input_go_1132()
 		"agent_scripts_stay_portable":
 			return _scenario_agent_scripts_stay_portable()
 		"audio_mix_thread_waits_out_bus_swaps_1112":
@@ -10216,6 +10223,7 @@ func _scenario_boomstick_charge_ring_tracks_fire_clock() -> Array[String]:
 		failures.append("ring still up after swapping to the pickaxe")
 	await _teardown(stage)
 	return failures
+
 ## Issue #55: a bullet that hits a player deals 35, shoves them along its line
 ## of flight, and is gone. The hit is reported as the shooter's
 ## `strike_landed`, the one seam the hitmarker (#33) and the phones' buzz (#34)
@@ -17237,6 +17245,7 @@ func _scenario_match_stats_revenge() -> Array[String]:
 		failures.append("revenge then a second KO: %s, %s, expected revenge and then a streak of 2" % [d1, d2])
 	_scenario_completed = true
 	return failures
+
 # --- Kill feed, KO credit and match awards (issue #148) -------------------------
 const MatchStatsScript := preload("res://scripts/MatchStats.gd")
 const KillFeedScript := preload("res://scripts/KillFeed.gd")
@@ -30394,25 +30403,30 @@ const KillZoneScript976 := preload("res://scripts/KillZone.gd")
 const GRAPPLE_PATH_976: String = "res://resources/grapple.tres"
 const BOOMSTICK_PATH_976: String = "res://resources/boomstick.tres"
 const AXE_PATH_976: String = "res://resources/axe.tres"
+
 ## The snapshot index of the weapon file at `path` (0 for the pickaxe).
 func _widx_976(path: String) -> int:
 	return PickupWeaponsScript.WEAPON_PATHS.find(path) + 1
+
 ## `_rc_world_241(0, 1)` (a round on stage 0) with `extra` merged over it.
 func _pf_world_976(extra: Dictionary = {}) -> Dictionary:
 	var w: Dictionary = _rc_world_241(0, 1)
 	w.merge(extra, true)
 	return w
+
 ## Feeds `frame` (a full snapshot) to `client` through the codec and draws once.
 func _pf_feed_976(client: Node, frame: Dictionary) -> void:
 	# Drawn from this frame alone, not eased from the one fed before it.
 	client._samples.clear()
 	client.apply_snapshot(_rc_codec_241(frame))
 	client._render()
+
 ## A stand-alone Online client (no host) fed `frame`.
 func _pf_client_976(rig: Dictionary, frame: Dictionary) -> Node:
 	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
 	_pf_feed_976(client, frame)
 	return client
+
 ## What the host captures for a lone `p` in `slot`: SnapshotCapture's own
 ## per-player readings, without a RoundManager round around it.
 func _pf_entry_976(p: RigidBody2D, slot: int) -> Dictionary:
@@ -30428,6 +30442,7 @@ func _pf_entry_976(p: RigidBody2D, slot: int) -> Dictionary:
 		"color": slot, "name": "P%d" % slot, "team": p.team, "damage": p.damage, "state": phase,
 		"flags": SnapshotCaptureScript251._player_flags(p, head),
 		"hat_spin": SnapshotCaptureScript251._hat_spin(p), "squash": SnapshotCaptureScript251._squash_byte(p)}
+
 ## A lone host player in `slot`'s palette colour holding `path`.
 func _pf_host_player_976(stage: Node2D, slot: int, path: String, at: Vector2 = DEEP_PARK_POSITION) -> RigidBody2D:
 	var p: RigidBody2D = _spawn_player(stage, at)
@@ -30439,8 +30454,10 @@ func _pf_host_player_976(stage: Node2D, slot: int, path: String, at: Vector2 = D
 	else:
 		await _await_ticks(ROSTER_SWAP_TICKS)
 	return p
+
 func _pf_col_off_976(a: Color, b: Color) -> bool:
 	return absf(a.r - b.r) > 0.01 or absf(a.g - b.g) > 0.01 or absf(a.b - b.b) > 0.01 or absf(a.a - b.a) > 0.01
+
 func _pf_pts_off_976(a: PackedVector2Array, b: PackedVector2Array, tol: float = 0.01) -> bool:
 	if a.size() != b.size():
 		return true
@@ -30448,6 +30465,7 @@ func _pf_pts_off_976(a: PackedVector2Array, b: PackedVector2Array, tol: float = 
 		if a[i].distance_to(b[i]) > tol:
 			return true
 	return false
+
 ## Every way puppet `puppet` is drawn differently from the live player `host`:
 ## body, outline, haft taper, hat, eyes, weapon head (art, colour, ink,
 ## rotation, place), the loaded special, the spawn blink and the phased head.
@@ -30514,6 +30532,7 @@ func _pf_figure_diffs_976(host: Node, puppet: Node2D, what: String) -> Array[Str
 	if puppet.visible != (host as CanvasItem).visible:
 		f.append("%s: shown %s, host %s" % [what, puppet.visible, (host as CanvasItem).visible])
 	return f
+
 ## Values read off a host node and its client copy, compared (vectors to a
 ## pixel, numbers and colours closely, anything else exactly).
 func _pf_values_976(got: Array, want: Array, what: String) -> Array[String]:
@@ -30536,7 +30555,9 @@ func _pf_values_976(got: Array, want: Array, what: String) -> Array[String]:
 		if off:
 			f.append("%s[%d]: client %s, host %s" % [what, i, a, b])
 	return f
+
 # Players ------------------------------------------------------------------------
+
 ## A live bot round captured and drawn on a client: every puppet's figure,
 ## every pickup and every stage part's look match the host's own nodes.
 func _scenario_online_puppets_match_live_host_round_976() -> Array[String]:
@@ -30581,6 +30602,7 @@ func _scenario_online_puppets_match_live_host_round_976() -> Array[String]:
 		node.queue_free()
 	await _teardown(built["main"])
 	return failures
+
 ## A lone host player with each kind of weapon, hat and eyes, damaged and
 ## turned, is drawn node for node the same by its puppet.
 func _scenario_online_puppet_figure_matches_host_player_976() -> Array[String]:
@@ -30604,6 +30626,7 @@ func _scenario_online_puppet_figure_matches_host_player_976() -> Array[String]:
 		node.queue_free()
 	await _teardown(stage)
 	return failures
+
 ## Big heads and Tiny weapons change the held weapon's art; the puppet draws
 ## the modified weapon exactly as the host does.
 func _scenario_online_puppet_draws_modified_weapon_976() -> Array[String]:
@@ -30628,6 +30651,7 @@ func _scenario_online_puppet_draws_modified_weapon_976() -> Array[String]:
 		node.queue_free()
 	await _teardown(stage)
 	return failures
+
 ## The grapple's loaded hook shows on the puppet while the host's is loaded,
 ## and a phased weapon head is see-through on both.
 func _scenario_online_puppet_loaded_and_phased_head_976() -> Array[String]:
@@ -30665,6 +30689,7 @@ func _scenario_online_puppet_loaded_and_phased_head_976() -> Array[String]:
 		node.queue_free()
 	await _teardown(stage)
 	return failures
+
 ## Spawn protection's blink: the host's dim half dims the puppet's body (not
 ## its weapon head), and the bright half shows it whole.
 func _scenario_online_puppet_spawn_blink_976() -> Array[String]:
@@ -30683,6 +30708,7 @@ func _scenario_online_puppet_spawn_blink_976() -> Array[String]:
 		node.queue_free()
 	await _teardown(stage)
 	return failures
+
 ## A knocked-out player is hidden on the host; its puppet and name tag hide too.
 func _scenario_online_puppet_hidden_when_knocked_out_976() -> Array[String]:
 	var failures: Array[String] = []
@@ -30696,6 +30722,7 @@ func _scenario_online_puppet_hidden_when_knocked_out_976() -> Array[String]:
 		failures.append("the living player's puppet is hidden")
 	await _rc_close_241(rig)
 	return failures
+
 ## The eyes: the host's blink, the gaze toward the weapon head, the squint
 ## when hit and the dead eyes all reach the puppet's face (PlayerFace.gd).
 func _scenario_online_puppet_eyes_follow_host_976() -> Array[String]:
@@ -30723,6 +30750,7 @@ func _scenario_online_puppet_eyes_follow_host_976() -> Array[String]:
 		failures.append("a knocked-out puppet's eyes are '%s', not dead" % face.eye_state())
 	await _rc_close_241(rig)
 	return failures
+
 ## A propeller hat turns in step with the host's (Hat.spin_byte()).
 func _scenario_online_puppet_propeller_hat_in_step_976() -> Array[String]:
 	var failures: Array[String] = []
@@ -30742,6 +30770,7 @@ func _scenario_online_puppet_propeller_hat_in_step_976() -> Array[String]:
 		node.queue_free()
 	await _teardown(stage)
 	return failures
+
 ## A landing's squash and a big hit's stretch on the host squash the puppet
 ## the same, hat and all, and at rest it is at rest.
 func _scenario_online_puppet_squash_follows_host_976() -> Array[String]:
@@ -30764,10 +30793,12 @@ func _scenario_online_puppet_squash_follows_host_976() -> Array[String]:
 		node.queue_free()
 	await _teardown(stage)
 	return failures
+
 ## The shot puppet for `kind` flags, owned by player 1.
 func _pf_shot_world_976(weapon: int, flags: int, rotation: float) -> Dictionary:
 	return _pf_world_976({"projectiles": [{"projectile_id": 7, "position": Vector2(10, 10), "velocity": Vector2(300, -40),
 		"weapon_type": weapon, "owner": 1, "rotation": rotation, "flags": flags}]})
+
 ## A boomstick bullet is drawn by Projectile.draw_bullet at the host's z, in
 ## its shooter's colour, from the shooter's weapon's radius.
 func _scenario_online_bullet_drawn_like_host_976() -> Array[String]:
@@ -30789,6 +30820,7 @@ func _scenario_online_bullet_drawn_like_host_976() -> Array[String]:
 	host_shot.queue_free()
 	await _rc_close_241(rig)
 	return failures
+
 ## A thrown boomerang: Boomerang.draw_boomerang at z 45, the host's spin, its
 ## ghost bit, the shooter's colour.
 func _scenario_online_boomerang_drawn_like_host_976() -> Array[String]:
@@ -30808,6 +30840,7 @@ func _scenario_online_boomerang_drawn_like_host_976() -> Array[String]:
 			failures.append("boomerang colour %s, thrower %s" % [shot.color, client.player_puppet(1).color])
 	await _rc_close_241(rig)
 	return failures
+
 ## A launched hook: GrappleHook.draw_hook at z 45, facing the host's way, its
 ## rope from the shooter's weapon head.
 func _scenario_online_hook_and_rope_drawn_like_host_976() -> Array[String]:
@@ -30826,6 +30859,7 @@ func _scenario_online_hook_and_rope_drawn_like_host_976() -> Array[String]:
 			failures.append("the rope starts at %s, the shooter's head is at (160, 0)" % shot.owner_puppet.weapon_head_position())
 	await _rc_close_241(rig)
 	return failures
+
 ## A flail: its ball and links are FlailChain's own visuals, in the owner's
 ## colour, placed and turned as the host's, see-through when phased.
 func _scenario_online_flail_drawn_like_host_976() -> Array[String]:
@@ -30853,6 +30887,7 @@ func _scenario_online_flail_drawn_like_host_976() -> Array[String]:
 	want.free()
 	await _rc_close_241(rig)
 	return failures
+
 ## A knocked-out player's ghost: Ghost.draw_ghost, at absolute z 0, in the
 ## owner's colour, faded and puffed as the host's.
 func _scenario_online_ghost_drawn_like_host_976() -> Array[String]:
@@ -30873,6 +30908,7 @@ func _scenario_online_ghost_drawn_like_host_976() -> Array[String]:
 			failures.append("ghost at %s" % ghost.global_position)
 	await _rc_close_241(rig)
 	return failures
+
 ## A Meteor shower meteor: Meteor.draw_meteor at z 5, its radius and trail.
 func _scenario_online_meteor_drawn_like_host_976() -> Array[String]:
 	var failures: Array[String] = []
@@ -30887,7 +30923,9 @@ func _scenario_online_meteor_drawn_like_host_976() -> Array[String]:
 			failures.append("meteor z %d radius %f velocity %s" % [meteor.z_index, meteor.radius, meteor.velocity])
 	await _rc_close_241(rig)
 	return failures
+
 # Pickups -----------------------------------------------------------------------
+
 ## The pickup puppet is a display-only Pickup.tscn: same art, its halo
 ## breathing in step with the host's, and never collectable.
 func _scenario_online_pickup_halo_follows_host_976() -> Array[String]:
@@ -30912,6 +30950,7 @@ func _scenario_online_pickup_halo_follows_host_976() -> Array[String]:
 		host.queue_free()
 	await _rc_close_241(rig)
 	return failures
+
 ## One stage part's look carried host to client: the host's copy runs, the
 ## client's (in its own physics world, its logic stopped by NetSync) takes
 ## the host's state through the snapshot codec, and every sent value then
@@ -30949,10 +30988,13 @@ func _part_parity_976(scene_path: String, configure: Callable, drive: Callable, 
 	mirror.queue_free()
 	await _teardown(stage)
 	return failures
+
 func _pf_noop_976(_node: Node) -> void:
 	pass
+
 func _pf_tick_976(_host: Node, _stage: Node) -> void:
 	await physics_frame
+
 func _scenario_online_part_bounce_pad_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/BouncePad.tscn", _pf_noop_976,
 		func(host: Node, stage: Node2D) -> void:
@@ -30967,6 +31009,7 @@ func _scenario_online_part_bounce_pad_976() -> Array[String]:
 			if _pf_col_off_976(client.visual_color(), host.visual_color()):
 				f.append("pad colour %s, host %s" % [client.visual_color(), host.visual_color()])
 			return f)
+
 func _scenario_online_part_breakable_wall_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/BreakableWall.tscn", _pf_noop_976,
 		func(host: Node, _stage: Node2D) -> void:
@@ -30980,6 +31023,7 @@ func _scenario_online_part_breakable_wall_976() -> Array[String]:
 			if client.visible_crack_count() != host.visible_crack_count() or client.state_name() != host.state_name():
 				f.append("cracks %d state %s, host %d %s" % [client.visible_crack_count(), client.state_name(), host.visible_crack_count(), host.state_name()])
 			return f)
+
 func _scenario_online_part_breakable_wall_broken_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/BreakableWall.tscn", _pf_noop_976,
 		func(host: Node, _stage: Node2D) -> void:
@@ -30991,6 +31035,7 @@ func _scenario_online_part_breakable_wall_broken_976() -> Array[String]:
 			if not host.is_broken() or client.state_name() != host.state_name() or client.visible_crack_count() != host.visible_crack_count():
 				f.append("broken wall: client %s / %d cracks, host %s / %d" % [client.state_name(), client.visible_crack_count(), host.state_name(), host.visible_crack_count()])
 			return f)
+
 func _scenario_online_part_collapsing_floor_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/CollapsingFloor.tscn",
 		func(node: Node) -> void:
@@ -31004,6 +31049,7 @@ func _scenario_online_part_collapsing_floor_976() -> Array[String]:
 			if _pf_col_off_976(client.visual_color(), host.visual_color()):
 				f.append("floor colour %s, host %s" % [client.visual_color(), host.visual_color()])
 			return f)
+
 func _scenario_online_part_crumbling_ledge_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/CrumblingLedge.tscn", _pf_noop_976,
 		func(host: Node, stage: Node2D) -> void:
@@ -31015,6 +31061,7 @@ func _scenario_online_part_crumbling_ledge_976() -> Array[String]:
 			if _pf_col_off_976(client.visual_color(), host.visual_color()):
 				f.append("ledge colour %s, host %s" % [client.visual_color(), host.visual_color()])
 			return f)
+
 func _scenario_online_part_conveyor_clock_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/Conveyor.tscn",
 		func(node: Node) -> void:
@@ -31024,12 +31071,14 @@ func _scenario_online_part_conveyor_clock_976() -> Array[String]:
 			host.set("_scroll", float(host.get("_scroll")) + 50.0)
 			await physics_frame,
 		1)
+
 func _scenario_online_part_fan_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/Fan.tscn",
 		func(node: Node) -> void:
 			node.spin_deg_per_sec = 90.0
 			node.travel = Vector2(200, 0),
 		_pf_tick_976, 40)
+
 func _scenario_online_part_moving_platform_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/MovingPlatform.tscn", _pf_noop_976, _pf_tick_976, 45,
 		func(host: Node, client: Node) -> Array[String]:
@@ -31037,6 +31086,7 @@ func _scenario_online_part_moving_platform_976() -> Array[String]:
 			if host.position == Vector2.ZERO:
 				f.append("the host platform never moved, the check proves nothing")
 			return f)
+
 func _scenario_online_part_saw_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/Saw.tscn",
 		func(node: Node) -> void:
@@ -31047,10 +31097,13 @@ func _scenario_online_part_saw_976() -> Array[String]:
 			if absf(angle_difference(client.blade_rotation(), host.blade_rotation())) > 0.01:
 				f.append("blade at %f, host %f" % [client.blade_rotation(), host.blade_rotation()])
 			return f)
+
 func _scenario_online_part_rotating_platform_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/RotatingPlatform.tscn", _pf_noop_976, _pf_tick_976, 60)
+
 func _scenario_online_part_teleporter_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/Teleporter.tscn", _pf_noop_976, _pf_tick_976, 25)
+
 func _scenario_online_part_wind_zone_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/WindZone.tscn", _pf_noop_976, _pf_tick_976, 150,
 		func(host: Node, client: Node) -> Array[String]:
@@ -31058,6 +31111,7 @@ func _scenario_online_part_wind_zone_976() -> Array[String]:
 			if client.phase() != host.phase() or _pf_col_off_976(client.visual_color(), host.visual_color()):
 				f.append("wind phase %d colour %s, host %d %s" % [client.phase(), client.visual_color(), host.phase(), host.visual_color()])
 			return f)
+
 func _scenario_online_part_falling_rock_976() -> Array[String]:
 	return await _part_parity_976("res://scenes/parts/FallingRock.tscn",
 		func(node: Node) -> void:
@@ -31071,6 +31125,7 @@ func _scenario_online_part_falling_rock_976() -> Array[String]:
 			if client.rock_position().distance_to(host.rock_position()) > 1.0:
 				f.append("rock at %s, host %s" % [client.rock_position(), host.rock_position()])
 			return f)
+
 ## The rising lava (#kill zone): its surface, rise and warning follow the host.
 func _scenario_online_part_kill_zone_rising_976() -> Array[String]:
 	var failures: Array[String] = []
@@ -31095,6 +31150,7 @@ func _scenario_online_part_kill_zone_rising_976() -> Array[String]:
 	mirror.queue_free()
 	await _teardown(stage)
 	return failures
+
 ## Clock-only parts (lava shimmer, sky, night lamps) keep running on the
 ## client and are re-set to the host's clock on a full snapshot when drifted.
 func _scenario_online_part_clocks_resync_976() -> Array[String]:
@@ -31115,6 +31171,7 @@ func _scenario_online_part_clocks_resync_976() -> Array[String]:
 		node.free()
 	_scenario_completed = true
 	return failures
+
 ## The client's stage parts are found by the id the host gives them, on a real
 ## stage, and a part state in a snapshot reaches the right node.
 func _scenario_online_stage_parts_found_by_host_id_976() -> Array[String]:
@@ -31163,6 +31220,7 @@ func _scenario_online_stage_parts_found_by_host_id_976() -> Array[String]:
 	holder.queue_free()
 	await _rc_close_241(rig)
 	return failures
+
 ## A part id the client cannot find is looked for once, not on every frame:
 ## the stage is walked again only for a new id, or once the stage gains a
 ## node (a part one of the host's states builds).
@@ -31188,7 +31246,9 @@ func _scenario_online_unknown_part_ids_cached_976() -> Array[String]:
 		failures.append("a node added to the stage led to %d walks, wanted 1" % (client.part_walks - after_new))
 	await _rc_close_241(rig)
 	return failures
+
 # Game-mode and modifier props --------------------------------------------------
+
 ## Feeds a client one prop `kind` with `state` and returns its copy.
 ## `host` is the host's prop node (read once the client is up, so it has not
 ## moved on by the time the copy is compared) or its state array.
@@ -31197,6 +31257,7 @@ func _pf_prop_client_976(rig: Dictionary, kind: int, host: Variant) -> Node:
 	var state: Array = NetSyncScript976.prop_state(host) if host is Node else host
 	_pf_feed_976(client, _pf_world_976({"props": [{"prop_id": 31, "kind": kind, "state": state}]}))
 	return client
+
 ## The polygons under `node`, in tree order, as [polygon, colour] pairs.
 func _pf_polys_976(node: Node) -> Array:
 	var out: Array = []
@@ -31205,6 +31266,7 @@ func _pf_polys_976(node: Node) -> Array:
 	for child: Node in node.find_children("*", "Line2D", true, false):
 		out.append([(child as Line2D).points, (child as Line2D).default_color])
 	return out
+
 func _pf_same_polys_976(a: Array, b: Array, what: String) -> Array[String]:
 	var f: Array[String] = []
 	if a.size() != b.size():
@@ -31214,6 +31276,7 @@ func _pf_same_polys_976(a: Array, b: Array, what: String) -> Array[String]:
 		if _pf_pts_off_976(a[i][0], b[i][0]) or _pf_col_off_976(a[i][1], b[i][1]):
 			f.append("%s: shape %d differs" % [what, i])
 	return f
+
 ## Soccer: the ball is Soccer.build_ball_visuals' disc and seam, where and as
 ## turned as the host's.
 func _scenario_online_soccer_ball_drawn_like_host_976() -> Array[String]:
@@ -31241,6 +31304,7 @@ func _scenario_online_soccer_ball_drawn_like_host_976() -> Array[String]:
 	host.free()
 	await _rc_close_241(rig)
 	return failures
+
 ## CTF: each flag is CaptureTheFlag.build_flag's, in its team's colours,
 ## shrunk while carried and hidden when the host hides it.
 func _scenario_online_ctf_flags_drawn_like_host_976() -> Array[String]:
@@ -31266,6 +31330,7 @@ func _scenario_online_ctf_flags_drawn_like_host_976() -> Array[String]:
 	host.free()
 	await _rc_close_241(rig)
 	return failures
+
 ## King of the Hill: the hill is drawn by KingOfTheHill.draw_hill from the
 ## host's own net_state (place, size, holder colour, fill, warning).
 func _scenario_online_hill_drawn_like_host_976() -> Array[String]:
@@ -31286,6 +31351,7 @@ func _scenario_online_hill_drawn_like_host_976() -> Array[String]:
 	host.free()
 	await _rc_close_241(rig)
 	return failures
+
 ## Sudden death's falling rocks (Tiebreaker): each is a FallingRock whose
 ## rock, marker and fade follow the host's.
 func _scenario_online_tiebreaker_rock_follows_host_976() -> Array[String]:
@@ -31311,6 +31377,7 @@ func _scenario_online_tiebreaker_rock_follows_host_976() -> Array[String]:
 	await _rc_close_241(rig)
 	await _teardown(stage)
 	return failures
+
 ## The Gale modifier's gust: a StageGust with the host's size, direction and
 ## timing, whose streaks and warning follow the host's.
 func _scenario_online_gale_follows_host_976() -> Array[String]:
@@ -31337,7 +31404,9 @@ func _scenario_online_gale_follows_host_976() -> Array[String]:
 	await _rc_close_241(rig)
 	await _teardown(stage)
 	return failures
+
 # The wire -----------------------------------------------------------------------
+
 ## Parts and props survive a hostile frame: an oversized state is refused, a
 ## state that is not an array decodes empty, and a delta merges them.
 func _scenario_snapshot_parts_and_props_hostile_976() -> Array[String]:
@@ -31384,6 +31453,7 @@ func _scenario_snapshot_parts_and_props_hostile_976() -> Array[String]:
 		failures.append("deltas did not merge: parts %s props %s" % [merged["parts"], merged["props"]])
 	_scenario_completed = true
 	return failures
+
 ## The client merges every v2 delta (flags, flails, ghosts, meteors, parts,
 ## props) onto its last full snapshot, as SnapshotCapture.delta sends them.
 func _scenario_online_client_merges_v2_deltas_976() -> Array[String]:
@@ -31408,6 +31478,7 @@ func _scenario_online_client_merges_v2_deltas_976() -> Array[String]:
 		failures.append("part/prop deltas: %d / %d" % [w.get("parts", []).size(), w.get("props", []).size()])
 	await _rc_close_241(rig)
 	return failures
+
 func _scenario_remote_client_draws_real_player_and_pickup_art_930() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = {"nodes": [], "relay": null}
@@ -32991,6 +33062,7 @@ func _scenario_victory_streaker_award_needs_three_unbroken_kos() -> Array[String
 		failures.append("begin_match left KO runs behind")
 	_scenario_completed = true
 	return failures
+
 ## Issue #921: Combo goes to the longest multi-KO chain inside 3 s, at least 2, no ties.
 func _scenario_victory_combo_award_needs_two_kos_inside_three_seconds() -> Array[String]:
 	var failures: Array[String] = []
@@ -33042,6 +33114,7 @@ func _scenario_victory_combo_award_needs_two_kos_inside_three_seconds() -> Array
 	stats.forget_slot(0)
 	_scenario_completed = true
 	return failures
+
 ## Issue #953: Sharpshooter goes to the most boomstick/boomerang KOs, at least 2, no ties.
 func _scenario_award_sharpshooter_counts_ranged_kos() -> Array[String]:
 	var failures: Array[String] = []
@@ -33088,6 +33161,7 @@ func _scenario_award_sharpshooter_counts_ranged_kos() -> Array[String]:
 		failures.append("begin_match left ranged KOs behind")
 	_scenario_completed = true
 	return failures
+
 ## Issue #970: the real Jack of All Trades award, packed and unpacked like the host's hud
 ## frame, appears on the online joiner's victory screen with its title and detail.
 func _scenario_remote_victory_shows_jack_award_970() -> Array[String]:
@@ -33109,6 +33183,7 @@ func _scenario_remote_victory_shows_jack_award_970() -> Array[String]:
 		failures.append("Jack of All Trades missing from the joiner's awards %s" % [texts])
 	await _rc_close_241(rig)
 	return failures
+
 ## Issue #970: Jack of All Trades goes to the most distinct weapons landed, at least 3, no ties.
 func _scenario_award_jack_counts_distinct_weapons() -> Array[String]:
 	var failures: Array[String] = []
@@ -33144,6 +33219,7 @@ func _scenario_award_jack_counts_distinct_weapons() -> Array[String]:
 		failures.append("a bot earned Jack")
 	_scenario_completed = true
 	return failures
+
 ## Issue #861: Haymaker goes to the single hardest hit, at least 40, no ties.
 func _scenario_haymaker_award_861() -> Array[String]:
 	var failures: Array[String] = []
@@ -33180,6 +33256,7 @@ func _scenario_haymaker_award_861() -> Array[String]:
 		failures.append("begin_match left best hits behind")
 	_scenario_completed = true
 	return failures
+
 ## Issue #832: Untouchable goes to the lowest damage taker who dealt damage.
 func _scenario_untouchable_award_832() -> Array[String]:
 	var failures: Array[String] = []
@@ -33216,6 +33293,7 @@ func _scenario_untouchable_award_832() -> Array[String]:
 		failures.append("seeded tie not stable or wrong: %s vs %s" % [first, again])
 	_scenario_completed = true
 	return failures
+
 ## Issue #325: the victory screen's stats table lists every player and, with
 ## eight long names, still fits the screen together with the podium and awards.
 func _scenario_victory_stat_table_fits_eight_players() -> Array[String]:
@@ -37113,6 +37191,7 @@ func _scenario_soccer_ball_in_a_goal_scores_for_the_other_team() -> Array[String
 		failures.append("a ball in Blue's goal left the score at %s, wanted 1 - 1" % [mode.scores])
 	await _teardown(rig["stage"])
 	return failures
+
 ## #988: a ball resting far from every fighter returns to the centre after the
 ## stuck window with no score; with `expect_reset` false (control) a fighter
 ## stands by the ball, so it must stay where it is.
@@ -37151,6 +37230,7 @@ func _scenario_soccer_stuck_ball(expect_reset: bool) -> Array[String]:
 		failures.append("the reset changed the score to %s" % [mode.scores])
 	await _teardown(rig["stage"])
 	return failures
+
 ## The third goal ends the round: the other team is out and the first team wins it.
 func _scenario_soccer_three_goals_end_the_round_for_that_team() -> Array[String]:
 	var failures: Array[String] = []
@@ -37209,6 +37289,7 @@ func _scenario_soccer_clock_gives_leader_the_win() -> Array[String]:
 		failures.append("a clear lead went to Sudden Death")
 	await _teardown(rig["stage"])
 	return failures
+
 ## #1040: the Soccer and CTF match clocks show top centre in their last 30 s
 ## ("m:ss", as King of the Hill), on the host and, through the `hud` frame's
 ## mirror, on the Online joiner. `mode` is the running mode node.
@@ -37242,6 +37323,7 @@ func _clock_pill_checks_1040(mode: Node, mode_id: String, rm: Node, pill: String
 			failures.append("%s: joiner pill at %.1f s is %s '%s', wanted '%s'" % [pill, case[0], mine.visible, mine.text, want])
 	client.effects.apply_mode_hud("", {})
 	await _rc_close_241(rig)
+
 func _scenario_soccer_clock_pill_last_30s() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = _soccer_rig(3)
@@ -37260,6 +37342,7 @@ func _scenario_soccer_clock_pill_last_30s() -> Array[String]:
 		failures.append("the pill did not hold 0:20 through the goal pause (%.2f '%s')" % [mode.time_left, mode._clock_label.text])
 	await _teardown(rig["stage"])
 	return failures
+
 func _scenario_ctf_clock_pill_last_30s() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = _ctf_rig(4)
@@ -37277,6 +37360,7 @@ func _scenario_ctf_clock_pill_last_30s() -> Array[String]:
 		failures.append("the pill did not hold 0:20 through the capture pause (%.2f '%s')" % [mode.time_left, mode._clock_label.text])
 	await _teardown(rig["stage"])
 	return failures
+
 ## #1012: a level score at time plays the shared Sudden Death in place,
 ## "Overtime!", with no golden goal: goals stop counting and a KO wins.
 ## Control: before time is up there is no tiebreaker.
@@ -37319,6 +37403,7 @@ func _scenario_soccer_level_at_time_goes_to_sudden_death() -> Array[String]:
 		failures.append("the overtime victim came back")
 	await _teardown(rig["stage"])
 	return failures
+
 ## A knocked-out player is back in about 1.5 s with spawn protection, and the
 ## round has not ended even when a team is briefly empty.
 func _scenario_soccer_ko_respawns_the_player() -> Array[String]:
@@ -37458,6 +37543,7 @@ func _scenario_soccer_goal_banner_names_scorer() -> Array[String]:
 	await _rc_close_241(mirror_rig)
 	await _teardown(rig["stage"])
 	return failures
+
 func _scenario_soccer_top_scorer_award_and_goal_credit() -> Array[String]:
 	var failures: Array[String] = []
 	var stats: RefCounted = MatchStatsScript.new()
@@ -38121,6 +38207,7 @@ func _scenario_ctf_clock_gives_leader_the_win() -> Array[String]:
 		failures.append("a clear leader went to overtime")
 	await _teardown(rig["stage"])
 	return failures
+
 ## A level score at the clock plays the shared Sudden Death in place, as Stock's tie does (#1013).
 func _scenario_ctf_level_at_time_goes_to_sudden_death() -> Array[String]:
 	var failures: Array[String] = []
@@ -38155,6 +38242,7 @@ func _scenario_ctf_level_at_time_goes_to_sudden_death() -> Array[String]:
 		failures.append("one team's last fighter going down in overtime did not decide the round")
 	await _teardown(rig["stage"])
 	return failures
+
 ## A knocked-out carrier drops the flag where they fell and is back in about 1.5 s
 ## with spawn protection; the round goes on while a team is briefly empty.
 func _scenario_ctf_a_ko_drops_the_flag_and_respawns_the_player() -> Array[String]:
@@ -52547,6 +52635,7 @@ func _scenario_edge_arrows_switch_off_draws_none() -> Array[String]:
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
+
 ## Issue #875: with Player numbers on, an edge arrow also shows its fighter's seat number (after the
 ## team letter in Teams), inside the screen; off, no number.
 func _scenario_edge_arrow_seat_numbers_875() -> Array[String]:
@@ -54163,6 +54252,7 @@ func _scenario_stage_title_card_switch_off_shows_none() -> Array[String]:
 	sfx.persist_settings = was["persist"]
 	_scenario_completed = true
 	return failures
+
 func _scenario_match_point_plate_switch_off_shows_none() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = _sfx()
@@ -54309,6 +54399,7 @@ func _scenario_match_point_skipped_when_target_is_1_829() -> Array[String]:
 		await _teardown(loop["stage"], false)
 	_scenario_completed = true
 	return failures
+
 ## #751: Settings > More options > Text size (Normal / Large / Larger = 1.0 / 1.2 / 1.4x)
 ## scales the theme's font sizes and the code-set font sizes of every screen, leaves
 ## the world-space name tags to their own option, round-trips through the settings
@@ -54386,6 +54477,7 @@ func _scenario_text_size_setting_751() -> Array[String]:
 		ui.toggle_panel()
 	_scenario_completed = true
 	return failures
+
 ## #751 auto-fit: at Large and Larger every screen steps its own text down until nothing sticks
 ## out of its parent or gets cut off, and is honoured wherever there is room. Checked on a
 ## synthetic screen (too wide at the chosen size, a roomy one, and back to Normal) and on the
@@ -54443,6 +54535,7 @@ func _scenario_text_size_auto_fit_751() -> Array[String]:
 	get_root().size = original
 	await _teardown(rig["main"])
 	return failures
+
 ## Waits until no visible screen has changed its fit factor for a while.
 func _text_fit_settle_751(sfx: Node) -> void:
 	var last: Dictionary = {}
@@ -54456,6 +54549,7 @@ func _text_fit_settle_751(sfx: Node) -> void:
 		last = now
 		if calm >= 25:
 			return
+
 ## A screen too wide at the chosen size steps down to fit; a roomy one is honoured; Normal restores both.
 func _text_fit_synthetic_751(sfx: Node, fit_script: GDScript) -> Array[String]:
 	var failures: Array[String] = []
@@ -54526,6 +54620,7 @@ func _launch_game_counts_797() -> Dictionary:
 	var languages: int = preload("res://scripts/Languages.gd").codes().size()
 	var players: int = preload("res://scripts/Palette.gd").PLAYERS.size()
 	return {"stages": stage_files, "weapons": weapons, "languages": languages, "players": players}
+
 ## Problems in one launch doc: every `<number> <noun>` pair naming stages,
 ## weapons, languages or players (digits or English number words, in any of
 ## the store page's languages) whose number is not in `allowed[noun]`. Each
@@ -54550,17 +54645,20 @@ func _launch_copy_problems_797(label: String, text: String, allowed: Dictionary)
 				if not (allowed[noun] as Array).has(quoted):
 					problems.append("%s:%d: quotes %d %s, the game has %s" % [label, i + 1, quoted, noun, allowed[noun]])
 	return problems
+
 func _launch_copy_files_797() -> Dictionary:
 	return {
 		"site/index.html": "res://site/index.html",
 		"docs/launch/store-page.md": "res://docs/launch/store-page.md",
 		"docs/launch/store-page-l10n.md": "res://docs/launch/store-page-l10n.md",
 	}
+
 func _launch_allowed_counts_797(label: String, counts: Dictionary) -> Dictionary:
 	var languages: Array = [counts["languages"]]
 	if label.ends_with("store-page-l10n.md"):
 		languages.append(int(counts["languages"]) - 1)  # "the 8 shipped languages": every language but English
 	return {"stages": [counts["stages"]], "weapons": [counts["weapons"]], "languages": languages, "players": [counts["players"]]}
+
 func _scenario_launch_copy_counts_match_the_game_797() -> Array[String]:
 	var failures: Array[String] = []
 	var counts: Dictionary = _launch_game_counts_797()
@@ -54582,6 +54680,7 @@ func _scenario_launch_copy_counts_match_the_game_797() -> Array[String]:
 		failures.append("store-page-l10n.md has %d translated sections, the game has %d languages besides English" % [l10n_sections, int(counts["languages"]) - 1])
 	_scenario_completed = true
 	return failures
+
 func _scenario_launch_copy_count_check_catches_a_wrong_count_797() -> Array[String]:
 	var failures: Array[String] = []
 	var counts: Dictionary = _launch_game_counts_797()
@@ -54616,6 +54715,7 @@ func _scenario_launch_copy_count_check_catches_a_wrong_count_797() -> Array[Stri
 ## so the coverage check leaves them to the system fonts. Named one by one so a
 ## new symbol in a CJK string still fails the check.
 const CJK_UNCOVERED_EXEMPT_849: String = "▸"
+
 ## One line per language listing the characters of `texts[code]` (an Array of
 ## strings) that the language's bundled subset has no glyph for. Control
 ## characters and CJK_UNCOVERED_EXEMPT_849 are skipped.
@@ -54638,6 +54738,7 @@ func _cjk_missing_chars_849(texts: Dictionary) -> Array[String]:
 		if not missing.is_empty():
 			out.append("%s: %s" % [code, missing])
 	return out
+
 ## The strings.csv column of every CJK_SUBSETS language plus that language's
 ## own name in the Language picker, as {code: Array of strings}.
 func _cjk_translated_strings_849() -> Dictionary:
@@ -54659,6 +54760,7 @@ func _cjk_translated_strings_849() -> Dictionary:
 		if texts.has(option["code"]):
 			(texts[option["code"]] as Array).append(str(option["name"]))
 	return texts
+
 func _scenario_cjk_subsets_cover_every_translated_character_849() -> Array[String]:
 	var failures: Array[String] = []
 	var texts: Dictionary = _cjk_translated_strings_849()
@@ -54691,6 +54793,7 @@ func _scenario_cjk_subsets_cover_every_translated_character_849() -> Array[Strin
 					failures.append("export filter '%s' excludes %s" % [pattern.strip_edges(), path])
 	_scenario_completed = true
 	return failures
+
 func _scenario_cjk_subset_check_reports_an_uncovered_character_849() -> Array[String]:
 	var failures: Array[String] = []
 	# 龘 (U+9F98) is in no translated string, so no subset carries it; the other
@@ -54704,6 +54807,7 @@ func _scenario_cjk_subset_check_reports_an_uncovered_character_849() -> Array[St
 		failures.append("a symbol off the exempt list must still be reported, got %s" % [found])
 	_scenario_completed = true
 	return failures
+
 func _scenario_cjk_fallback_chain_starts_with_bundled_subset_849() -> Array[String]:
 	var failures: Array[String] = []
 	var languages: GDScript = load("res://scripts/Languages.gd")
@@ -54739,6 +54843,7 @@ func _scenario_cjk_fallback_chain_starts_with_bundled_subset_849() -> Array[Stri
 		file.fallbacks = saved_fallbacks[file] # later scenarios measure text with these fonts
 	_scenario_completed = true
 	return failures
+
 ## The Language picker's popup lists 简体中文, 日本語 and 한국어 in every locale,
 ## including the ones whose UI fonts have no CJK chain, so its font keeps the
 ## locale's own chain first and then falls back to all three bundled subsets.
@@ -54777,6 +54882,7 @@ func _scenario_language_picker_draws_cjk_names_in_every_locale_849() -> Array[St
 					failures.append("%s picker font cannot draw '%s' in %s" % [code, char(c), name])
 	_scenario_completed = true
 	return failures
+
 func _controller_offline_problems_798(label: String, text: String) -> Array[String]:
 	# Static check: names every line of an HTML page that LOADS something from a literal remote host.
 	# A remote host is http(s)/ws(s) or protocol-relative ("//host"). Plain <a href> links are navigation, allowed.
@@ -54807,6 +54913,7 @@ func _controller_offline_problems_798(label: String, text: String) -> Array[Stri
 			seen[key] = true
 			found.append("%s:%d: loads %s from the internet" % [label, line_no, rule[0]])
 	return found
+
 func _scenario_controller_page_loads_nothing_from_the_internet_798() -> Array[String]:
 	var failures: Array[String] = []
 	var text: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
@@ -54817,6 +54924,7 @@ func _scenario_controller_page_loads_nothing_from_the_internet_798() -> Array[St
 	failures.append_array(_controller_offline_problems_798("controller/index.html", text))
 	_scenario_completed = true
 	return failures
+
 func _scenario_controller_offline_check_catches_a_cdn_reference_798() -> Array[String]:
 	var failures: Array[String] = []
 	var allowed: String = "\n".join([
@@ -54911,6 +55019,7 @@ func _site_page_problems_799(label: String, text: String, page_dir: String) -> A
 				if need_re.search(tag) == null:
 					found.append("%s:%d: <img> has no %s attribute" % [label, line_no, need])
 	return found
+
 func _scenario_site_pages_have_no_dead_links_or_bare_images_799() -> Array[String]:
 	var failures: Array[String] = []
 	for page: String in ["index.html", "press.html"]:
@@ -54921,6 +55030,7 @@ func _scenario_site_pages_have_no_dead_links_or_bare_images_799() -> Array[Strin
 		failures.append_array(_site_page_problems_799("site/" + page, text, "res://site"))
 	_scenario_completed = true
 	return failures
+
 func _scenario_site_link_check_catches_a_missing_file_and_a_missing_alt_799() -> Array[String]:
 	var failures: Array[String] = []
 	var good: String = "\n".join([
@@ -54961,6 +55071,7 @@ func _scenario_site_link_check_catches_a_missing_file_and_a_missing_alt_799() ->
 		failures.append("the real page with a bare broken image prepended gave %d problems, wanted 4 on line 1: %s" % [found.size(), found])
 	_scenario_completed = true
 	return failures
+
 ## Fixture for the #826 idle-hint scenarios: `count` players under a bare NameTags
 ## (no RoundManager parent, so the scenario feeds the hint its own round state).
 func _idle_hint_fixture(count: int) -> Dictionary:
@@ -54981,11 +55092,13 @@ func _idle_hint_fixture(count: int) -> Dictionary:
 	stage.add_child(tags)
 	tags.build()
 	return {"stage": stage, "players": players, "hint": tags.idle_hint(), "tags": tags}
+
 ## Steps `frames` physics frames, ticking the hint each one with `ctx`.
 func _idle_hint_run(hint: Node2D, ctx: Dictionary, frames: int) -> void:
 	for _i in frames:
 		await physics_frame
 		hint.tick(ctx)
+
 func _scenario_idle_fighter_gets_drag_hint_after_six_seconds_826() -> Array[String]:
 	var failures: Array[String] = []
 	var fx: Dictionary = _idle_hint_fixture(3)
@@ -55025,6 +55138,7 @@ func _scenario_idle_fighter_gets_drag_hint_after_six_seconds_826() -> Array[Stri
 		failures.append("slot 0's hint came back in the same match")
 	await _teardown(fx["stage"])
 	return failures
+
 func _scenario_idle_hint_skips_bots_ghosts_and_later_rounds_826() -> Array[String]:
 	var failures: Array[String] = []
 	var fx: Dictionary = _idle_hint_fixture(5)
@@ -55148,6 +55262,7 @@ func _scenario_copy_code_button_hidden_couch_solo_streamer_863() -> Array[String
 		failures.append("a hidden Copy code still wrote %s to the clipboard" % [copied])
 	await _kind_close_435(rig)
 	return failures
+
 ## Issue #863 review fix: the Copied timer fires refresh() on the controls after the lobby scene was left;
 ## refresh() must not read the freed screen (an invalid-access script error in the log before the guard).
 func _scenario_copy_code_refresh_after_lobby_closed_863() -> Array[String]:
@@ -55173,6 +55288,7 @@ func _scenario_copy_code_refresh_after_lobby_closed_863() -> Array[String]:
 	host.refresh()
 	_scenario_completed = true
 	return failures
+
 ## Pixel size [w, h] of a PNG or JPEG from its bytes, or [] when the bytes are neither (#864).
 func _image_size_864(b: PackedByteArray) -> Array:
 	if b.size() >= 24 and b[0] == 0x89 and b[1] == 0x50 and b[2] == 0x4E and b[3] == 0x47:
@@ -55198,6 +55314,7 @@ func _image_size_864(b: PackedByteArray) -> Array:
 				return [(b[i + 7] << 8) | b[i + 8], (b[i + 5] << 8) | b[i + 6]]
 			i += 2 + seg_len
 	return []
+
 ## Static check of one site page's social-preview meta tags (#864): og:title/og:description present, og:image and
 ## twitter:image equal, the image resolves onto a site/ file by path suffix, is a PNG or JPEG, and its real pixel size
 ## equals og:image:width/height. `root` is the folder the "site/..." suffix is resolved against. Names file:line.
@@ -55258,6 +55375,7 @@ func _social_preview_problems_864(label: String, text: String, root: String) -> 
 		if not declared.is_valid_int() or int(declared) != int(size[int(pair[1])]):
 			found.append("%s:%d: %s declares %s but %s is really %d px %s" % [label, int(metas[tag_name][1]), tag_name, declared, rel, int(size[int(pair[1])]), str(pair[2])])
 	return found
+
 func _scenario_site_social_preview_images_match_declared_size_864() -> Array[String]:
 	var failures: Array[String] = []
 	for page: String in ["index.html", "press.html"]:
@@ -55268,6 +55386,7 @@ func _scenario_site_social_preview_images_match_declared_size_864() -> Array[Str
 		failures.append_array(_social_preview_problems_864("site/" + page, text, "res://"))
 	_scenario_completed = true
 	return failures
+
 func _scenario_site_social_preview_check_catches_a_missing_file_and_a_size_mismatch_864() -> Array[String]:
 	var failures: Array[String] = []
 	var base: String = "https://example.github.io/pickfight/site/img/"
@@ -55321,7 +55440,9 @@ func _scenario_site_social_preview_check_catches_a_missing_file_and_a_size_misma
 		failures.append("a GIF header read as a PNG or JPEG")
 	_scenario_completed = true
 	return failures
+
 const CosmeticsPickerScript865 := preload("res://scripts/CosmeticsPicker.gd")
+
 ## #865: CosmeticsPicker.random_pick is a clean pick, never wears a colour another
 ## seat holds, and is repeatable for a seed.
 func _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865() -> Array[String]:
@@ -55389,6 +55510,7 @@ func _scenario_surprise_me_random_pick_is_clean_free_and_repeatable_865() -> Arr
 		failures.append("with no palette the colour was %s, wanted -1" % [no_palette["color"]])
 	_scenario_completed = true
 	return failures
+
 ## #865: the phone page has the Surprise me button in its lobby panel, labelled in
 ## all nine languages, and its handler sends only the existing hat, eyes and color
 ## frames; the page still loads nothing from the internet (#798).
@@ -56970,6 +57092,7 @@ func _scenario_night_glow_rehung_after_other_night_exits_refactor_audio() -> Arr
 	await _teardown(holder)
 	return failures
 	return failures
+
 ## Issue #992: the lobby's Kick button is two-step. One press only arms it
 ## ("Tap again to kick", 3 s); a second inside the window kicks; after 3 s a
 ## press only re-arms; arming one card disarms any other armed card.
@@ -57022,6 +57145,7 @@ func _scenario_lobby_kick_needs_second_press() -> Array[String]:
 		failures.append("kicking B also removed A: roster %s" % [server.claimed_slots()])
 	await _rc_close_241(rig)
 	return failures
+
 ## Issue #907: the PC join screen remembers the last room it got a seat in and offers it as a one-tap "Last room: CODE" button; a dead room (bad_room, host_left) is forgotten.
 func _scenario_join_screen_remembers_last_room_code() -> Array[String]:
 	var failures: Array[String] = []
@@ -57231,6 +57355,7 @@ func _scenario_stage_platform_geometry_unchanged_refactor_platforms() -> Array[S
 		failures.append("measured table written to %s" % ProjectSettings.globalize_path(STAGE_GEOMETRY_ACTUAL_REFACTOR_PLATFORMS))
 	_scenario_completed = true
 	return failures
+
 func _stage_geometry_lines_refactor_platforms(stage_name: String) -> PackedStringArray:
 	var out: PackedStringArray = []
 	var instance: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate()
@@ -57284,6 +57409,7 @@ func _stage_geometry_lines_refactor_platforms(stage_name: String) -> PackedStrin
 	holder.queue_free()
 	await process_frame
 	return out
+
 func _geometry_path_refactor_platforms(root: Node, node: Node) -> String:
 	var parts: PackedStringArray = []
 	var at: Node = node
@@ -57291,6 +57417,7 @@ func _geometry_path_refactor_platforms(root: Node, node: Node) -> String:
 		parts.insert(0, _geometry_name_refactor_platforms(at))
 		at = at.get_parent()
 	return "/".join(parts)
+
 func _geometry_xform_refactor_platforms(root: Node, node: Node2D) -> Transform2D:
 	var xform: Transform2D = Transform2D.IDENTITY
 	var at: Node = node
@@ -57299,6 +57426,7 @@ func _geometry_xform_refactor_platforms(root: Node, node: Node2D) -> Transform2D
 			xform = (at as Node2D).transform * xform
 		at = at.get_parent()
 	return xform
+
 ## A node's name with the counter of an auto-generated one (`@Polygon2D@354`,
 ## given to children a part builds without naming) dropped: that number
 ## depends on how many nodes the process has made, not on the stage.
@@ -57846,6 +57974,7 @@ func _scenario_remote_client_victory_awards_976() -> Array[String]:
 		failures.append("the victory screen stayed after the host left it")
 	await _rc_close_241(rig)
 	return failures
+
 # --- Issue #976 follow-up: name tags, idle hint, boomstick ring, pickup ring, night ---
 const RemotePuppetScript976 := preload("res://scripts/RemotePuppet.gd")
 const IdleHintScript976 := preload("res://scripts/IdleHint.gd")
@@ -57891,6 +58020,7 @@ func _scenario_stock_last_life_pip_red() -> Array[String]:
 		failures.append("after a loss / a gain slot 1 drew %s and slot 0 %s" % [tags.pip_color(1), tags.pip_color(0)])
 	await _teardown(fx["stage"])
 	return failures
+
 ## Issue #1064: the Online joiner runs the same NameTags.gd with the lives it
 ## receives, so its last-life pip is red too.
 func _scenario_remote_last_life_pip_red_1064() -> Array[String]:
@@ -57911,6 +58041,7 @@ func _scenario_remote_last_life_pip_red_1064() -> Array[String]:
 		failures.append("the joiner's two-life pips drew %s, want the fighter's colour" % [client.effects.name_tags.pip_color(2)])
 	await _rc_close_241(rig)
 	return failures
+
 ## The joiner's name tags are the host's NameTags.gd: name, colour, team
 ## outline, team badge, seat number and Stock pips; MATCH POINT puts its gold
 ## dot on that tag; the puppet draws no name of its own.
@@ -58294,6 +58425,7 @@ func _scenario_online_client_attention_on_countdown() -> Array[String]:
 	_scenario_completed = true
 	return failures
 	return failures
+
 ## #1035: Enter readies and un-readies in the client lobby, like the Ready button.
 ## Ignored with a text field focused or the Esc menu open; the "(Enter)" hint
 ## shows on Ready until a gamepad is the active input; a remote's Ready alone
@@ -58819,6 +58951,7 @@ func _scenario_stage_def_good_and_hostile_1045() -> Array[String]:
 			failures.append("%s: reason '%s' lacks '%s'" % [c[0], r["reason"], c[2]])
 	_scenario_completed = true
 	return failures
+
 ## #1078: Stock names the fighter on their last life and the one who stole a
 ## life, through the kill feed's banner (and so the effect stream the Online
 ## joiner replays); none in overtime, from one life, or for a refused steal.
@@ -58903,6 +59036,7 @@ func _scenario_stock_last_life_and_steal_banners() -> Array[String]:
 		failures.append("a one-life fighter going out logged a banner: %s" % [feed.banner_log])
 	await _stock_finish(rig)
 	return failures
+
 ## #1077: a change of hill holder shows "<name> takes the hill!" in the new
 ## holder's colour through the kill feed's banner path (read from the recorded
 ## effect stream, which is what Online joiners replay); the first take, an
@@ -58985,6 +59119,7 @@ func _scenario_hill_taken_banner_names_holder() -> Array[String]:
 	EffectStreamScript976.set_recording(false)
 	await _teardown(rig["stage"])
 	return failures
+
 ## #1046: StageBuilder rebuilds three built-in stages from hand-written definitions and the
 ## measured terrain matches tools/stage_platform_geometry.txt line for line, tint included.
 ## A definition has no part names, so built parts are Part0.. and are renamed to the table's
@@ -59063,6 +59198,7 @@ func _scenario_stage_builder_rebuilds_stages_from_definitions_1046() -> Array[St
 		tagged["stage"].free()
 	_scenario_completed = true
 	return failures
+
 ## The table's lines for a stage node built at runtime: bodies and KillZone as authored,
 ## then, in the tree under mood 0, the tinted colours. Part0.. become `names` in order.
 func _stage_geometry_lines_1046(stage_name: String, instance: Node2D, names: PackedStringArray) -> PackedStringArray:
@@ -59123,6 +59259,7 @@ func _stage_geometry_lines_1046(stage_name: String, instance: Node2D, names: Pac
 			line = line.replace("Part%d" % i, names[i])
 		out.append(line)
 	return out
+
 ## Issue #1085: Heckler goes to the KO'd fighter whose ghost landed the most Boos on living rivals,
 ## at least 2, no ties. A Boo skipped for spawn protection does not count.
 func _scenario_heckler_award_for_most_landed_boos_1085() -> Array[String]:
@@ -59642,6 +59779,7 @@ func _scenario_pickup_dropped_inside_terrain_rests_on_it_1102() -> Array[String]
 		failures.append("the pickup came to rest at y %.1f, not above the bar's top (y 280)" % pickup.global_position.y)
 	await _teardown(stage)
 	return failures
+
 ## Issue #1095: raising the umbrella overhead plays one umbrella_open; holding
 ## it plays no more; lowering and raising again after the gap plays another;
 ## a pickaxe held overhead and a KO'd fighter stay silent.
@@ -59724,6 +59862,8 @@ func _scenario_koth_kicked_leader_cannot_win_on_clock() -> Array[String]:
 		failures.append("scores are %d/%d, want 0/1" % [rm.score_of(0), rm.score_of(1)])
 	await _teardown(rig["stage"])
 	return failures
+
+
 ## Issue #1103: a dropped pickup resting on a bar falls again, from rest, when
 ## the bar is freed, and comes to rest on the floor below; one that was never
 ## dropped stays where it is.
@@ -59756,6 +59896,8 @@ func _scenario_pickup_refalls_when_platform_removed_1103() -> Array[String]:
 		failures.append("an authored pickup moved")
 	await _teardown(stage)
 	return failures
+
+
 ## #1106: a fighter still waiting on the 4 s respawn timer at the whistle comes
 ## back at once into Sudden Death, and no respawn timer outlives the whistle.
 func _scenario_soccer_overtime_cancels_pending_respawns() -> Array[String]:
@@ -59891,6 +60033,7 @@ func _scenario_background_threads_never_touch_the_tree_1112() -> Array[String]:
 	OS.remove_logger(logger)
 	_scenario_completed = true
 	return failures
+
 ## Issue #1114: a ghost's grab plays pickup_grab, its action-drop plays ghost_drop, both at 0.6
 ## strength; a Boo plays only ghost_boo; a round-end drop plays nothing.
 func _scenario_ghost_pickup_grab_and_drop_play_cues() -> Array[String]:
@@ -59948,6 +60091,7 @@ func _scenario_ghost_pickup_grab_and_drop_play_cues() -> Array[String]:
 		failures.append("a round-end drop played ghost_drop")
 	await _teardown(loop["stage"])
 	return failures
+
 ## Issue #1115: a carrier who drops the flag plays flag_drop once; a dropped flag going
 ## home (the 10 s timeout, a teammate's touch) plays flag_return once; a capture and a
 ## hall change play neither. Online joiners hear the same cues through the Sfx snapshot trailer.
@@ -60008,6 +60152,7 @@ func _scenario_ctf_flag_drop_and_return_play_cues() -> Array[String]:
 		failures.append("the hall change played a flag cue")
 	await _teardown(rig["stage"])
 	return failures
+
 # --- Sound names at call sites (issue #1120) -----------------------------------------
 ## Sfx.play() drops an unknown name with one runtime warning, so a typo in a
 ## literal at a call site ships as a silent missing cue. This reads each .gd
@@ -60026,12 +60171,14 @@ func _sfx_call_site_names_1120(text: String) -> Array:
 		for found: RegExMatch in regex.search_all(lines[i]):
 			out.append([i + 1, found.get_string(1)])
 	return out
+
 func _sfx_call_site_problems_1120(label: String, text: String, sounds: Dictionary) -> Array[String]:
 	var problems: Array[String] = []
 	for hit: Array in _sfx_call_site_names_1120(text):
 		if not sounds.has(StringName(hit[1])) and not sounds.has(hit[1]):
 			problems.append("%s:%d %s" % [label, hit[0], hit[1]])
 	return problems
+
 func _sfx_call_site_files_1120(dir: String) -> Array[String]:
 	var out: Array[String] = []
 	for file: String in DirAccess.get_files_at(dir):
@@ -60040,6 +60187,7 @@ func _sfx_call_site_files_1120(dir: String) -> Array[String]:
 	for sub: String in DirAccess.get_directories_at(dir):
 		out.append_array(_sfx_call_site_files_1120(dir.path_join(sub)))
 	return out
+
 func _scenario_sfx_call_sites_name_real_sounds_1120() -> Array[String]:
 	var failures: Array[String] = []
 	var sounds: Dictionary = (load("res://scripts/Sfx.gd") as GDScript).SOUNDS
@@ -60055,6 +60203,7 @@ func _scenario_sfx_call_sites_name_real_sounds_1120() -> Array[String]:
 		failures.append("the checker found only %d literal sound names under scripts/, expected dozens" % checked)
 	_scenario_completed = true
 	return failures
+
 func _scenario_sfx_call_site_check_flags_bad_fixture_1120() -> Array[String]:
 	var failures: Array[String] = []
 	var sounds: Dictionary = {&"hit": 1, &"jump": 2}
@@ -60069,6 +60218,7 @@ func _scenario_sfx_call_site_check_flags_bad_fixture_1120() -> Array[String]:
 		failures.append("the bad fixture gave %s, wanted %s" % [found, wanted])
 	_scenario_completed = true
 	return failures
+
 ## #1127: an Online client's lobby is the host's own LobbyScreen (cards, room code,
 ## popups), not a separate panel: the seats are LobbyPlayerCards with the looks
 ## frame's hat and eyes, the own card reads "(you)" and opens Your look, the join
@@ -60192,6 +60342,7 @@ func _scenario_play_of_round_frames_are_sharp_and_smooth_1128() -> Array[String]
 	rb.queue_free()
 	_scenario_completed = true
 	return failures
+
 ## #1126: every hat and eyes button of the Your look picker carries a drawn icon
 ## (the game's own preview render), and it redraws when the colour changes.
 func _scenario_look_picker_buttons_show_icons() -> Array[String]:
@@ -60329,6 +60480,7 @@ func _scenario_agent_scripts_stay_portable() -> Array[String]:
 		failures.append("a script with no shebang gave %s" % [no_shebang])
 	_scenario_completed = true
 	return failures
+
 ## Issue #1112, the real cause: the signal 11 was on the audio mix thread
 ## (AudioDriverDummy::thread_func -> AudioServer::_mix_step copying a
 ## playback's bus details, crashing in the StringName copy), not a game
@@ -60420,6 +60572,7 @@ func _scenario_audio_mix_thread_waits_out_bus_swaps_1112() -> Array[String]:
 	DirAccess.remove_absolute(tmp)
 	_scenario_completed = true
 	return failures
+
 ## #1132: an Online joiner fed a lobby frame. Returns the client, in its lobby.
 func _joiner_1132(frame: Dictionary) -> Node:
 	var client: Node = RemoteClientScene241.instantiate()
@@ -60433,6 +60586,7 @@ func _joiner_1132(frame: Dictionary) -> Node:
 	client._on_host_text(JSON.stringify(frame))
 	await process_frame
 	return client
+
 ## The lobby frame exactly as the host builds it for Classic: the round's mode is
 ## "" but RoundManager keys `stages_by_mode` and `rules.modes` "classic".
 func _classic_frame_1132(players: Array) -> Dictionary:
@@ -60441,6 +60595,7 @@ func _classic_frame_1132(players: Array) -> Dictionary:
 	state["rules"] = {"modifiers": ["x", "y", "z", "night"], "modes": {"classic": {"on": ["x", "y"], "locked": ["night"]}}}
 	state["players"] = players
 	return state
+
 ## #1132: the joiner reads Classic's stage count and modifiers from the "classic"
 ## key the host sends, so its summary and status line match the host's, not "0 stages".
 func _scenario_online_joiner_classic_stage_count_matches_host_1132() -> Array[String]:
@@ -60467,6 +60622,7 @@ func _scenario_online_joiner_classic_stage_count_matches_host_1132() -> Array[St
 	await process_frame
 	_scenario_completed = true
 	return failures
+
 ## #1132: the joiner's player cards take each seat's colour from the frame (the
 ## host's `_slot_color`), as the host's cards do, instead of all white.
 func _scenario_online_joiner_cards_use_slot_colours_1132() -> Array[String]:
@@ -60496,17 +60652,20 @@ func _scenario_online_joiner_cards_use_slot_colours_1132() -> Array[String]:
 	await process_frame
 	_scenario_completed = true
 	return failures
+
 func _key_1132(code: Key) -> InputEventKey:
 	var ev := InputEventKey.new()
 	ev.physical_keycode = code
 	ev.keycode = code
 	ev.pressed = true
 	return ev
+
 func _pad_1132(button: JoyButton) -> InputEventJoypadButton:
 	var ev := InputEventJoypadButton.new()
 	ev.button_index = button
 	ev.pressed = true
 	return ev
+
 ## #1132: on the joiner an open popup (How to play, Your look) owns the keys, as
 ## on the host: Esc and pad B close it and never open the Esc menu; Enter and pad
 ## A / Start act inside it and never toggle Ready. With no popup, Esc still opens
@@ -60562,7 +60721,7 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 	if client._ready_button.button_pressed != before_ready:
 		failures.append("Enter inside How to play toggled Ready")
 	# A pad user closing a popup gets focus back on the button that opened it, so the D-pad still works.
-	client._pad_active = true
+	client._input(_pad_1132(JOY_BUTTON_X)) # a pad becomes the active input
 	for which: String in ["look", "help"]:
 		screen.set_popup(which)
 		screen.focus_popup()
@@ -60570,7 +60729,7 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 		var opener: Control = client._lobby.look_button if which == "look" else client._lobby.help_button
 		if screen.popup_open() != "" or not opener.has_focus():
 			failures.append("pad B on %s left focus on '%s', want its opener" % [which, client.get_viewport().gui_get_focus_owner()])
-	client._pad_active = false
+	client._input(_key_1132(KEY_SHIFT)) # the keyboard takes over again
 	# With no popup, Esc opens the menu and Enter readies as before.
 	client._input(_key_1132(KEY_ESCAPE))
 	if not client.menu_open:
@@ -60586,7 +60745,62 @@ func _scenario_online_joiner_popup_owns_esc_enter_pad_1132() -> Array[String]:
 	await process_frame
 	_scenario_completed = true
 	return failures
-
+## #1166 review: on the joiner a popup must not swallow releases. A Space, click or
+## shoulder held as the popup opens and let go inside it is not still held after;
+## Your look / How to play take focus only while a pad is the active input (as on
+## the host), so a click then Space does not reopen a popup; and after pad B closes
+## a popup (focus back on its opener) pad A still readies, as #518 says.
+func _scenario_online_joiner_popup_lets_held_input_go_1132() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = await _joiner_1132(_classic_frame_1132([{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00"}, {"slot": 1, "ready": false, "name": "Me", "color": "56b4e9"}]))
+	var screen: Node = client._lobby.screen
+	# Held into a popup, let go inside it.
+	var space := _key_1132(KEY_SPACE)
+	client._input(space)
+	var shoulder := _pad_1132(JOY_BUTTON_RIGHT_SHOULDER)
+	client._input(shoulder)
+	screen.set_popup("help")
+	var space_up := _key_1132(KEY_SPACE)
+	space_up.pressed = false
+	client._input(space_up)
+	var shoulder_up := _pad_1132(JOY_BUTTON_RIGHT_SHOULDER)
+	shoulder_up.pressed = false
+	client._input(shoulder_up)
+	if client._action_down.has(-KEY_SPACE):
+		failures.append("a Space let go inside the popup is still held")
+	if client._pad_shoulder_held:
+		failures.append("a shoulder let go inside the popup is still held")
+	screen.set_popup("")
+	# Mouse / keyboard: the popup buttons take no focus, so Space cannot reopen one.
+	client._input(_key_1132(KEY_SHIFT))
+	if client._lobby.look_button.focus_mode != Control.FOCUS_NONE or client._lobby.help_button.focus_mode != Control.FOCUS_NONE:
+		failures.append("Your look / How to play are focusable with no pad active")
+	client._lobby.help_button.grab_focus()
+	if client._lobby.help_button.has_focus():
+		failures.append("How to play took focus with no pad active")
+	# Pad: B closes back onto the opener, then A readies (#518), not reopens.
+	client._input(_pad_1132(JOY_BUTTON_X))
+	if client._lobby.look_button.focus_mode != Control.FOCUS_ALL:
+		failures.append("Your look is not focusable with a pad active")
+	screen.set_popup("look")
+	screen.focus_popup()
+	client._input(_pad_1132(JOY_BUTTON_B))
+	if not client._lobby.look_button.has_focus():
+		failures.append("pad B did not give focus back to Your look")
+	var was: bool = client._ready_button.button_pressed
+	client._input(_pad_1132(JOY_BUTTON_A))
+	if client._ready_button.button_pressed == was:
+		failures.append("pad A after B did not toggle Ready")
+	if screen.popup_open() != "":
+		failures.append("pad A after B reopened '%s'" % screen.popup_open())
+	# Back to the keyboard: the buttons let go of focus.
+	client._input(_key_1132(KEY_SHIFT))
+	if client._lobby.look_button.has_focus():
+		failures.append("Your look kept focus after the keyboard took over")
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
 ## #1165: Music assigns a voice's volume_db only when the level changes.
 func _scenario_music_volume_written_only_on_change_1165() -> Array[String]:
 	var failures: Array[String] = []

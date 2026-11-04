@@ -65,10 +65,10 @@ func build(parent: Node, copy_pressed: Callable) -> void:
 	career_button.focus_mode = Control.FOCUS_NONE
 	career_button.add_theme_color_override("font_color", Color("8F96BD"))
 	right.add_child(career_button)
-	look_button = ScreenKitScript.themed_button(screen.tr("PICKER_TITLE"), UiThemeScript.SKY_BUTTON, "look", true) # a pad reaches it and gets focus back on close (#1132)
+	look_button = ScreenKitScript.themed_button(screen.tr("PICKER_TITLE"), UiThemeScript.SKY_BUTTON, "look")
 	look_button.pressed.connect(func() -> void: screen.set_popup("look"))
 	right.add_child(look_button)
-	help_button = ScreenKitScript.themed_button(screen.tr("HOW_TO_PLAY_BUTTON"), UiThemeScript.PINK_BUTTON, "how_to_play", true)
+	help_button = ScreenKitScript.themed_button(screen.tr("HOW_TO_PLAY_BUTTON"), UiThemeScript.PINK_BUTTON, "how_to_play")
 	help_button.pressed.connect(func() -> void: screen.set_popup("help"))
 	right.add_child(help_button)
 	host_row = HBoxContainer.new()
@@ -101,6 +101,15 @@ func build(parent: Node, copy_pressed: Callable) -> void:
 
 signal step_target(delta: int)
 signal toggle_mode
+
+## Your look and How to play take focus only while a gamepad is the active
+## input, as the host's buttons do only under its pad menu (HostControls.set_pad_menu),
+## so a mouse click leaves no focus for Space (ui_accept) to reopen a popup with (#1132).
+func set_pad_focus(on: bool) -> void:
+	for button: Button in [look_button, help_button]:
+		button.focus_mode = Control.FOCUS_ALL if on else Control.FOCUS_NONE
+		if not on and button.has_focus():
+			button.release_focus()
 
 ## The button that opens the open popup, which gets focus back when a pad user closes it (#1132).
 func popup_opener() -> Control:
