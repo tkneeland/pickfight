@@ -163,7 +163,7 @@ static func mode_key(mode_id: String) -> String:
 
 ## The ids the Stages & Rules screens (PC and phone) edit: Classic as "classic"
 ## (which `mode_key` also reads from the round's ""), plus the modes with lists.
-const KNOWN_MODES: PackedStringArray = ["classic", "king_of_the_hill", "sudden_death", "hot_potato", "stock", "soccer", "capture_the_flag"]
+const KNOWN_MODES: PackedStringArray = ["classic", "king_of_the_hill", "sudden_death", "stock", "soccer", "capture_the_flag"]
 
 static func is_known_mode(mode_id: String) -> bool:
 	return KNOWN_MODES.has(mode_key(mode_id))
