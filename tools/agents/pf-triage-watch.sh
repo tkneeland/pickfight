@@ -5,7 +5,7 @@
 #   MYTICKET <n>       ready-for-agent ticket assigned to this account and no worktree in progress
 #   FEATURES? PR <n>   (triagemaster only) open PR changes scripts/ or controller/ without docs/FEATURES.md (once per PR)
 #   PEER_BEACON        a WATCH_PEERS account's USAGE beacon (private channel, msg-inbox.log) became fresh (once)
-#   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than pf_worker_target (day DAY_AGENTS, night
+#   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than pf_worker_target (ticket-maker off: only if a ready ticket is startable) (day DAY_AGENTS, night
 #                      NIGHT_AGENTS, 1 past FIVE_H_SLOW_USED, 0 past FIVE_H_STOP_USED or the weekly stop)
 #   AUSTIN_QUEUE_LOW <n>  (triagemaster only, ticket-maker on) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
 #   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
@@ -71,7 +71,16 @@ while true; do
     for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | .number'); do
       pf_ticket_in_progress "$n" "$pr_tickets" && active=$((active+1))
     done
-    if [ "$active" -lt "$min" ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
+    # ticket-maker off (rule 11): fewer workers is expected, so wake only if a ready ticket I could start exists
+    # (assigned to me or unassigned, not already in progress)
+    startable=1
+    if [ "$active" -lt "$min" ] && [ "$(bash "$(dirname "$0")/pf-ticketmaker.sh")" = off ]; then
+      startable=0
+      for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.labels[]; .name=="ready-for-agent")) | select((.assignees|length)==0 or any(.assignees[]; .login==$me)) | .number'); do
+        pf_ticket_in_progress "$n" "$pr_tickets" || { startable=1; break; }
+      done
+    fi
+    if [ "$active" -lt "$min" ] && [ "$startable" = 1 ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
     if pf_is_triagemaster && pf_budget_ok && [ "$(bash "$(dirname "$0")/pf-ticketmaker.sh")" = on ]; then
       # no refill while the ticket-maker is off (playtest phase, autotriage.md rule 11)
       # peers' queues: dev tickets assigned to a peer (meta tickets excluded)
