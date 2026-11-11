@@ -1324,6 +1324,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_felt_per_match_and_respawn_1195",
 	"online_rebound_slot_merges_ping_stats_1195",
 	"online_relay_leg_goes_stale_1195",
+	"online_slot_taken_by_other_joiner_keeps_share_1195",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4397,6 +4398,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_rebound_slot_merges_ping_stats_1195()
 		"online_relay_leg_goes_stale_1195":
 			return await _scenario_online_relay_leg_goes_stale_1195()
+		"online_slot_taken_by_other_joiner_keeps_share_1195":
+			return await _scenario_online_slot_taken_by_other_joiner_keeps_share_1195()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -62350,32 +62353,44 @@ func _scenario_online_replayed_pong_one_sample_1195() -> Array[String]:
 func _scenario_remote_client_felt_per_match_and_respawn_1195() -> Array[String]:
 	var failures: Array[String] = []
 	var client: Node = RemoteClientScript241.new()
-	var measure: Callable = func(jump: bool, recentre: bool) -> void:
+	# mode: "respawn" (the puppet's state changes), "recentre" (the host's message),
+	# "far" (a lag spike: the body jumps but nothing respawned), "turn" (plain).
+	var measure: Callable = func(mode: String) -> void:
 		client._felt_rest_since_msec = Time.get_ticks_msec() - 1000
 		client._felt_last_sent = Vector2.ZERO
 		client._felt_note_drawn(Vector2(100, 100), Vector2(120, 100))
 		client._felt_note_sent(Vector2(1, 0)) # changed after a rest: a probe starts
-		if recentre:
+		if mode == "recentre":
 			client._felt_probe_msec = -1 # what the host's recentre message does
-		if jump:
-			client._felt_note_drawn(Vector2(900, 100), Vector2(900, 80)) # respawned far away, arm turned
+		if mode == "respawn":
+			client._felt_note_drawn(Vector2(900, 100), Vector2(900, 80), 2) # state changed, arm turned
+		elif mode == "far":
+			client._felt_note_drawn(Vector2(900, 100), Vector2(900, 80)) # far away, same state
 		else:
 			client._felt_note_drawn(Vector2(101, 100), Vector2(101, 80)) # the arm turned in place
-	measure.call(true, false)
+	measure.call("respawn")
 	if client.felt_msec() != -1:
-		failures.append("a probe across a respawn jump was measured (felt %d)" % client.felt_msec())
-	measure.call(false, true)
+		failures.append("a probe across a respawn was measured (felt %d)" % client.felt_msec())
+	measure.call("recentre")
 	if client.felt_msec() != -1:
 		failures.append("a probe dropped by a recentre was measured (felt %d)" % client.felt_msec())
-	measure.call(false, false)
+	measure.call("far")
+	if client.felt_msec() < 0:
+		failures.append("a lag-spike probe (body far, same state) was discarded")
+	client._felt_reset()
+	measure.call("turn")
 	if client.felt_msec() < 0:
 		failures.append("an ordinary turn in place was not measured")
-	# A new match starts from nothing; the match's own phases do not reset it.
-	client._felt_on_phase("playing", "round_end")
-	client._felt_on_phase("round_end", "playing")
+	# A new match (the host's match serial) starts from nothing; the same serial does not.
+	client._felt_on_match(5)
+	client._felt_on_match(5)
+	if client.felt_msec() != -1:
+		failures.append("the first serial seen did not start the felt delay afresh")
+	measure.call("turn")
+	client._felt_on_match(5)
 	if client.felt_msec() < 0:
-		failures.append("round_end -> playing reset the match's felt delay")
-	client._felt_on_phase("countdown", "playing")
+		failures.append("an unchanged match serial reset the felt delay")
+	client._felt_on_match(6)
 	if client.felt_msec() != -1 or client.felt_last_msec != -1:
 		failures.append("a new match kept the last match's felt delay (%d)" % client.felt_msec())
 	client.free()
@@ -62436,5 +62451,47 @@ func _scenario_online_relay_leg_goes_stale_1195() -> Array[String]:
 	server._on_link_state_changed("reconnecting")
 	if server.relay_rtt_msec != -1:
 		failures.append("the host leg survived the link leaving online: %d" % server.relay_rtt_msec)
+	await _rc_close_241(rig)
+	return failures
+
+## A non-sharing player leaves and a sharing one takes the slot: two entries, and the telemetry record
+## carries only the sharer's.
+func _scenario_online_slot_taken_by_other_joiner_keeps_share_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "other-joiner-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	for i in 2:
+		await _ping_answer_1195(rig, remote, 0, {"felt": 80, "share": false}) # player A, not sharing
+	server._keep_departed_ping_stats(slot) # A leaves
+	server._slot_client_id[slot] = "another-joiner-id" # B takes the slot
+	await _ping_answer_1195(rig, remote, 0, {"felt": 30, "share": true})
+	var listed: Array = server.match_ping_stats()
+	if listed.size() != 2:
+		failures.append("two joiners in one slot gave %s, expected two entries" % [listed])
+	else:
+		var shares: Array = [listed[0].get("share"), listed[1].get("share")]
+		if shares != [false, true] or int(listed[0].get("n", 0)) != 2 or int(listed[1].get("n", 0)) != 1:
+			failures.append("entries %s: expected A (n=2, not sharing) then B (n=1, sharing)" % [listed])
+		var stats: RefCounted = MatchStatsScript.new()
+		stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+		for entry: Dictionary in listed:
+			var e: Dictionary = entry.duplicate()
+			e["host_leg"] = 10
+			stats.ping.append(e)
+		var record: Dictionary = StatsSenderScript372.build_record(stats, "classic", ["Flatlands"], "ffa", 60, [], true, 1)
+		var sent: Variant = record.get("ping")
+		if not sent is Array or (sent as Array).size() != 1 or int(sent[0].get("n", 0)) != 1 or int(sent[0].get("felt", 0)) != 30:
+			failures.append("the telemetry ping list is %s, expected only the sharing joiner (n=1, felt 30)" % [sent])
 	await _rc_close_241(rig)
 	return failures

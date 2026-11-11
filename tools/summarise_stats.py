@@ -88,17 +88,21 @@ PING_FIELDS = ("avg", "p95", "max", "felt", "host_leg")
 
 
 def ping_summary(records):
-    """Issue #1195: each remote seat's ping fields over every record with a "ping"
-    list; -1 (not measured) values are left out. avg, felt and host_leg are means
+    """Issue #1195: the ping fields of each remote seat over every record with a
+    "ping" list; -1 (not measured) values are left out. avg and p95 are means
     weighted by the seat's sample count "n" (an entry without a usable n counts
-    once); p95 is the n-weighted mean of the seats' p95 (not a true pooled p95);
-    max is the largest max. Returns (seats, {field: value or None})."""
-    values = defaultdict(list)
+    once; the p95 mean is not a true pooled p95); max is the largest max; felt is
+    an unweighted mean per seat; host_leg is one value per record (every seat of a
+    record shares the host's leg), averaged over records. Returns
+    (seats, {field: value or None})."""
+    weighted = defaultdict(list)  # field -> [(value, weight)]
+    plain = defaultdict(list)  # field -> [value]
     seats = 0
     for rec in records:
         entries = rec.get("ping")
         if not isinstance(entries, list):
             continue
+        leg_seen = False
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
@@ -106,18 +110,29 @@ def ping_summary(records):
             weight = entry.get("n")
             if not isinstance(weight, (int, float)) or weight < 1:
                 weight = 1
-            for field in PING_FIELDS:
+            for field in ("avg", "p95"):
                 value = entry.get(field)
                 if isinstance(value, (int, float)) and value >= 0:
-                    values[field].append((value, weight))
+                    weighted[field].append((value, weight))
+            value = entry.get("max")
+            if isinstance(value, (int, float)) and value >= 0:
+                plain["max"].append(value)
+            value = entry.get("felt")
+            if isinstance(value, (int, float)) and value >= 0:
+                plain["felt"].append(value)
+            value = entry.get("host_leg")
+            if not leg_seen and isinstance(value, (int, float)) and value >= 0:
+                plain["host_leg"].append(value)
+                leg_seen = True
 
     def combine(field):
-        pairs = values[field]
-        if not pairs:
+        if field in ("avg", "p95"):
+            pairs = weighted[field]
+            return sum(v * w for v, w in pairs) / sum(w for _, w in pairs) if pairs else None
+        values = plain[field]
+        if not values:
             return None
-        if field == "max":
-            return max(v for v, _ in pairs)
-        return sum(v * w for v, w in pairs) / sum(w for _, w in pairs)
+        return max(values) if field == "max" else sum(values) / len(values)
 
     return seats, {f: combine(f) for f in PING_FIELDS}
 

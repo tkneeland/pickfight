@@ -710,7 +710,8 @@ func _on_host_text(text: String) -> void:
 	match str(msg.get("t", "")):
 		"lobby":
 			_attention_on_lobby(str(lobby.get("phase", "")), str(msg.get("phase", "")))
-			_felt_on_phase(str(lobby.get("phase", "")), str(msg.get("phase", ""))) # #1195
+			if msg.get("match") is float:
+				_felt_on_match(int(msg["match"])) # #1195
 			lobby = msg
 			_refresh_lobby()
 		"hud":
@@ -824,10 +825,12 @@ var _felt_rest_since_msec: int = -1
 var _felt_probe_msec: int = -1
 var _felt_rest_angle: float = NAN
 var _felt_drawn_angle: float = NAN
-## A drawn body further than this from where it was last frame is a respawn or
-## teleport, so a probe in flight is dropped (the host's recentre drops it too).
-const FELT_JUMP_PX: float = 150.0
-var _felt_drawn_body: Vector2 = Vector2(NAN, NAN)
+## The puppet state last drawn: a change (death, respawn) drops a probe in flight,
+## as does the host's recentre message. No distance rule: a lag spike moves the
+## body far too, and dropping those would bias the felt delay low.
+var _felt_drawn_state: int = -1
+## The host's match serial last seen; a new one starts the felt delay afresh.
+var _felt_match_serial: int = -1
 var _felt_sum: int = 0
 var _felt_n: int = 0
 ## The last single measurement, ms (-1 none yet).
@@ -845,12 +848,11 @@ func _felt_note_sent(v: Vector2) -> void:
 	_felt_rest_since_msec = now
 
 ## Called by `_render` with this joiner's own drawn body and weapon head.
-func _felt_note_drawn(body_position: Vector2, head_position: Vector2) -> void:
+func _felt_note_drawn(body_position: Vector2, head_position: Vector2, state: int = 1) -> void:
 	_felt_drawn_angle = (head_position - body_position).angle()
-	var jumped: bool = not is_nan(_felt_drawn_body.x) and body_position.distance_to(_felt_drawn_body) > FELT_JUMP_PX
-	_felt_drawn_body = body_position
-	if jumped:
-		_felt_probe_msec = -1 # a respawn or teleport turned the arm, not the input
+	if state != _felt_drawn_state:
+		_felt_drawn_state = state
+		_felt_probe_msec = -1 # a death or respawn turned the arm, not the input
 	if _felt_probe_msec < 0:
 		return
 	var now: int = Time.get_ticks_msec()
@@ -869,10 +871,10 @@ func _felt_reset() -> void:
 	felt_last_msec = -1
 	_felt_probe_msec = -1
 
-## The host's lobby phase changed: a match begins when the phase reaches "playing"
-## from anything but the match's own phases.
-func _felt_on_phase(prev: String, phase: String) -> void:
-	if phase == "playing" and prev != "playing" and prev != "round_end":
+## The lobby message's "match" serial (ControllerServer, #164): a new one is a new match.
+func _felt_on_match(serial: int) -> void:
+	if serial != _felt_match_serial:
+		_felt_match_serial = serial
 		_felt_reset()
 
 ## The mean felt input-to-screen delay this match, ms; -1 before the first.
@@ -1322,7 +1324,7 @@ func _render() -> void:
 			drawn_head,
 			lerp_angle(from_pose[3] if from_pose.size() > 3 else 0.0, to_pose[3] if to_pose.size() > 3 else 0.0, alpha))
 		if id == slot:
-			_felt_note_drawn(drawn_body, drawn_head) # #1195: the felt delay watches what is drawn
+			_felt_note_drawn(drawn_body, drawn_head, puppet.phase) # #1195: the felt delay watches what is drawn
 	for p: Variant in _world.get("projectiles", []):
 		if not p is Dictionary:
 			continue

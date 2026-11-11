@@ -124,10 +124,10 @@ var tie_seed: int = -1
 ## RoundManager at match end: [{"avg","p95","max","n","felt","host_leg","share"}]
 ## (ms, clamped to -1..60000), anonymous (no slot, name or colour).
 var ping: Array = []
-## The fields of a ping entry that are logged and sent ("share" only filters).
 ## The most any ping statistic may say, ms (ControllerServer and RoundManager use
 ## this; relay/Relay.gd's STATS_MAX_PING_MSEC is its own copy, kept equal).
 const PING_MAX_MSEC: int = 60000
+## The fields of a ping entry that are logged and sent ("share" only filters).
 const PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", "host_leg"]
 
 ## victim slot -> {"attacker": slot, "msec": int} for the last hit taken.

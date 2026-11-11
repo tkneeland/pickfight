@@ -3469,8 +3469,8 @@ var relay_echo_interval_msec: int = 1000
 var _relay_echo_n: int = 0
 var _relay_echo_sent_msec: int = 0
 var _relay_echo_sent: Dictionary = {} # echo n -> msec it left
-## slot -> {"samples", "felt", "share"} of the seat that left that slot since the
-## match started; merged back into the slot's one entry if it is rebound.
+## identity (client id) -> {"samples", "felt", "share"} of a joiner whose seat left since the
+## match started; merged back if the same joiner returns.
 var _departed_ping: Dictionary = {}
 var _relay_echo_answered_msec: int = 0
 ## No echo answered for this many intervals: the host leg is stale.
@@ -3554,31 +3554,37 @@ func reset_ping_stats() -> void:
 	for seat: RemoteSeat in _remote_seats.values():
 		seat.rtt_samples = PackedInt32Array()
 
-## Every remote PC seat's statistics this match, one entry per slot: a joiner
-## who left and came back to the same slot is merged (the departed samples first,
-## then the live seat's). Seats with no round trip are left out.
+## The identity a seat's statistics are filed under: the joiner's client id (stable
+## across a reconnect), so a different joiner taking a vacated slot is its own entry
+## with its own share flag; "slot:N" for a seat that has no id.
+func _ping_identity(slot: int) -> String:
+	var id: String = str(_slot_client_id[slot]) if slot < _slot_client_id.size() else ""
+	return id if not id.is_empty() else "slot:%d" % slot
+
+## Every remote PC seat's statistics this match, one entry per joiner: the same
+## joiner leaving and coming back (to any slot) is merged (departed samples first,
+## then the live seat's); a different joiner in a vacated slot is a separate entry
+## carrying its own share and felt. Seats with no round trip are left out.
 func match_ping_stats() -> Array:
+	var merged: Dictionary = {} # identity -> {"samples", "felt", "share"}
+	for identity: String in _departed_ping:
+		var gone: Dictionary = _departed_ping[identity]
+		merged[identity] = {"samples": (gone["samples"] as PackedInt32Array).duplicate(),
+				"felt": int(gone["felt"]), "share": bool(gone["share"])}
+	for slot in _slot_peers.size():
+		if not _is_pc_remote(_slot_peers[slot]) or _slot_peers[slot].rtt_samples.is_empty():
+			continue
+		var seat: RemoteSeat = _slot_peers[slot]
+		var identity: String = _ping_identity(slot)
+		var entry: Dictionary = merged.get(identity, {"samples": PackedInt32Array(), "felt": -1, "share": false})
+		var samples: PackedInt32Array = entry["samples"]
+		samples.append_array(seat.rtt_samples)
+		if samples.size() > PING_SAMPLES_MAX:
+			samples = samples.slice(samples.size() - PING_SAMPLES_MAX)
+		merged[identity] = {"samples": samples, "felt": seat.felt_msec, "share": seat.share}
 	var out: Array = []
-	var slots: int = _slot_peers.size()
-	for slot: int in _departed_ping:
-		slots = maxi(slots, slot + 1)
-	for slot in slots:
-		var samples: PackedInt32Array = PackedInt32Array()
-		var felt: int = -1
-		var share: bool = false
-		if _departed_ping.has(slot):
-			var gone: Dictionary = _departed_ping[slot]
-			samples = (gone["samples"] as PackedInt32Array).duplicate() # never grow the stored copy
-			felt = int(gone["felt"])
-			share = bool(gone["share"])
-		if slot < _slot_peers.size() and _is_pc_remote(_slot_peers[slot]) and not _slot_peers[slot].rtt_samples.is_empty():
-			var seat: RemoteSeat = _slot_peers[slot]
-			samples.append_array(seat.rtt_samples)
-			if samples.size() > PING_SAMPLES_MAX:
-				samples = samples.slice(samples.size() - PING_SAMPLES_MAX)
-			felt = seat.felt_msec
-			share = seat.share
-		var stats: Dictionary = _ping_stats_of(samples, felt, share)
+	for entry: Dictionary in merged.values():
+		var stats: Dictionary = _ping_stats_of(entry["samples"], int(entry["felt"]), bool(entry["share"]))
 		if not stats.is_empty():
 			out.append(stats)
 	return out
@@ -3589,13 +3595,14 @@ func _keep_departed_ping_stats(slot: int) -> void:
 	var seat: RemoteSeat = _slot_peers[slot]
 	if seat.rtt_samples.is_empty():
 		return
+	var identity: String = _ping_identity(slot)
 	var samples: PackedInt32Array = PackedInt32Array()
-	if _departed_ping.has(slot):
-		samples = (_departed_ping[slot]["samples"] as PackedInt32Array).duplicate() # the slot left and rebound before
+	if _departed_ping.has(identity):
+		samples = (_departed_ping[identity]["samples"] as PackedInt32Array).duplicate() # left and returned before
 	samples.append_array(seat.rtt_samples)
 	if samples.size() > PING_SAMPLES_MAX:
 		samples = samples.slice(samples.size() - PING_SAMPLES_MAX)
-	_departed_ping[slot] = {"samples": samples, "felt": seat.felt_msec, "share": seat.share}
+	_departed_ping[identity] = {"samples": samples, "felt": seat.felt_msec, "share": seat.share}
 	seat.rtt_samples = PackedInt32Array()
 
 # --- In-game cosmetics picker (issue #441, ADR-0021) --------------------------
