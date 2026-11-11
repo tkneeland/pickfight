@@ -825,7 +825,9 @@ func _reset_release_on_respawn(slot: int) -> void:
 		var peer: Variant = _slot_peers[slot]
 		if _is_pc_remote(peer):
 			peer.send_text(JSON.stringify({"t": "release", "v": false}))
-		if _slot_virtual[slot] == 0:
+		# Only a drag actually held out waits: recentring a controller already at
+		# rest would race (and eat) the first drag of the round.
+		if _slot_virtual[slot] == 0 and _smoothers[slot].target.length() > RESPAWN_NEUTRAL_EPSILON:
 			_slot_await_neutral[slot] = 1
 			if slot == _host_pc_slot:
 				_host_mouse.reset()
