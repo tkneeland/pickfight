@@ -300,6 +300,9 @@ AWARD_CATEGORY_CAPTURER,CAPTURER,FLAGGENRÄUBER,CAPTUREUR,CAPTURADOR,CAPTURADOR,
 STAGE_BASTION,Bastion,Bastion,Bastion,Bastión,Bastião,堡垒,バスティオン,요새,Бастион
 STAGE_STRONGHOLD,Stronghold,Festung,Forteresse,Fortaleza,Fortaleza,据点,ストロングホールド,거점,Цитадель
 STAGE_TREADMILL,Treadmill,Laufband,Tapis roulant,Cinta de correr,Esteira,跑步机,トレッドミル,러닝머신,Беговая дорожка
+STAGE_CELLAR,Cellar,Keller,Cave,Sótano,Porão,地窖,地下室,지하실,Погреб
+STAGE_TANK,Tank,Tank,Cuve,Tanque,Tanque,水箱,タンク,탱크,Цистерна
+STAGE_VAT,Vat,Bottich,Cuve,Cuba,Tina,大桶,大樽,큰 통,Чан
 AWARD_CATEGORY_HILL,HILL,HÜGEL,COLLINE,COLINA,COLINA,山丘,ヒル,언덕,ГОРА
 AWARD_CATEGORY_TAGGER,TAGGER,FÄNGER,PORTEUR,MARCADO,MARCADO,标记者,タッガー,술래,ВОДЯЩИЙ
 AWARD_CATEGORY_LIVES,LIVES,LEBEN,VIES,VIDAS,VIDAS,命数,ライフ,목숨,ЖИЗНИ

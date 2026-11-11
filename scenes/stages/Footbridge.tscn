@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/parts/CrumblingLedge.tscn" id="3"]
@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
 [ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
+[ext_resource type="PackedScene" path="res://scenes/parts/EdgeCatch.tscn" id="edge"]
 
 ; Footbridge (issue #315): a rope bridge of three CrumblingLedges (#18) over
 ; a 580 px chasm between two wide banks, with a MovingPlatform (#279) shuttling
@@ -59,22 +60,20 @@ one_way_sec = 3.0
 position = Vector2(0, 428)
 size = Vector2(440, 16)
 
-[node name="EndShelfLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-760, 340)
-size = Vector2(80, 16)
+; EdgeCatch part (#1202): a catch ledge and an end post at each floor end, inside the view (x<=800, ledge top at least a body radius over the view bottom), one node per end. Footbridge: 80 px ledge 72 px under each bank, left post 70 px over the bank, right 10 px (a body shoved along the bank still clears it). Kill zone at y=480.
+[node name="EdgeLeft" parent="." instance=ExtResource("edge")]
+position = Vector2(-720, 260)
+side = -1
+ledge_width = 80
+ledge_drop = 72
+post_height = 70
 
-[node name="EndShelfRight" parent="." instance=ExtResource("platform")]
-position = Vector2(760, 340)
-size = Vector2(80, 16)
-
-; End posts (#1202): a 16 px post at each end ledge (x=+-784..800) stops a fighter running along the ledge off the screen. The left is 220 px tall (top y=190); the right is 160 px (top y=250), low enough that a body shoved along the bank still clears it, which keeps the every-stage ring-out sweep (a 1800 px/s shove at spawn height) passing.
-[node name="EndPostLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-792, 300)
-size = Vector2(16, 220)
-
-[node name="EndPostRight" parent="." instance=ExtResource("platform")]
-position = Vector2(792, 330)
-size = Vector2(16, 160)
+[node name="EdgeRight" parent="." instance=ExtResource("edge")]
+position = Vector2(720, 260)
+side = 1
+ledge_width = 80
+ledge_drop = 72
+post_height = 10
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-640, 210)

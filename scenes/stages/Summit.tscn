@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
 [ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
+[ext_resource type="PackedScene" path="res://scenes/parts/EdgeCatch.tscn" id="edge"]
 
 ; Summit (issue #377, a King of the Hill stage): a stepped tower in the middle
 ; of a wide floor. The hill is fixed on top of the tower; side platforms and two
@@ -59,23 +60,20 @@ size = Vector2(100, 16)
 position = Vector2(-340, 384)
 size = Vector2(140, 8)
 
-; Edge shelves (#1202): an 80 px ledge past each end of the floor (the floor was trimmed to 1440 px, x=+-720), top y=420 (40 px under the floor, inside the 1600x900 view: y<450, x<=800), catches a fighter who walks or is knocked just off an end; the kill zone stays at y=700 and beyond x=+-800 is still open sky. Spawns pulled inboard to 130+ px from the ends and 45 px clear of the ice patch.
-[node name="EdgeShelfLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-760, 428)
-size = Vector2(80, 16)
+; EdgeCatch part (#1202): a catch ledge and an end post at each floor end, inside the view (x<=800, ledge top at least a body radius over the view bottom), one node per end. Summit: 80 px ledge 40 px under the floor, post 30 px over it; the kill zone stays at y=700 and beyond x=+-800 is open sky. Spawns pulled inboard to 130+ px from the ends and 45 px clear of the ice patch.
+[node name="EdgeLeft" parent="." instance=ExtResource("edge")]
+position = Vector2(-720, 380)
+side = -1
+ledge_width = 80
+ledge_drop = 40
+post_height = 30
 
-[node name="EdgeShelfRight" parent="." instance=ExtResource("platform")]
-position = Vector2(760, 428)
-size = Vector2(80, 16)
-
-; End posts (#1202): a 16x100 post at each shelf outer end (x=+-784..800, top y=350, 30 px over the floor) stops a fighter running along the shelf off the screen; a launched or jumping one still clears it.
-[node name="EndPostLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-792, 400)
-size = Vector2(16, 100)
-
-[node name="EndPostRight" parent="." instance=ExtResource("platform")]
-position = Vector2(792, 400)
-size = Vector2(16, 100)
+[node name="EdgeRight" parent="." instance=ExtResource("edge")]
+position = Vector2(720, 380)
+side = 1
+ledge_width = 80
+ledge_drop = 40
+post_height = 30
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-650, 320)
