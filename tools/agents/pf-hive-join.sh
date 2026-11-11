@@ -20,6 +20,7 @@ if [ -z "${PF_HIVE_INNER:-}" ]; then
   cat "$out" 2>/dev/null; rm -f "$out"; exit 0
 fi
 
+unset PF_HIVE_INNER   # do not leak into supervisors we spawn
 echo "hive: read docs/agents/team-memory.md (the hive's shared memory) before working."
 . "$AG/pf-env.sh" >/dev/null 2>&1 || { echo "hive: no account conf for this machine (set PF_ACCOUNT), not joined"; exit 0; }
 
@@ -43,14 +44,20 @@ start_unix() {
   fi
   restarted="$restarted $kind"
 }
+# any running `pf-msg.sh listen` (bare, launchd, keepalive or our supervisor) is alive: never start a second one
+listener_running() { pgrep -f 'pf-msg.sh listen' >/dev/null 2>&1 || ps -ax -o command 2>/dev/null | grep -q '[p]f-msg.sh listen' \
+  || ps -W 2>/dev/null | grep -q '[p]f-msg.sh listen'; }
+# pid_alive <pid>: Git Bash-safe (ps -W lists Windows pids); unknown when neither tool works counts as alive
+pid_alive() { [ -n "$1" ] || return 1; kill -0 "$1" 2>/dev/null && return 0
+  if ps -W >/dev/null 2>&1; then ps -W 2>/dev/null | awk -v p="$1" '$1==p||$4==p{f=1} END{exit !f}'; else return 1; fi; }
 need=""
 # msg: the listener + heartbeat supervisor rewrites msg-status.json every 60 s
-if [ -f "$PF_STATE/pf-msg.conf" ] && [ "$(age "$PF_STATE/msg-status.json")" -gt "${PF_HIVE_STALE:-180}" ]; then need="$need msg"; fi
+if [ -f "$PF_STATE/pf-msg.conf" ] && [ "$(age "$PF_STATE/msg-status.json")" -gt "${PF_HIVE_STALE:-180}" ] && ! listener_running; then need="$need msg"; fi
 # Windows keeps every AT watcher under pf-start.ps1; same liveness signals as pf-tm-check.sh
 if [ "$WIN" = 1 ]; then
   [ -f "$PF_STATE/triage-status.json" ] && [ "$(age "$PF_STATE/.triage-watch-alive")" -gt 900 ] && need="$need triage"
   [ -f "$PF_STATE/automerge-status.json" ] && [ "$(age "$PF_STATE/automerge-status.json")" -gt 86400 ] \
-    && ! pgrep -f "pf-automerge" >/dev/null 2>&1 && need="$need automerge"
+    && ! pid_alive "$(cat "$PF_STATE/automerge.pid" 2>/dev/null | tr -d '\r')" && need="$need automerge"
   [ -f "$PF_STATE/beacon-status.json" ] && [ "$(age "$PF_STATE/beacon-status.json")" -gt 900 ] && need="$need beacon"
 fi
 if [ -n "$need" ] && [ -z "${LOCKED:-}" ]; then

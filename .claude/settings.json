@@ -2,7 +2,6 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup",
         "hooks": [
           { "type": "command", "command": "f=\"$CLAUDE_PROJECT_DIR/tools/agents/pf-hive-join.sh\"; [ -f \"$f\" ] && bash \"$f\"; exit 0", "timeout": 8 }
         ]
