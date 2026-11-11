@@ -635,6 +635,7 @@ func _ready() -> void:
 	_slot_bumper_down.resize(_players.size())
 	_slot_bumper_down.fill(-1)
 	_slot_was_alive.resize(_players.size())
+	_slot_was_locked.resize(_players.size())
 	_slot_await_neutral.resize(_players.size())
 	_slot_name.resize(_players.size())
 	_slot_hat.resize(_players.size())
@@ -727,6 +728,8 @@ var _slot_release_remote: PackedByteArray = PackedByteArray()
 var _slot_release_toggle: PackedByteArray = PackedByteArray()
 var _slot_release_held: PackedByteArray = PackedByteArray()
 var _slot_was_alive: PackedByteArray = PackedByteArray()
+## Issue #1197: 1 while a slot's fighter is held by the round countdown.
+var _slot_was_locked: PackedByteArray = PackedByteArray()
 ## Issue #1185: 1 from a slot's respawn until its controller comes back to
 ## neutral. Until then the drag held across the round boundary is ignored, so
 ## the weapon starts the round at rest and the next drag starts from there.
@@ -799,6 +802,10 @@ func slot_released(slot: int) -> bool:
 func _action_press(slot: int) -> void:
 	if _try_throw(slot):
 		return
+	# #1197: held through the round countdown, a press does nothing at all, so
+	# no fighter starts the round released.
+	if slot >= 0 and slot < _players.size() and _players[slot] != null 			and bool(_players[slot].get("round_locked")):
+		return
 	_toggle_release(slot)
 
 ## An action throw; a fresh throw starts held, not released: an earlier retract
@@ -844,6 +851,19 @@ func _reset_release_on_respawn(slot: int) -> void:
 				peer.send_text(JSON.stringify({"t": "recentre"}))
 	_slot_was_alive[slot] = now_alive
 
+## Issue #1197: at GO a fighter starts held, not released, whatever was pressed
+## through the countdown (an Online client toggles its own release, so it is
+## told to clear it, as at a respawn).
+func _reset_release_on_unlock(slot: int) -> void:
+	var locked: int = 1 if bool(_players[slot].get("round_locked")) else 0
+	if locked == 0 and _slot_was_locked[slot] == 1:
+		_slot_release_toggle[slot] = 0
+		_slot_release_remote[slot] = 0
+		var peer: Variant = _slot_peers[slot]
+		if _is_pc_remote(peer):
+			peer.send_text(JSON.stringify({"t": "release", "v": false}))
+	_slot_was_locked[slot] = locked
+
 ## Issue #1185: the vector to hand `slot`'s player this tick, `smoothed` unless
 ## the slot still waits for its controller to come back to neutral.
 func _respawn_gated_input(slot: int, smoothed: Vector2) -> Vector2:
@@ -861,6 +881,7 @@ func _apply_smoothed_input(delta: float) -> void:
 		if (_slot_peers[slot] == null and _slot_virtual[slot] == 0) or _players[slot] == null:
 			continue
 		_reset_release_on_respawn(slot)
+		_reset_release_on_unlock(slot)
 		_players[slot].set_input_vector(_respawn_gated_input(slot, _smoothers[slot].step(delta)))
 		_players[slot].set_input_released(slot_released(slot))
 
@@ -1375,6 +1396,7 @@ func _unbind(slot: int) -> void:
 	_slot_ready[slot] = 0
 	_clear_release(slot)
 	_slot_was_alive[slot] = 0
+	_slot_was_locked[slot] = 0
 	_slot_await_neutral[slot] = 0
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0

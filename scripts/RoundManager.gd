@@ -321,7 +321,8 @@ func _process(_delta: float) -> void:
 			_check_round_end()
 			if _state == State.ROUND_ACTIVE:
 				_tick_airtime()
-				_pickup_director.tick()
+				if _round_play_begun:  # no pickups while the countdown holds (#1197)
+					_pickup_director.tick()
 				if lobby_enabled and _lobby_publish_due():
 					_publish_lobby_state()
 		State.ROUND_END:
@@ -413,6 +414,7 @@ func _try_start_round() -> void:
 	_tie_slots.clear()
 	_kill_zone_home_y = NAN
 	_state = State.ROUND_ACTIVE
+	_round_play_begun = false
 	_show_stage_title()
 	var counts_down: bool = _round_countdown_on() and not _skip_round_countdown
 	_skip_round_countdown = false
@@ -425,6 +427,7 @@ func _try_start_round() -> void:
 ## Everything a round runs once its fighters are let go: at once, or at the
 ## countdown's GO (#1197).
 func _begin_round_play() -> void:
+	_round_play_begun = true
 	_start_round_modifier()
 	_start_game_mode()
 	_pickup_director.start()
@@ -447,6 +450,9 @@ var _countdown_start_msec: int = -1
 var _countdown_step: int = 4
 ## The round the running countdown belongs to.
 var _countdown_round: int = 0
+## Whether this round's play has begun (`_begin_round_play()`): false through
+## the countdown, so the pickup director's tick waits for GO with its start.
+var _round_play_begun: bool = false
 ## Set as a match begins: its round 1 follows the lobby countdown, so it does
 ## not count down again. Consumed by the next round that starts.
 var _skip_round_countdown: bool = false
@@ -471,10 +477,9 @@ func _begin_round_countdown() -> void:
 	_countdown_step = 4
 	_countdown_round = _round_number
 	_set_round_locked(true)
-	# Protected from the spawn on; the protection's own seconds run from GO.
-	_start_spawn_protection()
-	if not _protected.is_empty():
-		_protected_until_msec += lead_msec + 3 * step_msec
+	# Protected from the spawn on (a held fighter can't dodge, so even with
+	# spawn protection set to 0); the protection's own seconds run from GO.
+	_start_spawn_protection(lead_msec + 3 * step_msec)
 
 func _tick_round_countdown() -> void:
 	if _countdown_start_msec < 0:
@@ -995,15 +1000,17 @@ const SPAWN_BLINK_ALPHA: float = RespawnBlinkScript.BLINK_ALPHA
 var _protected: Array[Node2D] = []
 var _protected_until_msec: int = 0
 
-func _start_spawn_protection() -> void:
+## `extra_msec`: held fighters' countdown time, protected on top (#1197).
+func _start_spawn_protection(extra_msec: int = 0) -> void:
 	_end_spawn_protection()
-	if spawn_protection_sec <= 0.0:
+	var total_msec: int = int(maxf(spawn_protection_sec, 0.0) * 1000.0) + extra_msec
+	if total_msec <= 0:
 		return
 	for player: Variant in _players:
 		if player is Node2D and is_instance_valid(player) and bool(player.get("alive")):
 			player.set("spawn_protected", true)
 			_protected.append(player)
-	_protected_until_msec = GameClockScript.now_msec() + int(spawn_protection_sec * 1000.0)
+	_protected_until_msec = GameClockScript.now_msec() + total_msec
 
 func _tick_spawn_protection() -> void:
 	if _protected.is_empty():
@@ -2676,7 +2683,13 @@ func _start_game_mode() -> void:
 	if _game_mode_node.has_signal("flag_captured"):
 		_game_mode_node.flag_captured.connect(_on_mode_flag_captured)
 	_game_mode_node.setup(self)
-	_game_mode_node.start_round(_in_round.duplicate())
+	# #1197: at the countdown's GO, a fighter who left during 3-2-1 is not in
+	# it (Stock would hand them lives no `cancel_respawn` ever takes back).
+	var slots: Array[int] = []
+	for slot: int in _in_round:
+		if not round_countdown_active() or (slot >= 0 and slot < _players.size() 				and is_instance_valid(_players[slot]) and bool(_players[slot].get("alive"))):
+			slots.append(slot)
+	_game_mode_node.start_round(slots)
 
 ## A Stock match plays one stage (#375): the host's pick, or a random enabled
 ## one, resolved on the match's first round and held for the rest. Any other

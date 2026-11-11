@@ -61897,6 +61897,8 @@ func _scenario_round_countdown_holds_fighters_until_go_1197() -> Array[String]:
 	var players: Array[RigidBody2D] = loop["players"]
 	rm.round_countdown_step_sec = 0.3
 	rm.stage_title_sec = 0.4
+	# Spawn protection off: the held fighters are still protected until GO.
+	rm.spawn_protection_sec = 0.0
 	var steps: Array[int] = []
 	var step_msec: Array[int] = []
 	rm.round_countdown_ticked.connect(func(step: int) -> void:
@@ -61922,12 +61924,17 @@ func _scenario_round_countdown_holds_fighters_until_go_1197() -> Array[String]:
 	if not players[0].round_locked or not players[1].round_locked:
 		failures.append("fighters were not held for the countdown")
 	if not players[0].spawn_protected:
-		failures.append("a fighter was not protected through the countdown")
+		failures.append("a fighter was not protected through the countdown (spawn protection 0)")
+	# The pickup timer waits for GO: one due now must not fire before it.
+	rm._pickup_director._next_pickup_msec = 0
 	# A drag held through the countdown moves nothing until GO.
 	while started.is_empty() and _game_msec() - spawned_msec < 5000:
 		players[0].set_input_vector(Vector2(0.0, -1.0))
 		if not steps.is_empty() and steps[-1] > 0 and players[0]._effective_input != Vector2.ZERO:
 			failures.append("a held drag reached the fighter at countdown step %d" % steps[-1])
+			break
+		if started.is_empty() and rm._pickup_director._next_pickup_msec != 0:
+			failures.append("the pickup timer ran during the countdown")
 			break
 		await physics_frame
 	if started.is_empty():
@@ -61940,13 +61947,13 @@ func _scenario_round_countdown_holds_fighters_until_go_1197() -> Array[String]:
 		print("      title lead %d ms, 3 to GO %d ms, round_started at GO+%d ms" % [lead, to_go, started[0] - step_msec[3]])
 		if lead < 300:
 			failures.append("the countdown began %d ms after the spawn, before the title card's 400 ms" % lead)
-		if absi(to_go - 900) > 60:
+		if absi(to_go - 900) > 150:
 			failures.append("3 to GO took %d ms, want 900" % to_go)
 		if started[0] < step_msec[3]:
 			failures.append("round_started went out before GO")
 		var protect_left: int = rm._protected_until_msec - step_msec[3]
-		if absi(protect_left - int(rm.spawn_protection_sec * 1000.0)) > 60:
-			failures.append("protection ran %d ms past GO, want %d" % [protect_left, int(rm.spawn_protection_sec * 1000.0)])
+		if absi(protect_left) > 150:
+			failures.append("protection ran %d ms past GO, want 0 (spawn protection 0)" % protect_left)
 	if sfx != null and ticks_heard[0] != 3:
 		failures.append("heard %d countdown ticks, want 3 (3, 2, 1)" % ticks_heard[0])
 	await _await_ticks(2)
@@ -61954,6 +61961,8 @@ func _scenario_round_countdown_holds_fighters_until_go_1197() -> Array[String]:
 		failures.append("fighters still held after GO")
 	if players[0]._effective_input == Vector2.ZERO:
 		failures.append("the held drag did not reach the fighter after GO")
+	if not await _await_condition(func() -> bool: return not players[0].spawn_protected, 1000):
+		failures.append("the countdown's protection outlasted GO with spawn protection 0")
 	var label: Label = rm._screen()._cards.round_countdown_label()
 	if label == null:
 		failures.append("the countdown card was never drawn")

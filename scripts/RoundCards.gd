@@ -8,6 +8,7 @@ extends RefCounted
 
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
+const PartKitScript := preload("res://scripts/PartKit.gd")
 
 ## The resume hint under PAUSED (#810): design px, never under the Deck's 16.
 const PAUSE_HINT_FONT_SIZE: int = 32
@@ -131,13 +132,8 @@ func show_round_countdown(step: int) -> void:
 	var screen: Vector2 = _screen.get_viewport().get_visible_rect().size
 	_countdown_label.position = (screen - _countdown_label.size) * 0.5
 	_countdown_label.visible = true
-	if not _reduce_flash():
+	if not PartKitScript.reduce_flash(_screen):  # Settings > Reduce flashes (#317)
 		ScreenKitScript.punch(_countdown_label, _screen)
-
-## Settings > Reduce flashes (#317) on this machine.
-func _reduce_flash() -> bool:
-	var sfx: Node = (Engine.get_main_loop() as SceneTree).root.get_node_or_null("Sfx")
-	return sfx != null and bool(sfx.get("reduce_flash"))
 
 # --- Pause banner (issue #149) -----------------------------------------------
 

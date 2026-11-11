@@ -244,8 +244,8 @@ func play(ev: Dictionary) -> void:
 		"pause":
 			cards.show_pause_banner(bool(ev.get("on", false)))
 		"countdown":
-			# #1197: the host's countdown holds this joiner's fighter too, so it
-			# shows whatever this machine's own switch says.
+			# #1197: the host's countdown holds this joiner's fighter too, so the
+			# joiner sees it whenever the host runs one (the host's switch decides).
 			cards.show_round_countdown(int(ev.get("n", -1)))
 		"match_point":
 			var found: Array = []

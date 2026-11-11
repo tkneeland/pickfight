@@ -2395,6 +2395,12 @@ func _recall_homing_hook() -> bool:
 ## Whether this tick's drag completes a flick. Called every tick so the history
 ## stays current; a flick is spent whether or not anything could launch.
 func _detect_flick() -> bool:
+	# #1197: the countdown's held zero is not a drag at rest, so a drag held
+	# through it does not flick at GO.
+	if round_locked:
+		_flick_armed = false
+		_flick_history.clear()
+		return false
 	var input: Vector2 = _effective_input
 	var length: float = input.length()
 	_flick_history.append(input)
