@@ -42097,8 +42097,8 @@ func _bots_close_445(rig: Dictionary) -> void:
 ## Humans in the roster: every claimed seat that is not a bot.
 func _humans_445(server: Node) -> int:
 	return server.claimed_slots().size() - server.bot_director.bot_count()
-## The counter adds bots one press at a time, wraps to none after the last free
-## seat, and never takes a seat a human holds: eight seats in all.
+## The counter adds bots one press at a time, stops after the last free
+## seat (stays there, #1182), and never takes a seat a human holds: eight seats in all.
 func _scenario_host_bot_counter_adds_bots_and_caps_at_eight_seats() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _bots_rig_445("local", false, failures)
@@ -42119,8 +42119,8 @@ func _scenario_host_bot_counter_adds_bots_and_caps_at_eight_seats() -> Array[Str
 	if server.bot_director.bot_count() != 8 or server.claimed_slots().size() != 8:
 		failures.append("asking for 50 bots gave %d bots on %d seats, expected 8 on 8" % [server.bot_director.bot_count(), server.claimed_slots().size()])
 	screen.press_control("bots")
-	if server.bot_director.bot_count() != 0:
-		failures.append("a press at the cap left %d bots, expected the counter to wrap to 0" % server.bot_director.bot_count())
+	if server.bot_director.bot_count() != 8:
+		failures.append("a press at the cap left %d bots, expected it to stay at 8 (#1182)" % server.bot_director.bot_count())
 	# A human's seat is not the counter's to take: one phone leaves 7 for bots.
 	var phone := WebSocketPeer.new()
 	var got: Dictionary = await _join_phone(phone, "bots445-cap", rig["phones"])
