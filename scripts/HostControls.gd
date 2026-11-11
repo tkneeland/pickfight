@@ -303,9 +303,9 @@ func press_control(id: String) -> void:
 		"mode":
 			server.apply_host_command("mode", "ffa" if server.team_mode() else "teams")
 		"bots":
-			# #445: one more bot, back to none after the last free seat.
+			# #445: one more bot; #1182: stops at the last free seat like the + button (no wrap to none).
 			var count: int = server.bot_director.bot_count()
-			server.apply_host_command("bots", count + 1 if count < server.bot_capacity() else 0)
+			server.apply_host_command("bots", mini(server.bot_capacity(), count + 1))
 		"bot_skill":
 			# #682: Easy -> Normal -> Hard -> Easy.
 			var levels: Array[String] = HostSettingsScript.BOT_DIFFICULTIES
