@@ -6,7 +6,8 @@
 #   3. prints `pf-hive.sh status --short --cached` (#1208: the last status at once, refreshed in the background) when
 #      that script exists, else a one-line local status
 # Silent on success apart from the status. Never blocks or fails the session: the whole check runs under a watchdog
-# (PF_HIVE_TIMEOUT seconds, default 4) and the exit code is always 0. No network use of its own.
+# (PF_HIVE_TIMEOUT seconds, default 4) and the exit code is always 0. No network use of its own; the cached status
+# starts a detached refresh (pf-hive.sh: at most once a minute, one at a time) that outlives the watchdog by design.
 # Env (tests): PF_HIVE_OS=windows|unix, PF_HIVE_TIMEOUT, PF_STATE_DIR, PF_ACCOUNT, PF_HIVE_STALE (msg status max age s, default 180).
 AG=$(cd "$(dirname "$0")" && pwd)
 if [ -z "${PF_HIVE_INNER:-}" ]; then

@@ -8,8 +8,9 @@
 #   pf-hive.sh status --short    the compact form for posting (rule 21: "status" in #hive replies with it)
 #   pf-hive.sh status --short --cached
 #                                prints the last --short result at once and refreshes it in the background (the
-#                                SessionStart hook, which has 4 s); exit 3 with nothing cached yet. PF_DRY_RUN=1: no refresh
-# Every run saves its --short form to $PF_STATE/hive-status-short.txt.
+#                                SessionStart hook, which has 4 s); exit 3 with nothing cached yet. The refresh runs only
+#                                when the cache is 60 s old or more, one at a time (a lock). PF_DRY_RUN=1: no refresh
+# Every run saves its --short form to $PF_STATE/hive-status-short.txt (kept as is when GitHub is down).
 # Sources: claimed = a peer's CLAIMs on the channel (24 h, not RELEASEd) / this machine's issue worktrees, both on
 # open issues; agents = a peer's USAGE agents= / this machine's live worktrees (pf_live_agents). #change-requests and
 # #hive counts come from `pf-discord-bugs.sh [--dev] check` on a machine that has triaged them (its marker exists),
@@ -22,9 +23,13 @@ CACHE=$PF_STATE/hive-status-short.txt
 shift; short=""; cached=""
 for a in "$@"; do case $a in --short) short=1;; --cached) cached=1;; *) echo "pf-hive: unknown option $a" >&2; exit 2;; esac; done
 if [ -n "$cached" ]; then   # never waits on the network: prints the cache (exit 0) or nothing (exit 3), then refreshes
-  [ -z "${PF_DRY_RUN:-}" ] && (bash "$0" status --short >/dev/null 2>&1 &)
+  age=$(( $(date +%s) - $(pf_mtime "$CACHE" 2>/dev/null || echo 0) )); L=$PF_STATE/.hive-refresh.lock
+  [ -d "$L" ] && [ $(( $(date +%s) - $(pf_mtime "$L" || echo 0) )) -gt 120 ] && rmdir "$L" 2>/dev/null
+  if [ -z "${PF_DRY_RUN:-}" ] && [ "$age" -ge 60 ] && mkdir "$L" 2>/dev/null; then
+    (bash "$0" status --short >/dev/null 2>&1; rmdir "$L" 2>/dev/null) &
+  fi
   [ -s "$CACHE" ] || exit 3
-  m=$(( ($(date +%s) - $(pf_mtime "$CACHE")) / 60 ))
+  m=$((age / 60))
   cat "$CACHE"; [ "$m" -ge 2 ] && echo "(as of ${m} min ago)"
   exit 0
 fi
@@ -45,13 +50,14 @@ discord() {  # discord <bugs|dev>: the unhandled count, or n/a
   case $rc in 0) echo "${n:-?}";; 1) echo 0;; *) echo "?";; esac
 }
 discord bugs > "$D/bugs" & discord dev > "$D/dev" &
-# this machine's live agents scan its worktrees (slow on Windows): also in the background
-{ pf_live_agents > "$D/live"; touch "$D/live.done"; } &
 
 # GitHub: every open issue and PR, labels, assignees, authors and bodies, in one paginated call
 iss=$(set -o pipefail; gh api --paginate "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null | jq -s 'add // []') || iss=""
 gh_ok=1; [ -n "$iss" ] || { gh_ok=""; iss='[]'; }
 open_issues=$(echo "$iss" | jq -r '[.[] | select(.pull_request == null) | .number] | join(" ")')
+# this machine's live agents scan its worktrees (slow on Windows), in the background, on the open issues just fetched
+# (GitHub down: no issue is known open, so it reports 0 rather than calling gh again)
+{ [ -n "$gh_ok" ] && pf_live_agents "${open_issues:-0}" > "$D/live"; touch "$D/live" "$D/live.done"; } &
 tm=$(pf_triagemaster)
 # per account, one line: "<handle> <ready> <PRs passed> <blocked> <waiting> <#n_state,_...>" (one jq for all: forks are slow on Windows)
 per_gh=$(echo "$iss" | jq -r --arg hs "$(pf_handles | tr '\n' ' ')" '. as $all | ($hs | split(" ") | map(select(. != "")))[] as $h |
@@ -89,7 +95,8 @@ row() {
   if [ "$h" = "$PF_ACCOUNT" ]; then
     while [ ! -f "$D/live.done" ]; do sleep 0.2; done
     agents=$(grep -c . "$D/live")
-    claimed=$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | sed -nE 's#^branch refs/heads/.*issue-([0-9]+).*#\1#p')
+    claimed=$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | sed -nE 's#^branch refs/heads/##p' |
+      sed -nE 's/.*issue-([0-9]+).*/\1/p; s#^[a-z]+/([0-9]+)-.*#\1#p')
   else
     agents=$(awk -F'|' -v p="$h" '$2 == p && $3 == "USAGE" && $1 + 0 >= m { m = $1 + 0; l = $4 } END { print l }' "$INBOX" 2>/dev/null |
       sed -n 's/.*agents=\([0-9]*\).*/\1/p'); agents=${agents:-?}
@@ -97,7 +104,7 @@ row() {
         if ($3 == "CLAIM" && $1 + 86400 >= t) c[w[1]] = 1; else if ($3 == "RELEASE") delete c[w[1]] }
       END { for (n in c) print n }' "$INBOX" 2>/dev/null)
   fi
-  claimed=$(for n in $claimed; do case " $open_issues " in *" $n "*) echo "#$n";; esac; done | sort -u | tr '\n' ' ')
+  claimed=$(for n in $claimed; do case " $open_issues " in (*" $n "*) echo "#$n";; esac; done | sort -u | tr '\n' ' ')
   claimed=${claimed% }
   # ready queue and PRs from the one GitHub answer (worked out for every account at once, above)
   read -r _ ready pr_pass pr_block pr_wait prs <<EOT
@@ -131,14 +138,15 @@ bugs=$(cat "$D/bugs"); dev=$(cat "$D/dev")
 rows=""; srows=""
 for h in $(pf_handles); do rows+=$(cat "$D/row.$h")$'\n'; srows+=$(cat "$D/srow.$h")$'\n'; done
 lastfire=""; [ "$nfires" -gt 0 ] && lastfire=" (latest: $(printf '%s\n' "$fires" | tail -n 1 | awk -F'|' '{ r = $4; for (i = 5; i <= NF; i++) r = r "|" $i; print $2 ": " r }' | cut -c1-120))"
-unh() { case $1 in ''|*[!0-9]*) echo "$1 (not triaged on this machine)";; *) echo "$1 unhandled";; esac; }
-[ "$bugs" = "?" ] || bugs=$(unh "$bugs"); [ "$dev" = "?" ] || dev=$(unh "$dev")
+unh() { case $1 in '?') echo "? (Discord check failed)";; ''|*[!0-9]*) echo "$1 (not triaged on this machine)";; *) echo "$1 unhandled";; esac; }
+bugs=$(unh "$bugs"); dev=$(unh "$dev")
 team="fires 24h $nfires$lastfire · #change-requests $bugs · #hive $dev · needs-triage $triage waiting for ✅ · Tommy: $tommy open on #685, $rfh ready-for-human"
 stamp="$(et "$now" '+%a %-I:%M%p') ET"
 
 sout="hive $stamp ($PF_ACCOUNT's view)"$'\n'"$srows""team: $team"
 [ -n "$gh_ok" ] || sout+=$'\n'"(GitHub unreachable: ready, PRs and triage counts unknown)"
-printf '%s\n' "$sout" > "$CACHE.tmp" && mv "$CACHE.tmp" "$CACHE"
+# a GitHub outage keeps the last good cache rather than a "?" one
+{ [ -n "$gh_ok" ] || [ ! -s "$CACHE" ]; } && printf '%s\n' "$sout" > "$CACHE.tmp.$$" && mv "$CACHE.tmp.$$" "$CACHE"
 if [ -n "$short" ]; then printf '%s\n' "$sout"; exit 0; fi
 echo "hive · $stamp · $PF_ACCOUNT's view · tm $tm"
 printf '%s' "$rows"

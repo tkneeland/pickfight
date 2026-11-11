@@ -21,18 +21,18 @@ fi
 export PF_ACCOUNT PF_DIR
 . "$PF_DIR/accounts/_shared.conf"
 . "$PF_DIR/accounts/$PF_ACCOUNT.conf"
+# US Eastern for the "times in ET" rule, as POSIX rules: correct on macOS and on Git Bash, which has no zoneinfo.
+PF_ET_TZ=EST5EDT,M3.2.0,M11.1.0
 # Git Bash (MSYS) does not know IANA zone names and silently falls back to UTC: translate the common US ones to POSIX rules.
 if [ "$PF_GNU" = 1 ] && [ "$(TZ=$TZ date +%Z)" = GMT ]; then
   case $TZ in
-    America/New_York|America/Detroit|US/Eastern) TZ=EST5EDT,M3.2.0,M11.1.0;;
+    America/New_York|America/Detroit|US/Eastern) TZ=$PF_ET_TZ;;
     America/Chicago|US/Central) TZ=CST6CDT,M3.2.0,M11.1.0;;
     America/Denver|US/Mountain) TZ=MST7MDT,M3.2.0,M11.1.0;;
     America/Los_Angeles|US/Pacific) TZ=PST8PDT,M3.2.0,M11.1.0;;
     America/Phoenix) TZ=MST7;;
   esac
 fi
-# US Eastern for the "times in ET" rule, as POSIX rules: correct on macOS and on Git Bash, which has no zoneinfo.
-PF_ET_TZ=EST5EDT,M3.2.0,M11.1.0
 export TZ REPO PF_ET_TZ
 : "${TZ_LABEL:=$(date +%Z)}"
 if [ -z "${REPO_PATH:-}" ]; then REPO_PATH=$(dirname "$(git -C "$PF_DIR" rev-parse --path-format=absolute --git-common-dir)"); fi

@@ -69,6 +69,7 @@ el=$(( $(date +%s) - t0 ))
 [ "$rc" = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL full: exit $rc"; }
 [ "$el" -lt 15 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL full: took ${el}s (budget 15)"; }
 has "one gh call" "$(grep -c 'api --paginate' "$T/calls.log")" 1
+has "no other gh call (live agents reuse it)" "$(grep -c . "$T/calls.log")" 1
 has "header" "$(printf '%s\n' "$out" | head -n 1)" "schans2's view · tm tkneeland"
 has "header in ET" "$(printf '%s\n' "$out" | head -n 1)" "$(TZ=$PF_ET_TZ pf_epoch_fmt "$t0" '+%a') "
 l=$(line "$out" tkneeland); l2=$(line "$out" tkneeland 2)
@@ -108,7 +109,9 @@ rm -f "$S/hive-status-short.txt"; PF_DRY_RUN=1 bash "$AG/pf-hive.sh" status --sh
 has "nothing cached: exit 3" "$?" 3
 
 # GitHub unreachable: the inbox half still shows, GitHub numbers are "?"
+bash "$AG/pf-hive.sh" status --short >/dev/null; good=$(cat "$S/hive-status-short.txt")
 g=$(PF_TEST_GH_DOWN=1 bash "$AG/pf-hive.sh" status --short)
+has "gh down: last good cache kept" "$(cat "$S/hive-status-short.txt")" "$good"
 has "gh down: note" "$g" "(GitHub unreachable"; has "gh down: usage still" "$g" "tkneeland: on 5m · TM · 5h12%"
 has "gh down: ready ?" "$g" "ready ? · PRs ?"; has "gh down: team ?" "$g" "needs-triage ? waiting"
 
