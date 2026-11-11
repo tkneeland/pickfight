@@ -27,6 +27,13 @@ INBOX=$T/state/msg-inbox.log; WAKE=$T/state/msg-wake.txt; OPEN=$T/state/ask-open
 pass=0; fail=0
 check() { if [ "$2" = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $1: got '$2', want '$3'"; fi; }
 ask() { PF_ACCOUNT=schans2 bash "$AG/pf-ask.sh" "$@"; }
+# listen_until <id>: run the listener until it has taken message <id> from the stream (a slow machine needs more than a
+# fixed sleep), give it a moment to write any wake, then stop it
+listen_until() {
+  PF_ACCOUNT=schans2 bash "$AG/pf-msg.sh" listen & LP=$!
+  for _ in $(seq 1 150); do [ "$(cat "$T/state/.msg-last-id" 2>/dev/null)" = "$1" ] && break; sleep 0.1; done
+  sleep 1; kill $LP 2>/dev/null; wait $LP 2>/dev/null
+}
 # the id of the newest ASK sent
 sent_id() { sed -n 's/^SEND schans2 ASK @[^ ]* \[\(q[0-9]*\)\].*/\1/p' "$PF_TEST_LOG" | tail -n 1; }
 # answer_when_asked <from> <text>: once an ASK is sent, append <from>'s ANSWER "[q<id>] <text>" to the inbox
@@ -69,11 +76,11 @@ check "in flight: first" "$(cat "$T/a1")" "one"
 check "in flight: second" "$(cat "$T/a2")" "two"
 
 # 4 timeout: exit 1, the heartbeat message in ET, and the question stays open
-: > "$PF_TEST_LOG"; hb=$((now - 720))
+: > "$PF_TEST_LOG"; hb=$(( $(date -u +%s) - 750 ))   # 12.5 min: half a minute clear of a boundary
 echo "$hb|agage-JG|HELLO|agage-JG" > "$INBOX"
 out=$(ask agage-JG "anyone there?" 1); rc=$?
 check "timeout: exit" "$rc" 1
-check "timeout: message" "$out" "agage-JG hasn't answered (last heartbeat $(( ($(date -u +%s) - hb) / 60 )) min ago, $(TZ=America/New_York pf_epoch_fmt "$hb" +%H:%M) ET)"
+check "timeout: message" "$out" "agage-JG hasn't answered (last heartbeat $(( ($(date -u +%s) - hb) / 60 )) min ago, $(TZ=$PF_ET_TZ pf_epoch_fmt "$hb" +%H:%M) ET)"
 lid=$(sent_id)
 check "timeout: left open" "$(grep -c "^$lid|agage-JG|" "$OPEN")" 1
 : > "$INBOX"
@@ -84,20 +91,20 @@ rm -f "$WAKE" "$T/state/.msg-last-id"
 t=$(date -u +%s)
 { echo "{\"id\":\"m1\",\"time\":$t,\"event\":\"message\",\"message\":\"tkneeland ANSWER [$lid] not yours\"}"
   echo "{\"id\":\"m2\",\"time\":$t,\"event\":\"message\",\"message\":\"agage-JG ANSWER [q1111111111999] some other question\"}"; } > "$PF_TEST_STREAM"
-PF_ACCOUNT=schans2 bash "$AG/pf-msg.sh" listen & LP=$!; sleep 2; kill $LP 2>/dev/null; wait $LP 2>/dev/null
+listen_until m2
 check "late: no wake for others" "$(cat "$WAKE" 2>/dev/null)" ""
 rm -f "$T/state/.msg-last-id"
 echo "{\"id\":\"m3\",\"time\":$t,\"event\":\"message\",\"message\":\"agage-JG ANSWER [$lid] here now\"}" > "$PF_TEST_STREAM"
-PF_ACCOUNT=schans2 bash "$AG/pf-msg.sh" listen & LP=$!; sleep 2; kill $LP 2>/dev/null; wait $LP 2>/dev/null
+listen_until m3
 check "late: wake" "$(cat "$WAKE" 2>/dev/null)" "MSG ANSWER agage-JG [$lid] here now"
 check "late: closed" "$(grep -c "^$lid|" "$OPEN")" 0
 rm -f "$WAKE" "$T/state/.msg-last-id"
-PF_ACCOUNT=schans2 bash "$AG/pf-msg.sh" listen & LP=$!; sleep 2; kill $LP 2>/dev/null; wait $LP 2>/dev/null
+listen_until m3
 check "late: wakes once" "$(cat "$WAKE" 2>/dev/null)" ""
 # an open question older than 24h is dropped and never wakes
 echo "q2222222222000|agage-JG|$((now - 90000))" >> "$OPEN"; rm -f "$T/state/.msg-last-id"
 echo "{\"id\":\"m4\",\"time\":$t,\"event\":\"message\",\"message\":\"agage-JG ANSWER [q2222222222000] a day late\"}" > "$PF_TEST_STREAM"
-PF_ACCOUNT=schans2 bash "$AG/pf-msg.sh" listen & LP=$!; sleep 2; kill $LP 2>/dev/null; wait $LP 2>/dev/null
+listen_until m4
 check "late: 24h expiry" "$(cat "$WAKE" 2>/dev/null)" ""
 
 # 6 usage errors send nothing

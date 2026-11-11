@@ -31,7 +31,9 @@ if [ "$PF_GNU" = 1 ] && [ "$(TZ=$TZ date +%Z)" = GMT ]; then
     America/Phoenix) TZ=MST7;;
   esac
 fi
-export TZ REPO
+# US Eastern for the "times in ET" rule, as POSIX rules: correct on macOS and on Git Bash, which has no zoneinfo.
+PF_ET_TZ=EST5EDT,M3.2.0,M11.1.0
+export TZ REPO PF_ET_TZ
 : "${TZ_LABEL:=$(date +%Z)}"
 if [ -z "${REPO_PATH:-}" ]; then REPO_PATH=$(dirname "$(git -C "$PF_DIR" rev-parse --path-format=absolute --git-common-dir)"); fi
 ROOT=$REPO_PATH
@@ -55,9 +57,10 @@ pf_budget_ok() {
 }
 # pf_live_agents: issue numbers (one per line, deduped) of this checkout's worktrees on an issue branch (issue-N or
 # <type>/N-) whose issue is still open and that something wrote to in the last 30 min. Idle leftovers from finished
-# or stalled runs don't count.
+# or stalled runs don't count. Optional $1: the open issue numbers (space separated) when the caller already has them,
+# which saves the gh call (pf-hive.sh).
 pf_live_agents() {
-  local open; open=" $(gh issue list -R "$REPO" --state open -L 300 --json number -q '.[].number' 2>/dev/null | tr '\n' ' ') "
+  local open; open=" ${1:-$(gh issue list -R "$REPO" --state open -L 300 --json number -q '.[].number' 2>/dev/null | tr '\n' ' ')} "
   git -C "$ROOT" worktree list --porcelain | awk '/^worktree /{w=$2} /^branch /{sub("refs/heads/","",$2); print w, $2}' |
   while read -r wt b; do
     i=$(echo "$b" | sed -nE 's/.*issue-([0-9]+).*/\1/p; s#^[a-z]+/([0-9]+)-.*#\1#p' | head -1); [ -n "$i" ] || continue
