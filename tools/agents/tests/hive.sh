@@ -10,6 +10,7 @@ mkdir -p "$T/bin" "$T/state"
 cat > "$T/bin/gh" <<'STUB'
 #!/bin/bash
 echo "gh $*" >> "$PF_TEST_LOG"
+[ -n "$PF_TEST_GH_SLEEP" ] && sleep "$PF_TEST_GH_SLEEP"
 [ -n "$PF_TEST_GH_DOWN" ] && exit 1
 case "$*" in
   "api --paginate repos/"*"/issues?state=open"*) cat "$PF_TEST_ISSUES";;
@@ -105,6 +106,13 @@ has "cache saved" "$(cat "$S/hive-status-short.txt")" "$s"
 : > "$T/calls.log"
 c=$(PF_DRY_RUN=1 bash "$AG/pf-hive.sh" status --short --cached)
 has "cached" "$c" "$s"; has "cached: no gh" "$(grep -c . "$T/calls.log")" 0
+# a stale cache refreshes in the background, and a captured call never waits for it (the refresh's gh takes 6 s here)
+touch -t 202001010000 "$S/hive-status-short.txt"; t0=$(date +%s)
+c=$(PF_TEST_GH_SLEEP=6 bash "$AG/pf-hive.sh" status --short --cached); el=$(( $(date +%s) - t0 ))
+[ "$el" -le 2 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL cached: a captured call waited ${el}s for the refresh"; }
+has "cached: stale one still printed" "$c" "$s"
+i=0; while [ -d "$S/.hive-refresh.lock" ] && [ "$i" -lt 150 ]; do sleep 0.2; i=$((i+1)); done   # let the refresh finish
+has "cached: the refresh ran" "$(grep -c 'api --paginate' "$T/calls.log")" 1
 rm -f "$S/hive-status-short.txt"; PF_DRY_RUN=1 bash "$AG/pf-hive.sh" status --short --cached >/dev/null
 has "nothing cached: exit 3" "$?" 3
 

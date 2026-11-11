@@ -26,7 +26,8 @@ if [ -n "$cached" ]; then   # never waits on the network: prints the cache (exit
   age=$(( $(date +%s) - $(pf_mtime "$CACHE" 2>/dev/null || echo 0) )); L=$PF_STATE/.hive-refresh.lock
   [ -d "$L" ] && [ $(( $(date +%s) - $(pf_mtime "$L" || echo 0) )) -gt 120 ] && rmdir "$L" 2>/dev/null
   if [ -z "${PF_DRY_RUN:-}" ] && [ "$age" -ge 60 ] && mkdir "$L" 2>/dev/null; then
-    (bash "$0" status --short >/dev/null 2>&1; rmdir "$L" 2>/dev/null) &
+    # detached from the caller's stdout/stderr too, so $(...) or a pipe never waits for the refresh
+    (bash "$0" status --short; rmdir "$L") >/dev/null 2>&1 </dev/null &
   fi
   [ -s "$CACHE" ] || exit 3
   m=$((age / 60))
@@ -42,11 +43,13 @@ ago() { local s=$1; if [ "$s" -lt 3600 ]; then echo "$((s / 60))m"; elif [ "$s" 
 # Discord counts in the background while GitHub answers (each is a network call)
 D=$(mktemp -d "${TMPDIR:-/tmp}/pf-hive.XXXXXX") || exit 1; trap 'rm -rf "$D"' EXIT
 discord() {  # discord <bugs|dev>: the unhandled count, or n/a
-  local k=$1 cmd=${PF_HIVE_DISCORD:-bash $AG/pf-discord-bugs.sh} n rc
+  local k=$1 n rc
+  # one word for the command (a checkout path may hold a space): PF_HIVE_DISCORD is a test stub's path
+  dc() { if [ -n "${PF_HIVE_DISCORD:-}" ]; then "$PF_HIVE_DISCORD" "$@"; else bash "$AG/pf-discord-bugs.sh" "$@"; fi; }
   if [ ! -f "$PF_STATE/pf-discord.conf" ] && [ -z "${PF_HIVE_DISCORD:-}" ]; then echo "n/a"; return; fi
   [ -f "$PF_STATE/.discord-$k-last" ] || { echo "n/a"; return; }   # never triaged here: a first check would count old history
-  if [ "$k" = dev ]; then n=$(PF_DISCORD_TIMEOUT=${PF_DISCORD_TIMEOUT:-6} $cmd --dev check 2>/dev/null); rc=$?
-  else n=$(PF_DISCORD_TIMEOUT=${PF_DISCORD_TIMEOUT:-6} $cmd check 2>/dev/null); rc=$?; fi
+  if [ "$k" = dev ]; then n=$(PF_DISCORD_TIMEOUT=${PF_DISCORD_TIMEOUT:-6} dc --dev check 2>/dev/null); rc=$?
+  else n=$(PF_DISCORD_TIMEOUT=${PF_DISCORD_TIMEOUT:-6} dc check 2>/dev/null); rc=$?; fi
   case $rc in 0) echo "${n:-?}";; 1) echo 0;; *) echo "?";; esac
 }
 discord bugs > "$D/bugs" & discord dev > "$D/dev" &
