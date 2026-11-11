@@ -108,13 +108,13 @@ func refresh(state: Dictionary, join_source: Object) -> void:
 		var own: bool = slot == host_pc and server != null and server.has_method("match_kind") and ["online", "solo"].has(server.match_kind())
 		var solo_host_ready: bool = own and server.has_method("room_closed") and server.room_closed()
 		var info: Dictionary = {
-			"name": entry["name"], "color": _screen._slot_color.call(slot) if _screen._slot_color.is_valid() else Color.WHITE,
+			"name": str(entry.get("name", "")), "color": _screen._slot_color.call(slot) if _screen._slot_color.is_valid() else Color.WHITE,
 			"hat": server.slot_hat(slot) if server != null and server.has_method("slot_hat") else "none",
 			"eyes": server.slot_eyes(slot) if server != null and server.has_method("slot_eyes") else "round",
-			"ready": bool(entry["ready"]), "bot": is_bot, "host": slot == int(state["host"]) and not own and not is_bot,
+			"ready": bool(entry.get("ready", false)), "bot": is_bot, "host": slot == int(state["host"]) and not own and not is_bot,
 			"own": own, "ping": int(entry.get("ping", -1)), "tip": bool(entry.get("tip", false)), "relay": bool(entry.get("relay", false)),
 			"clickable": own, "badge_clickable": solo_host_ready, "kickable": can_kick and slot != host_pc,
-			"dim": not bool(entry["ready"]) and not is_bot,
+			"dim": not bool(entry.get("ready", false)) and not is_bot,
 		}
 		if HostSettingsScript.shared().player_numbers:
 			info["number"] = slot + 1
