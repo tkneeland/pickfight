@@ -267,6 +267,7 @@ VICTORY_INPUT_SPACE,Space or click,Leertaste oder Klick,Espace ou clic,Espacio o
 VICTORY_LIST_LAST,%s or %s,%s oder %s,%s ou %s,%s o %s,%s ou %s,%s 或 %s,%s か %s,%s 또는 %s,%s или %s
 VICTORY_MATCH_OVER,MATCH OVER,MATCH VORBEI,MATCH TERMINÉ,FIN DE LA PARTIDA,FIM DA PARTIDA,对局结束,マッチ終了,대전 종료,МАТЧ ОКОНЧЕН
 VICTORY_TAP_CONTINUE,Tap Continue on your phone,Tipp auf dem Handy auf Weiter,Touche Continuer sur ton téléphone,Toca Continuar en tu celular,Toque em Continuar no celular,请在手机上点“继续”,スマホで「続ける」をタップ,폰에서 '계속'을 탭하세요,Нажмите «Продолжить» на телефоне
+VICTORY_WAIT_FOR_HOST,Waiting for host to continue,Warten auf den Host zum Fortfahren,En attente de l'hôte pour continuer,Esperando a que el anfitrión continúe,Aguardando o anfitrião continuar,等待主机继续,ホストが続けるのを待っています,호스트가 계속하길 기다리는 중,Ждём продолжения от хоста
 VICTORY_TEAM_WINS,%s TEAM WINS!,TEAM %s GEWINNT!,L'ÉQUIPE %s GAGNE !,¡GANA EL EQUIPO %s!,TIME %s VENCE!,%s队获胜!,%sチームの勝ち!,%s팀 승리!,КОМАНДА %s ПОБЕЖДАЕТ!
 VICTORY_WINS,%s WINS!,%s GEWINNT!,%s GAGNE !,¡GANA %s!,%s VENCE!,%s 获胜!,%s の勝ち!,%s 승리!,%s ПОБЕЖДАЕТ!
 WAITING_FOR_PLAYERS,Waiting for players: %d connected (need %d),Warte auf Spieler: %d verbunden (nötig: %d),En attente de joueurs : %d connectés (il en faut %d),Esperando jugadores: %d conectados (mínimo %d),Esperando jogadores: %d conectados (mínimo %d),等待玩家:已连接 %d 人(需要 %d),プレイヤー待ち: %d人接続(必要: %d人),플레이어 기다리는 중: %d명 연결됨 (필요 %d명),Ждём игроков: подключено %d (нужно %d)
