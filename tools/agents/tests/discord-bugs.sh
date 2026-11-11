@@ -35,4 +35,23 @@ echo '{"message":"Missing Access","code":50001}' > "$T/reply.json"
 bash "$D" check >/dev/null 2>&1; check "discord error" $? 2
 check "reply" "$(bash "$D" reply 101 'Filed as #5, thanks')" "discord reply: 200"
 grep -q '"parse": \[\]' "$T/curl.log"; check "reply pings nobody" $? 0
+# status: the stub answers the token, channel and history probes by URL
+stub() {  # stub <answer for /users/@me> <answer for /channels/<id>> <answer for messages>
+  printf '#!/bin/bash\ncfg=$(cat)\ncase "$cfg" in *users/@me*) echo %q;; *messages*) echo %q;; *) echo %q;; esac\n' \
+    "$1" "$3" "$2" > "$T/bin/curl"; chmod +x "$T/bin/curl"; }
+stub '{"username":"ClaudeChat"}' '{"name":"bug-reports"}' '[]'
+out=$(bash "$D" status); check "status ok" $? 0
+check "status names channel" "$(echo "$out" | grep -c 'PASS bot can read #bug-reports')" 1
+stub '{"username":"ClaudeChat"}' '{"message":"Missing Access","code":50001}' '{"message":"Missing Access"}'
+out=$(bash "$D" status); check "status not in server" $? 2
+check "status says why" "$(echo "$out" | grep -c 'FAIL bot ClaudeChat cannot see')" 1
+stub '{"message":"401: Unauthorized"}' '{}' '{}'
+bash "$D" status >/dev/null; check "status bad token" $? 2
+# pf-tm-check.sh turns that into a FAIL saying Discord is not watched (process checks skipped, gh stubbed)
+stub '{"username":"ClaudeChat"}' '{"message":"Missing Access","code":50001}' '{"message":"Missing Access"}'
+printf '#!/bin/bash\necho 0\n' > "$T/bin/gh"; chmod +x "$T/bin/gh"
+out=$(PF_TM_CHECK_SKIP_PROCS=1 bash "$AG/pf-tm-check.sh" --quiet); check "tm-check fails" $? 1
+check "tm-check flags discord" "$(echo "$out" | grep -c 'FAIL Discord #bug-reports is NOT being watched')" 1
+rm "$PF_STATE_DIR/pf-discord.conf"
+check "tm-check flags missing conf" "$(PF_TM_CHECK_SKIP_PROCS=1 bash "$AG/pf-tm-check.sh" --quiet | grep -c 'is NOT being watched')" 1
 echo "discord-bugs: $pass passed, $fail failed"; [ "$fail" = 0 ]

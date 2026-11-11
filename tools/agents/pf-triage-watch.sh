@@ -11,6 +11,7 @@
 #   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
 #   DISCORD_BUG <n> new in #bug-reports  (triagemaster only, pf-discord.conf set up) people posted in the Discord server's
 #                      #bug-reports channel; checked once a minute while idle; Claude reads them with pf-discord-bugs.sh read
+#   TM_CHECK_FAIL <line>  (triagemaster only) every 6h pf-tm-check.sh found a duty not covered; the line says how to fix it
 # Tickets the open PRs are working on, space-separated: Closes|Fixes|Resolves|Refs #N in a title or body (one PR may
 # close several tickets, #1147), or a head branch named for the ticket. $1 = gh pr list --json number,body,title,headRefName
 pf_pr_tickets() {
@@ -90,6 +91,15 @@ while true; do
         aq=$(echo "$issues" | jq --arg p "$peer" --arg m "$META_TICKETS" '[.[] | select(.pull_request==null and (.number|IN($m|split(" ")|map(tonumber)[])|not)) | select(any(.assignees[]; .login==$p)) | select(any(.labels[]; .name=="ready-for-agent"))] | length' 2>/dev/null || echo 9)
         [ "$aq" -lt 5 ] && { echo "AUSTIN_QUEUE_LOW $aq ready tickets queued for $peer"; exit 0; }
       done
+    fi
+  fi
+  # every 6h the triagemaster self-checks its duties (autotriage.md rule 19); a FAIL wakes Claude to fix it
+  if pf_is_triagemaster; then
+    last=$(cat "$PF_STATE/.pf-tmcheck-last" 2>/dev/null || echo 0)
+    if [ $(( $(date +%s) - last )) -ge 21600 ]; then
+      date +%s > "$PF_STATE/.pf-tmcheck-last"
+      f=$(bash "$(dirname "$0")/pf-tm-check.sh" --quiet 2>/dev/null | grep '^FAIL' | head -n 1)
+      [ -n "$f" ] && { echo "TM_CHECK_FAIL ${f#FAIL }"; exit 0; }
     fi
   fi
   # idle 10 min in short ticks so a channel message (pf-msg.sh listen -> msg-wake.txt) wakes us within PF_TICK seconds
