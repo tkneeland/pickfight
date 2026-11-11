@@ -18,10 +18,12 @@ const POLL_SECONDS := 0.5
 
 var _screen: int = -1
 var _timer: float = 0.0
-## How many screen changes have been handled, for the scenario fixture.
+## How many screen changes have been handled; part of every log line.
 var changes: int = 0
 
 func _ready() -> void:
+	# Keep polling while the tree is paused, so a focus-loss pause cannot hide a screen change.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	if DisplayServer.get_name() == "headless":
 		set_process(false)
 		return
@@ -43,11 +45,14 @@ func _check() -> void:
 		return
 	_screen = now
 	changes += 1
+	# Re-applying an unchanged vsync mode can be a no-op, so force a real reset:
+	# switch vsync off, then re-apply the saved vsync mode and frame cap.
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	HostSettingsScript.shared().apply_display()
 	_log("screen changed")
 
 func _log(why: String) -> void:
-	print("ScreenWatch: %s: screen %d of %d, refresh %.1f Hz, vsync mode %d, max_fps %d" % [
-			why, _screen, DisplayServer.get_screen_count(),
+	print("ScreenWatch: %s (change %d): screen %d of %d, refresh %.1f Hz, vsync mode %d, max_fps %d" % [
+			why, changes, _screen, DisplayServer.get_screen_count(),
 			DisplayServer.screen_get_refresh_rate(_screen), DisplayServer.window_get_vsync_mode(),
 			Engine.max_fps])
