@@ -1325,6 +1325,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_rebound_slot_merges_ping_stats_1195",
 	"online_relay_leg_goes_stale_1195",
 	"online_slot_taken_by_other_joiner_keeps_share_1195",
+	"online_returning_joiner_keeps_felt_1195",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4400,6 +4401,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_relay_leg_goes_stale_1195()
 		"online_slot_taken_by_other_joiner_keeps_share_1195":
 			return await _scenario_online_slot_taken_by_other_joiner_keeps_share_1195()
+		"online_returning_joiner_keeps_felt_1195":
+			return await _scenario_online_returning_joiner_keeps_felt_1195()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -62055,7 +62058,7 @@ func _scenario_online_ping_stats_avg_p95_max_1195() -> Array[String]:
 		failures.append("felt 123 / share true gave %s" % server.slot_ping_stats(slot))
 	for key: String in ["avg", "p95", "max", "n", "felt"]:
 		var v: int = int(server.slot_ping_stats(slot).get(key, -2))
-		if v < -1 or v > ControllerServerScript.PING_STAT_MAX_MSEC:
+		if v < -1 or v > MatchStatsScript.PING_MAX_MSEC:
 			failures.append("%s = %d is out of -1..60000" % [key, v])
 	# Bots, the host PC's seat and an empty slot have no statistics.
 	for bot: int in server.virtual_slots():
@@ -62493,5 +62496,35 @@ func _scenario_online_slot_taken_by_other_joiner_keeps_share_1195() -> Array[Str
 		var sent: Variant = record.get("ping")
 		if not sent is Array or (sent as Array).size() != 1 or int(sent[0].get("n", 0)) != 1 or int(sent[0].get("felt", 0)) != 30:
 			failures.append("the telemetry ping list is %s, expected only the sharing joiner (n=1, felt 30)" % [sent])
+	await _rc_close_241(rig)
+	return failures
+
+## A returning joiner's seat reads felt -1 until it measures again: the entry keeps the felt delay it
+## left with. A new match clears the live seat's felt and share too.
+func _scenario_online_returning_joiner_keeps_felt_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "returning-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	await _ping_answer_1195(rig, remote, 0, {"felt": 80, "share": true})
+	server._keep_departed_ping_stats(slot) # leaves with felt 80
+	server._slot_peers[slot].felt_msec = -1 # the same joiner's new seat: nothing measured yet
+	await _ping_answer_1195(rig, remote, 0) # an old-style pong: felt -1
+	var listed: Array = server.match_ping_stats()
+	if listed.size() != 1 or int(listed[0].get("n", 0)) != 2 or int(listed[0].get("felt", 0)) != 80:
+		failures.append("a returning joiner gives %s, expected one entry with n = 2 and felt 80" % [listed])
+	server.reset_ping_stats()
+	if server.slot_felt_msec(slot) != -1 or server._slot_peers[slot].share:
+		failures.append("reset_ping_stats left felt %d / share %s on the live seat" % [server.slot_felt_msec(slot), server._slot_peers[slot].share])
 	await _rc_close_241(rig)
 	return failures

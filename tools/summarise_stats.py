@@ -15,6 +15,7 @@ damage and hits. An Online match (#1195) may carry "ping": per remote seat
 means are printed last. Bad lines are skipped.
 """
 import json
+import math
 import sys
 from collections import Counter, defaultdict
 
@@ -108,7 +109,7 @@ def ping_summary(records):
                 continue
             seats += 1
             weight = entry.get("n")
-            if not isinstance(weight, (int, float)) or weight < 1:
+            if not isinstance(weight, (int, float)) or not math.isfinite(weight) or weight < 1:
                 weight = 1
             for field in ("avg", "p95"):
                 value = entry.get(field)
