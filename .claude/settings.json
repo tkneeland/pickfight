@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/tools/agents/pf-hive-join.sh\"", "timeout": 8 }
+        ]
+      }
+    ]
+  }
+}
