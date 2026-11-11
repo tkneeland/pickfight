@@ -187,6 +187,10 @@ const HAFT_COLOR: Color = Color(0.42, 0.3, 0.2, 1.0)
 
 var input_vector: Vector2 = Vector2.ZERO
 var has_controller: bool = false
+## Issue #1197: held still through the round countdown, until GO. Every input
+## source reads as "not touching" and an action press throws nothing, so the
+## fighter can neither move nor attack. Set and cleared by RoundManager.
+var round_locked: bool = false
 
 ## Damage taken so far this round, and how many times this player has been
 ## eliminated. Both are observable state a scenario or a display can read;
@@ -668,6 +672,7 @@ func clear_shots() -> void:
 ## what "out of the round" looks like.
 func _go_inert(keep_shots: bool = false) -> void:
 	alive = false
+	round_locked = false
 	_clear_rig()
 	if keep_shots:
 		# Issue #570: only the tether (the hook) is tied to its owner.
@@ -1631,6 +1636,8 @@ func _update_weapon_input(delta: float) -> void:
 		weapon_length = move_toward(weapon_length, _stats.min_reach, _stats.rest_return_speed * delta)
 
 func _get_effective_vector(delta: float) -> Vector2:
+	if round_locked:
+		return Vector2.ZERO
 	if has_controller:
 		return input_vector
 	match debug_source:
@@ -2305,7 +2312,7 @@ func _detect_flick() -> bool:
 ## boomerang the way a flick does -- same readiness, same launch -- and reports
 ## whether it did, so the caller toggles release only when it did not.
 func try_action_throw() -> bool:
-	if _stats == null or not alive:
+	if _stats == null or not alive or round_locked:
 		return false
 	if _stats.special != &"boomerang" and not (_stats.special == &"grapple" and not flick_launch_enabled):
 		return false

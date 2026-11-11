@@ -1,7 +1,8 @@
 extends RefCounted
 
-## The two cards laid over a round (#543, split out of `LobbyScreen.gd`): the
-## stage title card (#120) and the PAUSED banner (#149). Each is built the first
+## The cards laid over a round (#543, split out of `LobbyScreen.gd`): the
+## stage title card (#120), the round countdown (#1197, layer 11) and the
+## PAUSED banner (#149). Each is built the first
 ## time it is needed, on its own CanvasLayer as a child of the LobbyScreen
 ## (layers 10 and 12). Display only.
 
@@ -19,6 +20,9 @@ var _title_label: Label
 var _title_rule_label: Label
 var _title_tween: Tween
 
+var _countdown_layer: CanvasLayer
+var _countdown_label: Label
+
 var _pause_layer: CanvasLayer
 var _pause_label: Label
 var _pause_hint: Label
@@ -33,6 +37,10 @@ func stage_title_label() -> Label:
 ## The line under the stage title naming the game mode and its rule (#352).
 func stage_title_rule_label() -> Label:
 	return _title_rule_label
+
+## The round countdown's number, or null before the first countdown.
+func round_countdown_label() -> Label:
+	return _countdown_label
 
 ## The PAUSED banner, or null before the first pause.
 func pause_label() -> Label:
@@ -93,6 +101,43 @@ func show_stage_title(text: String, duration: float, rule: String = "") -> void:
 func _setting_on() -> bool:
 	var sfx: Node = (Engine.get_main_loop() as SceneTree).root.get_node_or_null("Sfx")
 	return sfx == null or bool(sfx.get("stage_title_card"))
+
+# --- Round countdown (issue #1197) -------------------------------------------
+#
+# "3", "2", "1", then "GO!", big in the middle of the screen, each punching in
+# (a plain swap with Reduce flashes on). `RoundManager` steps it and holds the
+# fighters until GO; this only draws it, the same on host and Online joiner.
+
+const COUNTDOWN_FONT_SIZE: int = 180
+
+## Shows countdown `step`: 3, 2 or 1, 0 for GO, or -1 to take it down.
+func show_round_countdown(step: int) -> void:
+	if step < 0:
+		if _countdown_label != null:
+			_countdown_label.visible = false
+		return
+	if _countdown_label == null:
+		_countdown_layer = CanvasLayer.new()
+		_countdown_layer.name = "RoundCountdownLayer"
+		_countdown_layer.layer = 11
+		_screen.add_child(_countdown_layer)
+		_countdown_label = ScreenKitScript.ink_label("", COUNTDOWN_FONT_SIZE, UiThemeScript.CREAM, 22)
+		_countdown_label.name = "RoundCountdown"
+		_countdown_layer.add_child(_countdown_label)
+	_countdown_label.text = str(step) if step > 0 else _screen.tr("ROUND_COUNTDOWN_GO")
+	_countdown_label.add_theme_color_override("font_color", UiThemeScript.CREAM if step > 0 else UiThemeScript.YELLOW)
+	_countdown_label.scale = Vector2.ONE
+	_countdown_label.reset_size()
+	var screen: Vector2 = _screen.get_viewport().get_visible_rect().size
+	_countdown_label.position = (screen - _countdown_label.size) * 0.5
+	_countdown_label.visible = true
+	if not _reduce_flash():
+		ScreenKitScript.punch(_countdown_label, _screen)
+
+## Settings > Reduce flashes (#317) on this machine.
+func _reduce_flash() -> bool:
+	var sfx: Node = (Engine.get_main_loop() as SceneTree).root.get_node_or_null("Sfx")
+	return sfx != null and bool(sfx.get("reduce_flash"))
 
 # --- Pause banner (issue #149) -----------------------------------------------
 

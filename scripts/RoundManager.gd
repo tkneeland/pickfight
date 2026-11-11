@@ -131,6 +131,11 @@ extends Node
 ## How long the stage name takes to sweep across. 0 turns it off.
 @export var stage_title_sec: float = 1.1
 
+## Issue #1197: each step of the "3, 2, 1, GO" a round opens with, after the
+## stage title card. scenes/Main.tscn has 0.6 s (3, 2, 1 and GO in 2.4 s); 0,
+## a round loop built in code, turns it off, as does Settings > "Round countdown".
+@export var round_countdown_step_sec: float = 0.0
+
 ## The HUD's KillFeed node (scenes/Main.tscn). Empty: KOs are still counted,
 ## just not shown.
 @export var kill_feed_path: NodePath
@@ -144,6 +149,8 @@ signal modifier_announced(title: String)
 ## Announcer hooks (#152): each whole second of the lobby countdown (3, 2,
 ## 1), and the round win that wins the match.
 signal countdown_ticked(seconds_left: int)
+## #1197: each step of the round countdown: 3, 2, 1, then 0 for GO.
+signal round_countdown_ticked(step: int)
 signal match_won(slot: int)
 ## Teams mode (issue #236): a team took a round, and a team won the match.
 ## A Teams match emits these instead of `match_won` (`round_won` still goes
@@ -294,6 +301,7 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_tick_final_ko()
+	_tick_round_countdown()
 	_tick_spawn_protection()
 	_tick_ghosts()
 	_tick_name_tags()
@@ -402,13 +410,104 @@ func _try_start_round() -> void:
 	_tie_slots.clear()
 	_kill_zone_home_y = NAN
 	_state = State.ROUND_ACTIVE
+	_show_stage_title()
+	if _round_countdown_on():
+		_begin_round_countdown()
+	else:
+		_start_spawn_protection()
+		_begin_round_play()
+
+## Everything a round runs once its fighters are let go: at once, or at the
+## countdown's GO (#1197).
+func _begin_round_play() -> void:
 	_start_round_modifier()
 	_start_game_mode()
 	_pickup_director.start()
 	_start_kill_zone_rise()
-	_start_spawn_protection()
-	_show_stage_title()
 	round_started.emit()
+
+# --- Round countdown (issue #1197) --------------------------------------------
+#
+# After the stage title card, "3, 2, 1, GO" steps by `round_countdown_step_sec`
+# on game time (a pause holds it). The fighters stand spawned but held
+# (`Player.round_locked`) and spawn protected; at GO they are let go, the
+# round's systems start (`_begin_round_play()`: modifier, mode, pickups, lava,
+# `round_started` and its "FIGHT!") and the protection's own time starts.
+# Each step is drawn by `RoundCards` and streamed to Online joiners.
+
+## When "3" shows, on game time; -1 with no countdown running.
+var _countdown_start_msec: int = -1
+## The step last shown: 3, 2, 1, 0 for GO; 4 before "3".
+var _countdown_step: int = 4
+## The round the running countdown belongs to.
+var _countdown_round: int = 0
+
+func _round_countdown_on() -> bool:
+	if round_countdown_step_sec <= 0.0:
+		return false
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	return sfx == null or bool(sfx.get("round_countdown"))
+
+## Whether a round countdown is running (before GO, or GO still showing).
+func round_countdown_active() -> bool:
+	return _countdown_start_msec >= 0
+
+func _begin_round_countdown() -> void:
+	var lead_msec: int = 0
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	if stage_title_sec > 0.0 and (sfx == null or bool(sfx.get("stage_title_card"))):
+		lead_msec = int(stage_title_sec * 1000.0)
+	var step_msec: int = int(round_countdown_step_sec * 1000.0)
+	_countdown_start_msec = GameClockScript.now_msec() + lead_msec
+	_countdown_step = 4
+	_countdown_round = _round_number
+	_set_round_locked(true)
+	# Protected from the spawn on; the protection's own seconds run from GO.
+	_start_spawn_protection()
+	if not _protected.is_empty():
+		_protected_until_msec += lead_msec + 3 * step_msec
+
+func _tick_round_countdown() -> void:
+	if _countdown_start_msec < 0:
+		return
+	if _state != State.ROUND_ACTIVE or _round_number != _countdown_round:
+		_cancel_round_countdown()
+		return
+	var since: int = GameClockScript.now_msec() - _countdown_start_msec
+	if since < 0:
+		return
+	var step_msec: int = maxi(1, int(round_countdown_step_sec * 1000.0))
+	var index: int = since / step_msec
+	if index >= 4 and _countdown_step == 0:
+		_show_round_countdown(-1)
+		_countdown_start_msec = -1
+		return
+	# A long frame never skips GO.
+	var step: int = maxi(0, 3 - index)
+	if step == _countdown_step:
+		return
+	_countdown_step = step
+	_show_round_countdown(step)
+	round_countdown_ticked.emit(step)
+	if step == 0:
+		_set_round_locked(false)
+		_begin_round_play()
+
+## A round that ends or is abandoned before GO lets its fighters go.
+func _cancel_round_countdown() -> void:
+	_set_round_locked(false)
+	_show_round_countdown(-1)
+	_countdown_start_msec = -1
+	_countdown_step = 4
+
+func _set_round_locked(on: bool) -> void:
+	for slot: int in _in_round:
+		if slot >= 0 and slot < _players.size() and is_instance_valid(_players[slot]):
+			_players[slot].set("round_locked", on and bool(_players[slot].get("alive")))
+
+func _show_round_countdown(step: int) -> void:
+	EffectStreamScript.record("countdown", {"n": step}) # the joiner's countdown
+	_screen().show_round_countdown(step)
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
 ## the next index into `stage_scenes` via `StageRotation.next_stage_index()`, and

@@ -834,6 +834,9 @@ func _build_left_column() -> Control:
 func show_stage_title(text: String, duration: float, rule: String = "") -> void:
 	_cards.show_stage_title(text, duration, rule)
 
+func show_round_countdown(step: int) -> void:
+	_cards.show_round_countdown(step)
+
 func show_pause_banner(on: bool) -> void:
 	_cards.show_pause_banner(on)
 

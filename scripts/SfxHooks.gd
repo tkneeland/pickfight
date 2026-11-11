@@ -243,6 +243,13 @@ func _watch_round_manager(round_manager: Node) -> void:
 	round_manager.connect("round_started", _on_round_started)
 	round_manager.connect("round_won", _on_round_won)
 	round_manager.connect("modifier_announced", _on_modifier_announced)
+	if round_manager.has_signal("round_countdown_ticked"):
+		round_manager.connect("round_countdown_ticked", _on_round_countdown_ticked)
+
+## #1197: a tick on each of 3, 2 and 1; GO is the round start's own sound.
+func _on_round_countdown_ticked(step: int) -> void:
+	if step > 0:
+		sfx.play(&"countdown")
 
 func _on_round_started() -> void:
 	sfx.play(&"round_start")

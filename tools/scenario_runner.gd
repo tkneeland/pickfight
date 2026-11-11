@@ -1304,6 +1304,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_guest_victory_prompt_waits_for_host_1186",
 	"koth_hill_never_over_a_pit_1187",
 	"weapon_starts_round_neutral_after_held_aim_1185",
+	"round_countdown_holds_fighters_until_go_1197",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4337,6 +4338,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_hill_never_over_a_pit_1187()
 		"weapon_starts_round_neutral_after_held_aim_1185":
 			return await _scenario_weapon_starts_round_neutral_after_held_aim_1185()
+		"round_countdown_holds_fighters_until_go_1197":
+			return await _scenario_round_countdown_holds_fighters_until_go_1197()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -61230,4 +61233,106 @@ func _scenario_weapon_starts_round_neutral_after_held_aim_1185() -> Array[String
 	server._test_pad_axes[0] = Vector2.ZERO
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _teardown(rig["stage"])
+	return failures
+
+## #1197: a round opens with "3, 2, 1, GO" after the stage title card. Until GO
+## the fighters are held (a held drag moves nothing), protected, and the round
+## has not started (no `round_started`, so no "FIGHT!", modifier, mode, pickups
+## or lava); 3, 2 and 1 each tick, the steps show on the round countdown card,
+## and at GO the fighters are let go and the protection's own time starts.
+## With Settings > "Round countdown" off, the round starts at once.
+func _scenario_round_countdown_holds_fighters_until_go_1197() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = get_root().get_node_or_null("Sfx")
+	var loop: Dictionary = _new_round_loop(ABANDON_GRACE_SEC * 100.0)
+	var roster: _LiveRoster = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	rm.round_countdown_step_sec = 0.3
+	rm.stage_title_sec = 0.4
+	var steps: Array[int] = []
+	var step_msec: Array[int] = []
+	rm.round_countdown_ticked.connect(func(step: int) -> void:
+		steps.append(step)
+		step_msec.append(_game_msec()))
+	var started: Array[int] = []
+	rm.round_started.connect(func() -> void: started.append(_game_msec()))
+	var ticks_heard: Array[int] = [0]
+	if sfx != null:
+		sfx.played.connect(func(sound: StringName, _p: Variant, _s: float) -> void:
+			if sound == &"countdown":
+				ticks_heard[0] += 1)
+	players[0].bind_controller()
+	roster.slots = [0, 1]
+	roster.live = [0, 1]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the round never spawned its fighters")
+		await _teardown(loop["stage"])
+		return failures
+	var spawned_msec: int = _game_msec()
+	if not rm.round_countdown_active():
+		failures.append("no countdown ran at the round start")
+	if not players[0].round_locked or not players[1].round_locked:
+		failures.append("fighters were not held for the countdown")
+	if not players[0].spawn_protected:
+		failures.append("a fighter was not protected through the countdown")
+	# A drag held through the countdown moves nothing until GO.
+	while started.is_empty() and _game_msec() - spawned_msec < 5000:
+		players[0].set_input_vector(Vector2(0.0, -1.0))
+		if not steps.is_empty() and steps[-1] > 0 and players[0]._effective_input != Vector2.ZERO:
+			failures.append("a held drag reached the fighter at countdown step %d" % steps[-1])
+			break
+		await physics_frame
+	if started.is_empty():
+		failures.append("the round never started (steps %s)" % [steps])
+	if steps.slice(0, 4) != [3, 2, 1, 0]:
+		failures.append("countdown steps %s, want [3, 2, 1, 0]" % [steps])
+	elif not started.is_empty():
+		var lead: int = step_msec[0] - spawned_msec
+		var to_go: int = step_msec[3] - step_msec[0]
+		print("      title lead %d ms, 3 to GO %d ms, round_started at GO+%d ms" % [lead, to_go, started[0] - step_msec[3]])
+		if lead < 300:
+			failures.append("the countdown began %d ms after the spawn, before the title card's 400 ms" % lead)
+		if absi(to_go - 900) > 60:
+			failures.append("3 to GO took %d ms, want 900" % to_go)
+		if started[0] < step_msec[3]:
+			failures.append("round_started went out before GO")
+		var protect_left: int = rm._protected_until_msec - step_msec[3]
+		if absi(protect_left - int(rm.spawn_protection_sec * 1000.0)) > 60:
+			failures.append("protection ran %d ms past GO, want %d" % [protect_left, int(rm.spawn_protection_sec * 1000.0)])
+	if sfx != null and ticks_heard[0] != 3:
+		failures.append("heard %d countdown ticks, want 3 (3, 2, 1)" % ticks_heard[0])
+	await _await_ticks(2)
+	if players[0].round_locked or players[1].round_locked:
+		failures.append("fighters still held after GO")
+	if players[0]._effective_input == Vector2.ZERO:
+		failures.append("the held drag did not reach the fighter after GO")
+	var label: Label = rm._screen()._cards.round_countdown_label()
+	if label == null:
+		failures.append("the countdown card was never drawn")
+	await _await_condition(func() -> bool: return not rm.round_countdown_active(), 2000)
+	if label != null and label.visible:
+		failures.append("the GO card stayed up")
+	players[0].set_input_vector(Vector2.ZERO)
+	await _teardown(loop["stage"], false)
+	# Switched off: the next round starts at once, nobody held.
+	if sfx != null:
+		var was: bool = sfx.round_countdown
+		sfx.round_countdown = false
+		var loop2: Dictionary = _new_round_loop(ABANDON_GRACE_SEC * 100.0)
+		var rm2: Node = loop2["round_manager"]
+		var players2: Array[RigidBody2D] = loop2["players"]
+		rm2.round_countdown_step_sec = 0.3
+		var started2: Array[bool] = [false]
+		rm2.round_started.connect(func() -> void: started2[0] = true)
+		var roster2: _LiveRoster = loop2["roster"]
+		roster2.slots = [0, 1]
+		roster2.live = [0, 1]
+		if not await _await_condition(func() -> bool: return _all_alive(players2), ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("switched off: the round never spawned")
+		elif not started2[0] or rm2.round_countdown_active() or players2[0].round_locked:
+			failures.append("switched off: the round still counted down (started %s, locked %s)" % [started2[0], players2[0].round_locked])
+		sfx.round_countdown = was
+		await _teardown(loop2["stage"], false)
+	_scenario_completed = true
 	return failures
