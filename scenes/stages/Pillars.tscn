@@ -63,6 +63,34 @@ strength = 900.0
 calm_sec = 7.0
 gust_sec = 1.5
 
+; Gap shelves (#1202): 126 falls in 43 rounds, the worst of the 44 stages in the bot sweep. A shelf
+; in every 180 px gap (top y=292, pillar tops y=120) and one beyond each outer pillar catches a body
+; that slips off a pillar top. It lands 172 px below the tops and climbs back; the kill zone stays
+; below for anything that misses.
+[node name="ShelfOuterLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-780, 300)
+size = Vector2(140, 16)
+
+[node name="ShelfFarLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-480, 300)
+size = Vector2(160, 16)
+
+[node name="ShelfLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-160, 300)
+size = Vector2(160, 16)
+
+[node name="ShelfRight" parent="." instance=ExtResource("platform")]
+position = Vector2(160, 300)
+size = Vector2(160, 16)
+
+[node name="ShelfFarRight" parent="." instance=ExtResource("platform")]
+position = Vector2(480, 300)
+size = Vector2(160, 16)
+
+[node name="ShelfOuterRight" parent="." instance=ExtResource("platform")]
+position = Vector2(780, 300)
+size = Vector2(140, 16)
+
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-320, 60)
 

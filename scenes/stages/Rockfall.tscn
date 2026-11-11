@@ -95,30 +95,44 @@ position = Vector2(0, -430)
 position = Vector2(640, -430)
 interval_sec = 7.0
 
+; Pit shelves (#1202): a ledge 72 px below the bank tops in each pit (kill zone y=500, shelf top
+; y=432). A body knocked into the pit lands here and climbs back instead of dying on the spot. The
+; outer edges stay open sky, so ring-outs are still possible.
+[node name="PitShelfLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-265, 440)
+size = Vector2(110, 16)
+
+[node name="PitShelfRight" parent="." instance=ExtResource("platform")]
+position = Vector2(265, 440)
+size = Vector2(110, 16)
+
+; Stage review (#1202): Spawn2/3 were 25 px from the bank's pit edge (x=+-330), so the first shove
+; ended the round (median first fall 1.4 s in the bot sweep). Spawns are now at least 80 px from
+; the pit edge and 60 px from the outer edge.
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-415, 320)
+position = Vector2(-600, 320)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(415, 320)
+position = Vector2(600, 320)
 
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-355, 320)
+position = Vector2(-500, 320)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(355, 320)
+position = Vector2(500, 320)
 
 ; Spawns 4-7 (issue #137): eight players. Four on each bank, 60 px apart, all inboard of the lookout ledges.
 [node name="Spawn4" type="Marker2D" parent="."]
-position = Vector2(-475, 320)
+position = Vector2(-410, 320)
 
 [node name="Spawn5" type="Marker2D" parent="."]
-position = Vector2(475, 320)
+position = Vector2(410, 320)
 
 [node name="Spawn6" type="Marker2D" parent="."]
-position = Vector2(-535, 320)
+position = Vector2(-660, 320)
 
 [node name="Spawn7" type="Marker2D" parent="."]
-position = Vector2(535, 320)
+position = Vector2(660, 320)
 
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 500)
