@@ -8,7 +8,7 @@
 #                                     exit 1 when there are none; exit 2 when not set up or Discord fails
 #   pf-discord-bugs.sh read           print those messages (id, time, author, text, attachment URLs), oldest first.
 #                                     Marks nothing: a report stays new until it is handled (reply or ack)
-#   pf-discord-bugs.sh reply <id> <text>   post <text> as a reply to message <id> (no pings) and mark that one handled
+#   pf-discord-bugs.sh reply <id> <text>   post <text> as a reply to message <id> (pings only allowlisted <@id>s, and only with --dev; public replies never ping) and mark that one handled
 #   pf-discord-bugs.sh ack <id> <reason>   mark that one message handled without replying; the reason is logged
 # Each message is handled on its own (owner, 2026-11-10: feature requests were skipped when a reply to a later
 # report marked everything before it). Unhandled reports keep waking the watcher until each gets a reply or ack.
@@ -46,13 +46,18 @@ advance() {  # advance <id>: the marker (everything up to here handled) moves fo
   if [ -z "$cur" ] || id_gt "$1" "$cur"; then echo "$1" > "$LAST"; fi; }
 mark() {  # mark <id> <disposition>: that one message is handled; the marker moves on in check
   echo "$1" >> "$HANDLED"; printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$1" "$2" >> "$PF_STATE/discord-bugs.log"; }
+# $done: ids handled on this machine plus ids that already have a real bot reply in the fetched messages (any machine's
+# reply: a new triagemaster, by succession or failover takeover, has no marker or handled list of its own, #1219). A
+# failover notice ("taking over from ...", pf-hive-failover.sh) is not an answer, the same rule as its unanswered().
+DONE_JQ='(($h | split("\n")) + [.[] | select(.author.bot == true and ((.content // "") | startswith("taking over from ") | not))
+  | .message_reference.message_id // empty]) as $done'
 # The fetched messages minus bots and handled ones, as a JSON array
-pending() { jq --rawfile h "$HANDLED" '($h | split("\n")) as $done | [.[] | select(.author.bot != true) | select(.id | IN($done[]) | not)]'; }
+pending() { jq --rawfile h "$HANDLED" "$DONE_JQ"' | [.[] | select(.author.bot != true) | select(.id | IN($done[]) | not)]'; }
 case "${1:-}" in
   check)
     touch "$HANDLED"; new=$(fetch_new) || exit 2
     # step the marker past the leading run of bot and handled messages, so they are never fetched again
-    done_to=$(echo "$new" | jq -r --rawfile h "$HANDLED" '($h | split("\n")) as $done |
+    done_to=$(echo "$new" | jq -r --rawfile h "$HANDLED" "$DONE_JQ"' |
       (map(.author.bot == true or (.id | IN($done[]))) | index(false)) as $i |
       if $i == null then (last.id // empty) elif $i == 0 then empty else .[$i - 1].id end')
     [ -n "$done_to" ] && advance "$done_to"
@@ -67,7 +72,7 @@ case "${1:-}" in
     exit 0 ;;
   reply)
     [ -n "${2:-}" ] && [ -n "${3:-}" ] || { echo "usage: pf-discord-bugs.sh reply <message id> <text>" >&2; exit 2; }
-    body=$(jq -n --arg t "${3:0:1900}" --arg id "$2" '{content: $t, message_reference: {message_id: $id}, allowed_mentions: {parse: []}}')
+    body=$(jq -n --arg t "${3:0:1900}" --arg id "$2" --argjson am "$( [ "$K" = dev ] && pf_discord_mentions "${3:0:1900}" || echo '{"parse":[],"users":[]}')" '{content: $t, message_reference: {message_id: $id}, allowed_mentions: $am}')
     code=$(dcurl "/channels/$CH/messages" -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" -d "$body")
     echo "discord reply: $code"; [ "$code" = 200 ] || exit 2
     mark "$2" "$K reply: ${3:0:200}" ;;

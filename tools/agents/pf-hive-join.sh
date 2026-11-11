@@ -3,9 +3,11 @@
 #   1. reminds the agent to read docs/agents/team-memory.md
 #   2. restarts this machine's dead private-channel supervisor (listener + heartbeat), and on Windows the
 #      triage/automerge/beacon supervisors too (reusing windows/pf-start.ps1; macOS: `screen` + windows/pf-supervise.sh)
-#   3. prints `pf-hive.sh status --short` (#1210) when that script exists, else a one-line local status
+#   3. prints `pf-hive.sh status --short --cached` (#1208: the last status at once, refreshed in the background) when
+#      that script exists, else a one-line local status
 # Silent on success apart from the status. Never blocks or fails the session: the whole check runs under a watchdog
-# (PF_HIVE_TIMEOUT seconds, default 4) and the exit code is always 0. No network use of its own.
+# (PF_HIVE_TIMEOUT seconds, default 4) and the exit code is always 0. No network use of its own; the cached status
+# starts a detached refresh (pf-hive.sh: at most once a minute, one at a time) that outlives the watchdog by design.
 # Env (tests): PF_HIVE_OS=windows|unix, PF_HIVE_TIMEOUT, PF_STATE_DIR, PF_ACCOUNT, PF_HIVE_STALE (msg status max age s, default 180).
 AG=$(cd "$(dirname "$0")" && pwd)
 if [ -z "${PF_HIVE_INNER:-}" ]; then
@@ -74,9 +76,8 @@ if [ -n "$need" ] && [ -z "${LOCKED:-}" ]; then
 fi
 [ -n "$restarted" ] && echo "hive: restarted dead${restarted}"
 
-if [ -f "$AG/pf-hive.sh" ]; then
-  bash "$AG/pf-hive.sh" status --short 2>/dev/null || echo "hive: status unavailable"
-else
+# the cached hive status (pf-hive.sh refreshes it in the background); with none cached yet, the one-line local status
+if ! { [ -f "$AG/pf-hive.sh" ] && bash "$AG/pf-hive.sh" status --short --cached 2>/dev/null; }; then
   m=$(age "$PF_STATE/msg-status.json"); [ "$m" -gt "${PF_HIVE_STALE:-180}" ] && ms=down || ms=ok
   i=$(age "$PF_STATE/msg-inbox.log"); [ "$i" = 999999 ] && is=none || is="$((i / 60))m ago"
   echo "hive: $PF_ACCOUNT channel=$ms last-message=$is"
