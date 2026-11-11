@@ -1,0 +1,6 @@
+$ godot --headless --path . --check-only -s tools/scenario_runner.gd 2>&1 | grep -E "SCRIPT ERROR|Parse Error"
+(no grep output above = PASS)
+$ grep -c '^		_:$' tools/scenario_runner.gd
+1
+$ tail -1 tools/scenario_runner.gd
+	return failures

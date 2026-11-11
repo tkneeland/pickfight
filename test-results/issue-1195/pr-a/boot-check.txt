@@ -1,0 +1,2 @@
+$ godot --headless --path . --quit 2>&1 | grep -E "SCRIPT ERROR|Parse Error|Failed to load script"
+(exit of godot: 0; no grep output above = PASS)
