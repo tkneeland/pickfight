@@ -56,7 +56,7 @@ if found; then
 fi
 hb=$(awk -F'|' -v p="$to" '$2 == p && ($3 == "HELLO" || $3 == "USAGE") && $1 + 0 > m { m = $1 + 0 } END { print int(m) }' "$INBOX" 2>/dev/null)
 if [ "${hb:-0}" -gt 0 ]; then
-  echo "$to hasn't answered (last heartbeat $(( ($(date -u +%s) - hb) / 60 )) min ago, $(TZ=America/New_York pf_epoch_fmt "$hb" +%H:%M) ET)"
+  echo "$to hasn't answered (last heartbeat $(( ($(date -u +%s) - hb) / 60 )) min ago, $(TZ=$PF_ET_TZ pf_epoch_fmt "$hb" +%H:%M) ET)"
 else
   echo "$to hasn't answered (no heartbeat on record)"
 fi

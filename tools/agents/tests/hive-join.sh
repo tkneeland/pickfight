@@ -8,6 +8,7 @@ for s in screen powershell.exe; do printf '#!/bin/bash\necho "%s $*" >> "$PF_TES
 printf '#!/bin/bash\n[ -n "$PF_TEST_PGREP" ] && echo "$PF_TEST_PGREP" && exit 0\nexit 1\n' > "$T/bin/pgrep"; chmod +x "$T/bin/pgrep"
 printf '#!/bin/bash\nexit 0\n' > "$T/bin/ps"; chmod +x "$T/bin/ps"   # no real processes visible to the test
 export PATH="$T/bin:$PATH" PF_STATE_DIR=$T/state PF_ACCOUNT=tkneeland PF_TEST_LOG=$T/calls.log PF_TEST_SCREENLS=$T/screenls
+export PF_DRY_RUN=1   # pf-hive.sh --cached starts no background refresh (no network)
 : > "$T/calls.log"; fails=0
 ok() { if [ "$2" = 0 ]; then echo "ok   $1"; else echo "FAIL $1"; fails=$((fails + 1)); fi; }
 run() { bash "$AG/pf-hive-join.sh"; }
