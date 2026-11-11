@@ -152,6 +152,7 @@ const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
 
 ## The hats a phone may pick (issue #151), by path (CLAUDE.md).
 const HatScript := preload("res://scripts/Hat.gd")
+const MatchStatsScript1195: GDScript = preload("res://scripts/MatchStats.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
@@ -2752,6 +2753,7 @@ func online_status() -> String:
 	return _link_status(_online_requested)
 
 func _on_room_code_changed(_code: String) -> void:
+	_forget_relay_leg() # #1195: a new room is a new host leg
 	_sync_steam_presence()
 	_refresh_join_label()
 	_send_lobby_to_all()
@@ -2782,7 +2784,9 @@ func _refresh_join_label() -> void:
 	else:
 		label.text = "%s\n%s" % [_join_label_base, tr("ONLINE_ROOM") % code]
 
-func _on_link_state_changed(_state: String) -> void:
+func _on_link_state_changed(state: String) -> void:
+	if state != "online":
+		_forget_relay_leg() # #1195: a stale host leg is never shown or logged
 	_sync_steam_presence()
 	_refresh_join_label()
 	_send_lobby_to_all()
@@ -3360,6 +3364,7 @@ func _on_pong(slot: int, msg: Dictionary) -> void:
 	if not seat is RemoteSeat or not _is_number(msg.get("n")) or not seat.ping_sent.has(int(msg["n"])):
 		return
 	seat.rtt_msec = maxi(0, Time.get_ticks_msec() - int(seat.ping_sent[int(msg["n"])]))
+	seat.ping_sent.erase(int(msg["n"])) # a replayed pong adds no second sample
 	# #1195: keep the round trip for the match statistics; read the client's
 	# felt delay and sharing flag, never trusting either (a hostile or older
 	# client's value becomes -1 / false, so it can never break the record).
@@ -3455,20 +3460,33 @@ func slot_ping_msec(slot: int) -> int:
 ## statistic is clamped to, so a stalled clock or a hostile client can never
 ## push a number out of what the relay's stats validator accepts.
 const PING_SAMPLES_MAX: int = 4096
-const PING_STAT_MAX_MSEC: int = 60000
+## One constant shared with MatchStats.ping_entries and RoundManager. relay/Relay.gd
+## runs as its own server and keeps its own STATS_MAX_PING_MSEC, kept equal to this.
+const PING_STAT_MAX_MSEC: int = MatchStatsScript1195.PING_MAX_MSEC
 ## The last host-to-relay round trip in ms; -1 until the relay answers an echo.
 var relay_rtt_msec: int = -1
 var relay_echo_interval_msec: int = 1000
 var _relay_echo_n: int = 0
 var _relay_echo_sent_msec: int = 0
 var _relay_echo_sent: Dictionary = {} # echo n -> msec it left
-## The statistics of seats unbound since the match started.
-var _departed_ping_stats: Array = []
+## slot -> {"samples", "felt", "share"} of the seat that left that slot since the
+## match started; merged back into the slot's one entry if it is rebound.
+var _departed_ping: Dictionary = {}
+var _relay_echo_answered_msec: int = 0
+## No echo answered for this many intervals: the host leg is stale.
+const RELAY_ECHO_STALE_INTERVALS: int = 5
+
+func _forget_relay_leg() -> void:
+	relay_rtt_msec = -1
+	_relay_echo_sent.clear()
 
 func _relay_echo_tick() -> void:
-	if relay_link == null or not is_online():
-		return
 	var now: int = Time.get_ticks_msec()
+	if relay_link == null or not is_online():
+		_forget_relay_leg()
+		return
+	if relay_rtt_msec >= 0 and now - _relay_echo_answered_msec > RELAY_ECHO_STALE_INTERVALS * relay_echo_interval_msec:
+		relay_rtt_msec = -1
 	if _relay_echo_n != 0 and now - _relay_echo_sent_msec < relay_echo_interval_msec:
 		return
 	_relay_echo_n += 1
@@ -3482,6 +3500,7 @@ func _on_relay_echo(n: int) -> void:
 		return
 	relay_rtt_msec = clampi(Time.get_ticks_msec() - int(_relay_echo_sent[n]), 0, PING_STAT_MAX_MSEC)
 	_relay_echo_sent.erase(n)
+	_relay_echo_answered_msec = Time.get_ticks_msec()
 
 ## Whether `slot` is held by a PC client over the relay (not a phone over the
 ## relay, a LAN phone, a pad, the host PC or a bot).
@@ -3499,11 +3518,21 @@ func slot_ping_stats(slot: int) -> Dictionary:
 		return {}
 	return _seat_ping_stats(_slot_peers[slot])
 
+## The joiner's felt delay for the remote PC seat in `slot` (-1 unknown). Cheap:
+## the readout reads this every second instead of sorting every sample.
+func slot_felt_msec(slot: int) -> int:
+	if slot < 0 or slot >= _slot_peers.size() or not _is_pc_remote(_slot_peers[slot]):
+		return -1
+	return _clamp_ping_stat(_slot_peers[slot].felt_msec)
+
 func _seat_ping_stats(seat: RemoteSeat) -> Dictionary:
-	var n: int = seat.rtt_samples.size()
+	return _ping_stats_of(seat.rtt_samples, seat.felt_msec, seat.share)
+
+static func _ping_stats_of(samples: PackedInt32Array, felt: int, share: bool) -> Dictionary:
+	var n: int = samples.size()
 	if n == 0:
 		return {}
-	var sorted: PackedInt32Array = seat.rtt_samples.duplicate()
+	var sorted: PackedInt32Array = samples.duplicate()
 	sorted.sort()
 	var total: int = 0
 	for v: int in sorted:
@@ -3514,35 +3543,60 @@ func _seat_ping_stats(seat: RemoteSeat) -> Dictionary:
 		"p95": _clamp_ping_stat(sorted[p95_index]),
 		"max": _clamp_ping_stat(sorted[n - 1]),
 		"n": _clamp_ping_stat(n),
-		"felt": _clamp_ping_stat(seat.felt_msec),
-		"share": seat.share,
+		"felt": _clamp_ping_stat(felt),
+		"share": share,
 	}
 
 ## Starts a match's statistics afresh: every live seat's round trips and the
 ## seats that left before.
 func reset_ping_stats() -> void:
-	_departed_ping_stats.clear()
+	_departed_ping.clear()
 	for seat: RemoteSeat in _remote_seats.values():
 		seat.rtt_samples = PackedInt32Array()
 
-## Every remote PC seat's statistics this match: the live seats, then the ones
-## that left mid-match. Seats with no round trip are left out.
+## Every remote PC seat's statistics this match, one entry per slot: a joiner
+## who left and came back to the same slot is merged (the departed samples first,
+## then the live seat's). Seats with no round trip are left out.
 func match_ping_stats() -> Array:
 	var out: Array = []
-	for slot in _slot_peers.size():
-		var stats: Dictionary = slot_ping_stats(slot)
+	var slots: int = _slot_peers.size()
+	for slot: int in _departed_ping:
+		slots = maxi(slots, slot + 1)
+	for slot in slots:
+		var samples: PackedInt32Array = PackedInt32Array()
+		var felt: int = -1
+		var share: bool = false
+		if _departed_ping.has(slot):
+			var gone: Dictionary = _departed_ping[slot]
+			samples = (gone["samples"] as PackedInt32Array).duplicate() # never grow the stored copy
+			felt = int(gone["felt"])
+			share = bool(gone["share"])
+		if slot < _slot_peers.size() and _is_pc_remote(_slot_peers[slot]) and not _slot_peers[slot].rtt_samples.is_empty():
+			var seat: RemoteSeat = _slot_peers[slot]
+			samples.append_array(seat.rtt_samples)
+			if samples.size() > PING_SAMPLES_MAX:
+				samples = samples.slice(samples.size() - PING_SAMPLES_MAX)
+			felt = seat.felt_msec
+			share = seat.share
+		var stats: Dictionary = _ping_stats_of(samples, felt, share)
 		if not stats.is_empty():
 			out.append(stats)
-	out.append_array(_departed_ping_stats)
 	return out
 
 func _keep_departed_ping_stats(slot: int) -> void:
 	if slot < 0 or slot >= _slot_peers.size() or not _is_pc_remote(_slot_peers[slot]):
 		return
-	var stats: Dictionary = _seat_ping_stats(_slot_peers[slot])
-	if not stats.is_empty():
-		_departed_ping_stats.append(stats)
-		_slot_peers[slot].rtt_samples = PackedInt32Array() # a rebind of this seat starts afresh
+	var seat: RemoteSeat = _slot_peers[slot]
+	if seat.rtt_samples.is_empty():
+		return
+	var samples: PackedInt32Array = PackedInt32Array()
+	if _departed_ping.has(slot):
+		samples = (_departed_ping[slot]["samples"] as PackedInt32Array).duplicate() # the slot left and rebound before
+	samples.append_array(seat.rtt_samples)
+	if samples.size() > PING_SAMPLES_MAX:
+		samples = samples.slice(samples.size() - PING_SAMPLES_MAX)
+	_departed_ping[slot] = {"samples": samples, "felt": seat.felt_msec, "share": seat.share}
+	seat.rtt_samples = PackedInt32Array()
 
 # --- In-game cosmetics picker (issue #441, ADR-0021) --------------------------
 #

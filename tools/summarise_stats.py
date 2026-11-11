@@ -88,9 +88,11 @@ PING_FIELDS = ("avg", "p95", "max", "felt", "host_leg")
 
 
 def ping_summary(records):
-    """Issue #1195: the mean of each remote seat's ping fields over every record
-    with a "ping" list; -1 (not measured) values are left out. Returns
-    (seats, {field: mean or None})."""
+    """Issue #1195: each remote seat's ping fields over every record with a "ping"
+    list; -1 (not measured) values are left out. avg, felt and host_leg are means
+    weighted by the seat's sample count "n" (an entry without a usable n counts
+    once); p95 is the n-weighted mean of the seats' p95 (not a true pooled p95);
+    max is the largest max. Returns (seats, {field: value or None})."""
     values = defaultdict(list)
     seats = 0
     for rec in records:
@@ -101,11 +103,23 @@ def ping_summary(records):
             if not isinstance(entry, dict):
                 continue
             seats += 1
+            weight = entry.get("n")
+            if not isinstance(weight, (int, float)) or weight < 1:
+                weight = 1
             for field in PING_FIELDS:
                 value = entry.get(field)
                 if isinstance(value, (int, float)) and value >= 0:
-                    values[field].append(value)
-    return seats, {f: (sum(values[f]) / len(values[f]) if values[f] else None) for f in PING_FIELDS}
+                    values[field].append((value, weight))
+
+    def combine(field):
+        pairs = values[field]
+        if not pairs:
+            return None
+        if field == "max":
+            return max(v for v, _ in pairs)
+        return sum(v * w for v, w in pairs) / sum(w for _, w in pairs)
+
+    return seats, {f: combine(f) for f in PING_FIELDS}
 
 
 def print_ping(records):
@@ -114,7 +128,7 @@ def print_ping(records):
         return
     shown = ["%.0f" % means[f] if means[f] is not None else "-" for f in PING_FIELDS]
     print("\nOnline ping (remote seats): %d seats" % seats)
-    print("avg / p95 / max / felt / host leg (ms): %s" % " / ".join(shown))
+    print("avg (n-weighted) / p95 (n-weighted mean) / max (largest) / felt / host leg (ms): %s" % " / ".join(shown))
 
 
 if __name__ == "__main__":

@@ -147,6 +147,8 @@ const STATS_MAX_ROUNDS: int = 1000
 ## every one a number of ms in -1..STATS_MAX_PING_MSEC (-1 = not measured).
 const STATS_MAX_PING_ENTRIES: int = 8
 const STATS_PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", "host_leg"]
+## Keep equal to MatchStats.PING_MAX_MSEC (the relay runs as its own server, so it
+## cannot preload the game's scripts).
 const STATS_MAX_PING_MSEC: int = 60000
 ## Records allowed per IP per hour.
 @export var stats_limit_per_hour: int = 30

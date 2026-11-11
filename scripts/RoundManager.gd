@@ -3107,7 +3107,7 @@ func _ping_readout_tick() -> void:
 		if not _controller_server.slot_is_online_pc(slot):
 			continue
 		var ping: int = _controller_server.slot_ping_msec(slot)
-		var felt: int = int(_controller_server.slot_ping_stats(slot).get("felt", -1))
+		var felt: int = _controller_server.slot_felt_msec(slot)
 		lines.append(PingReadoutScript.line(_slot_name(slot), ping, felt))
 		pings.append(ping)
 	var shown: bool = not lines.is_empty() and (_state == State.ROUND_ACTIVE or _state == State.ROUND_END)
@@ -3128,7 +3128,7 @@ func _ping_readout_tick() -> void:
 func _match_ping_1195() -> Array:
 	if _controller_server == null or not _controller_server.has_method("match_ping_stats"):
 		return []
-	var leg: int = clampi(int(_controller_server.get("relay_rtt_msec")), -1, 60000)
+	var leg: int = clampi(int(_controller_server.get("relay_rtt_msec")), -1, MatchStatsScript.PING_MAX_MSEC)
 	var out: Array = []
 	for stats: Dictionary in _controller_server.match_ping_stats():
 		var entry: Dictionary = stats.duplicate()

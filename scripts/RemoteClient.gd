@@ -710,6 +710,7 @@ func _on_host_text(text: String) -> void:
 	match str(msg.get("t", "")):
 		"lobby":
 			_attention_on_lobby(str(lobby.get("phase", "")), str(msg.get("phase", "")))
+			_felt_on_phase(str(lobby.get("phase", "")), str(msg.get("phase", ""))) # #1195
 			lobby = msg
 			_refresh_lobby()
 		"hud":
@@ -729,6 +730,7 @@ func _on_host_text(text: String) -> void:
 		"recentre":
 			# #1185: a respawn starts the weapon at rest; the mouse drag starts
 			# again from the centre. A held stick is the host's to wait out.
+			_felt_probe_msec = -1 # #1195: the arm resetting is not the input's doing
 			if not _pad_driving:
 				_mouse.reset()
 				input_vector = Vector2.ZERO
@@ -822,6 +824,10 @@ var _felt_rest_since_msec: int = -1
 var _felt_probe_msec: int = -1
 var _felt_rest_angle: float = NAN
 var _felt_drawn_angle: float = NAN
+## A drawn body further than this from where it was last frame is a respawn or
+## teleport, so a probe in flight is dropped (the host's recentre drops it too).
+const FELT_JUMP_PX: float = 150.0
+var _felt_drawn_body: Vector2 = Vector2(NAN, NAN)
 var _felt_sum: int = 0
 var _felt_n: int = 0
 ## The last single measurement, ms (-1 none yet).
@@ -841,6 +847,10 @@ func _felt_note_sent(v: Vector2) -> void:
 ## Called by `_render` with this joiner's own drawn body and weapon head.
 func _felt_note_drawn(body_position: Vector2, head_position: Vector2) -> void:
 	_felt_drawn_angle = (head_position - body_position).angle()
+	var jumped: bool = not is_nan(_felt_drawn_body.x) and body_position.distance_to(_felt_drawn_body) > FELT_JUMP_PX
+	_felt_drawn_body = body_position
+	if jumped:
+		_felt_probe_msec = -1 # a respawn or teleport turned the arm, not the input
 	if _felt_probe_msec < 0:
 		return
 	var now: int = Time.get_ticks_msec()
@@ -852,7 +862,20 @@ func _felt_note_drawn(body_position: Vector2, head_position: Vector2) -> void:
 	elif now - _felt_probe_msec > FELT_TIMEOUT_MSEC:
 		_felt_probe_msec = -1
 
-## The mean felt input-to-screen delay this session, ms; -1 before the first.
+## Starts the felt delay afresh (a new match), so each match's mean covers only it.
+func _felt_reset() -> void:
+	_felt_sum = 0
+	_felt_n = 0
+	felt_last_msec = -1
+	_felt_probe_msec = -1
+
+## The host's lobby phase changed: a match begins when the phase reaches "playing"
+## from anything but the match's own phases.
+func _felt_on_phase(prev: String, phase: String) -> void:
+	if phase == "playing" and prev != "playing" and prev != "round_end":
+		_felt_reset()
+
+## The mean felt input-to-screen delay this match, ms; -1 before the first.
 func felt_msec() -> int:
 	return int(round(float(_felt_sum) / _felt_n)) if _felt_n > 0 else -1
 

@@ -1320,6 +1320,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_reports_felt_delay_1195",
 	"online_ping_readout_mirrors_to_joiner_1195",
 	"match_end_logs_ping_stats_1195",
+	"online_replayed_pong_one_sample_1195",
+	"remote_client_felt_per_match_and_respawn_1195",
+	"online_rebound_slot_merges_ping_stats_1195",
+	"online_relay_leg_goes_stale_1195",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4385,6 +4389,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_ping_readout_mirrors_to_joiner_1195()
 		"match_end_logs_ping_stats_1195":
 			return await _scenario_match_end_logs_ping_stats_1195()
+		"online_replayed_pong_one_sample_1195":
+			return await _scenario_online_replayed_pong_one_sample_1195()
+		"remote_client_felt_per_match_and_respawn_1195":
+			return await _scenario_remote_client_felt_per_match_and_respawn_1195()
+		"online_rebound_slot_merges_ping_stats_1195":
+			return await _scenario_online_rebound_slot_merges_ping_stats_1195()
+		"online_relay_leg_goes_stale_1195":
+			return await _scenario_online_relay_leg_goes_stale_1195()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -62299,4 +62311,130 @@ func _scenario_match_end_logs_ping_stats_1195() -> Array[String]:
 	if not RelayScript238.clean_stats_record(huge).is_empty():
 		failures.append("the relay kept a max of 1e9")
 	_scenario_completed = true
+	return failures
+# --- Issue #1195 review follow-ups -------------------------------------------------
+## A replayed pong (the same n twice) adds one round-trip sample, not two.
+func _scenario_online_replayed_pong_one_sample_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "replay-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	var ping: Dictionary = await _online_wait_239(rig, remote, "n")
+	while not ping.is_empty() and ping.get("t") != "ping":
+		ping = await _online_wait_239(rig, remote, "n")
+	if ping.is_empty():
+		failures.append("no ping reached the remote")
+		await _rc_close_241(rig)
+		return failures
+	var pong: PackedByteArray = JSON.stringify({"t": "pong", "n": ping["n"]}).to_utf8_buffer()
+	for i in 3:
+		_online_send_239(remote, 1, pong)
+		await _online_frames_239(5)
+	var n: int = int(server.slot_ping_stats(slot).get("n", 0))
+	if n != 1:
+		failures.append("the same pong sent three times left n = %d, expected 1" % n)
+	await _rc_close_241(rig)
+	return failures
+
+## The felt delay restarts each match, and a probe spanning a respawn or recentre is dropped.
+func _scenario_remote_client_felt_per_match_and_respawn_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScript241.new()
+	var measure: Callable = func(jump: bool, recentre: bool) -> void:
+		client._felt_rest_since_msec = Time.get_ticks_msec() - 1000
+		client._felt_last_sent = Vector2.ZERO
+		client._felt_note_drawn(Vector2(100, 100), Vector2(120, 100))
+		client._felt_note_sent(Vector2(1, 0)) # changed after a rest: a probe starts
+		if recentre:
+			client._felt_probe_msec = -1 # what the host's recentre message does
+		if jump:
+			client._felt_note_drawn(Vector2(900, 100), Vector2(900, 80)) # respawned far away, arm turned
+		else:
+			client._felt_note_drawn(Vector2(101, 100), Vector2(101, 80)) # the arm turned in place
+	measure.call(true, false)
+	if client.felt_msec() != -1:
+		failures.append("a probe across a respawn jump was measured (felt %d)" % client.felt_msec())
+	measure.call(false, true)
+	if client.felt_msec() != -1:
+		failures.append("a probe dropped by a recentre was measured (felt %d)" % client.felt_msec())
+	measure.call(false, false)
+	if client.felt_msec() < 0:
+		failures.append("an ordinary turn in place was not measured")
+	# A new match starts from nothing; the match's own phases do not reset it.
+	client._felt_on_phase("playing", "round_end")
+	client._felt_on_phase("round_end", "playing")
+	if client.felt_msec() < 0:
+		failures.append("round_end -> playing reset the match's felt delay")
+	client._felt_on_phase("countdown", "playing")
+	if client.felt_msec() != -1 or client.felt_last_msec != -1:
+		failures.append("a new match kept the last match's felt delay (%d)" % client.felt_msec())
+	client.free()
+	_scenario_completed = true
+	return failures
+
+## A joiner whose seat leaves and comes back to the same slot is one entry, with both runs' samples.
+func _scenario_online_rebound_slot_merges_ping_stats_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "rebind-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	for i in 2:
+		await _ping_answer_1195(rig, remote, 0)
+	server._keep_departed_ping_stats(slot) # what _unbind does as the seat leaves
+	if not server.slot_ping_stats(slot).is_empty():
+		failures.append("the live seat kept its samples after being filed as departed")
+	await _ping_answer_1195(rig, remote, 0) # the slot's next occupant answers
+	var listed: Array = server.match_ping_stats()
+	if listed.size() != 1 or int(listed[0].get("n", 0)) != 3:
+		failures.append("a rebound slot gives %s, expected one entry with n = 3" % [listed])
+	server._keep_departed_ping_stats(slot)
+	server._keep_departed_ping_stats(slot)
+	listed = server.match_ping_stats()
+	if listed.size() != 1 or int(listed[0].get("n", 0)) != 3:
+		failures.append("filing a departed slot twice gives %s, expected one entry with n = 3" % [listed])
+	await _rc_close_241(rig)
+	return failures
+
+## The host leg never outlives its link: no echo answered for a while, or the link leaving "online".
+func _scenario_online_relay_leg_goes_stale_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.relay_echo_interval_msec = 100
+	if not await _wait_for_239(func() -> bool: return server.relay_rtt_msec >= 0, 5000):
+		failures.append("the relay never answered an echo")
+		await _rc_close_241(rig)
+		return failures
+	server._relay_echo_answered_msec = Time.get_ticks_msec() - 10000
+	server._relay_echo_tick()
+	if server.relay_rtt_msec != -1:
+		failures.append("a host leg with no echo answered for 10 s is still %d" % server.relay_rtt_msec)
+	if not await _wait_for_239(func() -> bool: return server.relay_rtt_msec >= 0, 5000):
+		failures.append("the host leg never came back after a fresh echo")
+	server._on_link_state_changed("reconnecting")
+	if server.relay_rtt_msec != -1:
+		failures.append("the host leg survived the link leaving online: %d" % server.relay_rtt_msec)
+	await _rc_close_241(rig)
 	return failures
