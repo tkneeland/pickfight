@@ -36,7 +36,7 @@ size = Vector2(180, 12)
 position = Vector2(0, 166)
 size = Vector2(260, 24)
 
-; Walls (no ledge): a 40 px wall each side (x=+-760..780) from above head height down past the floor, inside the 1600 px view, so there is no open end to walk or be shoved off; the only ring-outs are the drains.
+; Walls (no ledge): a 40 px wall each side (x=+-760..780) from above head height down past the floor, inside the 1600 px view, so there is no open end to walk or be shoved off; Tank has none: its drains are floored (DrainShelf), so it is a closed stage.
 [node name="WallLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-780, 20)
 size = Vector2(40, 760)

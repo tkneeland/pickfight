@@ -11,15 +11,16 @@
 ; MovingPlatform used as lifts, plus #53's FallingRock). The high ground is
 ; worth taking, but it is always under fire.
 ;
-; **Ground.** Two yards (x=+-300..+-740, top y=320) with a 600 px open pit
-; between them. All eight spawns are in the yards. Their outer ends are open
+; **Ground.** Two yards (x=+-300..+-740, top y=320) with a 600 px pit
+; between them, floored by the PitShelf (top y=420, #1202). All eight spawns are in the yards. Their outer ends are open
 ; sky.
 ;
 ; **Lifts.** Each side of the pit has a lift (160 wide, x=+-100..+-260). It
 ; runs between 48 px above the yards (top y=272, #1202) and the roof's height (top
 ; y=-100) in 3 s each way. The two lifts run in opposite phase, so one is
-; always at the bottom. The gap from a yard to a lift is 40 px, so you can
-; step on at the bottom. If you miss it, you fall into the pit.
+; always at the bottom. The gap from a yard to a lift is 40 px and the lift is
+; 48 px above the yard at the bottom, so you jump onto it. If you miss it, you
+; drop onto the PitShelf and climb back.
 ;
 ; **Roof.** A fixed slab (x=-90..90, top y=-122) between the tops of the two
 ; lifts' runs, 22 px above a lift at the top. It holds the best pickup. A

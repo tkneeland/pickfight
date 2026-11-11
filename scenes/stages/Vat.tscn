@@ -25,7 +25,7 @@ size = Vector2(630, 40)
 position = Vector2(445, 340)
 size = Vector2(630, 40)
 
-; Ferry: authored at the left dock (its left edge meets FloorLeft), patrolling 200 px right to the other dock.
+; Ferry: authored at x=-100 (its left edge at -170 overlaps FloorLeft, which ends at x=-130), patrolling 200 px right to x=+100 (its right edge at +170 overlaps FloorRight).
 [node name="Ferry" parent="." instance=ExtResource("mp")]
 position = Vector2(-100, 332)
 size = Vector2(140, 24)
@@ -48,7 +48,7 @@ size = Vector2(100, 16)
 position = Vector2(330, 328)
 size = Vector2(100, 16)
 
-; Walls (no ledge): a 40 px wall each side (x=+-760..780) from above head height down past the floor, inside the 1600 px view, so there is no open end to walk or be shoved off; the only ring-outs are the drains.
+; Walls (no ledge): a 40 px wall each side (x=+-760..780) from above head height down past the floor, inside the 1600 px view, so there is no open end to walk or be shoved off; the only ring-outs are the open drains.
 [node name="WallLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-780, 20)
 size = Vector2(40, 760)
@@ -91,5 +91,5 @@ position = Vector2(-520, 130)
 position = Vector2(520, 130)
 
 [node name="PickupSpawn2" type="Marker2D" parent="."]
-position = Vector2(0, 270)
+position = Vector2(250, 270)
 

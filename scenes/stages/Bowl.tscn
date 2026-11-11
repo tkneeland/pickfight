@@ -7,9 +7,9 @@
 ; A stepped bowl with high walls on both sides: each half is a staircase
 ; descending toward the middle, and the walls run from well above head height
 ; down past the lowest step, so there is no way out sideways at any height a
-; fight happens at. The only ring-out is the 120 px drain at the bottom centre
-; -- two and a half player widths, so it is a gap you are driven into rather
-; than one you wander over.
+; fight happens at. The drain at the bottom centre (120 px) is floored by the
+; DrainShelf (#1202) except a 30 px slot too narrow to fall through, so there
+; is no ring-out: the Bowl is closed and damage decides the round.
 ;
 ; This is the one stage in the rotation where damage, not geometry, usually
 ; decides the round -- every other stage rewards putting someone over an edge,

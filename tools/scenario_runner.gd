@@ -7860,7 +7860,7 @@ const RINGOUT_SHOVE_TICKS: int = 300
 ## amount of open floor would be a balance opinion rather than a correctness
 ## check. What it catches is the real mistake -- a stage whose walls, floor or
 ## kill zone were drawn or placed so that nobody can leave it.
-## The Bowl (#1202) is closed by design: its drain is floored but for a slot narrower than a fighter, since a fightable slot was fallen through by bots within seconds.
+## Bowl and Tank (#1202) are closed by design: their drains are floored (Bowl keeps a 30 px slot narrower than a fighter), since a drain a fighter can fall through was fallen through by bots within seconds. Neither can ring out.
 const RINGOUT_EXEMPT_1202: PackedStringArray = ["res://scenes/stages/Bowl.tscn", "res://scenes/stages/Tank.tscn"]
 func _scenario_every_stage_can_ring_out() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
@@ -36386,7 +36386,7 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		counts[mode_id] = hits
 		sequences[mode_id] = seq
 	print("      Hot Potato stages dealt %d of 900 in hot_potato, %d of 900 in classic" % [counts["hot_potato"], counts[""]])
-	# Expected: 12 of 36 bag slots (about 300); in classic each is in a bag 30% of the time.
+	# Expected: 12 of 47 bag slots-worth of weight (about 225-280 of 900 at 47 stages; 223 seen); in classic each is in a bag 30% of the time.
 	if counts["hot_potato"] < 200:
 		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 200" % counts["hot_potato"])
 	var others: int = 0
