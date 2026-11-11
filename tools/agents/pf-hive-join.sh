@@ -14,7 +14,7 @@ if [ -z "${PF_HIVE_INNER:-}" ]; then
   tries=$(( ${PF_HIVE_TIMEOUT:-4} * 5 )); i=0
   while kill -0 "$pid" 2>/dev/null && [ "$i" -lt "$tries" ]; do sleep 0.2; i=$((i + 1)); done
   if kill -0 "$pid" 2>/dev/null; then
-    pkill -P "$pid" 2>/dev/null; kill "$pid" 2>/dev/null
+    command -v pkill >/dev/null 2>&1 && pkill -P "$pid" 2>/dev/null; kill "$pid" 2>/dev/null
     echo "hive: join check timed out after ${PF_HIVE_TIMEOUT:-4}s, session continues (run tools/agents/pf-hive-join.sh to retry)"
   fi
   cat "$out" 2>/dev/null; rm -f "$out"; exit 0
@@ -26,30 +26,44 @@ echo "hive: read docs/agents/team-memory.md (the hive's shared memory) before wo
 case ${PF_HIVE_OS:-$(uname -s)} in MINGW*|MSYS*|CYGWIN*|windows) WIN=1;; *) WIN=0;; esac
 age() { local m; m=$(pf_mtime "$1") || { echo 999999; return; }; echo $(( $(date +%s) - m )); }
 restarted=""
-# restart_kind <kind>: start that supervisor, detached
-restart_kind() {
-  local kind=$1 name="pf-$1-$PF_ACCOUNT"
-  if [ "$WIN" = 1 ]; then
-    command -v powershell.exe >/dev/null 2>&1 || command -v powershell >/dev/null 2>&1 || return 0
-    local ps=powershell.exe; command -v powershell.exe >/dev/null 2>&1 || ps=powershell
-    "$ps" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$AG/windows/pf-start.ps1" 2>/dev/null || echo "$AG/windows/pf-start.ps1")" -Account "$PF_ACCOUNT" -Only "$kind" >/dev/null 2>&1
-  elif command -v screen >/dev/null 2>&1; then
-    screen -ls 2>/dev/null | grep -q "[0-9]\.$name[[:space:]]" && return 0   # a live session of that name: leave it alone
-    screen -dmS "$name" bash "$AG/windows/pf-supervise.sh" "$kind" >/dev/null 2>&1
+# one restarter at a time: sessions opened together (AT, workers, reserve) race otherwise. mkdir is atomic everywhere.
+LOCK=$PF_STATE/.hive-join.lock
+if ! mkdir "$LOCK" 2>/dev/null; then
+  [ $(( $(date +%s) - $(pf_mtime "$LOCK" || echo 0) )) -gt 60 ] && { rmdir "$LOCK" 2>/dev/null; mkdir "$LOCK" 2>/dev/null; } || LOCKED=1
+fi
+[ -z "${LOCKED:-}" ] && trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+# start_unix <kind>: macOS/Linux supervisor in a detached screen; any live session named pf-<kind> or pf-<kind>-<account> counts
+start_unix() {
+  local kind=$1
+  if command -v screen >/dev/null 2>&1; then
+    screen -ls 2>/dev/null | grep -Eq "[0-9]\.pf-$kind(-$PF_ACCOUNT)?[[:space:]]" && return 0
+    screen -dmS "pf-$kind-$PF_ACCOUNT" bash "$AG/windows/pf-supervise.sh" "$kind" >/dev/null 2>&1
   else
     nohup bash "$AG/windows/pf-supervise.sh" "$kind" >/dev/null 2>&1 &
   fi
   restarted="$restarted $kind"
 }
+need=""
 # msg: the listener + heartbeat supervisor rewrites msg-status.json every 60 s
-if [ -f "$PF_STATE/pf-msg.conf" ] && [ "$(age "$PF_STATE/msg-status.json")" -gt "${PF_HIVE_STALE:-180}" ]; then restart_kind msg; fi
-# Windows keeps every AT watcher under pf-start.ps1 (it skips one that is already running); macOS runs those in the AT session
+if [ -f "$PF_STATE/pf-msg.conf" ] && [ "$(age "$PF_STATE/msg-status.json")" -gt "${PF_HIVE_STALE:-180}" ]; then need="$need msg"; fi
+# Windows keeps every AT watcher under pf-start.ps1; same liveness signals as pf-tm-check.sh
 if [ "$WIN" = 1 ]; then
-  for kind in beacon automerge triage; do
-    [ -f "$PF_STATE/$kind-status.json" ] || continue
-    lim=900; [ "$kind" = triage ] && lim=3600   # triage sleeps 5 min after each wake
-    [ "$(age "$PF_STATE/$kind-status.json")" -gt "$lim" ] && restart_kind "$kind"
-  done
+  [ -f "$PF_STATE/triage-status.json" ] && [ "$(age "$PF_STATE/.triage-watch-alive")" -gt 900 ] && need="$need triage"
+  [ -f "$PF_STATE/automerge-status.json" ] && [ "$(age "$PF_STATE/automerge-status.json")" -gt 86400 ] \
+    && ! pgrep -f "pf-automerge" >/dev/null 2>&1 && need="$need automerge"
+  [ -f "$PF_STATE/beacon-status.json" ] && [ "$(age "$PF_STATE/beacon-status.json")" -gt 900 ] && need="$need beacon"
+fi
+if [ -n "$need" ] && [ -z "${LOCKED:-}" ]; then
+  if [ "$WIN" = 1 ]; then
+    # one detached pf-start.ps1 for everything (it skips watchers that already run), so the watchdog never cuts a launch in half
+    ps=powershell.exe; command -v powershell.exe >/dev/null 2>&1 || ps=powershell
+    if command -v "$ps" >/dev/null 2>&1; then
+      nohup "$ps" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$AG/windows/pf-start.ps1" 2>/dev/null || echo "$AG/windows/pf-start.ps1")" -Account "$PF_ACCOUNT" >/dev/null 2>&1 &
+      restarted=$need
+    fi
+  else
+    for kind in $need; do start_unix "$kind"; done
+  fi
 fi
 [ -n "$restarted" ] && echo "hive: restarted dead${restarted}"
 

@@ -19,18 +19,33 @@ case $out in *"channel=ok"*) ok "fallback status says ok" 0;; *) ok "fallback st
 [ ! -s "$T/calls.log" ]; ok "fresh status: nothing restarted" $?
 
 touch -t 202001010000 "$T/state/msg-status.json"
+mkdir "$T/state/.hive-join.lock"; : > "$T/calls.log"; run >/dev/null
+[ ! -s "$T/calls.log" ]; ok "lock held by another session: no second restart" $?
+rmdir "$T/state/.hive-join.lock"
 out=$(run)
 grep -q "screen -dmS pf-msg-tkneeland" "$T/calls.log"; ok "stale msg (unix): screen restart" $?
 case $out in *"restarted dead msg"*) ok "restart announced" 0;; *) ok "restart announced" 1;; esac
 
 : > "$T/calls.log"; echo "123.pf-msg-tkneeland	(Detached)" > "$T/screenls"
 run >/dev/null; ! grep -q "dmS" "$T/calls.log"; ok "live screen of that name: not duplicated" $?
+echo "124.pf-msg	(Detached)" > "$T/screenls"; : > "$T/calls.log"
+run >/dev/null; ! grep -q "dmS" "$T/calls.log"; ok "README-named pf-msg session recognised" $?
 rm -f "$T/screenls"
 
+# Windows: one pf-start.ps1 call (no -Only) when anything is stale
 : > "$T/calls.log"; echo '{}' > "$T/state/beacon-status.json"; touch -t 202001010000 "$T/state/beacon-status.json"
-PF_HIVE_OS=windows run >/dev/null
-grep -q "powershell.exe .*-Only msg" "$T/calls.log"; ok "stale msg (windows): pf-start.ps1 -Only msg" $?
-grep -q "powershell.exe .*-Only beacon" "$T/calls.log"; ok "stale beacon (windows): restarted" $?
+PF_HIVE_OS=windows run >/dev/null; sleep 1   # the launch is detached
+[ "$(grep -c powershell.exe "$T/calls.log")" = 1 ]; ok "windows: exactly one pf-start.ps1 launch" $?
+! grep -q -- "-Only" "$T/calls.log"; ok "windows: no -Only (starts whatever is down)" $?
+sleep 1
+# idle healthy triage / automerge must not be reported restarted
+: > "$T/calls.log"; touch "$T/state/msg-status.json" "$T/state/beacon-status.json" "$T/state/.triage-watch-alive"
+for k in triage automerge; do echo '{}' > "$T/state/$k-status.json"; touch -t 202001010000 "$T/state/$k-status.json"; done
+touch "$T/state/.triage-watch-alive"; touch -t 202601010000 "$T/state/automerge-status.json"
+out=$(PF_HIVE_OS=windows run); case $out in *restarted*) ok "windows: healthy triage/automerge not restarted" 1;; *) ok "windows: healthy triage/automerge not restarted" 0;; esac
+sleep 1; [ ! -s "$T/calls.log" ]; ok "windows: no launch when all alive" $?
+touch -t 202001010000 "$T/state/.triage-watch-alive"
+out=$(PF_HIVE_OS=windows run); case $out in *"restarted dead triage"*) ok "windows: dead triage heartbeat restarts" 0;; *) ok "windows: dead triage heartbeat restarts" 1;; esac
 
 # a pf-hive.sh that hangs must not hang the session
 cp -R "$AG" "$T/ag"; printf '#!/bin/bash\nsleep 30\n' > "$T/ag/pf-hive.sh"
