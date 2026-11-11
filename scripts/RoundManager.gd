@@ -320,8 +320,8 @@ func _process(_delta: float) -> void:
 		State.ROUND_ACTIVE:
 			_check_round_end()
 			if _state == State.ROUND_ACTIVE:
-				_tick_airtime()
-				if _round_play_begun:  # no pickups while the countdown holds (#1197)
+				if _round_play_begun:  # no airtime or pickups while the countdown holds (#1197)
+					_tick_airtime()
 					_pickup_director.tick()
 				if lobby_enabled and _lobby_publish_due():
 					_publish_lobby_state()
@@ -415,11 +415,11 @@ func _try_start_round() -> void:
 	_kill_zone_home_y = NAN
 	_state = State.ROUND_ACTIVE
 	_round_play_begun = false
-	_show_stage_title()
+	var title_shown: bool = _show_stage_title()
 	var counts_down: bool = _round_countdown_on() and not _skip_round_countdown
 	_skip_round_countdown = false
 	if counts_down:
-		_begin_round_countdown()
+		_begin_round_countdown(title_shown)
 	else:
 		_start_spawn_protection()
 		_begin_round_play()
@@ -428,6 +428,13 @@ func _try_start_round() -> void:
 ## countdown's GO (#1197).
 func _begin_round_play() -> void:
 	_round_play_begun = true
+	# The survival clocks start here, not at the spawn, so the hold before GO
+	# counts toward nobody's survival time (#1197).
+	var standing: Array[int] = []
+	for slot: int in _in_round:
+		if slot >= 0 and slot < _players.size() and is_instance_valid(_players[slot]) and _players[slot].alive:
+			standing.append(slot)
+	_stats.begin_round(standing, GameClockScript.now_msec())
 	_start_round_modifier()
 	_start_game_mode()
 	_pickup_director.start()
@@ -467,11 +474,9 @@ func _round_countdown_on() -> bool:
 func round_countdown_active() -> bool:
 	return _countdown_start_msec >= 0
 
-func _begin_round_countdown() -> void:
-	var lead_msec: int = 0
-	var sfx: Node = get_node_or_null(^"/root/Sfx")
-	if stage_title_sec > 0.0 and (sfx == null or bool(sfx.get("stage_title_card"))):
-		lead_msec = int(stage_title_sec * 1000.0)
+## `title_shown`: this round's stage title card is on screen, so "3" waits for it.
+func _begin_round_countdown(title_shown: bool) -> void:
+	var lead_msec: int = int(stage_title_sec * 1000.0) if title_shown else 0
 	var step_msec: int = int(round_countdown_step_sec * 1000.0)
 	_countdown_start_msec = GameClockScript.now_msec() + lead_msec
 	_countdown_step = 4
@@ -507,7 +512,19 @@ func _tick_round_countdown() -> void:
 		_set_round_locked(false)
 		_begin_round_play()
 
-## A round that ends or is abandoned before GO lets its fighters go.
+## A round that ends before GO (a disconnect, a leave or a kick left one
+## fighter or one team, or nobody with a controller) still opens before it
+## closes: the countdown comes down and `round_started` fires ahead of the
+## result, so music, Juice and the Announcer see a whole round. The round's
+## systems are not started; the wind-down that follows has nothing to stop.
+func _release_held_round() -> void:
+	if _round_play_begun:
+		return
+	_cancel_round_countdown()
+	_round_play_begun = true
+	round_started.emit()
+
+## Lets the fighters go and takes the countdown down.
 func _cancel_round_countdown() -> void:
 	_set_round_locked(false)
 	_show_round_countdown(-1)
@@ -702,6 +719,7 @@ func _check_round_end() -> void:
 	# A draw is played off, not thrown away (#554).
 	if alive_slots.is_empty() and not abandoned and not after_kick and _start_tiebreaker(_tie_slots):
 		return
+	_release_held_round()
 	if alive_slots.size() == 1:
 		var winner_slot: int = alive_slots[0]
 		_scores[winner_slot] += 1
@@ -1743,13 +1761,17 @@ func _stage_display_name(stage_name: String) -> String:
 	var shown: String = tr(key)
 	return stage_name.to_upper() if shown == key else shown.to_upper()
 
-func _show_stage_title() -> void:
+## Whether the host's title card is now on screen (the round countdown waits
+## for it, #1197): not with no stage, no title time, or the card switched off.
+func _show_stage_title() -> bool:
 	if _current_stage == null or stage_title_sec <= 0.0:
-		return
+		return false
 	var title: String = _stage_display_name(str(_current_stage.name))
 	var rule: String = "%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.status_line(game_mode)]
 	EffectStreamScript.record("title", {"t": title, "d": stage_title_sec, "r": rule}) # the joiner's card (#976)
 	_screen().show_stage_title(title, stage_title_sec, rule)
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	return sfx == null or bool(sfx.get("stage_title_card"))
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
 #
@@ -2125,6 +2147,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 		winner_team = _survivor_team
 	elif not after_kick and _start_tiebreaker(_tie_slots):
 		return  # a draw is played off (#554)
+	_release_held_round()
 	_survivor_team = -1
 	if after_kick:
 		winner_team = -1

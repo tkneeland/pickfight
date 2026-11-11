@@ -305,6 +305,12 @@ func end_play_of_round() -> void:
 func round_left() -> void:
 	final_ko.end()
 	end_play_of_round()
+	hide_round_countdown()
+
+## Takes the round countdown down without the host's "countdown -1" event,
+## which a full queue can drop (#1197): the round left or ended.
+func hide_round_countdown() -> void:
+	cards.show_round_countdown(-1)
 
 # --- Head trails ---------------------------------------------------------------
 

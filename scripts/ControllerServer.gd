@@ -805,7 +805,8 @@ func _action_press(slot: int) -> void:
 		return
 	# #1197: held through the round countdown, a press does nothing at all, so
 	# no fighter starts the round released.
-	if slot >= 0 and slot < _players.size() and _players[slot] != null 			and bool(_players[slot].get("round_locked")):
+	if slot >= 0 and slot < _players.size() and _players[slot] != null \
+			and bool(_players[slot].get("round_locked")):
 		return
 	_toggle_release(slot)
 
@@ -858,8 +859,9 @@ func _reset_release_on_respawn(slot: int) -> void:
 func _reset_release_on_unlock(slot: int) -> void:
 	var locked: int = 1 if bool(_players[slot].get("round_locked")) else 0
 	if locked == 0 and _slot_was_locked[slot] == 1:
-		_slot_release_toggle[slot] = 0
-		_slot_release_remote[slot] = 0
+		# Every release source, held ones too: a bumper or Space/click held
+		# through the countdown must be let up and pressed again after GO.
+		_clear_release(slot)
 		var peer: Variant = _slot_peers[slot]
 		if _is_pc_remote(peer):
 			peer.send_text(JSON.stringify({"t": "release", "v": false}))
