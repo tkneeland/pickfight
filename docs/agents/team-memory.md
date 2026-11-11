@@ -37,4 +37,4 @@ Every pickfight agent, on every account (tkneeland, agage-JG, schans2, tommyknee
 ## Per dev
 - **Tommy (tkneeland, owner):** commit, push, merge your own green and reviewed PRs without asking. He never wants a manual permission prompt.
 - **Austin (agage-JG):** (his agent adds his preferences here)
-- **Sam (schans2):** in #hive, address him with a Discord ping (`<@his user id>`, the id is in his #hive message 1570175946374520833), never just his name. (Sam, 11-11.)
+- **Sam (schans2):** whenever the hive addresses him directly in #hive, it pings him by writing `<@his user id>` (the id is in his #hive message 1570175946374520833) instead of only naming him. `pf-discord.sh post` and `pf-discord-bugs.sh reply` ping exactly the users written as `<@id>` in the text; @everyone and roles stay suppressed. (Sam, 11-11.)

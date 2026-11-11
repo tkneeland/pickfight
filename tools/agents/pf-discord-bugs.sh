@@ -67,7 +67,7 @@ case "${1:-}" in
     exit 0 ;;
   reply)
     [ -n "${2:-}" ] && [ -n "${3:-}" ] || { echo "usage: pf-discord-bugs.sh reply <message id> <text>" >&2; exit 2; }
-    body=$(jq -n --arg t "${3:0:1900}" --arg id "$2" '{content: $t, message_reference: {message_id: $id}, allowed_mentions: {parse: []}}')
+    body=$(jq -n --arg t "${3:0:1900}" --arg id "$2" '{content: $t, message_reference: {message_id: $id}, allowed_mentions: {parse: [], users: ([ | scan("<@!?([0-9]+)>") | .[0]] | unique | .[0:100])}}')
     code=$(dcurl "/channels/$CH/messages" -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" -d "$body")
     echo "discord reply: $code"; [ "$code" = 200 ] || exit 2
     mark "$2" "$K reply: ${3:0:200}" ;;
