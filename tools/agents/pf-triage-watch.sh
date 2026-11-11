@@ -11,7 +11,7 @@
 #   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
 #   DISCORD_BUG <n> new in #change-requests  (triagemaster only, pf-discord.conf set up) people posted in the public
 #                      channel; checked once a minute while idle; Claude reads them with pf-discord-bugs.sh read
-#   DISCORD_DEV <n> new in #dev-reports  the same for the private dev channel (pf-discord-bugs.sh --dev read): pre-approved
+#   DISCORD_DEV <n> new in #hive  the same for the private dev channel (pf-discord-bugs.sh --dev read): pre-approved
 #   DISCORD_APPROVED <issue> <user>  every 5 min: a dev reacted ✅ to the Discord source of a needs-triage issue
 #   TM_CHECK_FAIL <line>  (triagemaster only) every 6h pf-tm-check.sh found a duty not covered; the line says how to fix it
 # Tickets the open PRs are working on, space-separated: Closes|Fixes|Resolves|Refs #N in a title or body (one PR may
@@ -129,7 +129,7 @@ while true; do
     if [ $((tick % 6)) = 0 ] && [ -f "$PF_STATE/pf-discord.conf" ] && pf_is_triagemaster; then
       n=$(bash "$(dirname "$0")/pf-discord-bugs.sh" check 2>"$PF_STATE/discord-check.err"); rc=$?
       [ "$rc" = 0 ] && { echo "DISCORD_BUG $n new in #change-requests"; exit 0; }
-      n=$(bash "$(dirname "$0")/pf-discord-bugs.sh" --dev check 2>/dev/null) && { echo "DISCORD_DEV $n new in #dev-reports"; exit 0; }
+      n=$(bash "$(dirname "$0")/pf-discord-bugs.sh" --dev check 2>/dev/null) && { echo "DISCORD_DEV $n new in #hive"; exit 0; }
       if [ $((tick % 30)) = 0 ]; then
         a=$(bash "$(dirname "$0")/pf-discord-bugs.sh" approvals 2>/dev/null | head -n 1)
         [ -n "$a" ] && { echo "DISCORD_APPROVED $a"; exit 0; }

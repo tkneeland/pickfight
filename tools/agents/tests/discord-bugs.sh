@@ -66,7 +66,7 @@ check "marker waits for it" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 15698765
 bash "$D" reply 1569876514017780001 "Filed as #10" >/dev/null; bash "$D" check >/dev/null; check "both handled" $? 1
 check "marker past both" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017780002
 echo '[]' > "$T/r/$C"; rm -f "$T/r/${M}_after_1569876514017780002"
-# --dev: the private #dev-reports channel keeps its own marker and handled list
+# --dev: the private #hive channel keeps its own marker and handled list
 DV="channels_1569919897591611552_messages_limit_50"
 echo "[$(msg 1569919897591611600 austin false "dev: lobby crash")]" > "$T/r/$DV"
 check "dev check" "$(bash "$D" --dev check)" 1

@@ -1,7 +1,7 @@
 #!/bin/bash
 # The PickFight Discord server's report channels, read by the triagemaster (autotriage.md rule 18): the public
 # #change-requests (each report is filed as needs-triage and waits for a dev's ✅) and, with --dev first, the private
-# #dev-reports (a dev's report is already approved). Approvals:
+# #hive (a dev's report is already approved). Approvals:
 #   pf-discord-bugs.sh approvals      one line "<issue> <discord user>" per open needs-triage issue whose source
 #                                     message (a "Discord message: <id>" line in its body) has a ✅ from a Dev-role member
 #   pf-discord-bugs.sh check          exit 0 and print "N" when N messages from people (not bots) are not handled yet;
