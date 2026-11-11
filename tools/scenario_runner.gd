@@ -281,6 +281,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_modifier_double_damage_applies_and_undoes",
 	"round_modifier_rate_about_one_in_three",
 	"large_stages_only_with_five_or_more_players",
+	"small_stages_only_with_four_or_fewer_players",
 	"large_stage_camera_fits_view_with_eight_players",
 	"gap_roster_spawns_in_roster_order",
 	"stage_bag_redeals_when_player_count_crosses_large",
@@ -2355,6 +2356,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_round_modifier_rate_about_one_in_three()
 		"large_stages_only_with_five_or_more_players":
 			return await _scenario_large_stages_only_with_five_or_more_players()
+		"small_stages_only_with_four_or_fewer_players":
+			return await _scenario_small_stages_only_with_four_or_fewer_players()
 		"large_stage_camera_fits_view_with_eight_players":
 			return await _scenario_large_stage_camera_fits_view_with_eight_players()
 		"gap_roster_spawns_in_roster_order":
@@ -19135,6 +19138,8 @@ func _scenario_round_modifier_rate_about_one_in_three() -> Array[String]:
 const LARGE_STAGE_MIN_PLAYERS: int = 5
 ## How many large stages the issue asks for.
 const LARGE_STAGE_MIN_COUNT: int = 3
+## Issue #1201: the most players a round may have and still get a small stage.
+const SMALL_STAGE_MAX_PLAYERS: int = 4
 ## Stages dealt per player count in the selection check: many bags' worth.
 const LARGE_STAGE_DRAWS: int = 300
 ## How far a camera's zoom or framing may be from the stage's view.
@@ -19142,7 +19147,7 @@ const LARGE_VIEW_TOLERANCE: float = 0.5
 const LARGE_ZOOM_TOLERANCE: float = 0.001
 ## A stub stage with two spawns and no geometry that declares `view` as its
 ## `view_size` -- left at the default, it is a normal stage.
-func _make_view_stub_stage(stage_name: String, view: Vector2) -> PackedScene:
+func _make_view_stub_stage(stage_name: String, view: Vector2, spawn_span: float = 1400.0) -> PackedScene:
 	var root := Node2D.new()
 	root.name = stage_name
 	root.set_script(StageType)
@@ -19151,7 +19156,7 @@ func _make_view_stub_stage(stage_name: String, view: Vector2) -> PackedScene:
 	for i in 2:
 		var marker := Marker2D.new()
 		marker.name = "Spawn%d" % i
-		marker.position = Vector2(-100.0 + 200.0 * i, -2000.0)
+		marker.position = Vector2(-spawn_span * 0.5 + spawn_span * i, -2000.0)
 		root.add_child(marker)
 		marker.owner = root
 	var packed := PackedScene.new()
@@ -19275,6 +19280,96 @@ func _scenario_large_stages_only_with_five_or_more_players() -> Array[String]:
 	eight.free()
 	if dealt_two != dealt_eight:
 		failures.append("with no large stage, two players were dealt %s but eight %s" % [dealt_two, dealt_eight])
+	_scenario_completed = true
+	return failures
+## Issue #1201: a small stage (the smallest third of the shipped set by spawn
+## footprint, no hand-made list) is only dealt, and only offered by the Stock
+## picker, to a round of four or fewer. The shipped rotation's small share is
+## 25-40% and holds no large stage; then over stub stages: 5 to 8 players are
+## never dealt a small stage (even from a bag dealt for four), 2 to 4 are dealt
+## every stage including the small ones, a rotation of only small stages still
+## plays with eight, and Stock's pin and picker rows leave small stages out at
+## five players but keep them at four.
+func _scenario_small_stages_only_with_four_or_fewer_players() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation: PackedStringArray = _main_rotation_paths()
+	var small_names: PackedStringArray = []
+	for path: String in rotation:
+		var scene: PackedScene = load(path)
+		if StageType.is_small_scene(scene):
+			small_names.append(path.get_file().get_basename())
+			if StageType.is_large_view(StageType.view_size_of(scene)):
+				failures.append("%s is both small and large" % path.get_file())
+	var share: float = float(small_names.size()) / maxf(1.0, float(rotation.size()))
+	print("      Main rotation: %d stages, %d small (%s)" % [rotation.size(), small_names.size(), ", ".join(small_names)])
+	if share < 0.25 or share > 0.40:
+		failures.append("small stages are %d%% of the rotation, expected 25-40%% (retune Stage.SMALL_STAGE_MAX_FOOTPRINT)" % roundi(share * 100.0))
+	var defaults: Node = RoundManagerType.new()
+	if defaults._stage_rotation.small_stage_max_players != SMALL_STAGE_MAX_PLAYERS:
+		failures.append("small_stage_max_players is %d, expected %d" % [defaults._stage_rotation.small_stage_max_players, SMALL_STAGE_MAX_PLAYERS])
+	defaults.free()
+	var scenes: Array[PackedScene] = [
+		_make_view_stub_stage("NormalA", StageType.DEFAULT_VIEW_SIZE),
+		_make_view_stub_stage("NormalB", StageType.DEFAULT_VIEW_SIZE),
+		_make_view_stub_stage("SmallA", StageType.DEFAULT_VIEW_SIZE, 400.0),
+		_make_view_stub_stage("SmallB", StageType.DEFAULT_VIEW_SIZE, 900.0),
+		_make_view_stub_stage("LargeA", Vector2(2400.0, 1350.0), 400.0),
+	]
+	var small_indices: Array[int] = [2, 3]
+	if StageType.is_small_scene(scenes[0]) or not StageType.is_small_scene(scenes[2]) or StageType.is_small_scene(scenes[4]):
+		failures.append("stub stages are not classed normal, small and large as built")
+	for count: int in [2, 3, 4, 5, 6, 8]:
+		var rm: Node = _new_stage_dealer(scenes, count, 1201 + count)
+		var dealt: Array[int] = _deal_stages(rm, LARGE_STAGE_DRAWS)
+		rm.free()
+		var small_plays: int = 0
+		var seen: Dictionary = {}
+		for index: int in dealt:
+			seen[index] = true
+			if small_indices.has(index):
+				small_plays += 1
+		print("      %d players: %d plays on small stages" % [count, small_plays])
+		if count > SMALL_STAGE_MAX_PLAYERS and small_plays > 0:
+			failures.append("%d players: a small stage was dealt %d time(s)" % [count, small_plays])
+		if count <= SMALL_STAGE_MAX_PLAYERS:
+			for index: int in small_indices:
+				if not seen.has(index):
+					failures.append("%d players: small stage %d was never dealt" % [count, index])
+	var shrinking: Node = _new_stage_dealer(scenes, 4, 12)
+	_deal_stages(shrinking, 2)
+	shrinking._stage_rotation.set("round_player_count", 6)
+	for index: int in _deal_stages(shrinking, 30):
+		if small_indices.has(index):
+			failures.append("a bag dealt for four still dealt small stage %d once six were in" % index)
+			break
+	shrinking.free()
+	var only_small: Array[PackedScene] = [scenes[2], scenes[3]]
+	var fallback: Node = _new_stage_dealer(only_small, 8, 5)
+	var fallback_dealt: Array[int] = _deal_stages(fallback, 6)
+	fallback.free()
+	if not (fallback_dealt.has(0) and fallback_dealt.has(1)):
+		failures.append("a rotation of only small stages dealt %s to eight players, expected both" % [fallback_dealt])
+	# Stock's picker rows and pin, over real stages (a stub has no file name).
+	var real: Array[PackedScene] = [load("res://scenes/stages/Flatlands.tscn"), load("res://scenes/stages/Pocket.tscn")]
+	var stock_rm: Node = _new_stage_dealer(real, 5, 3)
+	var rows_for := func(count: int) -> Array:
+		stock_rm._stage_rotation.set("round_player_count", count)
+		var names: Array = []
+		for row: Dictionary in stock_rm._stage_rotation.picker_rows():
+			names.append(row["name"])
+		return names
+	var five_rows: Array = rows_for.call(5)
+	var four_rows: Array = rows_for.call(4)
+	if five_rows.has("Pocket") or not five_rows.has("Flatlands"):
+		failures.append("Stock's picker rows for five players are %s, expected Flatlands only" % [five_rows])
+	if not (four_rows.has("Pocket") and four_rows.has("Flatlands")):
+		failures.append("Stock's picker rows for four players are %s, expected both" % [four_rows])
+	stock_rm._stage_rotation.set("round_player_count", 5)
+	for _i in 10:
+		if stock_rm._stage_rotation.resolve_stock_pin() == 1:
+			failures.append("Stock pinned the small stage Pocket for five players")
+			break
+	stock_rm.free()
 	_scenario_completed = true
 	return failures
 ## Issue #144: a large stage played by eight players, under a real
@@ -35590,6 +35685,7 @@ func _scenario_demo_build_rotation_only_slice_stages() -> Array[String]:
 	var scenes: Array[PackedScene] = _real_stage_scenes_361()
 	rotation.scenes = scenes
 	rotation.round_player_count = 8
+	rotation.small_stage_max_players = 8  # these test the deal itself, not the small-stage cap (#1201)
 	rotation.rng = RandomNumberGenerator.new()
 	rotation.rng.seed = 11
 	var seen: Dictionary = {}
@@ -35722,6 +35818,7 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 	var scenes: Array[PackedScene] = _real_stage_scenes_361()
 	rotation.scenes = scenes
 	rotation.round_player_count = 8
+	rotation.small_stage_max_players = 8  # these test the deal itself, not the small-stage cap (#1201)
 	rotation.rng = RandomNumberGenerator.new()
 	rotation.rng.seed = 11
 	var seen: Dictionary = {}
@@ -36381,6 +36478,7 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		var rotation: RefCounted = rotation_script.new()
 		rotation.scenes = scenes
 		rotation.round_player_count = 8
+		rotation.small_stage_max_players = 8  # these test the deal itself, not the small-stage cap (#1201)
 		rotation.mode_id = mode_id
 		var rng := RandomNumberGenerator.new()
 		rng.seed = 373
