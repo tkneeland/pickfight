@@ -51,9 +51,16 @@ while true; do
       u=$(echo "$issues" | jq -r '.[] | select(.pull_request==null) | select(((.labels|map(.name)|map(test("^p[123]$"))|any)|not) or ((.assignees|length)==0)) | .number' | tr '\n' ' ')
       [ -n "${u// /}" ] && { echo "UNTRIAGED $u"; exit 0; }
     fi
-    for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | select(any(.labels[]; .name=="ready-for-agent")) | .number'); do
+    # rule 6: one conflict-risk ticket in flight across all devs; while one is in progress, the others wait (no MYTICKET)
+    cr_busy=0
+    for c in $(echo "$issues" | jq -r '.[] | select(.pull_request==null) | select(any(.labels[]; .name=="conflict-risk")) | .number'); do
+      pf_ticket_in_progress "$c" "$pr_tickets" && { cr_busy=1; break; }
+    done
+    for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | select(any(.labels[]; .name=="ready-for-agent")) | "\(.number)|\(any(.labels[]; .name=="conflict-risk"))"'); do
+      cr=${n#*|}; n=${n%%|*}
       # skip tickets already in progress: a branch for the issue, or an open PR that closes or refs it
       pf_ticket_in_progress "$n" "$pr_tickets" && continue
+      [ "$cr" = true ] && [ "$cr_busy" = 1 ] && continue
       # only when I am idle: no Atlas state file (removed at closeout)
       [ -z "$(ls "$ROOT"/.claude/atlas-state/*.json 2>/dev/null)" ] && { echo "MYTICKET $n"; exit 0; }
     done
