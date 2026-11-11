@@ -983,6 +983,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"respawn_stays_on_own_half_605",
 	"respawn_avoids_hazard_adjacent_spawn",
 	"respawn_alone_does_not_always_pick_spawn0_605",
+	"respawn_same_tick_deaths_take_distinct_spawns_1188",
 	"soccer_respawn_waits_four_seconds_stock_keeps_one_and_a_half_648",
 	"soccer_respawn_never_lands_in_a_goal_648",
 	"ctf_respawn_waits_four_seconds_648",
@@ -3709,6 +3710,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_respawn_skips_spawns_with_no_floor_605()
 		"respawn_stays_on_own_half_605":
 			return await _scenario_respawn_stays_on_own_half_605()
+		"respawn_same_tick_deaths_take_distinct_spawns_1188":
+			return await _scenario_respawn_same_tick_deaths_take_distinct_spawns_1188()
 		"respawn_avoids_hazard_adjacent_spawn":
 			return await _scenario_respawn_avoids_hazard_adjacent_spawn()
 		"respawn_alone_does_not_always_pick_spawn0_605":
@@ -45837,6 +45840,53 @@ func _scenario_respawn_avoids_hazard_adjacent_spawn() -> Array[String]:
 	if _pick.call(0) != points[2]:
 		failures.append("with every spawn near a hazard the pick was %s, want today's %s" % [_pick.call(0), points[2]])
 	await _teardown(stage)
+	return failures
+## Issue #1188: three fighters KO'd on the same tick come back on three
+## different spawn points, still spawn protected; with fewer free spawns than
+## fighters the extra one waits its own short timer instead of stacking.
+func _scenario_respawn_same_tick_deaths_take_distinct_spawns_1188() -> Array[String]:
+	var failures: Array[String] = []
+	var points: Array[Vector2] = [Vector2(0.0, 400.0), Vector2(500.0, 400.0), Vector2(1000.0, 400.0)]
+	var rig: Dictionary = _mode_rig(3, GameModesType.STOCK)
+	if not await _mode_started(rig):
+		await _teardown(rig["stage"])
+		return ["the round never started"]
+	var rm: Node = rig["rm"]
+	rm._stage_spawn_points = points
+	rm.spawn_protection_sec = 2.0
+	var watched: Dictionary = {}
+	for i in 3:
+		watched[i] = rig["players"][i]
+		rig["players"][i].teleport_to(Vector2(2000.0 + 100.0 * i, 400.0))
+	var respawn: RefCounted = RespawnScript605.new(rm, watched, 1.5)
+	for i in 3:
+		rig["players"][i].eliminate()
+		respawn.queue(i)
+	respawn.tick(2.0)
+	var seen: Array[Vector2] = []
+	for i in 3:
+		var p: Node2D = rig["players"][i]
+		if not p.alive:
+			failures.append("slot %d did not respawn" % i)
+		if not p.spawn_protected:
+			failures.append("slot %d lost its spawn protection" % i)
+		for other: Vector2 in seen:
+			if other.distance_to(p.global_position) < 50.0:
+				failures.append("slot %d stacked on another respawn at %s" % [i, p.global_position])
+		seen.append(p.global_position)
+	# Fewer free spawns than fighters: the last waits on its own timer.
+	for i in 3:
+		rig["players"][i].eliminate()
+		respawn.queue(i)
+	rm._stage_spawn_points = [points[0], points[1]] as Array[Vector2]
+	respawn.tick(2.0)
+	var back: int = 0
+	for i in 3:
+		if rig["players"][i].alive:
+			back += 1
+	if back != 2 or not respawn.is_pending(2):
+		failures.append("with 2 free spawns for 3 fighters, %d came back and slot 2 pending is %s" % [back, respawn.is_pending(2)])
+	await _teardown(rig["stage"])
 	return failures
 func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 	var failures: Array[String] = []
