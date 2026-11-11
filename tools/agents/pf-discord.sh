@@ -10,7 +10,7 @@
 #                                                  2 when the channel cannot be read (10 failed polls in a row)
 #   pf-discord.sh roles | members                  roles; members (id, name, roles)
 # Changing the server (only what the user asked for; rule 20)
-#   pf-discord.sh post <ch> <text>                 post a message (pings only <@id>s in PF_DISCORD_PING_IDS)
+#   pf-discord.sh post <ch> <text>                 post a message (pings only <@id>s in a PF_DISCORD_ID_<account> in the conf)
 #   pf-discord.sh topic <ch> <text> | rename <ch> <name>
 #   pf-discord.sh create <text|voice> <name> [category id|name] [private]   private: only the Dev role sees it
 #   pf-discord.sh role-create <name> [hex colour] | role-add <user id> <role> | role-remove <user id> <role>

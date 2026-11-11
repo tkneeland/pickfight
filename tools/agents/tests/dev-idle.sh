@@ -130,5 +130,18 @@ check "T10 bad id ignored" "$(bash "$AL" schans2 50 "#900" | cut -c1-13)" "Sam (
 printf '#!/bin/bash\necho "post $*" >> "$PF_TEST_LOG"\n' > "$T/bin/pfd"; chmod +x "$T/bin/pfd"; : > "$PF_TEST_LOG"
 PF_DISCORD_SH=$T/bin/pfd bash "$AL" schans2 50 "#900" --post >/dev/null
 check "T10 --post goes to #hive" "$(grep -c "^post post 1569919897591611552 " "$PF_TEST_LOG")" 1
+# failed post: non-zero exit and the throttle stamp is cleared so the next poll wakes again
+printf '#!/bin/bash\nexit 2\n' > "$T/bin/pfd-fail"; chmod +x "$T/bin/pfd-fail"; echo "$now 1" > "$T/state/.dev-idle-schans2"
+PF_DISCORD_SH=$T/bin/pfd-fail bash "$AL" schans2 50 "#900" --post >/dev/null 2>&1; rc=$?
+check "T10 failed post exits non-zero" "$rc" 1
+check "T10 failed post clears the throttle" "$([ -e "$T/state/.dev-idle-schans2" ] && echo kept || echo cleared)" cleared
+# 2h+ with a very long list: the reassignment offer is still in the first 1990 characters
+long=$(printf 'x%.0s' $(seq 1 3000))
+a=$(bash "$AL" schans2 130 "$long"); check "T10 long list keeps the offer" "$(echo "${a:0:1990}" | grep -c reassign)" 1
+check "T10 reserve account name" "$(bash "$AL" tommykneeland 50 "#1" | cut -c1-30)" "Tommy (reserve) (tommykneeland"
+# the real pf-discord.sh post: allowed_mentions.users carries the opted-in id (PF_DISCORD_ID_<account>), no one else
+printf 'PF_DISCORD_TOKEN=x\nPF_DISCORD_ID_schans2=123456789\n' > "$T/state/pf-discord.conf"; : > "$PF_TEST_LOG"
+bash "$AG/pf-discord.sh" post 1569919897591611552 "hi <@123456789> and <@555>" >/dev/null 2>&1
+check "T10 real post JSON: users" "$(tr -d ' \n' < "$PF_TEST_LOG" | grep -o '"users":\[[^]]*\]' | head -n 1)" '"users":["123456789"]'
 echo "dev-idle: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
