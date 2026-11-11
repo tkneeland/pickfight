@@ -13,6 +13,7 @@ PF_DISCORD_GUILD=$(pf_discord_conf PF_DISCORD_GUILD); PF_DISCORD_GUILD=${PF_DISC
 PF_DISCORD_BUGS=$(pf_discord_conf PF_DISCORD_BUGS_CHANNEL); PF_DISCORD_BUGS=${PF_DISCORD_BUGS:-$PF_DISCORD_DEFAULT_BUGS}
 PF_DISCORD_DEV=$(pf_discord_conf PF_DISCORD_DEV_CHANNEL); PF_DISCORD_DEV=${PF_DISCORD_DEV:-$PF_DISCORD_DEFAULT_DEV}
 # dcurl <path> [curl args]: the token goes in on stdin (`curl -K -`), never in argv where `ps` shows it.
-dcurl() { local path=$1; shift
-  printf 'header = "Authorization: Bot %s"\nurl = "%s%s"\n' "$PF_DISCORD_TOKEN" "$PF_DISCORD_API" "$path" | curl -s -K - "$@"; }
+dcurl() { local path=$1 t=${PF_DISCORD_TIMEOUT:-15} a; shift
+  for a in "$@"; do [ "$a" = -X ] && t=${PF_DISCORD_WRITE_TIMEOUT:-45}; done   # reads and polls 15 s; a write gets longer so a slow post is not retried into a duplicate
+  printf 'header = "Authorization: Bot %s"\nurl = "%s%s"\n' "$PF_DISCORD_TOKEN" "$PF_DISCORD_API" "$path" | curl -s -m "$t" -K - "$@"; }
 pf_discord_need_token() { [ -n "$PF_DISCORD_TOKEN" ] || { echo "$1: no PF_DISCORD_TOKEN in $PF_DISCORD_CONF (ask the owner for the bot token)" >&2; exit 2; }; }
