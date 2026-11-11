@@ -35,6 +35,8 @@ extends Node
 ##              slot and answers {"t":"left","peer":N}. An old relay ignores host
 ##              text frames (it only counts them as traffic), so a new host on an
 ##              old relay just keeps today's behaviour; an old host never sends it.
+##              {"t":"echo","n":N} (issue #1195) is answered with the same
+##              {"t":"echo","n":N} to that host only (its host-to-relay leg).
 ##
 ## Hardening (issue #580): a client frame over CLIENT_FRAME_MAX_BYTES is dropped
 ## (the host's inbound buffer is the same size as the relay's); a valid reclaim
@@ -735,10 +737,19 @@ func _pump_room(room: Room, now: int) -> void:
 			room.client_buckets.erase(id)
 			_send_json(room.host, {"t": "left", "peer": id})
 
-## A host control message (issue #580). Only {"t":"drop","peer":N} exists.
+## A host control message: {"t":"drop","peer":N} (issue #580), or
+## {"t":"echo","n":N} (issue #1195), answered with the same text to that host
+## only so it can time its own leg to the relay. Anything else is ignored.
 func _host_control(room: Room, text: String, now: int) -> void:
 	var msg: Variant = _parse_json(text)
-	if not (msg is Dictionary) or str(msg.get("t", "")) != "drop":
+	if not (msg is Dictionary):
+		return
+	if str(msg.get("t", "")) == "echo":
+		var n: Variant = msg.get("n")
+		if (n is int or (n is float and is_finite(n))) and absf(float(n)) < 1.0e9:
+			_send_json(room.host, {"t": "echo", "n": int(n)})
+		return
+	if str(msg.get("t", "")) != "drop":
 		return
 	var id: int = int(msg.get("peer", 0))
 	if not room.clients.has(id):

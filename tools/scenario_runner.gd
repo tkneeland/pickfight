@@ -1305,6 +1305,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"koth_hill_never_over_a_pit_1187",
 	"weapon_starts_round_neutral_after_held_aim_1185",
 	"koth_hill_radius_scales_with_stage_1198",
+	"online_ping_stats_avg_p95_max_1195",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4340,6 +4341,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_weapon_starts_round_neutral_after_held_aim_1185()
 		"koth_hill_radius_scales_with_stage_1198":
 			return await _scenario_koth_hill_radius_scales_with_stage_1198()
+		"online_ping_stats_avg_p95_max_1195":
+			return await _scenario_online_ping_stats_avg_p95_max_1195()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -61273,4 +61276,88 @@ func _scenario_koth_hill_radius_scales_with_stage_1198() -> Array[String]:
 			failures.append("%s: capture test at radius %.0f counted %s" % [path, want, inside])
 		await _teardown(rig["stage"], false)
 	_scenario_completed = true
+	return failures
+# --- Issue #1195: Online ping readout, felt delay and match statistics ------------
+## Answers the next ping the host sends `remote` after holding it `hold_msec`,
+## with `extra` merged into the pong. Returns false when no ping came.
+func _ping_answer_1195(rig: Dictionary, remote: WebSocketPeer, hold_msec: int, extra: Dictionary = {}) -> bool:
+	var ping: Dictionary = await _online_wait_239(rig, remote, "n")
+	while not ping.is_empty() and ping.get("t") != "ping":
+		ping = await _online_wait_239(rig, remote, "n")
+	if ping.is_empty():
+		return false
+	if hold_msec > 0:
+		await _wait_for_239(func() -> bool: return false, hold_msec)
+	var pong: Dictionary = {"t": "pong", "n": ping["n"]}
+	pong.merge(extra, true)
+	_online_send_239(remote, 1, JSON.stringify(pong).to_utf8_buffer())
+	await _online_frames_239(5)
+	return true
+func _scenario_online_ping_stats_avg_p95_max_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "ping-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	if not server.slot_ping_stats(slot).is_empty():
+		failures.append("statistics before any pong: %s" % server.slot_ping_stats(slot))
+	for hold: int in [0, 100, 300]:
+		if not await _ping_answer_1195(rig, remote, hold):
+			failures.append("no ping reached the remote seat (hold %d)" % hold)
+	var stats: Dictionary = server.slot_ping_stats(slot)
+	print("      stats after pongs held 0/100/300 ms: %s" % stats)
+	if int(stats.get("n", 0)) != 3:
+		failures.append("n = %s, expected 3" % stats.get("n"))
+	if int(stats.get("max", -1)) < 300 or int(stats.get("p95", -1)) < 300:
+		failures.append("max %s / p95 %s, expected both >= 300" % [stats.get("max"), stats.get("p95")])
+	if int(stats.get("avg", -1)) < 120 or int(stats.get("avg", -1)) > 280:
+		failures.append("avg %s, expected about 133..250" % stats.get("avg"))
+	if int(stats.get("felt", 0)) != -1 or stats.get("share") != false:
+		failures.append("an old-style pong left felt %s / share %s, expected -1 / false" % [stats.get("felt"), stats.get("share")])
+	# Hostile or junk felt values never reach the statistics.
+	await _ping_answer_1195(rig, remote, 0, {"felt": 1.0e9, "share": "yes"})
+	if int(server.slot_ping_stats(slot).get("felt", 0)) != -1 or server.slot_ping_stats(slot).get("share") != false:
+		failures.append("felt 1e9 / share 'yes' gave %s" % server.slot_ping_stats(slot))
+	await _ping_answer_1195(rig, remote, 0, {"felt": "x"})
+	if int(server.slot_ping_stats(slot).get("felt", 0)) != -1:
+		failures.append("felt 'x' gave %s" % server.slot_ping_stats(slot).get("felt"))
+	await _ping_answer_1195(rig, remote, 0, {"felt": 123, "share": true})
+	if int(server.slot_ping_stats(slot).get("felt", 0)) != 123 or server.slot_ping_stats(slot).get("share") != true:
+		failures.append("felt 123 / share true gave %s" % server.slot_ping_stats(slot))
+	for key: String in ["avg", "p95", "max", "n", "felt"]:
+		var v: int = int(server.slot_ping_stats(slot).get(key, -2))
+		if v < -1 or v > ControllerServerScript.PING_STAT_MAX_MSEC:
+			failures.append("%s = %d is out of -1..60000" % [key, v])
+	# Bots, the host PC's seat and an empty slot have no statistics.
+	for bot: int in server.virtual_slots():
+		if not server.slot_ping_stats(bot).is_empty():
+			failures.append("bot slot %d has statistics" % bot)
+	if server._set_host_pc_seat(true) and server.host_pc_slot() >= 0:
+		if not server.slot_ping_stats(server.host_pc_slot()).is_empty():
+			failures.append("the host PC seat has statistics")
+		server._set_host_pc_seat(false)
+	if not server.slot_ping_stats(-1).is_empty() or not server.slot_ping_stats(99).is_empty():
+		failures.append("an out-of-range slot has statistics")
+	server.reset_ping_stats()
+	if not server.slot_ping_stats(slot).is_empty() or not server.match_ping_stats().is_empty():
+		failures.append("reset_ping_stats left %s / %s" % [server.slot_ping_stats(slot), server.match_ping_stats()])
+	# A seat that leaves mid-match stays in the match's list.
+	await _ping_answer_1195(rig, remote, 0)
+	remote.close()
+	if not await _wait_for_239(func() -> bool: return server.slot_ping_stats(slot).is_empty(), 5000):
+		failures.append("the remote's seat was never unbound")
+	var listed: Array = server.match_ping_stats()
+	print("      after the seat left: %s" % [listed])
+	if listed.size() != 1 or int(listed[0].get("n", 0)) != 1:
+		failures.append("match_ping_stats after the seat left: %s, expected one entry with n=1" % [listed])
+	await _rc_close_241(rig)
 	return failures
