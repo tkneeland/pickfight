@@ -1304,6 +1304,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_guest_victory_prompt_waits_for_host_1186",
 	"koth_hill_never_over_a_pit_1187",
 	"weapon_starts_round_neutral_after_held_aim_1185",
+	"koth_hill_radius_scales_with_stage_1198",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4337,6 +4338,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_hill_never_over_a_pit_1187()
 		"weapon_starts_round_neutral_after_held_aim_1185":
 			return await _scenario_weapon_starts_round_neutral_after_held_aim_1185()
+		"koth_hill_radius_scales_with_stage_1198":
+			return await _scenario_koth_hill_radius_scales_with_stage_1198()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -61230,4 +61233,44 @@ func _scenario_weapon_starts_round_neutral_after_held_aim_1185() -> Array[String
 	server._test_pad_axes[0] = Vector2.ZERO
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _teardown(rig["stage"])
+	return failures
+
+## #1198: the King of the Hill circle grows with the stage's view width, never
+## below the old 110 px; the capture test and the Online client's net state use
+## the same radius, and the hill still stands on floor (#1187).
+func _scenario_koth_hill_radius_scales_with_stage_1198() -> Array[String]:
+	var failures: Array[String] = []
+	if absf(KothScript976.radius_for_view(1600.0) - 110.0) > 0.01:
+		failures.append("a 1600 view gives %.1f, want 110" % KothScript976.radius_for_view(1600.0))
+	if absf(KothScript976.radius_for_view(2240.0) - 154.0) > 0.01:
+		failures.append("a 2240 view gives %.1f, want 154" % KothScript976.radius_for_view(2240.0))
+	if KothScript976.radius_for_view(800.0) < 110.0:
+		failures.append("a narrow view shrank the hill below 110")
+	var cases: Array = [["res://scenes/stages/Summit.tscn", 110.0], ["res://scenes/stages/Colosseum.tscn", 154.0]]
+	for case: Array in cases:
+		var path: String = case[0]
+		var want: float = case[1]
+		var rig: Dictionary = _koth_stage_rig(path)
+		if not await _mode_started(rig):
+			failures.append("%s: the King of the Hill round never started" % path)
+			await _teardown(rig["stage"], false)
+			continue
+		await _await_ticks(5)
+		var hill: Node = rig["rm"].game_mode_node()
+		if absf(hill.hill_radius - want) > 0.01:
+			failures.append("%s: hill radius %.1f, want %.1f" % [path, hill.hill_radius, want])
+		if absf(float(hill.net_state()[1]) - hill.hill_radius) > 0.01:
+			failures.append("%s: net_state radius %.1f differs from the hill's %.1f" % [path, hill.net_state()[1], hill.hill_radius])
+		if not hill.is_standable(hill.hill_position):
+			failures.append("%s: hill at %s has no floor under it at radius %.0f" % [path, hill.hill_position, hill.hill_radius])
+		# The capture test: just inside the radius is on the hill, just outside is not.
+		var players: Array[RigidBody2D] = rig["players"]
+		players[0].global_position = hill.hill_position + Vector2(want - 5.0, 0.0)
+		players[1].global_position = hill.hill_position + Vector2(want + 40.0, 0.0)
+		players[2].global_position = hill.hill_position + Vector2(0.0, -2000.0)
+		var inside: Array[int] = hill.occupants()
+		if not inside.has(0) or inside.has(1):
+			failures.append("%s: capture test at radius %.0f counted %s" % [path, want, inside])
+		await _teardown(rig["stage"], false)
+	_scenario_completed = true
 	return failures
