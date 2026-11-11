@@ -29,7 +29,9 @@ check "first run sees the backlog" "$(bash "$D" check)" 1
 check "read shows it" "$(bash "$D" read | grep -c 'before the watcher')" 1
 check "read marks nothing" "$(bash "$D" check)" 1
 check "reply" "$(bash "$D" reply 1569876514017779900 'Filed as #5, thanks')" "discord reply: 200"
-check "reply marks handled" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017779900
+check "reply marks that one handled" "$(grep -c 1569876514017779900 "$PF_STATE_DIR/.discord-bugs-handled")" 1
+check "reply is logged" "$(grep -c 'reply: Filed as #5' "$PF_STATE_DIR/discord-bugs.log")" 1
+bash "$D" check >/dev/null; check "check steps the marker past it" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017779900
 grep '_messages | \|/messages | ' "$T/curl.log" | grep -q '"parse":\[\]'; check "reply pings nobody" $? 0
 # 19-digit ids stay exact (jq numbers would round them) and the marker only moves forward
 A="${M}_after_1569876514017779900"
@@ -37,11 +39,13 @@ echo "[$(msg 1569876514017779902 bot true "filed #5"),$(msg 1569876514017779901 
 check "check counts people only" "$(bash "$D" check)" 1
 check "check leaves marker" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017779900
 check "read oldest first" "$(bash "$D" read | head -n 1 | cut -d' ' -f2)" 1569876514017779901
-bash "$D" ack 1569876514017779901 >/dev/null; check "ack exact id" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017779901
-bash "$D" ack 999 >/dev/null; check "ack never moves back" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017779901
-bash "$D" ack abc >/dev/null 2>&1; check "ack rejects non-id" $? 2
+bash "$D" ack 1569876514017779901 >/dev/null 2>&1; check "ack needs a reason" $? 2
+bash "$D" ack 1569876514017779901 "chat: thanks" >/dev/null; bash "$D" check >/dev/null
+check "ack steps past it and the bot reply after it" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017779902
+bash "$D" ack 999 "test" >/dev/null; bash "$D" check >/dev/null; check "ack never moves back" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017779902
+bash "$D" ack abc "x" >/dev/null 2>&1; check "ack rejects non-id" $? 2
 # a full page of bot replies after the marker: check pages on and still finds the report behind them
-B="${M}_after_1569876514017779901"; L=""
+B="${M}_after_1569876514017779902"; L=""
 for i in $(seq 10 59); do L="$L$(msg 15698765140177799$i bot true reply),"; done
 echo "[${L%,}]" > "$T/r/$B"
 echo "[$(msg 1569876514017780000 sam false "behind the bot replies")]" > "$T/r/${M}_after_1569876514017779959"
@@ -51,6 +55,17 @@ check "read finds it" "$(bash "$D" read | grep -c 'behind the bot replies')" 1
 echo '[]' > "$T/r/${M}_after_1569876514017779959"
 bash "$D" check >/dev/null; check "bot-only: nothing new" $? 1
 check "bot-only: marker steps on" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017779959
+# a reply to a later report leaves an earlier one unhandled (owner, 2026-11-10: feature requests were skipped)
+C="${M}_after_1569876514017779959"
+echo "[$(msg 1569876514017780001 sam false "add a countdown"),$(msg 1569876514017780002 kenobi false "ping is laggy")]" > "$T/r/$C"
+bash "$D" reply 1569876514017780002 "Filed as #9" >/dev/null
+check "earlier report still pending" "$(bash "$D" check)" 1
+check "read shows only it" "$(bash "$D" read | grep -c '^--- ')" 1
+check "it is the earlier one" "$(bash "$D" read | grep -c 'add a countdown')" 1
+check "marker waits for it" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017779959
+bash "$D" reply 1569876514017780001 "Filed as #10" >/dev/null; bash "$D" check >/dev/null; check "both handled" $? 1
+check "marker past both" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017780002
+echo '[]' > "$T/r/$C"; rm -f "$T/r/${M}_after_1569876514017780002"
 check "token on stdin only" "$(grep -c 'Bot tok123"$' "$T/headers.log")" "$(grep -c . "$T/headers.log")"
 check "token never in argv" "$(grep -c tok123 "$T/curl.log")" 0
 rm "$T/r/${M}_after_1569876514017779959"
