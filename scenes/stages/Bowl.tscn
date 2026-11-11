@@ -86,6 +86,15 @@ position = Vector2(-580, 140)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(580, 140)
 
+; DrainShelf (#1202): the drain is floored at y=400 except a 30 px slot in the middle (x=-15..15), so a fighter dropped or shoved in is caught on screen and climbs out. The slot is too narrow for a fighter (48 px) to fall through: ring-outs are gone from the Bowl on purpose, because any slot a fighter can fall through was fallen through by bots within ~10 s (first stage death 8-10 s). This is the one stage where damage decides the round, as its description above says; `every_stage_can_ring_out` exempts it (`RINGOUT_EXEMPT_1202`).
+[node name="DrainShelf" parent="." instance=ExtResource("platform")]
+position = Vector2(-37.5, 408)
+size = Vector2(45, 16)
+
+[node name="DrainShelfRight" parent="." instance=ExtResource("platform")]
+position = Vector2(37.5, 408)
+size = Vector2(45, 16)
+
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 560)
 

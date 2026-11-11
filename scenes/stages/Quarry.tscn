@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/parts/FallingRock.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
 [ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
+[ext_resource type="PackedScene" path="res://scenes/parts/EdgeCatch.tscn" id="edge"]
 
 ; A mine head with two lifts and a roof under a chute (issue #143: #18's
 ; MovingPlatform used as lifts, plus #53's FallingRock). The high ground is
@@ -62,6 +63,25 @@ size = Vector2(180, 24)
 
 [node name="Chute" parent="." instance=ExtResource("4")]
 position = Vector2(0, -430)
+
+; Catch geometry (#1202): bots fell into the 600 px pit within seconds. PitShelf is a 540 px ledge across the pit (top y=392, 72 px under the yards, below the lifts' lowest stop), so a fighter dropped off a lift or the roof lands on it and climbs back; a 30 px slit beside each yard stays open, so the pit is still a ring-out. EdgeCatch parts hold the yards' outer ends: a 20 px ledge 72 px under the yard and a 10 px post (x<=800), narrow enough that a hard launch off an end still rings out.
+[node name="PitShelf" parent="." instance=ExtResource("platform")]
+position = Vector2(0, 400)
+size = Vector2(540, 16)
+
+[node name="EdgeLeft" parent="." instance=ExtResource("edge")]
+position = Vector2(-740, 320)
+side = -1
+ledge_width = 20
+ledge_drop = 72
+post_height = 10
+
+[node name="EdgeRight" parent="." instance=ExtResource("edge")]
+position = Vector2(740, 320)
+side = 1
+ledge_width = 20
+ledge_drop = 72
+post_height = 10
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-430, 270)
