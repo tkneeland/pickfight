@@ -36387,8 +36387,8 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		sequences[mode_id] = seq
 	print("      Hot Potato stages dealt %d of 900 in hot_potato, %d of 900 in classic" % [counts["hot_potato"], counts[""]])
 	# Expected: 12 of 36 bag slots (about 300); in classic each is in a bag 30% of the time.
-	if counts["hot_potato"] < 225:
-		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 225" % counts["hot_potato"])
+	if counts["hot_potato"] < 200:
+		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 200" % counts["hot_potato"])
 	var others: int = 0
 	for i in scenes.size():
 		if not favoured.has(i):

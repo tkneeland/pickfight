@@ -16,7 +16,7 @@
 ; sky.
 ;
 ; **Lifts.** Each side of the pit has a lift (160 wide, x=+-100..+-260). It
-; runs between flush with the yards (top y=320) and the roof's height (top
+; runs between 48 px above the yards (top y=272, #1202) and the roof's height (top
 ; y=-100) in 3 s each way. The two lifts run in opposite phase, so one is
 ; always at the bottom. The gap from a yard to a lift is 40 px, so you can
 ; step on at the bottom. If you miss it, you fall into the pit.
@@ -45,16 +45,16 @@ size = Vector2(440, 40)
 
 ; Authored at the bottom of its run, heading up.
 [node name="LiftLeft" parent="." instance=ExtResource("3")]
-position = Vector2(-180, 330)
+position = Vector2(-180, 282)
 size = Vector2(160, 20)
-travel = Vector2(0, -420)
+travel = Vector2(0, -372)
 one_way_sec = 3.0
 
 ; Authored at the top of its run, heading down: opposite phase to LiftLeft.
 [node name="LiftRight" parent="." instance=ExtResource("3")]
 position = Vector2(180, -90)
 size = Vector2(160, 20)
-travel = Vector2(0, 420)
+travel = Vector2(0, 372)
 one_way_sec = 3.0
 
 [node name="Roof" parent="." instance=ExtResource("platform")]
@@ -64,10 +64,10 @@ size = Vector2(180, 24)
 [node name="Chute" parent="." instance=ExtResource("4")]
 position = Vector2(0, -430)
 
-; Catch geometry (#1202): bots fell into the 600 px pit within seconds. PitShelf is a 540 px ledge across the pit (top y=392, 72 px under the yards, below the lifts' lowest stop), so a fighter dropped off a lift or the roof lands on it and climbs back; a 30 px slit beside each yard stays open, so the pit is still a ring-out. EdgeCatch parts hold the yards' outer ends: a 20 px ledge 72 px under the yard and a 10 px post (x<=800), narrow enough that a hard launch off an end still rings out.
+; Catch geometry (#1202): bots fell into the 600 px pit within seconds. PitShelf is a 600 px ledge across the pit (top y=420, 100 px under the yards, 128 px under the lifts' lowest stop, which is now 48 px above the yards so the shelf keeps the headroom rule), so a fighter dropped off a lift or the roof lands on it and climbs back; the pit is closed, and the ring-outs are the open yard ends. EdgeCatch parts hold the yards' outer ends: a 20 px ledge 72 px under the yard and a 10 px post (x<=800), narrow enough that a hard launch off an end still rings out.
 [node name="PitShelf" parent="." instance=ExtResource("platform")]
-position = Vector2(0, 400)
-size = Vector2(540, 16)
+position = Vector2(0, 428)
+size = Vector2(600, 16)
 
 [node name="EdgeLeft" parent="." instance=ExtResource("edge")]
 position = Vector2(-740, 320)

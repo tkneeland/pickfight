@@ -757,14 +757,14 @@ Quarry|poly|YardLeft/YardLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2A
 Quarry|body|YardRight|StaticBody2D|Transform2D(1, 0, 0, 1, 520, 340)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Quarry|shape|YardRight/YardRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(440, 40)|oneway=false|disabled=false
 Quarry|poly|YardRight/YardRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-220, -20, 220, -20, 220, 20, -220, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Quarry|body|LiftLeft|AnimatableBody2D|Transform2D(1, 0, 0, 1, -180, 330)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Quarry|body|LiftLeft|AnimatableBody2D|Transform2D(1, 0, 0, 1, -180, 282)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Quarry|body|LiftRight|AnimatableBody2D|Transform2D(1, 0, 0, 1, 180, -90)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Quarry|body|Roof|StaticBody2D|Transform2D(1, 0, 0, 1, 0, -110)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Quarry|shape|Roof/RoofShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(180, 24)|oneway=false|disabled=false
 Quarry|poly|Roof/RoofVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Quarry|body|PitShelf|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 400)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Quarry|shape|PitShelf/PitShelfShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(540, 16)|oneway=false|disabled=false
-Quarry|poly|PitShelf/PitShelfVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-270, -8, 270, -8, 270, 8, -270, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Quarry|body|PitShelf|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Quarry|shape|PitShelf/PitShelfShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(600, 16)|oneway=false|disabled=false
+Quarry|poly|PitShelf/PitShelfVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-300, -8, 300, -8, 300, 8, -300, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Quarry|body|EdgeLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -740, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Quarry|shape|EdgeLeft/EdgeLeftLedgeShape|Transform2D(1, 0, 0, 1, -10, 80)|RectangleShape2D|Vector2(20, 16)|oneway=false|disabled=false
 Quarry|poly|EdgeLeft/EdgeLeftLedgeVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-20, 72, 0, 72, 0, 88, -20, 88)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
@@ -1103,7 +1103,7 @@ Tank|body|FloorRight|StaticBody2D|Transform2D(1, 0, 0, 1, 570, 340)|layer=1|mask
 Tank|shape|FloorRight/FloorRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(380, 40)|oneway=false|disabled=false
 Tank|poly|FloorRight/FloorRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-190, -20, 190, -20, 190, 20, -190, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Tank|body|CentreMud|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 314)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Tank|body|Bridge|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 170)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Tank|body|Bridge|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 166)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Tank|shape|Bridge/BridgeShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(260, 24)|oneway=false|disabled=false
 Tank|poly|Bridge/BridgeVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-130, -12, 130, -12, 130, 12, -130, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Tank|body|WallLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -780, 20)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
