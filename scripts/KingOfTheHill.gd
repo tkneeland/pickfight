@@ -423,7 +423,9 @@ func _timeout(teams: bool) -> void:
 	var leaders: Array[int] = []
 	var units: Array = []
 	if teams:
-		units = [0, 1]
+		# Every team in play, not just Red and Blue (#1200).
+		for team: int in round_manager.team_count():
+			units.append(team)
 	else:
 		# A kicked player's banked hold time cannot win the clock (#1107).
 		for slot: int in _slots:
@@ -491,7 +493,7 @@ func _fraction_of(unit: int) -> float:
 func holds_text() -> String:
 	var rows: Array = []
 	if _teams_round():
-		for team: int in [0, 1]:
+		for team: int in TeamsScript.COUNT:
 			if team_hold_of(team) > 0.0:
 				rows.append([team_hold_of(team), "%s %d/%d" % [TeamsScript.team_name(team), floori(team_hold_of(team)), roundi(seconds_to_win)]])
 	else:

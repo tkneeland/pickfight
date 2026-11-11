@@ -12,6 +12,7 @@ const STATE_ROUND_END: int = 2
 const STATE_VICTORY: int = 5
 const UiMirrorScript: GDScript = preload("res://scripts/UiMirror.gd")
 const HostSettingsScript: GDScript = preload("res://scripts/HostSettings.gd")
+const TeamsScript: GDScript = preload("res://scripts/Teams.gd")
 
 static func capture(rm: Node) -> Dictionary:
 	var state: int = int(rm.get("_state"))
@@ -81,9 +82,12 @@ static func _mode(id: String, node: Object, rm: Node) -> Dictionary:
 			var hold: Dictionary = {}
 			for slot: int in node.get("hold_time"):
 				hold[slot] = roundi(float(node.hold_time[slot]))
+			var team_hold: Array = []
+			for team: int in TeamsScript.COUNT:
+				team_hold.append(roundi(node.team_hold_of(team)))
 			return {"hold": hold, "win": roundi(float(node.seconds_to_win)),
 				"moving": bool(node.get("hill_warning")), "clock": str(node.clock_text()),
-				"team_hold": [roundi(node.team_hold_of(0)), roundi(node.team_hold_of(1))]}
+				"team_hold": team_hold}
 		"capture_the_flag":
 			return {"score": [int(node.scores[0]), int(node.scores[1])], "flag": [int(node.state[0]), int(node.state[1])],
 				"carrier": [int(node.carrier[0]), int(node.carrier[1])], "win": int(node.captures_to_win), "clock": str(node.clock_text())}

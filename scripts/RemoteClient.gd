@@ -29,6 +29,7 @@ const PuppetScript: GDScript = preload("res://scripts/RemotePuppet.gd")
 const PaletteScript: GDScript = preload("res://scripts/Palette.gd")
 const PickupWeaponsScript: GDScript = preload("res://scripts/PickupWeapons.gd")
 const TeamsScript: GDScript = preload("res://scripts/Teams.gd")
+const GameModesScript: GDScript = preload("res://scripts/GameModes.gd")
 const StageScript: GDScript = preload("res://scripts/Stage.gd")
 const CosmeticsPickerScript: GDScript = preload("res://scripts/CosmeticsPicker.gd")
 const CosmeticsPanelScript: GDScript = preload("res://scripts/OnlineCosmeticsPanel.gd")
@@ -1857,6 +1858,9 @@ func _build_lobby_panel() -> void:
 	_target_label = _lobby.target_label
 	_lobby.toggle_mode.connect(func() -> void:
 		_send_json({"t": "mode", "v": "ffa" if lobby.get("mode") == "teams" else "teams"}))
+	_lobby.step_team_count.connect(func() -> void:
+		var count: int = int(lobby.get("team_count", TeamsScript.MIN_COUNT))
+		_send_json({"t": "teamcount", "v": TeamsScript.MIN_COUNT if count >= TeamsScript.MAX_COUNT else count + 1}))
 	_lobby.team_picked.connect(func(team: int) -> void: _send_json({"t": "team", "v": team}))
 	_lobby.step_target.connect(func(delta: int) -> void:
 		_send_json({"t": "target", "n": int(lobby.get("target", 5)) + delta}))
@@ -2009,8 +2013,8 @@ func _lobby_toggle_team() -> bool:
 	if not bool(lobby.get("teams", false)) or not ["lobby", "countdown"].has(str(lobby.get("phase", ""))):
 		return false
 	for entry: Variant in lobby.get("players", []):
-		if entry is Dictionary and int(entry.get("slot", -2)) == slot and int(entry.get("team", -1)) in [0, 1]:
-			_send_json({"t": "team", "v": 1 - int(entry["team"])})
+		if entry is Dictionary and int(entry.get("slot", -2)) == slot and int(entry.get("team", -1)) >= 0:
+			_send_json({"t": "team", "v": (int(entry["team"]) + 1) % clampi(int(lobby.get("team_count", TeamsScript.MIN_COUNT)), TeamsScript.MIN_COUNT, TeamsScript.MAX_COUNT)})
 			return true
 	return false
 
@@ -2053,6 +2057,10 @@ func _refresh_lobby() -> void:
 	var host: bool = _is_host()
 	_host_row.visible = host
 	_mode_button.text = tr("MODE_TEAMS") if lobby.get("mode") == "teams" else tr("MODE_FFA")
+	var count_button: Button = _lobby.team_count_button
+	count_button.visible = lobby.get("mode") == "teams"
+	count_button.text = tr("TEAM_COUNT_BUTTON") % int(lobby.get("team_count", TeamsScript.MIN_COUNT))
+	count_button.disabled = bool(lobby.get("two_teams_only", false))
 	_target_label.text = tr(_target_label_key(str(lobby.get("target_kind", "first_to")))) % int(lobby.get("target", 5))
 	_pause_button.visible = host
 	_pause_button.text = tr("JOIN_RESUME_MATCH") if lobby.get("paused", false) else tr("JOIN_PAUSE_MATCH")

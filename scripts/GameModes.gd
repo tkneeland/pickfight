@@ -34,6 +34,7 @@ const CLASSIC: String = ""
 ## - no_modifiers: optional; true means no modifier is ever rolled (Stock, #375).
 ## - ffa_only: not playable in the Teams format.
 ## - teams_only: optional; true means playable only in the Teams format (Soccer, #402).
+## - two_teams_only: optional; true means the mode has two sides, Red and Blue, whatever the host's team count (Soccer, Capture the Flag, #1200).
 ## - retired: optional; true keeps the row (so a forced round, its cards and
 ##   its translations still work) but takes the mode out of every picker and
 ##   makes `selectable` false, so a saved choice of it loads as Classic (Hot
@@ -75,13 +76,13 @@ const TABLE: Array[Dictionary] = [
 		"id": SOCCER, "name": "Soccer",
 		"rule": "Reach the goal target to win.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
-		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true, "own_stages": true,
+		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true, "two_teams_only": true, "own_stages": true,
 	},
 	{
 		"id": CAPTURE_THE_FLAG, "name": "Capture the Flag",
 		"rule": "Reach the capture target to win.",
 		"rise": false, "rise_grace_factor": 1.0, "rise_speed_factor": 1.0,
-		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true, "own_stages": true,
+		"banned": ["meteor_shower"], "ffa_only": false, "teams_only": true, "two_teams_only": true, "own_stages": true,
 	},
 ]
 
@@ -198,6 +199,10 @@ static func is_ffa_only(id: String) -> bool:
 
 static func is_teams_only(id: String) -> bool:
 	return bool(entry(id).get("teams_only", false))
+
+## The most teams `id` has in a Teams match: 2 for a two-sided mode (Soccer, Capture the Flag, #1200), else 4.
+static func max_teams(id: String) -> int:
+	return 2 if bool(entry(id).get("two_teams_only", false)) else 4
 
 ## Whether `id` plays only on the stages whose `mode_weights` name it.
 static func needs_own_stages(id: String) -> bool:

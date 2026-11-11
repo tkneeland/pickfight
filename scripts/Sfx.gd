@@ -270,6 +270,8 @@ const SOUNDS: Dictionary = {
 	"announce_winner": {"files": ["announcer/winner.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_red_team_wins": {"files": ["announcer/red_team_wins.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_blue_team_wins": {"files": ["announcer/blue_team_wins.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_green_team_wins": {"files": ["announcer/green_team_wins.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
+	"announce_yellow_team_wins": {"files": ["announcer/yellow_team_wins.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_low_gravity": {"files": ["announcer/low_gravity.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_heavy_weapons": {"files": ["announcer/heavy_weapons.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
 	"announce_big_heads": {"files": ["announcer/big_heads.ogg"], "db": -15.0, "overlap": 1, "positional": false, "voice": true},
