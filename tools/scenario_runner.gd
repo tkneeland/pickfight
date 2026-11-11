@@ -1301,6 +1301,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_joiner_lobby_focus_follows_pad_1170",
 	"mode_lists_derive_from_game_modes_1172",
 	"retired_mode_saved_lists_dropped_1172",
+	"online_guest_victory_prompt_waits_for_host_1186",
 	"koth_hill_never_over_a_pit_1187",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4329,6 +4330,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_mode_lists_derive_from_game_modes_1172()
 		"retired_mode_saved_lists_dropped_1172":
 			return _scenario_retired_mode_saved_lists_dropped_1172()
+		"online_guest_victory_prompt_waits_for_host_1186":
+			return await _scenario_online_guest_victory_prompt_waits_for_host_1186()
 		"koth_hill_never_over_a_pit_1187":
 			return await _scenario_koth_hill_never_over_a_pit_1187()
 		_:
@@ -61114,6 +61117,39 @@ func _scenario_retired_mode_saved_lists_dropped_1172() -> Array[String]:
 			failures.append("the old global list wrongly seeded %s" % id)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	_scenario_completed = true
+	return failures
+
+## Issue #1186: on the victory screen an Online guest (not the room host) cannot
+## continue, so its prompt reads "Waiting for host to continue"; the host seat
+## keeps the Continue inputs, and the prompt is the same label either way.
+func _scenario_online_guest_victory_prompt_waits_for_host_1186() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _fx_client_976(rig)
+	var slots: Array[int] = [0, 1]
+	var data: Dictionary = {"slots": slots, "scores": PackedInt32Array([5, 2]), "winner": 0, "awards": [] as Array[Dictionary],
+		"winner_team": -1, "teams": {}, "team_scores": PackedInt32Array(), "stats": [] as Array[Dictionary],
+		"inputs": PackedStringArray(["pc", "phone"]), "names": {0: ["Ann", Color.RED], 1: ["Bo", Color.BLUE]}, "end_card": false}
+	var wait_text: String = client.tr("VICTORY_WAIT_FOR_HOST")
+	if wait_text == "VICTORY_WAIT_FOR_HOST" or wait_text.is_empty():
+		failures.append("VICTORY_WAIT_FOR_HOST has no translation")
+	client.effects.set_victory_guest(true)
+	client.effects.show_victory(RemoteHudScript976.unpack(RemoteHudScript976._pack(data), {}))
+	var prompt: Label = client.effects.victory.victory_panel().find_child("ContinuePrompt", true, false) as Label
+	if prompt == null:
+		failures.append("no ContinuePrompt on the joiner's victory screen")
+	else:
+		if prompt.text != wait_text:
+			failures.append("guest prompt '%s', wanted '%s'" % [prompt.text, wait_text])
+		client.effects.set_victory_guest(false)
+		if prompt.text == wait_text or prompt.text.is_empty():
+			failures.append("host prompt '%s' still says waiting" % prompt.text)
+		if prompt.text != client.effects.victory.continue_prompt_text(PackedStringArray(["pc", "phone"])):
+			failures.append("host prompt '%s' is not the Continue inputs line" % prompt.text)
+		client.effects.set_victory_guest(true)
+		if prompt.text != wait_text:
+			failures.append("guest prompt did not switch back to waiting: '%s'" % prompt.text)
+	await _rc_close_241(rig)
 	return failures
 
 ## #1187: on every stage in Main's rotation, the King of the Hill hill (and each

@@ -2032,6 +2032,7 @@ func _refresh_extras() -> void:
 	effects.set_numbers(screens.get("numbers"))
 	if effects.mode_hud != null:
 		effects.mode_hud.visible = _host_hud.visible
+	effects.set_victory_guest(not _is_host())
 	var victory_text: String = str(hud.get("victory", "")) if int(hud.get("state", 0)) == RemoteHudScript.STATE_VICTORY else ""
 	if victory_text != _victory_text:
 		_victory_text = victory_text

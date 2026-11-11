@@ -337,6 +337,15 @@ func head_anchor_count() -> int:
 
 # --- Screens from the hud frame ------------------------------------------------
 
+## An Online guest (not the room host) cannot continue: its victory prompt reads
+## "Waiting for host to continue" (#1186).
+var _victory_guest: bool = false
+
+func set_victory_guest(guest: bool) -> void:
+	_victory_guest = guest
+	if victory != null:
+		victory.set_waiting_for_host(guest)
+
 ## The host's victory screen from `RoundManager.victory_data()` (null hides
 ## it): the same `VictoryScreen` build and refresh, every award included.
 func show_victory(data: Variant) -> void:
@@ -351,6 +360,7 @@ func show_victory(data: Variant) -> void:
 	if victory == null:
 		victory = VictoryScreenScript.new(screen, _victory_name, _victory_color)
 		victory.build()
+		victory.set_waiting_for_host(_victory_guest)
 	var key: String = var_to_str(d)
 	if key != _victory_key:
 		_victory_key = key

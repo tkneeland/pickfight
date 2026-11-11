@@ -32,6 +32,10 @@ var _podium: HBoxContainer
 var _victory_logo: TextureRect
 var _end_card_panel: Control
 var _continue_prompt_label: Label
+## An Online guest cannot continue (only the host can, #1186): the prompt then
+## reads "Waiting for host to continue" instead of the Continue inputs.
+var _waiting_for_host: bool = false
+var _continue_kinds: PackedStringArray = PackedStringArray()
 var _clip_saved_label: Label
 ## What the podium, awards and stats were last built from: the lobby state changes
 ## about once a second with remote seats (their ping), and the same inputs need no rebuild.
@@ -111,8 +115,18 @@ func _continue_prompt() -> Label:
 ## `ControllerServer.continue_inputs()`. Phones alone (or nobody) keep the
 ## original line.
 func set_continue_inputs(kinds: PackedStringArray) -> void:
+	_continue_kinds = kinds
+	_sync_continue_prompt()
+
+## An Online guest passes true (#1186): only the prompt text switches, the pill
+## is the same drawing code the host uses. The host and Couch never call it.
+func set_waiting_for_host(waiting: bool) -> void:
+	_waiting_for_host = waiting
+	_sync_continue_prompt()
+
+func _sync_continue_prompt() -> void:
 	if _continue_prompt_label != null:
-		_continue_prompt_label.text = continue_prompt_text(kinds)
+		_continue_prompt_label.text = _screen.tr("VICTORY_WAIT_FOR_HOST") if _waiting_for_host else continue_prompt_text(_continue_kinds)
 
 ## The prompt for `kinds` ("pc", "pad", "phone"): "Tap Continue on your phone"
 ## for phones alone, otherwise "Continue with Space, A on a gamepad or a tap on
