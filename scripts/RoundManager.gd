@@ -1504,6 +1504,7 @@ func _publish_lobby_state() -> void:
 		picked_mode = str(_controller_server.game_mode())
 	if picked_mode == GameModesScript.STOCK:  # the host phone's Stock controls (#354)
 		var settings: RefCounted = HostSettingsScript.shared()
+		_stage_rotation.round_player_count = roster.size()  # the picker offers what this many may play (#1201)
 		state["stock"] = {
 			"lives": settings.stock_lives, "time": settings.stock_time_limit,
 			"stage": _stock_single_stage(), "stages": _stage_rotation.picker_rows(),

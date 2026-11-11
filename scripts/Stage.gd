@@ -175,6 +175,45 @@ static func is_large_view(view: Vector2) -> bool:
 static func view_size_of(scene: PackedScene) -> Vector2:
 	return _root_prop(scene, &"view_size", DEFAULT_VIEW_SIZE)
 
+## Issue #1201: a small stage is only offered to a round of
+## `StageRotation.small_stage_max_players` or fewer. Nobody keeps a list: a stage
+## is small when its spawn footprint (the spawn markers' bounding box, width plus
+## height) is at most this many pixels. 1200 is the footprint of the 16th
+## smallest of the 47 stages (ties included), so it marks the smallest third.
+## A stage that sets a large `view_size` is never small. Retune it when the
+## stage set grows enough that the small share leaves 25-40% (a scenario checks).
+const SMALL_STAGE_MAX_FOOTPRINT: float = 1200.0
+
+## A stage scene's spawn footprint, read off its packed children like
+## `view_size_of()` (no instancing): the bounding box of its `Spawn*` markers,
+## width plus height. 0 for a scene with no spawns.
+static func spawn_footprint_of(scene: PackedScene) -> float:
+	if scene == null:
+		return 0.0
+	var state: SceneState = scene.get_state()
+	var low := Vector2(INF, INF)
+	var high := Vector2(-INF, -INF)
+	for n in state.get_node_count():
+		if state.get_node_type(n) != &"Marker2D" or str(state.get_node_path(n)).count("/") != 1:
+			continue
+		if not str(state.get_node_name(n)).begins_with("Spawn"):
+			continue
+		var at := Vector2.ZERO
+		for p in state.get_node_property_count(n):
+			if state.get_node_property_name(n, p) == &"position":
+				at = state.get_node_property_value(n, p)
+		low = low.min(at)
+		high = high.max(at)
+	if low.x == INF:
+		return 0.0
+	var span: Vector2 = high - low
+	return span.x + span.y
+
+## Whether a stage scene is small (#1201): a footprint at or under
+## `SMALL_STAGE_MAX_FOOTPRINT` and a normal-sized view.
+static func is_small_scene(scene: PackedScene) -> bool:
+	return not is_large_view(view_size_of(scene)) and spawn_footprint_of(scene) <= SMALL_STAGE_MAX_FOOTPRINT
+
 ## Property `prop` as a stage scene's packed root sets it, read without
 ## instancing the scene, or `fallback` where it is not set (or no scene).
 static func _root_prop(scene: PackedScene, prop: StringName, fallback: Variant) -> Variant:
