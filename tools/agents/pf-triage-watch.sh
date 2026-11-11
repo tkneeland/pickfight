@@ -73,7 +73,11 @@ pf_dev_idle_check() {
     awk -F'|' -v h="$h" -v now="$now" '$2==h && ($3=="USAGE" || $3=="HELLO") && now-$1<3600 {f=1} END {exit !f}' "$PF_STATE/msg-inbox.log" 2>/dev/null || continue
     ca=$(pf_peer_claude_at "$h"); [ -n "$ca" ] || continue
     idle=$((now - ca)); [ "$idle" -ge 2700 ] || continue
-    st=$(cat "$PF_STATE/.dev-idle-$h" 2>/dev/null || echo "0 0"); t=${st%% *}; stage=${st##* }
+    st=$(cat "$PF_STATE/.dev-idle-$h" 2>/dev/null || echo "0 0"); read -r t stage rt <<EOT
+$st
+EOT
+    t=${t:-0}; stage=${stage:-0}
+    [ "${rt:-0}" -gt "$now" ] && continue   # a failed #hive post set a retry time (pf-dev-idle-alert.sh): not before it
     ok=1
     if [ "$t" -ge "$ca" ]; then   # already woken in this idle stretch: next at 2 h, or the one stage-2 wake when idle reaches 2 h
       ok=0

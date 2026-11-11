@@ -20,6 +20,10 @@ pf_discord_need_token() { [ -n "$PF_DISCORD_TOKEN" ] || { echo "$1: no PF_DISCOR
 # pf_discord_mentions <text>: the allowed_mentions JSON for a post. Pings only users written as <@id> in the text who are
 # also the value of a PF_DISCORD_ID_<account> line in the conf (the one opt-in per dev; kept out of the public repo).
 # Ids quoted from untrusted reports never ping; @everyone and roles never do.
-pf_discord_ping_ids() { [ -f "$PF_DISCORD_CONF" ] && sed -n 's/^PF_DISCORD_ID_[A-Za-z0-9_]*=//p' "$PF_DISCORD_CONF" | tr -d '\r"'"'"' ' | tr '\n' ,; }
+pf_discord_ping_ids() { [ -f "$PF_DISCORD_CONF" ] || return 0
+  sed -n 's/^PF_DISCORD_ID_[A-Za-z0-9_]*=//p' "$PF_DISCORD_CONF" | tr -d '\r"'"'"' ' | tr '\n' ,
+  local legacy; legacy=$(pf_discord_conf PF_DISCORD_PING_IDS)   # old comma list: still honoured, with a nudge to migrate
+  [ -n "$legacy" ] && { printf '%s,' "$legacy"; echo "pf-discord: PF_DISCORD_PING_IDS is deprecated; use PF_DISCORD_ID_<account>=<id> lines" >&2; }
+  return 0; }
 pf_discord_mentions() { jq -nc --arg t "$1" --arg ok "$(pf_discord_ping_ids)" \
   '($ok | split(",") | map(select(length > 0))) as $ok | {parse: [], users: ([$t | scan("<@!?([0-9]+)>") | .[0]] | unique | map(select(. as $i | $ok | index($i))))}' 2>/dev/null || echo '{"parse":[],"users":[]}'; }

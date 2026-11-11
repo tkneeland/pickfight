@@ -9,10 +9,12 @@
 acct=${1:-}; mins=${2:-}; what=${3:-}
 case $mins in ''|*[!0-9]*) echo "usage: pf-dev-idle-alert.sh <account> <idle minutes> \"<what waits>\" [--post]" >&2; exit 2;; esac
 [ -n "$acct" ] && [ -n "$what" ] || { echo "usage: pf-dev-idle-alert.sh <account> <idle minutes> \"<what waits>\" [--post]" >&2; exit 2; }
-case $acct in schans2) nm=Sam;; agage-JG) nm=Austin;; tkneeland) nm=Tommy;; tommykneeland) nm="Tommy (reserve)";; *) nm=$acct;; esac
+mins=$((10#$mins))   # base 10: 08 and 09 are not octal
+lbl=$acct
+case $acct in schans2) nm=Sam;; agage-JG) nm=Austin;; tkneeland) nm=Tommy;; tommykneeland) nm=Tommy; lbl="reserve, tommykneeland";; *) nm=$acct;; esac
 key=$(printf '%s' "$acct" | tr -c 'A-Za-z0-9' _)
 id=$(pf_discord_conf "PF_DISCORD_ID_$key"); case $id in *[!0-9]*) id="";; esac
-who="$nm ($acct)"; [ -n "$id" ] && who="<@$id> $who"
+who="$nm ($lbl)"; [ -n "$id" ] && who="<@$id> $who"
 if [ "$mins" -ge 60 ]; then t="$((mins / 60))h$(printf %02d $((mins % 60)))m"; else t="${mins}m"; fi
 # the reassignment offer goes before the list of what waits, so post's 1990-character cut never drops it
 msg="$who: your Claude session has been idle for $t."
@@ -20,5 +22,5 @@ msg="$who: your Claude session has been idle for $t."
 msg="$msg Work is waiting on you: ${what:0:600}. Reply here if you are away on purpose."
 printf '%s\n' "$msg"
 [ "${4:-}" = --post ] || exit 0
-bash "${PF_DISCORD_SH:-$PF_DIR/pf-discord.sh}" post "$PF_DISCORD_DEV" "$msg" >/dev/null || { rm -f "$PF_STATE/.dev-idle-$acct"; echo "pf-dev-idle-alert: post failed; throttle cleared so the next poll wakes again" >&2; exit 1; }
+bash "${PF_DISCORD_SH:-$PF_DIR/pf-discord.sh}" post "$PF_DISCORD_DEV" "$msg" >/dev/null || { echo "0 0 $(( $(date +%s) + 600 ))" > "$PF_STATE/.dev-idle-$acct"; echo "pf-dev-idle-alert: post failed; the next DEV_IDLE wake retries in 10 min" >&2; exit 1; }
 exit 0
