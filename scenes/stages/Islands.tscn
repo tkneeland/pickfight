@@ -19,7 +19,7 @@
 ; you can reach the next before someone swings at you over the gap -- so
 ; making one of the four move is not a new idea bolted on, it is this
 ; stage's own idea with the answer changing while you decide. It patrols
-; horizontally and never leaves y=300, because the thing worth protecting
+; horizontally and never leaves y=270 (lifted 30 px by #1202), because the thing worth protecting
 ; here is that nothing is higher than anything else; a platform that rose
 ; and fell would quietly hand back the height advantage the stage exists
 ; to withhold.
@@ -39,11 +39,11 @@ background_silhouette = Color(0.1, 0.12, 0.18, 1)
 background_layers = PackedStringArray("clouds", "hills")
 
 [node name="IslandA" parent="." instance=ExtResource("platform")]
-position = Vector2(-420, 300)
+position = Vector2(-420, 270)
 size = Vector2(180, 24)
 
 [node name="IslandB" parent="." instance=ExtResource("platform")]
-position = Vector2(-140, 300)
+position = Vector2(-140, 270)
 size = Vector2(180, 24)
 
 ; Was IslandC, a static platform at x=140. As a ferry it is authored at
@@ -52,84 +52,84 @@ size = Vector2(180, 24)
 ; at 330). 2.5 s a leg is slow enough to be a thing you wait for rather than
 ; a thing you react to.
 [node name="Ferry" parent="." instance=ExtResource("3")]
-position = Vector2(50, 300)
+position = Vector2(50, 270)
 size = Vector2(180, 24)
 travel = Vector2(190, 0)
 one_way_sec = 2.5
 
 [node name="IslandD" parent="." instance=ExtResource("platform")]
-position = Vector2(420, 300)
+position = Vector2(420, 270)
 size = Vector2(180, 24)
 
-; Outer islets (issue #137): 120 px, one each side, 100 px off IslandA and
-; IslandD -- the same gap as A to B -- so the chain runs x=+-730 and a player
+; Outer islets (issue #137, widened to 160 px by #1202): one each side, 80 px off IslandA and
+; IslandD -- the same gap as A to B -- so the chain runs x=+-750 and a player
 ; knocked off an end island has somewhere to land. Same height as the rest.
 [node name="IslandE" parent="." instance=ExtResource("platform")]
-position = Vector2(-670, 300)
+position = Vector2(-670, 270)
 size = Vector2(160, 24)
 
 [node name="IslandF" parent="." instance=ExtResource("platform")]
-position = Vector2(670, 300)
+position = Vector2(670, 270)
 size = Vector2(160, 24)
 
-; Reef (#1202): a long ledge 140 px under the islands (top y=452; the kill zone drops to y=640), under the outer islands and islets, x=-660..-150 and 150..660; a 300 px drain under the ferry's crossing stays open. Bots shoved or leaping into a gap died within 4 s; now a fighter who falls lands on the reef and climbs back (140 px under the islands is inside the 100-180 px hook range and over the 128 px headroom rule, ferry included). Ring-outs remain through the drain and off the islets' outside edges. Islets widened to 160 px and the end spawns pulled inboard (they were 25 px from an islet edge).
+; Reef (#1202): two catch ledges under the chain, top y=420 (inside the 450 bottom of the screen, 162 px under the island tops: the 100-180 px hook range; the islands were lifted 30 px so the reef keeps 138 px of headroom under them, ferry included), spanning x=-780..-100 and 100..780 so the outer islets are caught too. A 200 px drain under the ferry crossing stays open: bots shoved or leaping into a gap died within 4 s, and ring-outs now come through the drain and past x=+-780. Islets widened to 160 px and the end spawns pulled inboard. KillZone stays at y=480.
 [node name="ReefLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-405, 460)
-size = Vector2(510, 16)
+position = Vector2(-440, 428)
+size = Vector2(680, 16)
 
 [node name="ReefRight" parent="." instance=ExtResource("platform")]
-position = Vector2(405, 460)
-size = Vector2(510, 16)
+position = Vector2(440, 428)
+size = Vector2(680, 16)
 
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-420, 220)
+position = Vector2(-420, 190)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(435, 220)
+position = Vector2(420, 190)
 
 ; Spawns 2 and 3 (issue #36): Spawn2 beside IslandB's pickup, 60 px clear of it. Spawn3 on IslandD (#199: swapped with Spawn7, so two, three and four players split left/right as evenly as they can).
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-200, 220)
+position = Vector2(-200, 190)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(490, 220)
+position = Vector2(480, 190)
 
-; Spawns 4-7 (issue #137): eight players. One on each outer islet, a second on IslandA, and (#199) a third on IslandD, so eight split 4/4 rather than 5/3. Spawn7 sits 125 px clear of the ferry pickup at (240, 220), 55 px off Spawn1.
+; Spawns 4-7 (issue #137): eight players. One on each outer islet, a second on IslandA, and (#199) a third on IslandD, so eight split 4/4 rather than 5/3. Spawn7 sits 125 px clear of the ferry pickup at (240, 190), 55 px off Spawn1.
 [node name="Spawn4" type="Marker2D" parent="."]
-position = Vector2(-660, 220)
+position = Vector2(-660, 190)
 
 [node name="Spawn5" type="Marker2D" parent="."]
-position = Vector2(660, 220)
+position = Vector2(660, 190)
 
 [node name="Spawn6" type="Marker2D" parent="."]
-position = Vector2(-480, 220)
+position = Vector2(-480, 190)
 
 [node name="Spawn7" type="Marker2D" parent="."]
-position = Vector2(380, 220)
+position = Vector2(365, 190)
 
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
-position = Vector2(0, 640)
+position = Vector2(0, 480)
 
 ; Pickup spawn points (issue #14, ADR-0009). On the middle island and over the ferry's route.
 [node name="PickupSpawn0" type="Marker2D" parent="."]
-position = Vector2(-140, 252)
+position = Vector2(-140, 222)
 
 [node name="PickupSpawn1" type="Marker2D" parent="."]
-position = Vector2(240, 220)
+position = Vector2(240, 190)
 
-; Saw (issue #315): patrols x=-100..100 at y=120, above the spawns (y=220) and clear of IslandB's spawn at x=-200.
+; Saw (issue #315): patrols x=-100..100 at y=90, above the spawns (y=190) and clear of IslandB's spawn at x=-200.
 [node name="HighSaw" parent="." instance=ExtResource("saw315")]
-position = Vector2(-100, 120)
+position = Vector2(-100, 90)
 travel = Vector2(200, 0)
 one_way_sec = 2.5
 
-; Teleporter pair (issue #960): one portal on each outer islet, so a fighter knocked to one end can cross the whole chain. The islet spawns sit 60 px inboard (x=+-635).
+; Teleporter pair (issue #960): one portal on each outer islet, so a fighter knocked to one end can cross the whole chain. The islet spawns (x=+-660) sit 55 px inboard (#1202).
 [node name="TeleporterW" parent="." instance=ExtResource("tele960")]
-position = Vector2(-715, 262)
+position = Vector2(-715, 232)
 twin = NodePath("../TeleporterE")
 radius = 24.0
 
 [node name="TeleporterE" parent="." instance=ExtResource("tele960")]
-position = Vector2(715, 262)
+position = Vector2(715, 232)
 twin = NodePath("../TeleporterW")
 radius = 24.0

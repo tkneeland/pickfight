@@ -59,38 +59,47 @@ size = Vector2(100, 16)
 position = Vector2(-340, 384)
 size = Vector2(140, 8)
 
-; Edge shelves (#1202): a ledge 72 px below each end of the floor (top y=452, kill zone y=700) catches a fighter knocked off an end, who climbs back. Spawns pulled inboard to at least 110 px from the ends. Past the shelves is still open sky, so hard hits still ring out.
+; Edge shelves (#1202): a 50 px ledge past each end of the floor, top y=420 (40 px under the floor, inside the 1600x900 view: y<450, x<=800), catches a fighter who walks or is knocked just off an end; the kill zone stays at y=700 and beyond x=+-800 is still open sky. Spawns pulled inboard to 130+ px from the ends and 45 px clear of the ice patch.
 [node name="EdgeShelfLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-890, 460)
-size = Vector2(280, 16)
+position = Vector2(-775, 428)
+size = Vector2(50, 16)
 
 [node name="EdgeShelfRight" parent="." instance=ExtResource("platform")]
-position = Vector2(890, 460)
-size = Vector2(280, 16)
+position = Vector2(775, 428)
+size = Vector2(50, 16)
+
+; End posts (#1202): a 16x100 post at each shelf outer end (x=+-800..816, top y=350, 30 px over the floor) stops a fighter running along the shelf off the screen; a launched or jumping one still clears it.
+[node name="EndPostLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-808, 400)
+size = Vector2(16, 100)
+
+[node name="EndPostRight" parent="." instance=ExtResource("platform")]
+position = Vector2(808, 400)
+size = Vector2(16, 100)
 
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-640, 320)
+position = Vector2(-650, 320)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(640, 320)
+position = Vector2(650, 320)
 
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-570, 320)
+position = Vector2(-585, 320)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(570, 320)
+position = Vector2(585, 320)
 
 [node name="Spawn4" type="Marker2D" parent="."]
-position = Vector2(-500, 320)
+position = Vector2(-520, 320)
 
 [node name="Spawn5" type="Marker2D" parent="."]
-position = Vector2(500, 320)
+position = Vector2(520, 320)
 
 [node name="Spawn6" type="Marker2D" parent="."]
-position = Vector2(-440, 320)
+position = Vector2(-455, 320)
 
 [node name="Spawn7" type="Marker2D" parent="."]
-position = Vector2(440, 320)
+position = Vector2(455, 320)
 
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)
