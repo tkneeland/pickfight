@@ -8,7 +8,7 @@
 #   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than pf_worker_target (ticket-maker off: only if a ready ticket is startable) (day DAY_AGENTS, night
 #                      NIGHT_AGENTS, 1 past FIVE_H_SLOW_USED, 0 past FIVE_H_STOP_USED or the weekly stop)
 #   AUSTIN_QUEUE_LOW <n>  (triagemaster only, ticket-maker on) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
-#   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
+#   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line (or a late pf-ask.sh ANSWER) from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
 #   DISCORD_BUG <n> new in #change-requests  (triagemaster only, pf-discord.conf set up) people posted in the public
 #                      channel; checked once a minute while idle; Claude reads them with pf-discord-bugs.sh read
 #   DISCORD_DEV <n> new in #hive  the same for the private dev channel (pf-discord-bugs.sh --dev read): pre-approved

@@ -4,7 +4,8 @@
 #   pf-msg.sh send <TYPE> <text>    TYPE: CLAIM RELEASE USAGE ASK ANSWER INFO FIRE HELLO TM
 #                                   USAGE is the only usage beacon (pf-beacon.sh); TM "<handle> until <reset ISO>" (pf-succession.sh --post)
 #   pf-msg.sh claim|release <n>     send CLAIM / RELEASE <n>
-#   pf-msg.sh listen                long-lived: appends to msg-inbox.log, writes CLAIM/ASK/FIRE lines to msg-wake.txt
+#   pf-msg.sh listen                long-lived: appends to msg-inbox.log, writes CLAIM/ASK/FIRE lines to msg-wake.txt, and
+#                                   an ANSWER to a pf-ask.sh question that timed out (its [q<id>] in ask-open.txt) too
 #   pf-msg.sh backfill              one pass: append the channel's cached last 12h (ntfy poll) to msg-inbox.log, skipping
 #                                   lines already there; pf_usage_backfill runs it when the inbox is missing or 6h+ stale
 #   pf-msg.sh claimed <n>           exit 0 when another account CLAIMed <n> in the last 24h and has not RELEASEd it
@@ -16,6 +17,17 @@
 CONF=$PF_STATE/pf-msg.conf
 INBOX=$PF_STATE/msg-inbox.log
 WAKE=$PF_STATE/msg-wake.txt
+ASK_OPEN=$PF_STATE/ask-open.txt
+# 0 when <answer text> starts with the [q<id>] of a pf-ask.sh question from <account> that timed out (#1207); the
+# question is closed so it wakes once. Open questions older than 24h are dropped.
+late_answer() {  # late_answer <account> <answer text>
+  local id hit t; t=$(date -u +%s)
+  case $2 in "[q"*"]"*) id=${2#[}; id=${id%%]*};; *) return 1;; esac
+  [ -f "$ASK_OPEN" ] || return 1
+  hit=$(awk -F'|' -v id="$id" -v a="$1" -v t="$t" '$1 == id && $2 == a && $3 + 86400 >= t' "$ASK_OPEN")
+  awk -F'|' -v id="$id" -v a="$1" -v t="$t" '!($1 == id && $2 == a) && $3 + 86400 >= t' "$ASK_OPEN" > "$ASK_OPEN.tmp"     && mv "$ASK_OPEN.tmp" "$ASK_OPEN"
+  [ -n "$hit" ]
+}
 now() { echo "${PF_NOW:-$(date -u +%s)}"; }
 load_conf() {
   PF_MSG_TOPIC=""; PF_MSG_SERVER=""
@@ -70,7 +82,8 @@ EOT
           [ "$from" = "$PF_ACCOUNT" ] && continue
           echo "$t|$from|$type|$rest" >> "$INBOX"
           # wake only for fresh events: a reconnect replaying older history must not re-wake the triage watcher
-          case $type in CLAIM|ASK|FIRE) [ $(( $(date -u +%s) - ${t%.*} )) -le 600 ] && echo "MSG $type $from $rest" > "$WAKE";; esac
+          case $type in CLAIM|ASK|FIRE) [ $(( $(date -u +%s) - ${t%.*} )) -le 600 ] && echo "MSG $type $from $rest" > "$WAKE";;
+            ANSWER) [ $(( $(date -u +%s) - ${t%.*} )) -le 600 ] && late_answer "$from" "$rest" && echo "MSG $type $from $rest" > "$WAKE";; esac
           n=$((n+1))
           if [ $((n % 100)) -eq 0 ] && [ "$(wc -l < "$INBOX")" -gt 2000 ]; then
             tail -n 2000 "$INBOX" > "$INBOX.tmp" && mv "$INBOX.tmp" "$INBOX"
