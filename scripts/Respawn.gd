@@ -41,6 +41,18 @@ var watched: Dictionary = {}
 var _pending: Dictionary = {}
 ## slot -> GameClock msec its spawn protection ends.
 var _protected: Dictionary = {}
+## slot -> the spawn point it came back at, held until its protection ends, so
+## two returns never share one point (#1188).
+var _claimed: Dictionary = {}
+## slot -> how many times its return was pushed back because no spawn was free.
+var _staggered: Dictionary = {}
+## A fighter this close to a spawn point occupies it (#1188).
+const OCCUPIED_RADIUS: float = 90.0
+## With no free spawn, a return waits this long and asks again (#1188).
+const STAGGER_SEC: float = 0.5
+## After this many pushes the player comes back anyway, at the spawn farthest
+## from the other fighters (farthest_spawn's own pick): never wait forever.
+const MAX_STAGGERS: int = 4
 
 func _init(manager: Node, players: Dictionary, delay_sec: float = 1.5) -> void:
 	round_manager = manager
@@ -49,22 +61,36 @@ func _init(manager: Node, players: Dictionary, delay_sec: float = 1.5) -> void:
 
 func queue(slot: int) -> void:
 	_pending[slot] = respawn_sec
+	_claimed.erase(slot)
+	_staggered.erase(slot)
 
 func is_pending(slot: int) -> bool:
 	return _pending.has(slot)
 
 func cancel(slot: int) -> void:
 	_pending.erase(slot)
+	_staggered.erase(slot)
 
 func clear() -> void:
 	_pending.clear()
 	_protected.clear()
+	_claimed.clear()
+	_staggered.clear()
 
 func tick(_delta: float) -> void:
 	for slot: int in _pending.keys():
 		_pending[slot] = float(_pending[slot]) - _delta
 		if float(_pending[slot]) <= 0.0:
-			respawn_now(slot)
+			# Issue #1188: every spawn taken (someone standing on it, or just
+			# returned to it): this player waits its own short timer instead of
+			# stacking. Only the timer defers; respawn_now() always places the
+			# fighter at once, as the tiebreakers and steal_life call it.
+			if is_instance_valid(watched.get(slot)) and int(_staggered.get(slot, 0)) < MAX_STAGGERS \
+					and _is_taken(farthest_spawn(slot), slot):
+				_staggered[slot] = int(_staggered.get(slot, 0)) + 1
+				_pending[slot] = STAGGER_SEC
+			else:
+				respawn_now(slot)
 	_tick_protection()
 
 ## Back in at the spawn farthest from the others, a pickaxe in hand.
@@ -74,6 +100,9 @@ func respawn_now(slot: int) -> void:
 	if not is_instance_valid(player) or not _still_claimed(slot):
 		return
 	var spot: Vector2 = farthest_spawn(slot)
+	_staggered.erase(slot)
+	if float(round_manager.spawn_protection_sec) > 0.0:
+		_claimed[slot] = spot
 	player.start_round(spot, false)
 	# Issue #1015: a soft chime at the spawn. Host only; online clients hear it
 	# through the generic Sfx snapshot trailer. Kicked slots returned above.
@@ -148,6 +177,13 @@ func farthest_spawn(slot: int) -> Vector2:
 			clear.append(point)
 	if not clear.is_empty():
 		pool = clear
+	# Issue #1188: leave out spawns another fighter stands on or just returned to.
+	var untaken: Array[Vector2] = []
+	for point: Vector2 in pool:
+		if not _is_taken(point, slot):
+			untaken.append(point)
+	if not untaken.is_empty():
+		pool = untaken
 	var best: Vector2 = pool[0]
 	var best_gap: float = -1.0
 	for point: Vector2 in pool:
@@ -167,6 +203,19 @@ func farthest_spawn(slot: int) -> Vector2:
 			best_gap = gap
 			best = point
 	return best
+
+## Whether another fighter stands on `point` or came back to it and is still
+## spawn protected (#1188).
+func _is_taken(point: Vector2, slot: int) -> bool:
+	for other: int in _claimed.keys():
+		if other != slot and (_claimed[other] as Vector2).distance_to(point) < 1.0:
+			return true
+	for other: int in watched.keys():
+		if other == slot or not is_instance_valid(watched[other]) or not bool(watched[other].alive):
+			continue
+		if point.distance_to(watched[other].global_position) < OCCUPIED_RADIUS:
+			return true
+	return false
 
 ## Whether `point` is within HAZARD_CLEARANCE of a spike strip (its footprint)
 ## or a saw (its blade centre, wherever it is now). Host-side only (#982).
@@ -204,7 +253,9 @@ func _tick_protection() -> void:
 		var player: Node2D = watched[slot]
 		if not is_instance_valid(player):
 			_protected.erase(slot)
+			_claimed.erase(slot)
 		elif now >= int(_protected[slot]):
+			_claimed.erase(slot)
 			player.spawn_protected = false
 			player.modulate.a = 1.0
 			_protected.erase(slot)
