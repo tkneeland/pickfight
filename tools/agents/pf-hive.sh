@@ -12,7 +12,7 @@
 #                                when the cache is 60 s old or more, one at a time (a lock). PF_DRY_RUN=1: no refresh
 # Every run saves its --short form to $PF_STATE/hive-status-short.txt (kept as is when GitHub is down).
 # Sources: claimed = a peer's CLAIMs on the channel (24 h, not RELEASEd) / this machine's issue worktrees, both on
-# open issues; agents = a peer's USAGE agents= / this machine's live worktrees (pf_live_agents). #change-requests and
+# open issues; claude idle = time since the account's claude_at (#1233; `claude ?` when unknown); agents = a peer's USAGE agents= / this machine's live worktrees (pf_live_agents). #change-requests and
 # #hive counts come from `pf-discord-bugs.sh [--dev] check` on a machine that has triaged them (its marker exists),
 # else "n/a". Env: PF_HIVE_DISCORD (tests: the Discord check command), PF_DISCORD_TIMEOUT (default here 6 s).
 AG=$(cd "$(dirname "$0")" && pwd)
@@ -74,7 +74,7 @@ nfires=$(printf '%s' "$fires" | grep -c . || true)
 
 # row <handle>: its two full lines to $D/row.<handle>, its short line to $D/srow.<handle>. Rows run in parallel.
 row() {
-  local h=$1 role on son s last use suse agents claimed ready pr_pass pr_block pr_wait prs srole sprs
+  local h=$1 ca cidle role on son s last use suse agents claimed ready pr_pass pr_block pr_wait prs srole sprs
   role=dev; [ "$h" = "$tm" ] && role=triagemaster
   [ "$role" = dev ] && grep -q '^RESERVE=1' "$PF_DIR/accounts/$h.conf" 2>/dev/null && role=reserve
   # online: this machine by its channel supervisor (msg-status.json, rewritten every minute); a peer by its last HELLO/USAGE
@@ -87,6 +87,9 @@ row() {
     elif [ $((now - last)) -le 3600 ]; then on="online $(ago $((now - last)))"; son="on $(ago $((now - last)))"
     else on="offline $(ago $((now - last)))"; son="off $(ago $((now - last)))"; fi
   fi
+  # claude idle: this machine from its newest transcript write, a peer from claude_at in its newest USAGE (under 1 h old; #1233)
+  if [ "$h" = "$PF_ACCOUNT" ]; then ca=$(pf_claude_at); else ca=$(pf_peer_claude_at "$h"); fi
+  cidle="claude ?"; [ -n "$ca" ] && [ "$ca" -le "$now" ] && cidle="claude idle $(ago $((now - ca)))"
   pf_beacon "$h"
   if [ "$b_age" -ge 999999 ]; then use="usage ?"; suse="?"
   else
@@ -115,12 +118,12 @@ $(echo "$per_gh" | awk -v h="$h" '$1 == h')
 EOT
   prs=${prs//_/ }
   [ -n "$gh_ok" ] || { ready="?"; prs="?"; }
-  { printf '%-14s %s · %s · %s · agents %s\n' "$h" "$on" "$role" "$use" "$agents"
+  { printf '%-14s %s · %s · %s · agents %s · %s\n' "$h" "$on" "$role" "$use" "$agents" "$cidle"
     printf '%-14s claimed %s · ready %s · PRs %s\n' "" "${claimed:-none}" "$ready" "${prs:-none}"; } > "$D/row.$h"
   srole=$role; case $role in triagemaster) srole=TM;; esac
   sprs="none"; [ -n "$gh_ok" ] || sprs="?"
   [ -n "$gh_ok" ] && [ $((pr_pass + pr_block + pr_wait)) -gt 0 ] && sprs="${pr_pass} passed/${pr_block} blocked/${pr_wait} waiting"
-  echo "$h: $son · $srole · $suse · agents $agents · claimed ${claimed:-none} · ready $ready · PRs $sprs" > "$D/srow.$h"
+  echo "$h: $son · $srole · $suse · agents $agents · $cidle · claimed ${claimed:-none} · ready $ready · PRs $sprs" > "$D/srow.$h"
 }
 for h in $(pf_handles); do row "$h" & done
 

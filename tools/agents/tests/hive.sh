@@ -45,7 +45,7 @@ echo '{"rate_limits":{"five_hour":{"used_percentage":7.4,"resets_at":1794470400}
   echo "$((now - 900))|tkneeland|CLAIM|903"
   echo "$((now - 600))|tkneeland|RELEASE|903"
   echo "$((now - 600))|tkneeland|CLAIM|950"
-  echo "$((now - 300))|tkneeland|USAGE|12% 40% 2026-11-12T17:00:00Z r5=2026-11-11T21:00:00Z agents=2 at=$(iso $((now - 300)))"
+  echo "$((now - 300))|tkneeland|USAGE|12% 40% 2026-11-12T17:00:00Z r5=2026-11-11T21:00:00Z agents=2 at=$(iso $((now - 300))) claude_at=$(iso $((now - 3000)))"
   echo "$((now - 300))|tkneeland|HELLO|tkneeland"; } > "$INBOX"
 # label <name>, assignee <login>
 cat > "$T/issues.json" <<'JSON'
@@ -75,17 +75,17 @@ has "header" "$(printf '%s\n' "$out" | head -n 1)" "schans2's view · tm tkneela
 has "header in ET" "$(printf '%s\n' "$out" | head -n 1)" "$(TZ=$PF_ET_TZ pf_epoch_fmt "$t0" '+%a') "
 l=$(line "$out" tkneeland); l2=$(line "$out" tkneeland 2)
 has "tk online" "$l" "online 5m"; has "tk role" "$l" "triagemaster"
-has "tk 5h ET" "$l" "5h 12% (r 4p)"; has "tk 7d ET" "$l" "7d 40% (r Thu 12p)"; has "tk agents" "$l" "agents 2"
+has "tk 5h ET" "$l" "5h 12% (r 4p)"; has "tk 7d ET" "$l" "7d 40% (r Thu 12p)"; has "tk agents" "$l" "agents 2"; has "tk claude idle" "$l" "claude idle 50m"
 has "tk claimed (released and closed dropped)" "$l2" "claimed #902 ·"; has "tk ready" "$l2" "ready 2"; has "tk PRs" "$l2" "PRs #912 waiting"
 l=$(line "$out" agage-JG); l2=$(line "$out" agage-JG 2)
 has "aj offline" "$l" "offline 3h"; has "aj role" "$l" "· dev ·"; has "aj stale usage" "$l" "(3h old)"
-has "aj 5h ET" "$l" "5h 50% (r 1:30p)"; has "aj 7d ET" "$l" "7d 80% (r Sat 10a)"; has "aj agents" "$l" "agents 0"
+has "aj 5h ET" "$l" "5h 50% (r 1:30p)"; has "aj 7d ET" "$l" "7d 80% (r Sat 10a)"; has "aj agents" "$l" "agents 0"; has "aj claude unknown" "$l" "agents 0 · claude ?"
 has "aj none" "$l2" "claimed none · ready 0 · PRs none"
 l=$(line "$out" schans2); l2=$(line "$out" schans2 2)
-has "me online" "$l" "online (this machine)"; has "me usage" "$l" "5h 7% (r 3a) · 7d 30% (r Thu 12p)"; has "me agents" "$l" "agents 1"
+has "me online" "$l" "online (this machine)"; has "me usage" "$l" "5h 7% (r 3a) · 7d 30% (r Thu 12p)"; has "me agents" "$l" "agents 1"; has "me claude unknown (no transcript_path)" "$l" "agents 1 · claude ?"
 has "me claimed" "$l2" "claimed #901"; has "me ready" "$l2" "ready 1"; has "me PRs" "$l2" "PRs #910 passed, #911 blocked"
 l=$(line "$out" tommykneeland)
-has "reserve" "$l" "offline (never heard) · reserve · usage ? · agents ?"
+has "reserve" "$l" "offline (never heard) · reserve · usage ? · agents ? · claude ?"
 team=$(printf '%s\n' "$out" | grep '^team')
 has "fires (24h only, latest)" "$team" "fires 24h 1 (latest: agage-JG: build broken on main)"
 has "change-requests" "$team" "#change-requests 3 unhandled"
@@ -95,9 +95,9 @@ has "tommy" "$team" "Tommy: 2 open on #685, 1 ready-for-human"
 
 # --short: one line per account plus the team line, also saved as the cache
 s=$(bash "$AG/pf-hive.sh" status --short)
-has "short tk" "$s" "tkneeland: on 5m · TM · 5h12% 7d40% · agents 2 · claimed #902 · ready 2 · PRs 0 passed/0 blocked/1 waiting"
-has "short me" "$s" "schans2: on · dev · 5h7% 7d30% · agents 1 · claimed #901 · ready 1 · PRs 1 passed/1 blocked/0 waiting"
-has "short aj" "$s" "agage-JG: off 3h · dev · 5h50% 7d80%(3h old) · agents 0 · claimed none · ready 0 · PRs none"
+has "short tk" "$s" "tkneeland: on 5m · TM · 5h12% 7d40% · agents 2 · claude idle 50m · claimed #902 · ready 2 · PRs 0 passed/0 blocked/1 waiting"
+has "short me" "$s" "schans2: on · dev · 5h7% 7d30% · agents 1 · claude ? · claimed #901 · ready 1 · PRs 1 passed/1 blocked/0 waiting"
+has "short aj" "$s" "agage-JG: off 3h · dev · 5h50% 7d80%(3h old) · agents 0 · claude ? · claimed none · ready 0 · PRs none"
 has "short team" "$s" "team: fires 24h 1"
 has "short lines" "$(printf '%s\n' "$s" | wc -l | tr -d ' ')" 6
 has "cache saved" "$(cat "$S/hive-status-short.txt")" "$s"
