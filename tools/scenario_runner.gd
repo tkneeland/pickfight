@@ -1306,6 +1306,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"weapon_starts_round_neutral_after_held_aim_1185",
 	"koth_hill_radius_scales_with_stage_1198",
 	"online_ping_stats_avg_p95_max_1195",
+	"remote_client_reports_felt_delay_1195",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4343,6 +4344,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_hill_radius_scales_with_stage_1198()
 		"online_ping_stats_avg_p95_max_1195":
 			return await _scenario_online_ping_stats_avg_p95_max_1195()
+		"remote_client_reports_felt_delay_1195":
+			return await _scenario_remote_client_reports_felt_delay_1195()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -61359,5 +61362,38 @@ func _scenario_online_ping_stats_avg_p95_max_1195() -> Array[String]:
 	print("      after the seat left: %s" % [listed])
 	if listed.size() != 1 or int(listed[0].get("n", 0)) != 1:
 		failures.append("match_ping_stats after the seat left: %s, expected one entry with n=1" % [listed])
+	await _rc_close_241(rig)
+	return failures
+func _scenario_remote_client_reports_felt_delay_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	if client.felt_msec() != -1:
+		failures.append("a felt delay of %d before any input" % client.felt_msec())
+	# Rest (wall clock: the probe times wall ms), then one sharp sweep away from
+	# where the arm rests.
+	var rest_until: int = Time.get_ticks_msec() + 1500
+	while Time.get_ticks_msec() < rest_until:
+		await process_frame
+	client.mouse_motion(Vector2.from_angle(client._felt_drawn_angle + PI) * 4000.0)
+	if not await _wait_for_239(func() -> bool: return client.felt_msec() >= 0, 4000):
+		failures.append("no felt delay after a sweep from rest (drawn angle %s)" % client._felt_drawn_angle)
+		await _rc_close_241(rig)
+		return failures
+	var felt: int = client.felt_msec()
+	var floor_msec: int = RemoteClientScript241.INTERP_MSEC - int(1000.0 / ControllerServerScript.SNAPSHOT_HZ) - 5
+	print("      felt delay on loopback: %d ms (floor %d: the drawn pose is INTERP_MSEC behind)" % [felt, floor_msec])
+	if felt < floor_msec:
+		failures.append("felt %d ms is under %d: the probe is not watching the drawn, interpolated pose" % [felt, floor_msec])
+	# The next pong carries it to the host.
+	if not await _wait_for_239(func() -> bool: return int(server.slot_ping_stats(client.slot).get("felt", -1)) == client.felt_msec(), 3000):
+		failures.append("the host's felt for the seat is %s, the client's %d" % [server.slot_ping_stats(client.slot).get("felt"), client.felt_msec()])
 	await _rc_close_241(rig)
 	return failures

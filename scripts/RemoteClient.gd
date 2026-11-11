@@ -716,7 +716,8 @@ func _on_host_text(text: String) -> void:
 		"looks":
 			_on_looks(msg)
 		"ping":
-			_send_json({"t": "pong", "n": msg.get("n", 0)})
+			# #1195: the felt delay and whether this joiner shares stats ride along.
+			_send_json({"t": "pong", "n": msg.get("n", 0), "felt": felt_msec(), "share": shares_stats()})
 		"release":
 			pass # the host owns the toggle now (#481)
 		"recentre":
@@ -794,6 +795,66 @@ func _send_input() -> void:
 	body[9] = action_presses | (0x80 if _action_was_hold else 0)
 	_send_envelope(RelayLinkScript.KIND_INPUT, body)
 	input_frames_sent += 1
+	_felt_note_sent(v)
+
+# --- Felt input-to-screen delay (issue #1195) --------------------------------------
+#
+# A diagnostic, never an input path: the wall-clock time from sending a vector
+# that changed after at least FELT_REST_MSEC unchanged, to the first render
+# whose DRAWN arm (the interpolated pose `_render` gives this joiner's own
+# puppet, so the interpolation delay is inside the number) has turned more
+# than FELT_TURN_RAD from where it was drawn when the input changed. The match
+# mean is reported on every pong and shown in the in-match ping readout.
+
+const HostSettingsScript1195: GDScript = preload("res://scripts/HostSettings.gd")
+const FELT_REST_MSEC: int = 300
+const FELT_TURN_RAD: float = 0.05
+## A probe that sees no turn this long (a nudge too small to move the arm) is dropped.
+const FELT_TIMEOUT_MSEC: int = 2000
+var _felt_last_sent: Vector2 = Vector2.ZERO
+var _felt_rest_since_msec: int = -1
+var _felt_probe_msec: int = -1
+var _felt_rest_angle: float = NAN
+var _felt_drawn_angle: float = NAN
+var _felt_sum: int = 0
+var _felt_n: int = 0
+## The last single measurement, ms (-1 none yet).
+var felt_last_msec: int = -1
+
+func _felt_note_sent(v: Vector2) -> void:
+	var now: int = Time.get_ticks_msec()
+	if v == _felt_last_sent and _felt_rest_since_msec >= 0:
+		return
+	if v != _felt_last_sent and _felt_probe_msec < 0 and _felt_rest_since_msec >= 0 \
+			and now - _felt_rest_since_msec >= FELT_REST_MSEC and not is_nan(_felt_drawn_angle):
+		_felt_probe_msec = now
+		_felt_rest_angle = _felt_drawn_angle
+	_felt_last_sent = v
+	_felt_rest_since_msec = now
+
+## Called by `_render` with this joiner's own drawn body and weapon head.
+func _felt_note_drawn(body_position: Vector2, head_position: Vector2) -> void:
+	_felt_drawn_angle = (head_position - body_position).angle()
+	if _felt_probe_msec < 0:
+		return
+	var now: int = Time.get_ticks_msec()
+	if absf(angle_difference(_felt_rest_angle, _felt_drawn_angle)) > FELT_TURN_RAD:
+		felt_last_msec = now - _felt_probe_msec
+		_felt_sum += felt_last_msec
+		_felt_n += 1
+		_felt_probe_msec = -1
+	elif now - _felt_probe_msec > FELT_TIMEOUT_MSEC:
+		_felt_probe_msec = -1
+
+## The mean felt input-to-screen delay this session, ms; -1 before the first.
+func felt_msec() -> int:
+	return int(round(float(_felt_sum) / _felt_n)) if _felt_n > 0 else -1
+
+## Whether this joiner shares match stats (#1195, D8): the same two-part
+## consent the host's own telemetry needs (#617), from this PC's settings.
+func shares_stats() -> bool:
+	var settings: RefCounted = HostSettingsScript1195.shared()
+	return settings.share_stats and settings.telemetry_notice_seen
 
 ## The mouse moved by `relative` pixels while captured (what `_input` calls).
 func mouse_motion(relative: Vector2) -> void:
@@ -1222,10 +1283,14 @@ func _render() -> void:
 		puppet.modifier = modifier
 		if ink is Color:
 			puppet.set_ink(ink)
-		puppet.set_pose((from_pose[0] as Vector2).lerp(to_pose[0], alpha),
+		var drawn_body: Vector2 = (from_pose[0] as Vector2).lerp(to_pose[0], alpha)
+		var drawn_head: Vector2 = (from_pose[2] as Vector2).lerp(to_pose[2], alpha)
+		puppet.set_pose(drawn_body,
 			lerp_angle(from_pose[1], to_pose[1], alpha),
-			(from_pose[2] as Vector2).lerp(to_pose[2], alpha),
+			drawn_head,
 			lerp_angle(from_pose[3] if from_pose.size() > 3 else 0.0, to_pose[3] if to_pose.size() > 3 else 0.0, alpha))
+		if id == slot:
+			_felt_note_drawn(drawn_body, drawn_head) # #1195: the felt delay watches what is drawn
 	for p: Variant in _world.get("projectiles", []):
 		if not p is Dictionary:
 			continue
