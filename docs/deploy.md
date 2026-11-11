@@ -8,7 +8,7 @@ Relay on Fly.io (region iad); PC builds on itch.io (unsigned; one build serves h
 2. From the repository root: `fly launch --no-deploy --copy-config --config relay/fly.toml --dockerfile relay/Dockerfile`. If `pickfight-relay` is taken, pick another app name.
 3. `fly deploy --config relay/fly.toml --dockerfile relay/Dockerfile`. The Dockerfile copies the whole repo, so build context is the root.
 4. Set `[pickfight] relay_url` in `project.godot` to `wss://<app>.fly.dev` (Fly terminates TLS). Live: `wss://pickfight-relay.fly.dev` (deployed 2026-10-01). Run the local dev relay with `--relay=ws://127.0.0.1:9080`.
-5. **Redeploy after #1195 merges** (step 3): the relay then answers the host's `{"t":"echo"}` (the readout's "host leg" line) and keeps the telemetry record's `ping` list. Until then both degrade silently: no host-leg line, and the `ping` field is dropped from stored records.
+5. **Redeploys are automatic:** `relay-deploy.yml` runs `fly deploy` on every push to main that touches `relay/` (needs the `FLY_API_TOKEN` secret; run it by hand from the Actions tab otherwise). **Redeploy after #1195 merges** (step 3): the relay then answers the host's `{"t":"echo"}` (the readout's "host leg" line) and keeps the telemetry record's `ping` list. Until then both degrade silently: no host-leg line, and the `ping` field is dropped from stored records.
 
 ### Enabling in-game feedback (#262)
 
