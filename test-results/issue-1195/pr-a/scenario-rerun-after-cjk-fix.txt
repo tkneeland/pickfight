@@ -1,0 +1,93 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+SteamPlatform: GodotSteam not present, Steam off
+PASS  cjk_subsets_cover_every_translated_character_849
+Controller page: http://<lan-ip>:55435/
+WARNING: Camera2D overridden to physics process mode due to use of physics interpolation.
+   at: _update_process_callback (scene/2d/camera_2d.cpp:85)
+   GDScript backtrace (most recent call first):
+       [0] _build_world (res://scripts/RemoteClient.gd:1567)
+       [1] _ready (res://scripts/RemoteClient.gd:320)
+       [2] _rc_client_241 (res://tools/scenario_runner.gd:30091)
+       [3] _scenario_online_ping_readout_mirrors_to_joiner_1195 (res://tools/scenario_runner.gd:61690)
+       [4] _rc_rig_241 (res://tools/scenario_runner.gd:30110)
+       [5] _wait_for_239 (res://tools/scenario_runner.gd:27120)
+RoundManager: match seed 683762966 (replay with -- --seed=683762966)
+      host readout: 'Pinger  9 ms | host leg 4 ms'
+Controller page: http://<lan-ip>:55439/
+RoundManager: match seed 2766320671 (replay with -- --seed=2766320671)
+PASS  online_ping_readout_mirrors_to_joiner_1195
+SCRIPT ERROR: Invalid access to property or key 'ready' on a base object of type 'Dictionary'.
+   at: refresh (res://scripts/LobbyCards.gd:110)
+   GDScript backtrace (most recent call first):
+       [0] refresh (res://scripts/LobbyCards.gd:110)
+       [1] refresh_lobby (res://scripts/LobbyScreen.gd:447)
+       [2] _refresh_shared_lobby (res://scripts/RemoteClient.gd:2032)
+       [3] _refresh_lobby (res://scripts/RemoteClient.gd:2052)
+       [4] _scenario_online_client_lobby_title_names_host (res://tools/scenario_runner.gd:58651)
+       [5] _rc_client_241 (res://tools/scenario_runner.gd:30094)
+SCRIPT ERROR: Invalid access to property or key 'ready' on a base object of type 'Dictionary'.
+   at: refresh_lobby (res://scripts/LobbyScreen.gd:466)
+   GDScript backtrace (most recent call first):
+       [0] refresh_lobby (res://scripts/LobbyScreen.gd:466)
+       [1] _refresh_shared_lobby (res://scripts/RemoteClient.gd:2032)
+       [2] _refresh_lobby (res://scripts/RemoteClient.gd:2052)
+       [3] _scenario_online_client_lobby_title_names_host (res://tools/scenario_runner.gd:58651)
+       [4] _rc_client_241 (res://tools/scenario_runner.gd:30094)
+SCRIPT ERROR: Invalid access to property or key 'ready' on a base object of type 'Dictionary'.
+   at: refresh (res://scripts/LobbyCards.gd:110)
+   GDScript backtrace (most recent call first):
+       [0] refresh (res://scripts/LobbyCards.gd:110)
+       [1] refresh_lobby (res://scripts/LobbyScreen.gd:447)
+       [2] _refresh_shared_lobby (res://scripts/RemoteClient.gd:2032)
+       [3] _refresh_lobby (res://scripts/RemoteClient.gd:2052)
+       [4] _scenario_online_client_lobby_title_names_host (res://tools/scenario_runner.gd:58657)
+       [5] _rc_client_241 (res://tools/scenario_runner.gd:30094)
+SCRIPT ERROR: Invalid access to property or key 'ready' on a base object of type 'Dictionary'.
+   at: refresh_lobby (res://scripts/LobbyScreen.gd:466)
+   GDScript backtrace (most recent call first):
+       [0] refresh_lobby (res://scripts/LobbyScreen.gd:466)
+       [1] _refresh_shared_lobby (res://scripts/RemoteClient.gd:2032)
+       [2] _refresh_lobby (res://scripts/RemoteClient.gd:2052)
+       [3] _scenario_online_client_lobby_title_names_host (res://tools/scenario_runner.gd:58657)
+       [4] _rc_client_241 (res://tools/scenario_runner.gd:30094)
+SCRIPT ERROR: Invalid access to property or key 'ready' on a base object of type 'Dictionary'.
+   at: refresh (res://scripts/LobbyCards.gd:110)
+   GDScript backtrace (most recent call first):
+       [0] refresh (res://scripts/LobbyCards.gd:110)
+       [1] refresh_lobby (res://scripts/LobbyScreen.gd:447)
+       [2] _refresh_shared_lobby (res://scripts/RemoteClient.gd:2032)
+       [3] _refresh_lobby (res://scripts/RemoteClient.gd:2052)
+       [4] _scenario_online_client_lobby_title_names_host (res://tools/scenario_runner.gd:58661)
+       [5] _rc_client_241 (res://tools/scenario_runner.gd:30094)
+SCRIPT ERROR: Invalid access to property or key 'ready' on a base object of type 'Dictionary'.
+   at: refresh_lobby (res://scripts/LobbyScreen.gd:466)
+   GDScript backtrace (most recent call first):
+       [0] refresh_lobby (res://scripts/LobbyScreen.gd:466)
+       [1] _refresh_shared_lobby (res://scripts/RemoteClient.gd:2032)
+       [2] _refresh_lobby (res://scripts/RemoteClient.gd:2052)
+       [3] _scenario_online_client_lobby_title_names_host (res://tools/scenario_runner.gd:58661)
+       [4] _rc_client_241 (res://tools/scenario_runner.gd:30094)
+PASS  online_client_lobby_title_names_host
+      10 whips at a held sword: deepest the ball's path went into the blade 6.9 px
+FAIL  flail_ball_does_not_clip_head
+      - the ball's path went 6.9 px into another player's head: it passed through instead of being stopped
+Controller page: http://<lan-ip>:55441/
+RoundManager: match seed 1989469159 (replay with -- --seed=1989469159)
+FAIL  online_bots_only_match_starts_offline_and_says_so
+      - the link never reported unreachable ('connecting')
+      - the lobby does not say it is playing offline ('connecting…')
+FAIL  career_phone_page_shows_compact_line_and_expands_503
+      - the phone page is missing: <div id="name"></div>
+    <div id="career"></div>
+---
+3 passed, 3 failed, 6 total
+WARNING: 50 RIDs of type "CanvasItem" were leaked.
+   at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2692)
+ERROR: 25 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 57 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+   at: cleanup (core/object/object.cpp:2641)
+ERROR: 3 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:810)

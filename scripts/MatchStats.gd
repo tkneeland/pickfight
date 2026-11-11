@@ -120,6 +120,12 @@ var total_kos: int = 0
 ## Seeds the break of a full tie between award candidates (#613); -1 keeps the
 ## lowest slot. Each call redraws from the seed, so a refresh never reshuffles.
 var tie_seed: int = -1
+## Issue #1195: each remote PC seat's ping statistics this match, set by the
+## RoundManager at match end: [{"avg","p95","max","n","felt","host_leg","share"}]
+## (ms, clamped to -1..60000), anonymous (no slot, name or colour).
+var ping: Array = []
+## The fields of a ping entry that are logged and sent ("share" only filters).
+const PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", "host_leg"]
 
 ## victim slot -> {"attacker": slot, "msec": int} for the last hit taken.
 var _last_hit: Dictionary = {}
@@ -158,6 +164,7 @@ func begin_match() -> void:
 	goals.clear()
 	captures.clear()
 	total_kos = 0
+	ping = []
 	_last_hit.clear()
 	_streak.clear()
 	_last_killer.clear()
@@ -651,6 +658,9 @@ static func _clock(msec: int) -> String:
 ## One JSON line for the balance log: {"t": unix time, "weapons": {id: {"damage", "hits"}}}.
 ## Empty when no real player landed a damaging hit this match.
 ## A match that ended without a winner (#643) adds `"completed": false` and `"rounds_played"`.
+## An Online match (#1195) adds `"ping"`: every remote seat's statistics
+## (`PING_FIELDS`), whether or not that joiner shares stats, since the log never
+## leaves the host.
 func balance_log_line(unix_time: int, completed: bool = true, rounds_played: int = 0) -> String:
 	if weapon_damage.is_empty():
 		return ""
@@ -661,7 +671,28 @@ func balance_log_line(unix_time: int, completed: bool = true, rounds_played: int
 	if not completed:
 		line["completed"] = false
 		line["rounds_played"] = maxi(0, rounds_played)
+	var entries: Array = ping_entries(ping, false, 0)
+	if not entries.is_empty():
+		line["ping"] = entries
 	return JSON.stringify(line)
+
+## `list`'s ping entries cut to `PING_FIELDS` as ints clamped to -1..60000.
+## `only_shared` keeps the entries whose joiner said it shares stats (#1195 D8);
+## `cap` > 0 keeps at most that many, those with the most samples (`n`).
+static func ping_entries(list: Array, only_shared: bool, cap: int) -> Array:
+	var out: Array = []
+	for entry: Variant in list:
+		if not entry is Dictionary or (only_shared and (entry as Dictionary).get("share") != true):
+			continue
+		var clean: Dictionary = {}
+		for field: String in PING_FIELDS:
+			var v: Variant = (entry as Dictionary).get(field, -1)
+			clean[field] = clampi(int(v), -1, 60000) if (v is int or (v is float and is_finite(v))) else -1
+		out.append(clean)
+	if cap > 0 and out.size() > cap:
+		out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["n"]) > int(b["n"]))
+		out.resize(cap)
+	return out
 
 ## The weapon landing the most hits among `slots` ("" when none landed one);
 ## the first reached wins a tie. Names the match winner's weapon for telemetry.
