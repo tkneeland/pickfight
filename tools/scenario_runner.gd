@@ -18761,6 +18761,8 @@ func _scenario_round_modifier_meteor_shower_hits_and_undoes() -> Array[String]:
 	var loop: Dictionary = _new_modifier_round("")
 	var players: Array[RigidBody2D] = loop["players"]
 	var round_manager: Node = loop["round_manager"]
+	# Timed for the 1 s protection it was written for; #1196 made 3 s the default.
+	round_manager.spawn_protection_sec = 1.0
 	var tps: float = float(Engine.physics_ticks_per_second)
 	var extra: Array[String] = []
 	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
