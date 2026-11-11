@@ -1307,6 +1307,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_team_switch_host_1199",
 	"lobby_team_switch_joiner_1199",
 	"lobby_teams_uneven_note_1199",
+	"koth_hill_radius_scales_with_stage_1198",
+	"spawn_protection_ghosts_fighters_1196",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4346,6 +4348,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_team_switch_joiner_1199()
 		"lobby_teams_uneven_note_1199":
 			return await _scenario_lobby_teams_uneven_note_1199()
+		"koth_hill_radius_scales_with_stage_1198":
+			return await _scenario_koth_hill_radius_scales_with_stage_1198()
+		"spawn_protection_ghosts_fighters_1196":
+			return await _scenario_spawn_protection_ghosts_fighters_1196()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -18767,6 +18773,8 @@ func _scenario_round_modifier_meteor_shower_hits_and_undoes() -> Array[String]:
 	var loop: Dictionary = _new_modifier_round("")
 	var players: Array[RigidBody2D] = loop["players"]
 	var round_manager: Node = loop["round_manager"]
+	# Timed for the 1 s protection it was written for; #1196 made 3 s the default.
+	round_manager.spawn_protection_sec = 1.0
 	var tps: float = float(Engine.physics_ticks_per_second)
 	var extra: Array[String] = []
 	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
@@ -26211,7 +26219,8 @@ func _scenario_teams_ffa_unchanged_when_off() -> Array[String]:
 	if not rings.is_empty() or outline != Color(0.0, 0.0, 0.0, 1.0) or rm.name_tag(0).get_theme_constant("outline_size") != 6:
 		failures.append("free-for-all name tags had %d rings, outline %s" % [rings.size(), outline])
 	players[1].freeze = true
-	# Past spawn protection (#114), which would zero any hit.
+	# Past spawn protection (#114), which would zero any hit, on either side (#1196).
+	players[0].spawn_protected = false
 	players[1].spawn_protected = false
 	players[0]._land_strike(players[1], HIT_CLEAN_SPEED)
 	if players[1].damage <= 0.0:
@@ -37246,15 +37255,20 @@ func _scenario_soccer_stuck_ball(expect_reset: bool) -> Array[String]:
 	for player: RigidBody2D in rig["players"]:
 		player.teleport_to(centre + Vector2(0.0, -40.0) if expect_reset else far + Vector2(0.0, -40.0))
 		player.linear_velocity = Vector2.ZERO
-	# Keep the fighters parked where we put them.
+	# Keep the fighters parked where we put them. Whether the ball was ever put
+	# back at the centre is watched every tick: once reset it falls from the spawn
+	# and can roll on, so where it lies at the end depends on timing.
 	var elapsed: float = 0.0
+	var moved: bool = false
 	while elapsed < 9.0:
-		await _await_ticks(30)
+		for i in 30:
+			await physics_frame
+			if mode.ball != null and mode.ball.global_position.distance_to(centre) < 100.0:
+				moved = true
 		elapsed += 0.5
 		for player: RigidBody2D in rig["players"]:
 			player.teleport_to(centre + Vector2(0.0, -40.0) if expect_reset else far + Vector2(0.0, -40.0))
 			player.linear_velocity = Vector2.ZERO
-	var moved: bool = mode.ball.global_position.distance_to(centre) < 100.0
 	if expect_reset and not moved:
 		failures.append("the stuck ball never returned to the centre (at %s, centre %s)" % [mode.ball.global_position, centre])
 	if not expect_reset and moved:
@@ -61384,4 +61398,153 @@ func _scenario_lobby_teams_uneven_note_1199() -> Array[String]:
 	screen.queue_free()
 	await process_frame
 	_scenario_completed = true
+	return failures
+
+## #1198: the King of the Hill circle grows with the stage's view width, never
+## below the old 110 px; the capture test and the Online client's net state use
+## the same radius, and the hill still stands on floor (#1187).
+func _scenario_koth_hill_radius_scales_with_stage_1198() -> Array[String]:
+	var failures: Array[String] = []
+	if absf(KothScript976.radius_for_view(1600.0) - 110.0) > 0.01:
+		failures.append("a 1600 view gives %.1f, want 110" % KothScript976.radius_for_view(1600.0))
+	if absf(KothScript976.radius_for_view(2240.0) - 154.0) > 0.01:
+		failures.append("a 2240 view gives %.1f, want 154" % KothScript976.radius_for_view(2240.0))
+	if KothScript976.radius_for_view(800.0) < 110.0:
+		failures.append("a narrow view shrank the hill below 110")
+	var cases: Array = [["res://scenes/stages/Summit.tscn", 110.0], ["res://scenes/stages/Colosseum.tscn", 154.0]]
+	for case: Array in cases:
+		var path: String = case[0]
+		var want: float = case[1]
+		var rig: Dictionary = _koth_stage_rig(path)
+		if not await _mode_started(rig):
+			failures.append("%s: the King of the Hill round never started" % path)
+			await _teardown(rig["stage"], false)
+			continue
+		await _await_ticks(5)
+		var hill: Node = rig["rm"].game_mode_node()
+		if absf(hill.hill_radius - want) > 0.01:
+			failures.append("%s: hill radius %.1f, want %.1f" % [path, hill.hill_radius, want])
+		if absf(float(hill.net_state()[1]) - hill.hill_radius) > 0.01:
+			failures.append("%s: net_state radius %.1f differs from the hill's %.1f" % [path, hill.net_state()[1], hill.hill_radius])
+		if not hill.is_standable(hill.hill_position):
+			failures.append("%s: hill at %s has no floor under it at radius %.0f" % [path, hill.hill_position, hill.hill_radius])
+		# The capture test: just inside the radius is on the hill, just outside is not.
+		var players: Array[RigidBody2D] = rig["players"]
+		players[0].global_position = hill.hill_position + Vector2(want - 5.0, 0.0)
+		players[1].global_position = hill.hill_position + Vector2(want + 40.0, 0.0)
+		players[2].global_position = hill.hill_position + Vector2(0.0, -2000.0)
+		var inside: Array[int] = hill.occupants()
+		if not inside.has(0) or inside.has(1):
+			failures.append("%s: capture test at radius %.0f counted %s" % [path, want, inside])
+		await _teardown(rig["stage"], false)
+	_scenario_completed = true
+	return failures
+## #1196: spawn protection lasts 3 s, and a protected fighter is a ghost to the
+## others. Two fighters spawned overlapping each take a turn swinging their weapon
+## through the other, which stays put and unhurt; once it ends they stay ghosted
+## until they come apart, and after that they collide again: one thrown at the
+## other is stopped by it instead of passing through.
+func _scenario_spawn_protection_ghosts_fighters_1196() -> Array[String]:
+	var failures: Array[String] = []
+	var rm_default: Node = RoundManagerType.new()
+	if not is_equal_approx(float(rm_default.spawn_protection_sec), 3.0):
+		failures.append("spawn protection lasts %.1f s by default, want 3" % rm_default.spawn_protection_sec)
+	rm_default.free()
+	var stage: Node2D = _new_stage()
+	var p0: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	var p1: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND + Vector2(12, 0))
+	# As RoundManager does at round start: placed, then protected.
+	p0.start_round(NEW_WEAPON_FLOOR_STAND)
+	p1.start_round(NEW_WEAPON_FLOOR_STAND + Vector2(12, 0))
+	p0.spawn_protected = true
+	p1.spawn_protected = true
+	await _await_ticks(2)
+	# A swing moves its own fighter (that is how fighters get about), so each
+	# takes a turn swinging through the other, which stands idle: the idle one
+	# is neither shoved nor hurt. Both turns, with a settle
+	# before each, fit inside the 3 s.
+	var turn_ticks: int = int(1.0 * Engine.physics_ticks_per_second)
+	for turn in 2:
+		var swinger: RigidBody2D = p0 if turn == 0 else p1
+		var idle: RigidBody2D = p1 if turn == 0 else p0
+		var side: float = 1.0 if turn == 0 else -1.0
+		# The last turn's swinger comes to rest before it stands idle.
+		idle.set_input_vector(Vector2.ZERO)
+		await _await_ticks(20)
+		var idle_x: float = idle.global_position.x
+		for i in turn_ticks:
+			# Through the idle fighter's body and up over it, never down into
+			# the floor, where a head levering on terrain moves its own fighter.
+			swinger.set_input_vector(Vector2(0.95 * side, -0.15) if (i / 15) % 2 == 0 else Vector2(0.6 * side, -0.7))
+			idle.set_input_vector(Vector2.ZERO)
+			await physics_frame
+		swinger.set_input_vector(Vector2.ZERO)
+		var shoved: float = absf(idle.global_position.x - idle_x)
+		print("      turn %d: %s swung through %s, which moved %.1f px" % [turn, swinger.name, idle.name, shoved])
+		if shoved > 4.0:
+			failures.append("%s's swing shoved protected %s %.1f px" % [swinger.name, idle.name, shoved])
+		if not idle.spawn_protected:
+			failures.append("setup: protection was off during turn %d" % turn)
+	if p0.damage > 0.0 or p1.damage > 0.0:
+		failures.append("protected fighters took damage: %.1f and %.1f" % [p0.damage, p1.damage])
+	if not p0.alive or not p1.alive:
+		failures.append("a protected fighter was eliminated")
+	# Protection ends with them overlapping (stacked again, still protected,
+	# as a 3 s spawn can leave them): no pop apart.
+	p0.set_input_vector(Vector2.ZERO)
+	p1.set_input_vector(Vector2.ZERO)
+	p0.start_round(NEW_WEAPON_FLOOR_STAND)
+	p1.start_round(NEW_WEAPON_FLOOR_STAND + Vector2(12, 0))
+	await _await_ticks(20)
+	p0.spawn_protected = false
+	p1.spawn_protected = false
+	var x0: float = p0.global_position.x
+	var x1: float = p1.global_position.x
+	await _await_ticks(20)
+	if absf(p0.global_position.x - x0) > 16.0 or absf(p1.global_position.x - x1) > 16.0:
+		failures.append("protection ending on an overlap popped them apart (%.1f, %.1f px)" % [
+			absf(p0.global_position.x - x0), absf(p1.global_position.x - x1)])
+	# Apart, the ghosting clears and they collide again.
+	p1.start_round(NEW_WEAPON_FLOOR_STAND + Vector2(260, 0))
+	if not await _await_condition(func() -> bool: return p0._ghosted.is_empty() and p1._ghosted.is_empty(), 1000):
+		failures.append("the pair stayed ghosted after coming apart")
+	if p0.get_collision_exceptions().has(p1) or p1.get_collision_exceptions().has(p0):
+		failures.append("a body collision exception outlived the protection")
+	await _await_ticks(10)
+	for i in 40:
+		p1.linear_velocity = Vector2(-500.0, p1.linear_velocity.y)
+		await physics_frame
+		if p1.global_position.x < p0.global_position.x:
+			break
+	if p1.global_position.x < p0.global_position.x:
+		failures.append("after protection a fighter thrown at another passed through it")
+	# A protected fighter's shot neither hurts nor shoves anyone; an unprotected
+	# one's still does (the control).
+	for protected_shooter: bool in [true, false]:
+		p0.spawn_protected = protected_shooter
+		p1.spawn_protected = false
+		p1.damage = 0.0
+		p1.linear_velocity = Vector2.ZERO
+		await _await_ticks(30)  # at rest after the throw above
+		var shot: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+		shot.shooter = p0
+		shot.direction = Vector2.LEFT
+		shot.damage = 10.0
+		shot.knockback = 600.0
+		stage.add_child(shot)
+		shot.global_position = p1.global_position + Vector2(30, 0)
+		var before_x: float = p1.global_position.x
+		shot._hit(p1, p1.global_position)
+		await _await_ticks(4)  # an impulse shows from the next physics step
+		var kick: float = absf(p1.global_position.x - before_x)
+		var label: String = "protected" if protected_shooter else "unprotected"
+		if protected_shooter and (p1.damage > 0.0 or kick > 1.0):
+			failures.append("a protected shooter's bullet still hit: damage %.1f, pushed %.1f px" % [p1.damage, kick])
+		if not protected_shooter and (p1.damage <= 0.0 or kick < 3.0):
+			failures.append("control: an unprotected shooter's bullet did nothing (damage %.1f, pushed %.1f px)" % [p1.damage, kick])
+		print("      %s shooter's bullet: damage %.1f, pushed %.1f px in 4 ticks" % [label, p1.damage, kick])
+		if is_instance_valid(shot):
+			shot.queue_free()
+	p0.spawn_protected = false
+	await _teardown(stage)
 	return failures
