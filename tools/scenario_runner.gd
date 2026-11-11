@@ -59332,7 +59332,11 @@ func _scenario_stage_builder_rebuilds_stages_from_definitions_1046() -> Array[St
 			{"type": "Platform", "pos": [0, 270], "size": [140, 300]},
 			{"type": "Platform", "pos": [320, 270], "size": [140, 300]},
 			{"type": "Platform", "pos": [-640, 270], "size": [140, 300]},
-			{"type": "Platform", "pos": [640, 270], "size": [140, 300]}, kill_floor]},
+			{"type": "Platform", "pos": [640, 270], "size": [140, 300]},
+			{"type": "Platform", "pos": [-480, 248], "size": [160, 16]},
+			{"type": "Platform", "pos": [-160, 248], "size": [160, 16]},
+			{"type": "Platform", "pos": [160, 248], "size": [160, 16]},
+			{"type": "Platform", "pos": [480, 248], "size": [160, 16]}, kill_floor]},
 	}
 	for stage_name: String in defs:
 		var built: Dictionary = builder.build(defs[stage_name])
@@ -59433,7 +59437,8 @@ func _stage_geometry_lines_1046(stage_name: String, instance: Node2D, names: Pac
 	await process_frame
 	var out: PackedStringArray = []
 	for line: String in raw:
-		for i in names.size():
+		# Highest index first, so Part1 does not eat the front of Part10 (#1202).
+		for i in range(names.size() - 1, -1, -1):
 			line = line.replace("Part%d" % i, names[i])
 		out.append(line)
 	return out

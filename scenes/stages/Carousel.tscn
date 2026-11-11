@@ -10,13 +10,13 @@
 ; modes). Everything between the two edges tips or turns; only the shoulders
 ; the players start on and a small hub in the middle hold still.
 ;
-; **Shoulders.** x=+-590..+-790, top y=300: the only fixed ground at the
-; edges, and where all four spawns sit, so the round opens on still footing
+; **Shoulders.** x=+-530..+-790, top y=300: the only fixed ground at the
+; edges, and where all the spawns sit, so the round opens on still footing
 ; and nobody's first second is a slide.
 ;
-; **See-saws.** Centred x=+-380 on y=300, 300 px long (x=+-230..+-530), tilt
+; **See-saws.** Centred x=+-360 on y=300, 260 px long (x=+-230..+-490), tilt
 ; capped at 20 degrees so a lone player tips one without being poured off
-; it. They are the dependable route: 60 px from a shoulder's lip, 140 px
+; it. They are the dependable route: 40 px from a shoulder's lip, 140 px
 ; from the hub's, both inside every weapon's hook-and-fling. Standing on the
 ; far end of one lifts the other end -- a fight on a see-saw is also a fight
 ; over which way it leans.
@@ -40,28 +40,29 @@ background_silhouette = Color(0.1, 0.07, 0.14, 1)
 background_layers = PackedStringArray("clouds", "hills")
 
 ; Shoulders widened inward for issue #137 (x=+-590..+-790 ->
-; +-570..+-790) to fit four spawns each; the gap to each see-saw is now 40 px.
+; +-570..+-790) to fit four spawns each, then to +-530..+-790 for #1202 with
+; the see-saws shortened to match; the gap to each see-saw is still 40 px.
 [node name="ShoulderLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-680, 320)
-size = Vector2(220, 40)
+position = Vector2(-660, 320)
+size = Vector2(260, 40)
 
 [node name="ShoulderRight" parent="." instance=ExtResource("platform")]
-position = Vector2(680, 320)
-size = Vector2(220, 40)
+position = Vector2(660, 320)
+size = Vector2(260, 40)
 
 [node name="Hub" parent="." instance=ExtResource("platform")]
 position = Vector2(0, 320)
 size = Vector2(180, 40)
 
 [node name="SeesawLeft" parent="." instance=ExtResource("3")]
-position = Vector2(-380, 300)
-size = Vector2(300, 20)
+position = Vector2(-360, 300)
+size = Vector2(260, 20)
 mode = 1
 max_tilt_deg = 20.0
 
 [node name="SeesawRight" parent="." instance=ExtResource("3")]
-position = Vector2(380, 300)
-size = Vector2(300, 20)
+position = Vector2(360, 300)
+size = Vector2(260, 20)
 mode = 1
 max_tilt_deg = 20.0
 
@@ -80,30 +81,35 @@ strength = 1300.0
 sweep_deg = 30.0
 sweep_sec = 5.0
 
+; Stage review (#1202): the bot sweep had a fighter off the stage within about a second here.
+; Spawns used to run from 25 px off the outer edge to 15 px off the pit edge, so a first shove
+; ended the round. The shoulders are now 260 px wide (x=+-530..790) and the see-saws 260 px long
+; (x=+-230..490, 40 px clear of the shoulders, as before). The spawns, still 60 px apart, sit
+; 35 px from the outer edge and 45 px from the inner one.
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-765, 250)
+position = Vector2(-755, 250)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(765, 250)
+position = Vector2(755, 250)
 
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-705, 250)
+position = Vector2(-695, 250)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(705, 250)
+position = Vector2(695, 250)
 
 ; Spawns 4-7 (issue #137): eight players. Four on each shoulder, 60 px apart: still fixed footing for everyone.
 [node name="Spawn4" type="Marker2D" parent="."]
-position = Vector2(-645, 250)
+position = Vector2(-635, 250)
 
 [node name="Spawn5" type="Marker2D" parent="."]
-position = Vector2(645, 250)
+position = Vector2(635, 250)
 
 [node name="Spawn6" type="Marker2D" parent="."]
-position = Vector2(-585, 250)
+position = Vector2(-575, 250)
 
 [node name="Spawn7" type="Marker2D" parent="."]
-position = Vector2(585, 250)
+position = Vector2(575, 250)
 
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)
