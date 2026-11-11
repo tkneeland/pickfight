@@ -5,6 +5,9 @@
 #   MYTICKET <n>       ready-for-agent ticket assigned to this account and no worktree in progress
 #   FEATURES? PR <n>   (triagemaster only) open PR changes scripts/ or controller/ without docs/FEATURES.md (once per PR)
 #   PEER_BEACON        a WATCH_PEERS account's USAGE beacon (private channel, msg-inbox.log) became fresh (once)
+#   DEV_IDLE <account> <minutes>  (triagemaster only) a peer with live heartbeats has ready work (ready-for-agent ticket without a PR, or a
+#                      review-blocked PR with no fix since) and its USAGE claude_at is 45+ min old; day, at night only p1; never for an
+#                      account at its 5h/weekly stop; once per 2 h, plus one wake at 120 min (autotriage.md rule 21)
 #   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than pf_worker_target (ticket-maker off: only if a ready ticket is startable) (day DAY_AGENTS, night
 #                      NIGHT_AGENTS, 1 past FIVE_H_SLOW_USED, 0 past FIVE_H_STOP_USED or the weekly stop)
 #   AUSTIN_QUEUE_LOW <n>  (triagemaster only, ticket-maker on) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
@@ -29,12 +32,68 @@ pf_ticket_in_progress() {
   case " $2 " in *" $1 "*) return 0;; esac
   git -C "$ROOT" branch -a --list "*issue-$1-*" "*/$1-*" | grep -q .
 }
+META_TICKETS=${META_TICKETS:-"702 720 619"}   # meta tickets that never count as a peer's dev queue
+# pf_dev_throttled: the beacon in pf_beacon's b_* vars shows an account that must sit idle (rules 2, 3): 5h at the stop with the
+# window still open, or weekly at the handoff level with the reset more than RESET_GRACE_HOURS away. Unknown numbers do not exempt.
+pf_dev_throttled() {
+  local r
+  if [ -n "$b_p5" ] && [ "$b_p5" -ge "${FIVE_H_STOP_USED:-90}" ] && [ -n "$b_r5" ]; then
+    r=$(pf_iso_to_epoch "$b_r5") && [ "$r" -gt "$(date +%s)" ] && return 0
+  fi
+  if [ -n "$b_used" ] && [ "$b_used" -ge "${HANDOFF_WEEKLY_USED:-85}" ] && [ -n "$b_reset" ]; then
+    r=$(pf_iso_to_epoch "$b_reset") && [ $(( r - $(date +%s) )) -gt $(( ${RESET_GRACE_HOURS:-24} * 3600 )) ] && return 0
+  fi
+  return 1
+}
+# pf_dev_waiting <handle> <issues> <pr_tickets> <cr_busy>: 0 when work waits on the handle (autotriage.md rule 21): a
+# ready-for-agent ticket with no open PR, or a review-blocked PR of theirs with no commit pushed since the block. At night only p1.
+pf_dev_waiting() {
+  local h=$1 night=0 n cr p
+  [ "$(pf_daynight)" = night ] && night=1
+  for n in $(echo "$2" | jq -r --arg h "$h" --argjson ni "$night" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$h)) | select(any(.labels[]; .name=="ready-for-agent")) | select($ni==0 or any(.labels[]; .name=="p1")) | "\(.number)|\(any(.labels[]; .name=="conflict-risk"))"'); do
+    cr=${n#*|}; n=${n%%|*}
+    case " $META_TICKETS " in *" $n "*) continue;; esac
+    case " $3 " in *" $n "*) continue;; esac
+    [ "$cr" = true ] && [ "$4" = 1 ] && continue
+    return 0
+  done
+  for p in $(gh pr list --repo "$REPO" --state open -L 100 --author "$h" --label review-blocked --json number,labels 2>/dev/null | jq -r --argjson ni "$night" '.[] | select($ni==0 or any(.labels[]; .name=="p1")) | .number'); do
+    gh api --paginate "repos/$REPO/issues/$p/timeline?per_page=100" 2>/dev/null | jq -s -e 'add // [] | (map(select(.event=="labeled" and .label.name=="review-blocked")) | last | .created_at) as $b | $b != null and ([.[] | select((.event=="committed" or .event=="head_ref_force_pushed") and ((.created_at // .committer.date // .author.date // "") > $b))] | length == 0)' >/dev/null 2>&1 && return 0
+  done
+  return 1
+}
+# pf_dev_idle_check <issues> <pr_tickets> <cr_busy>: prints one "DEV_IDLE <account> <minutes>" line (exit 0) for the first peer whose
+# Claude session is idle with work waiting, else nothing (exit 1). Stamp $PF_STATE/.dev-idle-<h>: "<epoch of wake> <stage 1|2>".
+pf_dev_idle_check() {
+  local h now ca idle st t stage ok
+  now=$(date +%s)
+  for h in $(pf_handles); do
+    [ "$h" = "$PF_ACCOUNT" ] && continue
+    # live heartbeat: a HELLO or USAGE line under 1 h old
+    awk -F'|' -v h="$h" -v now="$now" '$2==h && ($3=="USAGE" || $3=="HELLO") && now-$1<3600 {f=1} END {exit !f}' "$PF_STATE/msg-inbox.log" 2>/dev/null || continue
+    ca=$(pf_peer_claude_at "$h"); [ -n "$ca" ] || continue
+    idle=$((now - ca)); [ "$idle" -ge 2700 ] || continue
+    st=$(cat "$PF_STATE/.dev-idle-$h" 2>/dev/null || echo "0 0"); t=${st%% *}; stage=${st##* }
+    ok=1
+    if [ "$t" -ge "$ca" ]; then   # already woken in this idle stretch: next at 2 h, or the one stage-2 wake when idle reaches 2 h
+      ok=0
+      [ $((now - t)) -ge 7200 ] && ok=1
+      [ "$stage" = 1 ] && [ "$idle" -ge 7200 ] && ok=1
+    fi
+    [ "$ok" = 1 ] || continue
+    pf_beacon "$h"; pf_dev_throttled && continue
+    pf_dev_waiting "$h" "$1" "$2" "$3" || continue
+    stage=1; [ "$idle" -ge 7200 ] && stage=2
+    echo "$now $stage" > "$PF_STATE/.dev-idle-$h"
+    echo "DEV_IDLE $h $((idle / 60))"; return 0
+  done
+  return 1
+}
 [ "${1:-}" = --functions ] && { return 0 2>/dev/null || exit 0; }   # tests/triage-watch-in-progress.sh sources the helpers only
 . "$(dirname "$0")/pf-env.sh" || exit 1
 SEEN=$PF_STATE/.pf-triage-seen; touch "$SEEN"
 # first run: a wake file older than this watcher counts as handled
 [ -f "$PF_STATE/.msg-wake-handled" ] || pf_mtime "$PF_STATE/msg-wake.txt" > "$PF_STATE/.msg-wake-handled" 2>/dev/null
-META_TICKETS=${META_TICKETS:-"702 720 619"}   # meta tickets that never count as a peer's dev queue
 while true; do
   : > "$PF_STATE/.triage-watch-alive"   # heartbeat for pf-tm-check.sh (rule 19), every poll and tick
   # every 6h the triagemaster self-checks its duties (autotriage.md rule 19); first in the loop so other wakes
@@ -87,6 +146,9 @@ while true; do
       echo "beacon-$peer" >> "$SEEN"; echo "PEER_BEACON $peer fresh at $b_at"; exit 0
     fi
   done
+  if pf_is_triagemaster && [ -n "$issues" ]; then
+    d=$(pf_dev_idle_check "$issues" "$pr_tickets" "$cr_busy") && { echo "$d"; exit 0; }
+  fi
   # hourly productivity check: fewer active work packages than this mode's minimum -> wake Claude to start more
   last=$(cat "$PF_STATE/.pf-slots-last" 2>/dev/null || echo 0)
   if [ $(( $(date +%s) - last )) -ge 3600 ]; then
