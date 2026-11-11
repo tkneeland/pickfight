@@ -3442,6 +3442,11 @@ func _on_relay_echo(n: int) -> void:
 	relay_rtt_msec = clampi(Time.get_ticks_msec() - int(_relay_echo_sent[n]), 0, PING_STAT_MAX_MSEC)
 	_relay_echo_sent.erase(n)
 
+## Whether `slot` is held by a PC client over the relay (not a phone over the
+## relay, a LAN phone, a pad, the host PC or a bot).
+func slot_is_online_pc(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_peers.size() and _is_pc_remote(_slot_peers[slot])
+
 static func _clamp_ping_stat(v: int) -> int:
 	return clampi(v, -1, PING_STAT_MAX_MSEC)
 
