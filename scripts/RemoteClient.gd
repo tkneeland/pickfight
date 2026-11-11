@@ -55,7 +55,18 @@ const NAME_MAX_LENGTH: int = ControllerServerScript.MAX_NAME_LENGTH
 ## How long a join may take before the client gives up, msec.
 const JOIN_TIMEOUT_MSEC: int = 8000
 ## How far behind the newest snapshot the puppets are drawn, msec.
+## The interpolation delay at join, the fallback while too few snapshot gaps
+## are known, and the ceiling of the adaptive delay (issue #1195, D3).
 const INTERP_MSEC: int = 100
+## Issue #1195 (D3): the adaptive delay's floor, the gaps it needs before it
+## adapts, the ring it keeps, the gap that counts as a stall (clears the ring
+## and snaps back to INTERP_MSEC) and how fast the live delay moves toward its
+## target, in delay ms per wall second.
+const INTERP_MIN_MSEC: int = 40
+const INTERP_MIN_SAMPLES: int = 20
+const INTERP_GAP_RING: int = 120
+const INTERP_STALL_MSEC: int = 500
+const INTERP_SLEW_MS_PER_SEC: float = 60.0
 const SAMPLE_KEEP_MSEC: int = 1500
 const MAX_SAMPLES: int = 90
 const DEFAULT_SETTINGS_PATH: String = "user://remote_client.cfg"
@@ -364,7 +375,24 @@ func _process(_delta: float) -> void:
 func _physics_process(_delta: float) -> void:
 	if state == State.PLAYING:
 		_pad_input()
+		if not _sent_this_tick:
+			_send_input()
+		_sent_this_tick = false
+
+## Issue #1195 (D5): with this on, a changed vector goes out at once instead of
+## on the next physics tick. It replaces that tick's send, never adds one (the
+## host plays one queued vector per frame, so an extra send would add delay),
+## and ticks with no change still send (the host's remote input timeout needs
+## them). A client flag, not a user setting; off until a real-network run
+## shows it helps.
+var send_input_on_change: bool = false
+var _sent_this_tick: bool = false
+
+func _send_input_on_change(before: Vector2) -> void:
+	if send_input_on_change and not _sent_this_tick and state == State.PLAYING \
+			and not menu_open and input_vector != before:
 		_send_input()
+		_sent_this_tick = true
 
 ## #435: a gamepad's right stick drives the arm too, as a gamepad seat's does on
 ## the host (#261). While the stick is out it sets the vector; let go, and the
@@ -376,6 +404,7 @@ var _pad_driving: bool = false
 var _mouse_px_pending: Vector2 = Vector2.ZERO
 
 func _pad_input() -> void:
+	var before: Vector2 = input_vector
 	var stick := Vector2.ZERO
 	if test_pad_stick is Vector2:
 		stick = ControllerServerScript.pad_stick(test_pad_stick, test_pad_left_stick, ControllerServerScript.pad_deadzone())
@@ -391,6 +420,7 @@ func _pad_input() -> void:
 		_pad_driving = false
 		_mouse.reset()
 		input_vector = Vector2.ZERO
+	_send_input_on_change(before)
 
 ## Issue #463, ADR-0022: a mouse never lifts, so Space (tap) and the pad's stick
 ## clicks toggle "released" and a held shoulder button holds it. Sent as one
@@ -894,7 +924,9 @@ func shares_stats() -> bool:
 func mouse_motion(relative: Vector2) -> void:
 	_mouse_px_pending += relative
 	var edge: float = minf(get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y)
+	var before: Vector2 = input_vector
 	input_vector = _mouse.move(relative, HostMouseScript.drag_radius(edge))
+	_send_input_on_change(before)
 
 func set_sensitivity(value: float) -> void:
 	_mouse.sensitivity = clampf(value, 0.1, 5.0)
@@ -983,6 +1015,9 @@ func apply_snapshot(snap: Dictionary) -> void:
 		_apply_delta(snap.get("delta_entities", []))
 	frames_applied += 1
 	_last_snapshot_msec = Time.get_ticks_msec()
+	if _gap_prev_msec >= 0:
+		_note_snapshot_gap(_last_snapshot_msec - _gap_prev_msec)
+	_gap_prev_msec = _last_snapshot_msec
 	_push_sample()
 	_refresh_hud()
 
@@ -1258,14 +1293,70 @@ func _modifier_id() -> String:
 			return str(m.get("name", ""))
 	return ""
 
-## Draws the newest state INTERP_MSEC late, blending the two samples around that
-## moment so the 30 Hz stream moves smoothly.
+# --- Adaptive interpolation delay (issue #1195, D3) ------------------------------
+#
+# The wall-clock gaps between applied snapshots set how far behind the newest
+# sample the world is drawn: twice the mean gap plus the p95 of each gap's
+# distance from the mean, clamped to [INTERP_MIN_MSEC, INTERP_MSEC]. Until
+# INTERP_MIN_SAMPLES gaps are known it is INTERP_MSEC. The live value slews
+# toward the target at INTERP_SLEW_MS_PER_SEC so the puppets never jump; a
+# stall (a gap over INTERP_STALL_MSEC) clears the ring and snaps it back to
+# INTERP_MSEC, since the world was frozen and the old gaps no longer apply.
+
+var _gaps: PackedInt32Array = PackedInt32Array()
+var _gap_prev_msec: int = -1
+var _interp_live: float = float(INTERP_MSEC)
+var _interp_slewed_at: int = -1
+
+## Records one gap, in ms, between consecutive applied snapshots.
+func _note_snapshot_gap(msec: int) -> void:
+	if msec > INTERP_STALL_MSEC:
+		_gaps.clear()
+		_interp_live = float(INTERP_MSEC)
+		return
+	_gaps.append(maxi(0, msec))
+	if _gaps.size() > INTERP_GAP_RING:
+		_gaps.remove_at(0)
+
+## The delay the gaps call for (INTERP_MSEC with too few of them).
+func interp_target_msec() -> float:
+	var n: int = _gaps.size()
+	if n < INTERP_MIN_SAMPLES:
+		return float(INTERP_MSEC)
+	var sum: int = 0
+	for g: int in _gaps:
+		sum += g
+	var mean: float = float(sum) / n
+	var deviations: PackedFloat32Array = PackedFloat32Array()
+	deviations.resize(n)
+	for i in n:
+		deviations[i] = absf(_gaps[i] - mean)
+	deviations.sort()
+	var jitter: float = deviations[clampi(ceili(0.95 * n) - 1, 0, n - 1)]
+	return clampf(2.0 * mean + jitter, float(INTERP_MIN_MSEC), float(INTERP_MSEC))
+
+## Moves the live delay toward its target by the wall time since the last call.
+func _slew_interp(now_msec: int) -> void:
+	var elapsed: int = 0 if _interp_slewed_at < 0 else maxi(0, now_msec - _interp_slewed_at)
+	_interp_slewed_at = now_msec
+	_interp_live = move_toward(_interp_live, interp_target_msec(), INTERP_SLEW_MS_PER_SEC * elapsed / 1000.0)
+
+## The interpolation delay drawn this frame, in ms.
+func interp_msec() -> int:
+	return int(round(_interp_live))
+
+## Draws the newest state interp_msec() late, blending the two samples around
+## that moment so the snapshot stream moves smoothly.
 func _render() -> void:
+	var now: int = Time.get_ticks_msec()
+	_slew_interp(now)
+	if effects != null:
+		effects.delay_msec = interp_msec() # #976: effects wait as long as the world
 	if _samples.is_empty() or not _round_shown():
 		_hide_puppets_except({})
 		_clear_props()
 		return
-	var render_at: int = Time.get_ticks_msec() - INTERP_MSEC
+	var render_at: int = now - interp_msec()
 	var after: int = -1
 	for i in _samples.size():
 		if _samples[i]["t"] >= render_at:

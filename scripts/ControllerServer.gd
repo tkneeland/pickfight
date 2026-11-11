@@ -3232,9 +3232,9 @@ func _rumble_pad(device: int, kind: String) -> void:
 const SnapshotScript: GDScript = preload("res://scripts/Snapshot.gd")
 const SnapshotCaptureScript: GDScript = preload("res://scripts/SnapshotCapture.gd")
 const RemoteHudScript: GDScript = preload("res://scripts/RemoteHud.gd")
-const SNAPSHOT_HZ: float = 30.0
+const SNAPSHOT_HZ: float = 60.0
 ## A full snapshot every this many frames (about a second); deltas between.
-const SNAPSHOT_FULL_EVERY: int = 30
+const SNAPSHOT_FULL_EVERY: int = 60
 
 ## Frames sent since the first of this stream (diagnostic, for scenarios).
 var snapshot_frames_sent: int = 0
@@ -3248,7 +3248,7 @@ var _hud_tick: int = 0
 ## Hud text frames sent to remote seats (issue #436), for scenarios.
 var hud_frames_sent: int = 0
 
-## Streams the world to the remote seats at 30 Hz while at least one is bound;
+## Streams the world to the remote seats at SNAPSHOT_HZ while at least one is bound;
 ## a seat that just bound gets a full snapshot at once. Captures nothing, and
 ## costs one loop over the seats, when none is bound.
 func _stream_snapshots(delta: float) -> void:
@@ -3297,7 +3297,7 @@ func _stream_snapshots(delta: float) -> void:
 	_hud_tick += 1
 	if fresh:
 		_hud_last = {}
-	if fresh or _hud_tick % 4 == 0:
+	if fresh or _hud_tick % 8 == 0: # #1195: about 7.5 Hz, as before the stream went to 60 Hz
 		var hud: Dictionary = RemoteHudScript.capture(round_manager)
 		if hud != _hud_last:
 			_hud_last = hud
