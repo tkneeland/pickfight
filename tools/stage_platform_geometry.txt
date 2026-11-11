@@ -313,16 +313,31 @@ Flatlands|tinted|PlatformRight/PlatformRightVisual|Color(0.16470589, 0.20392157,
 Flatlands|tinted|PerchLedge/Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Flatlands|tinted|FloorConveyor/Belt|Color(0.3, 0.3, 0.34, 1)
 Flatlands|tinted|FloorSpeedStrip/Strip|Color(0.1, 0.4, 0.45, 1)
-Footbridge|body|BankLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -505, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|body|BankLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -505, 280)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Footbridge|shape|BankLeft/BankLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(430, 40)|oneway=false|disabled=false
 Footbridge|poly|BankLeft/BankLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Footbridge|body|BankRight|StaticBody2D|Transform2D(1, 0, 0, 1, 505, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|body|BankRight|StaticBody2D|Transform2D(1, 0, 0, 1, 505, 280)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Footbridge|shape|BankRight/BankRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(430, 40)|oneway=false|disabled=false
 Footbridge|poly|BankRight/BankRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-215, -20, 215, -20, 215, 20, -215, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Footbridge|body|Ledge0|StaticBody2D|Transform2D(1, 0, 0, 1, -190, 312)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Footbridge|body|Ledge1|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 312)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Footbridge|body|Ledge2|StaticBody2D|Transform2D(1, 0, 0, 1, 190, 312)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Footbridge|body|Overhead|AnimatableBody2D|Transform2D(1, 0, 0, 1, -170, 160)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|body|Ledge0|StaticBody2D|Transform2D(1, 0, 0, 1, -190, 272)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|body|Ledge1|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 272)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|body|Ledge2|StaticBody2D|Transform2D(1, 0, 0, 1, 190, 272)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|body|Overhead|AnimatableBody2D|Transform2D(1, 0, 0, 1, -170, 120)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|body|ChasmShelf|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|shape|ChasmShelf/ChasmShelfShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(440, 16)|oneway=false|disabled=false
+Footbridge|poly|ChasmShelf/ChasmShelfVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-220, -8, 220, -8, 220, 8, -220, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Footbridge|body|EndShelfLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -760, 340)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|shape|EndShelfLeft/EndShelfLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(80, 16)|oneway=false|disabled=false
+Footbridge|poly|EndShelfLeft/EndShelfLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-40, -8, 40, -8, 40, 8, -40, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Footbridge|body|EndShelfRight|StaticBody2D|Transform2D(1, 0, 0, 1, 760, 340)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|shape|EndShelfRight/EndShelfRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(80, 16)|oneway=false|disabled=false
+Footbridge|poly|EndShelfRight/EndShelfRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-40, -8, 40, -8, 40, 8, -40, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Footbridge|body|EndPostLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -792, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|shape|EndPostLeft/EndPostLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(16, 220)|oneway=false|disabled=false
+Footbridge|poly|EndPostLeft/EndPostLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-8, -110, 8, -110, 8, 110, -8, 110)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Footbridge|body|EndPostRight|StaticBody2D|Transform2D(1, 0, 0, 1, 792, 330)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Footbridge|shape|EndPostRight/EndPostRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(16, 160)|oneway=false|disabled=false
+Footbridge|poly|EndPostRight/EndPostRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-8, -80, 8, -80, 8, 80, -8, 80)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Footbridge|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 480)|layer=1|mask=1|z=0|zrel=true|visible=true|script=res://scripts/KillZone.gd|rise_warning_sec=4.0|surface_depth=2000.0
 Footbridge|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Footbridge|tinted|BankLeft/BankLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
@@ -331,6 +346,11 @@ Footbridge|tinted|Ledge0/Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Footbridge|tinted|Ledge1/Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Footbridge|tinted|Ledge2/Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Footbridge|tinted|Overhead/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Footbridge|tinted|ChasmShelf/ChasmShelfVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Footbridge|tinted|EndShelfLeft/EndShelfLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Footbridge|tinted|EndShelfRight/EndShelfRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Footbridge|tinted|EndPostLeft/EndPostLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Footbridge|tinted|EndPostRight/EndPostRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Furnace|body|Ground|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Furnace|shape|Ground/GroundShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(1300, 40)|oneway=false|disabled=false
 Furnace|poly|Ground/GroundVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-650, -20, 650, -20, 650, 20, -650, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
@@ -425,22 +445,28 @@ Highrise|tinted|Ledge2/Ledge2Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Highrise|tinted|Ledge3/Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Highrise|tinted|Ledge4/Ledge4Visual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Highrise|tinted|Summit/SummitVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Islands|body|IslandA|StaticBody2D|Transform2D(1, 0, 0, 1, -420, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Islands|body|IslandA|StaticBody2D|Transform2D(1, 0, 0, 1, -420, 270)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Islands|shape|IslandA/IslandAShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(180, 24)|oneway=false|disabled=false
 Islands|poly|IslandA/IslandAVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Islands|body|IslandB|StaticBody2D|Transform2D(1, 0, 0, 1, -140, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Islands|body|IslandB|StaticBody2D|Transform2D(1, 0, 0, 1, -140, 270)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Islands|shape|IslandB/IslandBShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(180, 24)|oneway=false|disabled=false
 Islands|poly|IslandB/IslandBVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Islands|body|Ferry|AnimatableBody2D|Transform2D(1, 0, 0, 1, 50, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Islands|body|IslandD|StaticBody2D|Transform2D(1, 0, 0, 1, 420, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Islands|body|Ferry|AnimatableBody2D|Transform2D(1, 0, 0, 1, 50, 270)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Islands|body|IslandD|StaticBody2D|Transform2D(1, 0, 0, 1, 420, 270)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Islands|shape|IslandD/IslandDShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(180, 24)|oneway=false|disabled=false
 Islands|poly|IslandD/IslandDVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-90, -12, 90, -12, 90, 12, -90, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Islands|body|IslandE|StaticBody2D|Transform2D(1, 0, 0, 1, -670, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Islands|shape|IslandE/IslandEShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(120, 24)|oneway=false|disabled=false
-Islands|poly|IslandE/IslandEVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-60, -12, 60, -12, 60, 12, -60, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Islands|body|IslandF|StaticBody2D|Transform2D(1, 0, 0, 1, 670, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Islands|shape|IslandF/IslandFShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(120, 24)|oneway=false|disabled=false
-Islands|poly|IslandF/IslandFVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-60, -12, 60, -12, 60, 12, -60, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Islands|body|IslandE|StaticBody2D|Transform2D(1, 0, 0, 1, -670, 270)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Islands|shape|IslandE/IslandEShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(160, 24)|oneway=false|disabled=false
+Islands|poly|IslandE/IslandEVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Islands|body|IslandF|StaticBody2D|Transform2D(1, 0, 0, 1, 670, 270)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Islands|shape|IslandF/IslandFShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(160, 24)|oneway=false|disabled=false
+Islands|poly|IslandF/IslandFVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-80, -12, 80, -12, 80, 12, -80, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Islands|body|ReefLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -440, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Islands|shape|ReefLeft/ReefLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(680, 16)|oneway=false|disabled=false
+Islands|poly|ReefLeft/ReefLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-340, -8, 340, -8, 340, 8, -340, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Islands|body|ReefRight|StaticBody2D|Transform2D(1, 0, 0, 1, 440, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Islands|shape|ReefRight/ReefRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(680, 16)|oneway=false|disabled=false
+Islands|poly|ReefRight/ReefRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-340, -8, 340, -8, 340, 8, -340, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Islands|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 480)|layer=1|mask=1|z=0|zrel=true|visible=true|script=res://scripts/KillZone.gd|rise_warning_sec=4.0|surface_depth=2000.0
 Islands|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Islands|tinted|IslandA/IslandAVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
@@ -449,6 +475,8 @@ Islands|tinted|Ferry/@Polygon2D@|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Islands|tinted|IslandD/IslandDVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Islands|tinted|IslandE/IslandEVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Islands|tinted|IslandF/IslandFVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Islands|tinted|ReefLeft/ReefLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Islands|tinted|ReefRight/ReefRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Mesa|body|Floor|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 400)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Mesa|shape|Floor/FloorShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(1500, 40)|oneway=false|disabled=false
 Mesa|poly|Floor/FloorVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-750, -20, 750, -20, 750, 20, -750, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
@@ -934,8 +962,8 @@ Stronghold|tinted|LedgeLeft/LedgeLeftVisual|Color(0.16470589, 0.20392157, 0.2509
 Stronghold|tinted|LedgeRight/LedgeRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Stronghold|tinted|Bridge/BridgeVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Summit|body|Floor|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 400)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Summit|shape|Floor/FloorShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(1500, 40)|oneway=false|disabled=false
-Summit|poly|Floor/FloorVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-750, -20, 750, -20, 750, 20, -750, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Summit|shape|Floor/FloorShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(1440, 40)|oneway=false|disabled=false
+Summit|poly|Floor/FloorVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-720, -20, 720, -20, 720, 20, -720, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Summit|body|Tower|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 180)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Summit|shape|Tower/TowerShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(320, 24)|oneway=false|disabled=false
 Summit|poly|Tower/TowerVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-160, -12, 160, -12, 160, 12, -160, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
@@ -954,6 +982,18 @@ Summit|poly|HighRight/HighRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector
 Summit|body|PadLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -200, 372)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Summit|body|PadRight|StaticBody2D|Transform2D(1, 0, 0, 1, 200, 372)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Summit|body|FloorIce|StaticBody2D|Transform2D(1, 0, 0, 1, -340, 384)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Summit|body|EdgeShelfLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -760, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Summit|shape|EdgeShelfLeft/EdgeShelfLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(80, 16)|oneway=false|disabled=false
+Summit|poly|EdgeShelfLeft/EdgeShelfLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-40, -8, 40, -8, 40, 8, -40, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Summit|body|EdgeShelfRight|StaticBody2D|Transform2D(1, 0, 0, 1, 760, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Summit|shape|EdgeShelfRight/EdgeShelfRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(80, 16)|oneway=false|disabled=false
+Summit|poly|EdgeShelfRight/EdgeShelfRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-40, -8, 40, -8, 40, 8, -40, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Summit|body|EndPostLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -792, 400)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Summit|shape|EndPostLeft/EndPostLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(16, 100)|oneway=false|disabled=false
+Summit|poly|EndPostLeft/EndPostLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-8, -50, 8, -50, 8, 50, -8, 50)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Summit|body|EndPostRight|StaticBody2D|Transform2D(1, 0, 0, 1, 792, 400)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Summit|shape|EndPostRight/EndPostRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(16, 100)|oneway=false|disabled=false
+Summit|poly|EndPostRight/EndPostRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-8, -50, 8, -50, 8, 50, -8, 50)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Summit|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 700)|layer=1|mask=1|z=0|zrel=true|visible=true|script=res://scripts/KillZone.gd|rise_warning_sec=4.0|surface_depth=2000.0
 Summit|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Summit|tinted|Floor/FloorVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
@@ -963,6 +1003,10 @@ Summit|tinted|StepRight/StepRightVisual|Color(0.16470589, 0.20392157, 0.2509804,
 Summit|tinted|HighLeft/HighLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Summit|tinted|HighRight/HighRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Summit|tinted|FloorIce/Ice|Color(0.7, 0.86, 0.96, 1)
+Summit|tinted|EdgeShelfLeft/EdgeShelfLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Summit|tinted|EdgeShelfRight/EdgeShelfRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Summit|tinted|EndPostLeft/EndPostLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Summit|tinted|EndPostRight/EndPostRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Switchyard|body|YardLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -675, 400)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Switchyard|shape|YardLeft/YardLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(850, 40)|oneway=false|disabled=false
 Switchyard|poly|YardLeft/YardLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-425, -20, 425, -20, 425, 20, -425, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
@@ -1018,6 +1062,18 @@ Treadmill|body|BeltRight|StaticBody2D|Transform2D(1, 0, 0, 1, 350, 374)|layer=1|
 Treadmill|body|CentreMud|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 374)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Treadmill|body|PadLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -700, 388)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Treadmill|body|PadRight|StaticBody2D|Transform2D(1, 0, 0, 1, 700, 388)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Treadmill|body|EdgeShelfLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -775, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Treadmill|shape|EdgeShelfLeft/EdgeShelfLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(50, 16)|oneway=false|disabled=false
+Treadmill|poly|EdgeShelfLeft/EdgeShelfLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-25, -8, 25, -8, 25, 8, -25, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Treadmill|body|EdgeShelfRight|StaticBody2D|Transform2D(1, 0, 0, 1, 775, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Treadmill|shape|EdgeShelfRight/EdgeShelfRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(50, 16)|oneway=false|disabled=false
+Treadmill|poly|EdgeShelfRight/EdgeShelfRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-25, -8, 25, -8, 25, 8, -25, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Treadmill|body|EndPostLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -792, 330)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Treadmill|shape|EndPostLeft/EndPostLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(16, 250)|oneway=false|disabled=false
+Treadmill|poly|EndPostLeft/EndPostLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-8, -125, 8, -125, 8, 125, -8, 125)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Treadmill|body|EndPostRight|StaticBody2D|Transform2D(1, 0, 0, 1, 792, 330)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Treadmill|shape|EndPostRight/EndPostRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(16, 250)|oneway=false|disabled=false
+Treadmill|poly|EndPostRight/EndPostRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-8, -125, 8, -125, 8, 125, -8, 125)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Treadmill|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 700)|layer=1|mask=1|z=0|zrel=true|visible=true|script=res://scripts/KillZone.gd|rise_warning_sec=4.0|surface_depth=2000.0
 Treadmill|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Treadmill|tinted|Floor/FloorVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
@@ -1027,6 +1083,10 @@ Treadmill|tinted|MidDeck/MidDeckVisual|Color(0.16470589, 0.20392157, 0.2509804, 
 Treadmill|tinted|BeltLeft/Belt|Color(0.3, 0.3, 0.34, 1)
 Treadmill|tinted|BeltRight/Belt|Color(0.3, 0.3, 0.34, 1)
 Treadmill|tinted|CentreMud/Mud|Color(0.32, 0.21, 0.12, 1)
+Treadmill|tinted|EdgeShelfLeft/EdgeShelfLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Treadmill|tinted|EdgeShelfRight/EdgeShelfRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Treadmill|tinted|EndPostLeft/EndPostLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Treadmill|tinted|EndPostRight/EndPostRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Updraft|body|BankLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -580, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Updraft|shape|BankLeft/BankLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(320, 40)|oneway=false|disabled=false
 Updraft|poly|BankLeft/BankLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-160, -20, 160, -20, 160, 20, -160, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
