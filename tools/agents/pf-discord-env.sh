@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sourced by pf-discord.sh and pf-discord-bugs.sh (after pf-env.sh): the bot conf and the one curl wrapper.
 # Conf $PF_STATE/pf-discord.conf (never commit it): PF_DISCORD_TOKEN=<bot token>, optional PF_DISCORD_GUILD and
-# PF_DISCORD_BUGS_CHANNEL and PF_DISCORD_DEV_CHANNEL. Read without sourcing, tolerating CRLF and quotes (same as pf-msg.sh).
+# PF_DISCORD_BUGS_CHANNEL and PF_DISCORD_DEV_CHANNEL and PF_DISCORD_PING_IDS (devs who asked to be pinged). Read without sourcing, tolerating CRLF and quotes (same as pf-msg.sh).
 PF_DISCORD_CONF=$PF_STATE/pf-discord.conf
 PF_DISCORD_API=https://discord.com/api/v10
 PF_DISCORD_DEFAULT_GUILD=1569873613526405190      # the PickFight server
@@ -22,4 +22,4 @@ pf_discord_need_token() { [ -n "$PF_DISCORD_TOKEN" ] || { echo "$1: no PF_DISCOR
 # Ids quoted from untrusted reports never ping; @everyone and roles never do.
 PF_DISCORD_PING_IDS=$(pf_discord_conf PF_DISCORD_PING_IDS)
 pf_discord_mentions() { jq -nc --arg t "$1" --arg ok "$PF_DISCORD_PING_IDS" \
-  '($ok | split(",") | map(select(length > 0))) as $ok | {parse: [], users: ([$t | scan("<@!?([0-9]+)>") | .[0]] | unique | map(select(. as $i | $ok | index($i))))}'; }
+  '($ok | split(",") | map(select(length > 0))) as $ok | {parse: [], users: ([$t | scan("<@!?([0-9]+)>") | .[0]] | unique | map(select(. as $i | $ok | index($i))))}' 2>/dev/null || echo '{"parse":[],"users":[]}'; }

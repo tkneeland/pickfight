@@ -8,7 +8,7 @@
 #                                     exit 1 when there are none; exit 2 when not set up or Discord fails
 #   pf-discord-bugs.sh read           print those messages (id, time, author, text, attachment URLs), oldest first.
 #                                     Marks nothing: a report stays new until it is handled (reply or ack)
-#   pf-discord-bugs.sh reply <id> <text>   post <text> as a reply to message <id> (no pings) and mark that one handled
+#   pf-discord-bugs.sh reply <id> <text>   post <text> as a reply to message <id> (pings only allowlisted <@id>s, and only with --dev; public replies never ping) and mark that one handled
 #   pf-discord-bugs.sh ack <id> <reason>   mark that one message handled without replying; the reason is logged
 # Each message is handled on its own (owner, 2026-11-10: feature requests were skipped when a reply to a later
 # report marked everything before it). Unhandled reports keep waking the watcher until each gets a reply or ack.
@@ -67,7 +67,7 @@ case "${1:-}" in
     exit 0 ;;
   reply)
     [ -n "${2:-}" ] && [ -n "${3:-}" ] || { echo "usage: pf-discord-bugs.sh reply <message id> <text>" >&2; exit 2; }
-    body=$(jq -n --arg t "${3:0:1900}" --arg id "$2" --argjson am "$(pf_discord_mentions "${3:0:1900}")" '{content: $t, message_reference: {message_id: $id}, allowed_mentions: $am}')
+    body=$(jq -n --arg t "${3:0:1900}" --arg id "$2" --argjson am "$( [ "$K" = dev ] && pf_discord_mentions "${3:0:1900}" || echo '{"parse":[],"users":[]}')" '{content: $t, message_reference: {message_id: $id}, allowed_mentions: $am}')
     code=$(dcurl "/channels/$CH/messages" -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" -d "$body")
     echo "discord reply: $code"; [ "$code" = 200 ] || exit 2
     mark "$2" "$K reply: ${3:0:200}" ;;
