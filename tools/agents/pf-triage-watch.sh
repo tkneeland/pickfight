@@ -12,6 +12,9 @@
 #   DISCORD_BUG <n> new in #change-requests  (triagemaster only, pf-discord.conf set up) people posted in the public
 #                      channel; checked once a minute while idle; Claude reads them with pf-discord-bugs.sh read
 #   DISCORD_DEV <n> new in #hive  the same for the private dev channel (pf-discord-bugs.sh --dev read): pre-approved
+#   HIVE_TAKEOVER <msg id>  (not the triagemaster) a dev message in #hive has had no answer for 10 min and this account is the next
+#                      live one in succession order (rule 21): run pf-hive-failover.sh takeover <id>, then answer. An account
+#                      without pf-discord.conf asks the owner on the private channel instead (once per 6h).
 #   DISCORD_APPROVED <issue> <user>  every 5 min: a dev reacted ✅ to the Discord source of a needs-triage issue
 #   TM_CHECK_FAIL <line>  (triagemaster only) every 6h pf-tm-check.sh found a duty not covered; the line says how to fix it
 # Tickets the open PRs are working on, space-separated: Closes|Fixes|Resolves|Refs #N in a title or body (one PR may
@@ -123,6 +126,10 @@ while true; do
     wm=$(pf_mtime "$PF_STATE/msg-wake.txt")
     if [ -n "$wm" ] && [ -s "$PF_STATE/msg-wake.txt" ] && [ "$wm" != "$(cat "$PF_STATE/.msg-wake-handled" 2>/dev/null)" ]; then
       echo "$wm" > "$PF_STATE/.msg-wake-handled"; head -n 1 "$PF_STATE/msg-wake.txt"; exit 0
+    fi
+    # #hive failover (rule 21): every minute, on every machine that is not the triagemaster
+    if [ $((tick % 6)) = 3 ] && ! pf_is_triagemaster; then
+      hv=$(bash "$(dirname "$0")/pf-hive-failover.sh" check 2>/dev/null) && { echo "$hv"; exit 0; }
     fi
     # Discord #bug-reports (autotriage.md rule 18): once a minute, triagemaster only, once the bot token is set up
     : > "$PF_STATE/.triage-watch-alive"

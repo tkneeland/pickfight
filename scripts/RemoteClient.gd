@@ -44,6 +44,7 @@ const RemoteHudScript: GDScript = preload("res://scripts/RemoteHud.gd")
 const UiMirrorScript: GDScript = preload("res://scripts/UiMirror.gd")
 const ModifierBannerScript: GDScript = preload("res://scripts/ModifierBanner.gd")
 const HostHudScene: PackedScene = preload("res://scenes/HostHud.tscn")
+const PingReadoutScript: GDScript = preload("res://scripts/PingReadout.gd")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
 ## Room-code alphabet and length: Relay.CODE_LETTERS (no I and no O) / CODE_LENGTH.
@@ -447,6 +448,10 @@ func _input(event: InputEvent) -> void:
 		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
 		get_viewport().set_input_as_handled() # else a focused Ready also takes it as ui_accept and flips back (#550)
 		return
+	if pad_button != null and pad_button.pressed and not menu_open and pad_button.button_index == JOY_BUTTON_X \
+			and _ready_button != null and _ready_button.is_visible_in_tree() and _lobby_toggle_team():
+		get_viewport().set_input_as_handled() # X moves this player to the other team in a Teams lobby (#1199)
+		return
 	if enter_readies(event):
 		get_viewport().set_input_as_handled() # a focused Ready also takes Enter as ui_accept (#550)
 		return
@@ -716,7 +721,8 @@ func _on_host_text(text: String) -> void:
 		"looks":
 			_on_looks(msg)
 		"ping":
-			_send_json({"t": "pong", "n": msg.get("n", 0)})
+			# #1195: the felt delay and whether this joiner shares stats ride along.
+			_send_json({"t": "pong", "n": msg.get("n", 0), "felt": felt_msec(), "share": shares_stats()})
 		"release":
 			pass # the host owns the toggle now (#481)
 		"recentre":
@@ -794,6 +800,69 @@ func _send_input() -> void:
 	body[9] = action_presses | (0x80 if _action_was_hold else 0)
 	_send_envelope(RelayLinkScript.KIND_INPUT, body)
 	input_frames_sent += 1
+	_felt_note_sent(v)
+
+# --- Felt input-to-screen delay (issue #1195) --------------------------------------
+#
+# A diagnostic, never an input path: the wall-clock time from sending a vector
+# that changed after at least FELT_REST_MSEC unchanged, to the first render
+# whose DRAWN arm (the interpolated pose `_render` gives this joiner's own
+# puppet, so the interpolation delay is inside the number) has turned more
+# than FELT_TURN_RAD from where it was drawn when the input changed. The match
+# mean is reported on every pong and shown in the in-match ping readout.
+
+const HostSettingsScript1195: GDScript = preload("res://scripts/HostSettings.gd")
+const FELT_REST_MSEC: int = 300
+const FELT_TURN_RAD: float = 0.05
+## A probe that sees no turn this long (a nudge too small to move the arm) is dropped.
+const FELT_TIMEOUT_MSEC: int = 2000
+var _felt_last_sent: Vector2 = Vector2.ZERO
+var _felt_rest_since_msec: int = -1
+var _felt_probe_msec: int = -1
+var _felt_rest_angle: float = NAN
+var _felt_drawn_angle: float = NAN
+var _felt_sum: int = 0
+var _felt_n: int = 0
+## The last single measurement, ms (-1 none yet).
+var felt_last_msec: int = -1
+
+func _felt_note_sent(v: Vector2) -> void:
+	var now: int = Time.get_ticks_msec()
+	if v == _felt_last_sent and _felt_rest_since_msec >= 0:
+		return
+	if v != _felt_last_sent and _felt_probe_msec < 0 and _felt_rest_since_msec >= 0 \
+			and now - _felt_rest_since_msec >= FELT_REST_MSEC and not is_nan(_felt_drawn_angle):
+		_felt_probe_msec = now
+		_felt_rest_angle = _felt_drawn_angle
+	_felt_last_sent = v
+	_felt_rest_since_msec = now
+
+## Called by `_render` with this joiner's own drawn body and weapon head.
+func _felt_note_drawn(body_position: Vector2, head_position: Vector2) -> void:
+	_felt_drawn_angle = (head_position - body_position).angle()
+	if _felt_probe_msec < 0:
+		return
+	var now: int = Time.get_ticks_msec()
+	if absf(angle_difference(_felt_rest_angle, _felt_drawn_angle)) > FELT_TURN_RAD:
+		felt_last_msec = now - _felt_probe_msec
+		_felt_sum += felt_last_msec
+		_felt_n += 1
+		_felt_probe_msec = -1
+	elif now - _felt_probe_msec > FELT_TIMEOUT_MSEC:
+		_felt_probe_msec = -1
+
+## The mean felt input-to-screen delay this session, ms; -1 before the first.
+func felt_msec() -> int:
+	return int(round(float(_felt_sum) / _felt_n)) if _felt_n > 0 else -1
+
+## Whether this joiner shares match stats (#1195, D8): the same two-part
+## consent the host's own telemetry needs (#617), from this PC's settings.
+## Scenarios point this at their own settings (one process runs host and joiner).
+var share_settings: RefCounted = null
+
+func shares_stats() -> bool:
+	var settings: RefCounted = share_settings if share_settings != null else HostSettingsScript1195.shared()
+	return settings.share_stats and settings.telemetry_notice_seen
 
 ## The mouse moved by `relative` pixels while captured (what `_input` calls).
 func mouse_motion(relative: Vector2) -> void:
@@ -1222,10 +1291,14 @@ func _render() -> void:
 		puppet.modifier = modifier
 		if ink is Color:
 			puppet.set_ink(ink)
-		puppet.set_pose((from_pose[0] as Vector2).lerp(to_pose[0], alpha),
+		var drawn_body: Vector2 = (from_pose[0] as Vector2).lerp(to_pose[0], alpha)
+		var drawn_head: Vector2 = (from_pose[2] as Vector2).lerp(to_pose[2], alpha)
+		puppet.set_pose(drawn_body,
 			lerp_angle(from_pose[1], to_pose[1], alpha),
-			(from_pose[2] as Vector2).lerp(to_pose[2], alpha),
+			drawn_head,
 			lerp_angle(from_pose[3] if from_pose.size() > 3 else 0.0, to_pose[3] if to_pose.size() > 3 else 0.0, alpha))
+		if id == slot:
+			_felt_note_drawn(drawn_body, drawn_head) # #1195: the felt delay watches what is drawn
 	for p: Variant in _world.get("projectiles", []):
 		if not p is Dictionary:
 			continue
@@ -1724,6 +1797,9 @@ func _build_hud() -> void:
 	# host's recorded events (mirror: it records nothing itself).
 	_host_hud = HostHudScene.instantiate() as CanvasLayer
 	_host_hud.name = "HostHud"
+	# #1195: the in-match ping readout, built and placed by the host's own code
+	# so the mirror only has to carry its text, colour and visibility.
+	PingReadoutScript.make(_host_hud)
 	var feed: Control = _host_hud.get_node("KillFeed") as Control
 	feed.mirror = true
 	# The scene's placeholder texts are the host's own start-up lines, in
@@ -1781,6 +1857,7 @@ func _build_lobby_panel() -> void:
 	_target_label = _lobby.target_label
 	_lobby.toggle_mode.connect(func() -> void:
 		_send_json({"t": "mode", "v": "ffa" if lobby.get("mode") == "teams" else "teams"}))
+	_lobby.team_picked.connect(func(team: int) -> void: _send_json({"t": "team", "v": team}))
 	_lobby.step_target.connect(func(delta: int) -> void:
 		_send_json({"t": "target", "n": int(lobby.get("target", 5)) + delta}))
 	_leave_button = _lobby.leave_button
@@ -1925,6 +2002,17 @@ func lobby_title_text() -> String:
 			if not host_name.is_empty():
 				return tr("JOIN_ROOM_HOSTED") % [room_code, host_name]
 	return tr("JOIN_ROOM_TITLE") % room_code
+
+## Issue #1199: sends the pick that moves this player to the other team, when
+## the lobby is a Teams one that shows it on a team. Whether it was sent.
+func _lobby_toggle_team() -> bool:
+	if not bool(lobby.get("teams", false)) or not ["lobby", "countdown"].has(str(lobby.get("phase", ""))):
+		return false
+	for entry: Variant in lobby.get("players", []):
+		if entry is Dictionary and int(entry.get("slot", -2)) == slot and int(entry.get("team", -1)) in [0, 1]:
+			_send_json({"t": "team", "v": 1 - int(entry["team"])})
+			return true
+	return false
 
 ## Redraws the host's lobby screen from the `lobby` frame (#1127): the same call
 ## RoundManager makes, with this client's RemoteLobby standing in for the server.

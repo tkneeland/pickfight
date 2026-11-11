@@ -1,0 +1,35 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+SteamPlatform: GodotSteam not present, Steam off
+Controller page: http://<lan-ip>:63129/
+PASS  online_ping_reaches_lobby_and_scoreboard_with_warning
+WARNING: Camera2D overridden to physics process mode due to use of physics interpolation.
+   at: _update_process_callback (scene/2d/camera_2d.cpp:85)
+   GDScript backtrace (most recent call first):
+       [0] _build_world (res://scripts/RemoteClient.gd:1567)
+       [1] _ready (res://scripts/RemoteClient.gd:320)
+       [2] _rc_client_241 (res://tools/scenario_runner.gd:30091)
+       [3] _scenario_remote_client_lobby_text_follows_the_locale (res://tools/scenario_runner.gd:39909)
+       [4] _run_scenario (res://tools/scenario_runner.gd:3370)
+       [5] _run_one (res://tools/scenario_runner.gd:1755)
+       [6] _run_all (res://tools/scenario_runner.gd:1714)
+       [7] _run_one (res://tools/scenario_runner.gd:1765)
+       [8] _run_scenario (res://tools/scenario_runner.gd:3356)
+       [9] _scenario_online_ping_reaches_lobby_and_scoreboard_with_warning (res://tools/scenario_runner.gd:39613)
+       [10] _rc_close_241 (res://tools/scenario_runner.gd:30117)
+       [11] _snap_close_251 (res://tools/scenario_runner.gd:27823)
+       [12] _teardown (res://tools/scenario_runner.gd:4864)
+      lobby titles in xx: [xx] Room ABCD  starting in 3 | [xx] Room ABCD  match over
+PASS  remote_client_lobby_text_follows_the_locale
+PASS  online_client_shows_the_host_lobby_1127
+---
+3 passed, 0 failed, 3 total
+WARNING: 30 RIDs of type "CanvasItem" were leaked.
+   at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2692)
+ERROR: 22 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 33 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+   at: cleanup (core/object/object.cpp:2641)
+ERROR: 3 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:810)

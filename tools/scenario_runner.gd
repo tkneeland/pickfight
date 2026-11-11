@@ -1304,7 +1304,15 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_guest_victory_prompt_waits_for_host_1186",
 	"koth_hill_never_over_a_pit_1187",
 	"weapon_starts_round_neutral_after_held_aim_1185",
+	"lobby_team_switch_host_1199",
+	"lobby_team_switch_joiner_1199",
+	"lobby_teams_uneven_note_1199",
 	"koth_hill_radius_scales_with_stage_1198",
+	"spawn_protection_ghosts_fighters_1196",
+	"online_ping_stats_avg_p95_max_1195",
+	"remote_client_reports_felt_delay_1195",
+	"online_ping_readout_mirrors_to_joiner_1195",
+	"match_end_logs_ping_stats_1195",
 	"round_countdown_holds_fighters_until_go_1197",
 ]
 const ANGLE_TOLERANCE: float = 0.01
@@ -4339,8 +4347,24 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_hill_never_over_a_pit_1187()
 		"weapon_starts_round_neutral_after_held_aim_1185":
 			return await _scenario_weapon_starts_round_neutral_after_held_aim_1185()
+		"lobby_team_switch_host_1199":
+			return await _scenario_lobby_team_switch_host_1199()
+		"lobby_team_switch_joiner_1199":
+			return await _scenario_lobby_team_switch_joiner_1199()
+		"lobby_teams_uneven_note_1199":
+			return await _scenario_lobby_teams_uneven_note_1199()
 		"koth_hill_radius_scales_with_stage_1198":
 			return await _scenario_koth_hill_radius_scales_with_stage_1198()
+		"spawn_protection_ghosts_fighters_1196":
+			return await _scenario_spawn_protection_ghosts_fighters_1196()
+		"online_ping_stats_avg_p95_max_1195":
+			return await _scenario_online_ping_stats_avg_p95_max_1195()
+		"remote_client_reports_felt_delay_1195":
+			return await _scenario_remote_client_reports_felt_delay_1195()
+		"online_ping_readout_mirrors_to_joiner_1195":
+			return await _scenario_online_ping_readout_mirrors_to_joiner_1195()
+		"match_end_logs_ping_stats_1195":
+			return await _scenario_match_end_logs_ping_stats_1195()
 		"round_countdown_holds_fighters_until_go_1197":
 			return await _scenario_round_countdown_holds_fighters_until_go_1197()
 		_:
@@ -18764,6 +18788,8 @@ func _scenario_round_modifier_meteor_shower_hits_and_undoes() -> Array[String]:
 	var loop: Dictionary = _new_modifier_round("")
 	var players: Array[RigidBody2D] = loop["players"]
 	var round_manager: Node = loop["round_manager"]
+	# Timed for the 1 s protection it was written for; #1196 made 3 s the default.
+	round_manager.spawn_protection_sec = 1.0
 	var tps: float = float(Engine.physics_ticks_per_second)
 	var extra: Array[String] = []
 	var measure := func(_loop: Dictionary, instance: Node2D) -> float:
@@ -26208,7 +26234,8 @@ func _scenario_teams_ffa_unchanged_when_off() -> Array[String]:
 	if not rings.is_empty() or outline != Color(0.0, 0.0, 0.0, 1.0) or rm.name_tag(0).get_theme_constant("outline_size") != 6:
 		failures.append("free-for-all name tags had %d rings, outline %s" % [rings.size(), outline])
 	players[1].freeze = true
-	# Past spawn protection (#114), which would zero any hit.
+	# Past spawn protection (#114), which would zero any hit, on either side (#1196).
+	players[0].spawn_protected = false
 	players[1].spawn_protected = false
 	players[0]._land_strike(players[1], HIT_CLEAN_SPEED)
 	if players[1].damage <= 0.0:
@@ -37243,15 +37270,20 @@ func _scenario_soccer_stuck_ball(expect_reset: bool) -> Array[String]:
 	for player: RigidBody2D in rig["players"]:
 		player.teleport_to(centre + Vector2(0.0, -40.0) if expect_reset else far + Vector2(0.0, -40.0))
 		player.linear_velocity = Vector2.ZERO
-	# Keep the fighters parked where we put them.
+	# Keep the fighters parked where we put them. Whether the ball was ever put
+	# back at the centre is watched every tick: once reset it falls from the spawn
+	# and can roll on, so where it lies at the end depends on timing.
 	var elapsed: float = 0.0
+	var moved: bool = false
 	while elapsed < 9.0:
-		await _await_ticks(30)
+		for i in 30:
+			await physics_frame
+			if mode.ball != null and mode.ball.global_position.distance_to(centre) < 100.0:
+				moved = true
 		elapsed += 0.5
 		for player: RigidBody2D in rig["players"]:
 			player.teleport_to(centre + Vector2(0.0, -40.0) if expect_reset else far + Vector2(0.0, -40.0))
 			player.linear_velocity = Vector2.ZERO
-	var moved: bool = mode.ball.global_position.distance_to(centre) < 100.0
 	if expect_reset and not moved:
 		failures.append("the stuck ball never returned to the centre (at %s, centre %s)" % [mode.ball.global_position, centre])
 	if not expect_reset and moved:
@@ -61238,6 +61270,151 @@ func _scenario_weapon_starts_round_neutral_after_held_aim_1185() -> Array[String
 	await _teardown(rig["stage"])
 	return failures
 
+## #1199: the lobby's player card carries a team switch in a Teams lobby. On the
+## host screen a click moves any human seat to the other team (the same pick its
+## phone's Red / Blue buttons send), a gamepad's X moves its own seat, a bot or a
+## free-for-all card has none, and a seat that never picks stays on auto-balance.
+func _scenario_lobby_team_switch_host_1199() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		await _join_phone(peer, "team-switch-%d" % i, joined)
+		joined.append(peer)
+	var screen: Node = rm._lobby_screen
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	# A free-for-all card has no switch.
+	if screen._players.card(1) != null and screen._players.card(1).team_switch() != null:
+		failures.append("a free-for-all card shows a team switch")
+	joined[0].send_text(JSON.stringify({"t": "mode", "v": "teams"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS * 2)
+	var card0: Control = screen._players.card(0)
+	var card1: Control = screen._players.card(1)
+	if card0 == null or card1 == null or card0.team_switch() == null or card1.team_switch() == null:
+		failures.append("the Teams lobby cards show no team switch")
+		await _close_phones(joined)
+		await _teardown(main)
+		return failures
+	if server.slot_team_pick(0) != -1 or server.slot_team_pick(1) != -1:
+		failures.append("nobody picked, yet the picks read %d / %d (auto-balance is the default)" % [server.slot_team_pick(0), server.slot_team_pick(1)])
+	var teams_script: GDScript = load("res://scripts/Teams.gd")
+	if card1.team_switch().text != TranslationServer.translate("LOBBY_TEAM_SWITCH") % teams_script.team_name(0):
+		failures.append("slot 1's switch reads '%s', expected a move to Red" % card1.team_switch().text)
+	# Pressing slot 1's switch (Blue -> Red) leaves both on Red: Start must wait for a second team.
+	card1.team_switch().pressed.emit()
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS * 2)
+	if server.slot_team_pick(1) != 0:
+		failures.append("the switch left slot 1's pick at %d, expected Red (0)" % server.slot_team_pick(1))
+	if server.slot_team_pick(0) != -1:
+		failures.append("moving slot 1 changed slot 0's pick to %d" % server.slot_team_pick(0))
+	card0 = screen._players.card(0)
+	if card0.team_switch() == null or card0.team_switch().text != TranslationServer.translate("LOBBY_TEAM_SWITCH") % teams_script.team_name(0):
+		failures.append("slot 0 auto-balanced onto Blue should be offered Red, got '%s'" % (card0.team_switch().text if card0.team_switch() != null else "no switch"))
+	# The same pick comes in through a pad's X and through the phone's own message.
+	server.toggle_slot_team(0)
+	if server.slot_team_pick(0) != 0:
+		failures.append("toggle_slot_team moved slot 0 to pick %d, expected Red (0)" % server.slot_team_pick(0))
+	joined[1].send_text(JSON.stringify({"t": "team", "v": -1}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.slot_team_pick(1) != -1:
+		failures.append("a phone's Auto no longer clears the pick (%d)" % server.slot_team_pick(1))
+	# A mid-match change is refused.
+	server.set_lobby_state({"phase": "playing", "teams": true, "players": [{"slot": 0, "team": 0}]})
+	if server.set_slot_team_pick(0, 1) or server.toggle_slot_team(0) or server.slot_team_pick(0) != 0:
+		failures.append("a team pick was taken mid-match")
+	await _close_phones(joined)
+	await _teardown(main)
+	return failures
+
+## #1199: an Online joiner's lobby draws the same cards, with the switch on its own
+## card only; pressing it (or X on its gamepad) asks the host for the other team.
+func _scenario_lobby_team_switch_joiner_1199() -> Array[String]:
+	var failures: Array[String] = []
+	var frame: Dictionary = _classic_frame_1132([
+		{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00", "team": 0, "pick": -1},
+		{"slot": 1, "ready": false, "name": "Me", "color": "56b4e9", "team": 1, "pick": -1}])
+	frame["teams"] = true
+	var client: Node = await _joiner_1132(frame)
+	var screen: Node = client._lobby.screen
+	var own: Control = screen._players.card(1)
+	var other: Control = screen._players.card(0)
+	if own == null or other == null:
+		failures.append("the joiner's lobby is missing a card")
+	else:
+		if own.team_switch() == null:
+			failures.append("the joiner's own card has no team switch")
+		if other.team_switch() != null:
+			failures.append("the joiner can switch another player's team")
+		var picked: Array[int] = []
+		client._lobby.team_picked.connect(func(team: int) -> void: picked.append(team))
+		if own.team_switch() != null:
+			own.team_switch().pressed.emit()
+		if picked != [0]:
+			failures.append("the joiner's switch asked for %s, expected [0] (Red)" % [picked])
+	if not client._lobby_toggle_team():
+		failures.append("X on the joiner's pad does not move it to the other team")
+	frame["phase"] = "playing"
+	client._on_host_text(JSON.stringify(frame))
+	if client._lobby_toggle_team():
+		failures.append("the joiner could switch teams mid-match")
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## #1199: uneven teams never stop Start: the lobby only notes it. A team with nobody
+## on it still holds Start back, as before (nothing to play against).
+func _scenario_lobby_teams_uneven_note_1199() -> Array[String]:
+	var failures: Array[String] = []
+	var screen: CanvasLayer = (load("res://scripts/LobbyScreen.gd") as GDScript).new()
+	get_root().add_child(screen)
+	screen.build_panels()
+	var note: String = TranslationServer.translate("LOBBY_TEAMS_UNEVEN")
+	var empty_note: String = TranslationServer.translate("LOBBY_BOTH_TEAMS_NEED_PLAYER")
+	var entry := func(slot: int, team: int) -> Dictionary:
+		return {"slot": slot, "name": "P%d" % slot, "ready": true, "team": team, "pick": -1}
+	var base: Dictionary = _classic_frame_1132([])
+	base["teams"] = true
+	base["players"] = [entry.call(0, 0), entry.call(1, 0), entry.call(2, 1)]
+	screen.refresh_lobby(base, 2, null)
+	if not screen._lobby_status.text.contains(note):
+		failures.append("2 v 1 shows no uneven note ('%s')" % screen._lobby_status.text)
+	if not screen._host._start_ready:
+		failures.append("uneven teams switched Start off")
+	base["players"] = [entry.call(0, 0), entry.call(1, 1)]
+	screen.refresh_lobby(base, 2, null)
+	if screen._lobby_status.text.contains(note) or not screen._host._start_ready:
+		failures.append("1 v 1 shows the uneven note or has Start off ('%s')" % screen._lobby_status.text)
+	base["players"] = [entry.call(0, 0), entry.call(1, 0), entry.call(2, 0)]
+	screen.refresh_lobby(base, 2, null)
+	if screen._host._start_ready or not screen._lobby_status.text.contains(empty_note):
+		failures.append("3 v 0 let Start light or lost the empty-team message ('%s')" % screen._lobby_status.text)
+	base["teams"] = false
+	base["players"] = [entry.call(0, -1), entry.call(1, -1), entry.call(2, -1)]
+	screen.refresh_lobby(base, 2, null)
+	if screen._lobby_status.text.contains(note):
+		failures.append("a free-for-all lobby shows the uneven note")
+	# The note exists in every language the game ships.
+	var was_locale: String = TranslationServer.get_locale()
+	for locale: String in ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]:
+		TranslationServer.set_locale(locale)
+		for key: String in ["LOBBY_TEAMS_UNEVEN", "LOBBY_TEAM_SWITCH"]:
+			var text: String = TranslationServer.translate(key)
+			if text == key or text.is_empty():
+				failures.append("%s: %s is untranslated" % [locale, key])
+	TranslationServer.set_locale(was_locale)
+	screen.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
 ## #1198: the King of the Hill circle grows with the stage's view width, never
 ## below the old 110 px; the capture test and the Online client's net state use
 ## the same radius, and the hill still stands on floor (#1187).
@@ -61275,6 +61452,433 @@ func _scenario_koth_hill_radius_scales_with_stage_1198() -> Array[String]:
 		if not inside.has(0) or inside.has(1):
 			failures.append("%s: capture test at radius %.0f counted %s" % [path, want, inside])
 		await _teardown(rig["stage"], false)
+	_scenario_completed = true
+	return failures
+## #1196: spawn protection lasts 3 s, and a protected fighter is a ghost to the
+## others. Two fighters spawned overlapping each take a turn swinging their weapon
+## through the other, which stays put and unhurt; once it ends they stay ghosted
+## until they come apart, and after that they collide again: one thrown at the
+## other is stopped by it instead of passing through.
+func _scenario_spawn_protection_ghosts_fighters_1196() -> Array[String]:
+	var failures: Array[String] = []
+	var rm_default: Node = RoundManagerType.new()
+	if not is_equal_approx(float(rm_default.spawn_protection_sec), 3.0):
+		failures.append("spawn protection lasts %.1f s by default, want 3" % rm_default.spawn_protection_sec)
+	rm_default.free()
+	var stage: Node2D = _new_stage()
+	var p0: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	var p1: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND + Vector2(12, 0))
+	# As RoundManager does at round start: placed, then protected.
+	p0.start_round(NEW_WEAPON_FLOOR_STAND)
+	p1.start_round(NEW_WEAPON_FLOOR_STAND + Vector2(12, 0))
+	p0.spawn_protected = true
+	p1.spawn_protected = true
+	await _await_ticks(2)
+	# A swing moves its own fighter (that is how fighters get about), so each
+	# takes a turn swinging through the other, which stands idle: the idle one
+	# is neither shoved nor hurt. Both turns, with a settle
+	# before each, fit inside the 3 s.
+	var turn_ticks: int = int(1.0 * Engine.physics_ticks_per_second)
+	for turn in 2:
+		var swinger: RigidBody2D = p0 if turn == 0 else p1
+		var idle: RigidBody2D = p1 if turn == 0 else p0
+		var side: float = 1.0 if turn == 0 else -1.0
+		# The last turn's swinger comes to rest before it stands idle.
+		idle.set_input_vector(Vector2.ZERO)
+		await _await_ticks(20)
+		var idle_x: float = idle.global_position.x
+		for i in turn_ticks:
+			# Through the idle fighter's body and up over it, never down into
+			# the floor, where a head levering on terrain moves its own fighter.
+			swinger.set_input_vector(Vector2(0.95 * side, -0.15) if (i / 15) % 2 == 0 else Vector2(0.6 * side, -0.7))
+			idle.set_input_vector(Vector2.ZERO)
+			await physics_frame
+		swinger.set_input_vector(Vector2.ZERO)
+		var shoved: float = absf(idle.global_position.x - idle_x)
+		print("      turn %d: %s swung through %s, which moved %.1f px" % [turn, swinger.name, idle.name, shoved])
+		if shoved > 4.0:
+			failures.append("%s's swing shoved protected %s %.1f px" % [swinger.name, idle.name, shoved])
+		if not idle.spawn_protected:
+			failures.append("setup: protection was off during turn %d" % turn)
+	if p0.damage > 0.0 or p1.damage > 0.0:
+		failures.append("protected fighters took damage: %.1f and %.1f" % [p0.damage, p1.damage])
+	if not p0.alive or not p1.alive:
+		failures.append("a protected fighter was eliminated")
+	# Protection ends with them overlapping (stacked again, still protected,
+	# as a 3 s spawn can leave them): no pop apart.
+	p0.set_input_vector(Vector2.ZERO)
+	p1.set_input_vector(Vector2.ZERO)
+	p0.start_round(NEW_WEAPON_FLOOR_STAND)
+	p1.start_round(NEW_WEAPON_FLOOR_STAND + Vector2(12, 0))
+	await _await_ticks(20)
+	p0.spawn_protected = false
+	p1.spawn_protected = false
+	var x0: float = p0.global_position.x
+	var x1: float = p1.global_position.x
+	await _await_ticks(20)
+	if absf(p0.global_position.x - x0) > 16.0 or absf(p1.global_position.x - x1) > 16.0:
+		failures.append("protection ending on an overlap popped them apart (%.1f, %.1f px)" % [
+			absf(p0.global_position.x - x0), absf(p1.global_position.x - x1)])
+	# Apart, the ghosting clears and they collide again.
+	p1.start_round(NEW_WEAPON_FLOOR_STAND + Vector2(260, 0))
+	if not await _await_condition(func() -> bool: return p0._ghosted.is_empty() and p1._ghosted.is_empty(), 1000):
+		failures.append("the pair stayed ghosted after coming apart")
+	if p0.get_collision_exceptions().has(p1) or p1.get_collision_exceptions().has(p0):
+		failures.append("a body collision exception outlived the protection")
+	await _await_ticks(10)
+	for i in 40:
+		p1.linear_velocity = Vector2(-500.0, p1.linear_velocity.y)
+		await physics_frame
+		if p1.global_position.x < p0.global_position.x:
+			break
+	if p1.global_position.x < p0.global_position.x:
+		failures.append("after protection a fighter thrown at another passed through it")
+	# A protected fighter's shot neither hurts nor shoves anyone; an unprotected
+	# one's still does (the control).
+	for protected_shooter: bool in [true, false]:
+		p0.spawn_protected = protected_shooter
+		p1.spawn_protected = false
+		p1.damage = 0.0
+		p1.linear_velocity = Vector2.ZERO
+		await _await_ticks(30)  # at rest after the throw above
+		var shot: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+		shot.shooter = p0
+		shot.direction = Vector2.LEFT
+		shot.damage = 10.0
+		shot.knockback = 600.0
+		stage.add_child(shot)
+		shot.global_position = p1.global_position + Vector2(30, 0)
+		var before_x: float = p1.global_position.x
+		shot._hit(p1, p1.global_position)
+		await _await_ticks(4)  # an impulse shows from the next physics step
+		var kick: float = absf(p1.global_position.x - before_x)
+		var label: String = "protected" if protected_shooter else "unprotected"
+		if protected_shooter and (p1.damage > 0.0 or kick > 1.0):
+			failures.append("a protected shooter's bullet still hit: damage %.1f, pushed %.1f px" % [p1.damage, kick])
+		if not protected_shooter and (p1.damage <= 0.0 or kick < 3.0):
+			failures.append("control: an unprotected shooter's bullet did nothing (damage %.1f, pushed %.1f px)" % [p1.damage, kick])
+		print("      %s shooter's bullet: damage %.1f, pushed %.1f px in 4 ticks" % [label, p1.damage, kick])
+		if is_instance_valid(shot):
+			shot.queue_free()
+	p0.spawn_protected = false
+	await _teardown(stage)
+	return failures
+# --- Issue #1195: Online ping readout, felt delay and match statistics ------------
+## Answers the next ping the host sends `remote` after holding it `hold_msec`,
+## with `extra` merged into the pong. Returns false when no ping came.
+func _ping_answer_1195(rig: Dictionary, remote: WebSocketPeer, hold_msec: int, extra: Dictionary = {}) -> bool:
+	var ping: Dictionary = await _online_wait_239(rig, remote, "n")
+	while not ping.is_empty() and ping.get("t") != "ping":
+		ping = await _online_wait_239(rig, remote, "n")
+	if ping.is_empty():
+		return false
+	if hold_msec > 0:
+		await _wait_for_239(func() -> bool: return false, hold_msec)
+	var pong: Dictionary = {"t": "pong", "n": ping["n"]}
+	pong.merge(extra, true)
+	_online_send_239(remote, 1, JSON.stringify(pong).to_utf8_buffer())
+	await _online_frames_239(5)
+	return true
+func _scenario_online_ping_stats_avg_p95_max_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(3, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "ping-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	if not server.slot_ping_stats(slot).is_empty():
+		failures.append("statistics before any pong: %s" % server.slot_ping_stats(slot))
+	for hold: int in [0, 100, 300]:
+		if not await _ping_answer_1195(rig, remote, hold):
+			failures.append("no ping reached the remote seat (hold %d)" % hold)
+	var stats: Dictionary = server.slot_ping_stats(slot)
+	print("      stats after pongs held 0/100/300 ms: %s" % stats)
+	if int(stats.get("n", 0)) != 3:
+		failures.append("n = %s, expected 3" % stats.get("n"))
+	if int(stats.get("max", -1)) < 300 or int(stats.get("p95", -1)) < 300:
+		failures.append("max %s / p95 %s, expected both >= 300" % [stats.get("max"), stats.get("p95")])
+	if int(stats.get("avg", -1)) < 120 or int(stats.get("avg", -1)) > 280:
+		failures.append("avg %s, expected about 133..250" % stats.get("avg"))
+	if int(stats.get("felt", 0)) != -1 or stats.get("share") != false:
+		failures.append("an old-style pong left felt %s / share %s, expected -1 / false" % [stats.get("felt"), stats.get("share")])
+	# Hostile or junk felt values never reach the statistics.
+	await _ping_answer_1195(rig, remote, 0, {"felt": 1.0e9, "share": "yes"})
+	if int(server.slot_ping_stats(slot).get("felt", 0)) != -1 or server.slot_ping_stats(slot).get("share") != false:
+		failures.append("felt 1e9 / share 'yes' gave %s" % server.slot_ping_stats(slot))
+	await _ping_answer_1195(rig, remote, 0, {"felt": "x"})
+	if int(server.slot_ping_stats(slot).get("felt", 0)) != -1:
+		failures.append("felt 'x' gave %s" % server.slot_ping_stats(slot).get("felt"))
+	await _ping_answer_1195(rig, remote, 0, {"felt": 123, "share": true})
+	if int(server.slot_ping_stats(slot).get("felt", 0)) != 123 or server.slot_ping_stats(slot).get("share") != true:
+		failures.append("felt 123 / share true gave %s" % server.slot_ping_stats(slot))
+	for key: String in ["avg", "p95", "max", "n", "felt"]:
+		var v: int = int(server.slot_ping_stats(slot).get(key, -2))
+		if v < -1 or v > ControllerServerScript.PING_STAT_MAX_MSEC:
+			failures.append("%s = %d is out of -1..60000" % [key, v])
+	# Bots, the host PC's seat and an empty slot have no statistics.
+	for bot: int in server.virtual_slots():
+		if not server.slot_ping_stats(bot).is_empty():
+			failures.append("bot slot %d has statistics" % bot)
+	if server._set_host_pc_seat(true) and server.host_pc_slot() >= 0:
+		if not server.slot_ping_stats(server.host_pc_slot()).is_empty():
+			failures.append("the host PC seat has statistics")
+		server._set_host_pc_seat(false)
+	if not server.slot_ping_stats(-1).is_empty() or not server.slot_ping_stats(99).is_empty():
+		failures.append("an out-of-range slot has statistics")
+	server.reset_ping_stats()
+	if not server.slot_ping_stats(slot).is_empty() or not server.match_ping_stats().is_empty():
+		failures.append("reset_ping_stats left %s / %s" % [server.slot_ping_stats(slot), server.match_ping_stats()])
+	# A seat that leaves mid-match stays in the match's list.
+	await _ping_answer_1195(rig, remote, 0)
+	remote.close()
+	if not await _wait_for_239(func() -> bool: return server.slot_ping_stats(slot).is_empty(), 5000):
+		failures.append("the remote's seat was never unbound")
+	var listed: Array = server.match_ping_stats()
+	print("      after the seat left: %s" % [listed])
+	if listed.size() != 1 or int(listed[0].get("n", 0)) != 1:
+		failures.append("match_ping_stats after the seat left: %s, expected one entry with n=1" % [listed])
+	await _rc_close_241(rig)
+	return failures
+func _scenario_remote_client_reports_felt_delay_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	if client.felt_msec() != -1:
+		failures.append("a felt delay of %d before any input" % client.felt_msec())
+	# Rest (wall clock: the probe times wall ms), then one sharp sweep away from
+	# where the arm rests.
+	var rest_until: int = Time.get_ticks_msec() + 1500
+	while Time.get_ticks_msec() < rest_until:
+		await process_frame
+	client.mouse_motion(Vector2.from_angle(client._felt_drawn_angle + PI) * 4000.0)
+	if not await _wait_for_239(func() -> bool: return client.felt_msec() >= 0, 4000):
+		failures.append("no felt delay after a sweep from rest (drawn angle %s)" % client._felt_drawn_angle)
+		await _rc_close_241(rig)
+		return failures
+	var felt: int = client.felt_msec()
+	var floor_msec: int = RemoteClientScript241.INTERP_MSEC - int(1000.0 / ControllerServerScript.SNAPSHOT_HZ) - 5
+	print("      felt delay on loopback: %d ms (floor %d: the drawn pose is INTERP_MSEC behind)" % [felt, floor_msec])
+	if felt < floor_msec:
+		failures.append("felt %d ms is under %d: the probe is not watching the drawn, interpolated pose" % [felt, floor_msec])
+	# The next pong carries it to the host.
+	if not await _wait_for_239(func() -> bool: return int(server.slot_ping_stats(client.slot).get("felt", -1)) == client.felt_msec(), 3000):
+		failures.append("the host's felt for the seat is %s, the client's %d" % [server.slot_ping_stats(client.slot).get("felt"), client.felt_msec()])
+	await _rc_close_241(rig)
+	return failures
+func _scenario_online_ping_readout_mirrors_to_joiner_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var readout := preload("res://scripts/PingReadout.gd")
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.ping_interval_msec = 200
+	rm.ping_readout_interval_msec = 200
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures, "Pinger") or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var ui_root: Node = rm.get_node(rm.score_label_path).get_parent()
+	# The host leg needs the relay's echo answered, and the line the seat's first pong.
+	var ready: bool = await _wait_for_239(func() -> bool:
+		var l: Label = ui_root.get_node_or_null(readout.NODE_NAME) as Label
+		return l != null and l.visible and l.text.contains("Pinger") and server.relay_rtt_msec >= 0 \
+			and l.text.contains(tr("HOST_LEG_MS") % server.relay_rtt_msec), 6000)
+	var host_label: Label = ui_root.get_node_or_null(readout.NODE_NAME) as Label
+	if not ready or host_label == null:
+		failures.append("the host's readout never showed the joiner and the host leg (%s, leg %d)" % [host_label.text if host_label != null else "missing", server.relay_rtt_msec])
+		await _rc_close_241(rig)
+		return failures
+	rm.ping_readout_interval_msec = 1000000 # hold the text still while the mirror catches up
+	await process_frame
+	print("      host readout: '%s'" % host_label.text.replace("\n", " | "))
+	var ping: int = server.slot_ping_msec(client.slot)
+	if not host_label.text.contains(readout.line("Pinger", ping, int(server.slot_ping_stats(client.slot).get("felt", -1)))):
+		failures.append("the readout '%s' lacks the seat's line for ping %d" % [host_label.text, ping])
+	if host_label.get_theme_color("font_color") != LobbyScreenScript230.ping_color(ping):
+		failures.append("readout colour %s, expected the lobby's colour for %d ms" % [host_label.get_theme_color("font_color"), ping])
+	var view_w: float = host_label.get_viewport_rect().size.x
+	var right: float = host_label.get_global_rect().end.x
+	if absf(view_w - right) > 40.0:
+		failures.append("the readout's right edge is at %.0f, the screen's at %.0f" % [right, view_w])
+	var joiner_root: CanvasLayer = client.host_hud()
+	var joiner_label: Label = joiner_root.get_node_or_null(readout.NODE_NAME) as Label if joiner_root != null else null
+	if joiner_label == null:
+		failures.append("the joiner's HUD has no readout label")
+		await _rc_close_241(rig)
+		return failures
+	if not await _wait_for_239(func() -> bool: return joiner_label.text == host_label.text, 4000):
+		failures.append("the joiner's readout '%s' never matched the host's '%s'" % [joiner_label.text, host_label.text])
+	await process_frame
+	if joiner_label.get_theme_color("font_color") != host_label.get_theme_color("font_color"):
+		failures.append("joiner colour %s, host %s" % [joiner_label.get_theme_color("font_color"), host_label.get_theme_color("font_color")])
+	if joiner_label.visible != host_label.visible or not joiner_root.visible:
+		failures.append("joiner visible %s (HUD %s), host %s" % [joiner_label.visible, joiner_root.visible, host_label.visible])
+	if joiner_label.position != host_label.position or joiner_label.size != host_label.size:
+		failures.append("joiner at %s size %s, host at %s size %s" % [joiner_label.position, joiner_label.size, host_label.position, host_label.size])
+	for side: String in ["anchor_left", "anchor_top", "anchor_right", "anchor_bottom"]:
+		if joiner_label.get(side) != host_label.get(side):
+			failures.append("%s: joiner %s, host %s" % [side, joiner_label.get(side), host_label.get(side)])
+	if joiner_label.get_theme_font_size("font_size") != host_label.get_theme_font_size("font_size") \
+			or not joiner_label.has_theme_font_size_override("font_size"):
+		failures.append("font size: joiner %d, host %d" % [joiner_label.get_theme_font_size("font_size"), host_label.get_theme_font_size("font_size")])
+	await _rc_close_241(rig)
+	# Local: no remote seat, so no readout.
+	var built: Dictionary = await _snap_main_251(2)
+	var local_rm: Node = built["rm"]
+	local_rm.ping_readout_interval_msec = 100
+	await _await_condition(func() -> bool: return int(local_rm.get("_state")) == 1, 8000)
+	await _wait_for_239(func() -> bool: return false, 500)
+	var local_label: Label = local_rm.get_node(local_rm.score_label_path).get_parent().get_node_or_null(readout.NODE_NAME) as Label
+	if int(local_rm.get("_state")) != 1:
+		failures.append("the Local round never started (state %d)" % int(local_rm.get("_state")))
+	if local_label != null and local_label.visible:
+		failures.append("a Local match shows the ping readout: '%s'" % local_label.text)
+	await _teardown(built["main"])
+	return failures
+## The last JSON line of `path`, or {}.
+func _last_json_line_1195(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var lines: PackedStringArray = FileAccess.get_file_as_string(path).strip_edges().split("\n")
+	var parsed: Variant = JSON.parse_string(lines[lines.size() - 1]) if lines.size() > 0 else null
+	return parsed if parsed is Dictionary else {}
+## The match-end ping list: six numeric fields and nothing that names a seat.
+func _check_ping_list_1195(failures: Array[String], what: String, list: Variant, want_n: int) -> void:
+	if not list is Array or (list as Array).size() != want_n:
+		failures.append("%s: ping list %s, expected %d entries" % [what, list, want_n])
+		return
+	for entry: Variant in list:
+		if not entry is Dictionary:
+			failures.append("%s: entry %s is not an object" % [what, entry])
+			continue
+		var keys: Array = (entry as Dictionary).keys()
+		keys.sort()
+		if keys != ["avg", "felt", "host_leg", "max", "n", "p95"]:
+			failures.append("%s: entry fields %s, expected exactly avg/p95/max/n/felt/host_leg" % [what, keys])
+		for key: Variant in keys:
+			var v: Variant = entry[key]
+			if not (v is int or v is float) or float(v) < -1.0 or float(v) > 60000.0:
+				failures.append("%s: %s = %s is not a number in -1..60000" % [what, key, v])
+func _scenario_match_end_logs_ping_stats_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = HostSettingsScript372.shared()
+	var was: Array = [host.share_stats, host.telemetry_notice_seen, host.persist]
+	host.persist = false
+	host.share_stats = true
+	host.telemetry_notice_seen = true
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		host.share_stats = was[0]
+		host.telemetry_notice_seen = was[1]
+		host.persist = was[2]
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.ping_interval_msec = 200
+	var log_path: String = "user://balance_stats_scenario_1195.jsonl"
+	DirAccess.remove_absolute(log_path)
+	rm.balance_log_path = log_path
+	var records: Array = []
+	rm.telemetry_sink = func(record: Dictionary) -> void: records.append(record)
+	var joiner: RefCounted = HostSettingsScript372.new()
+	joiner.persist = false
+	joiner.share_stats = true
+	joiner.telemetry_notice_seen = true
+	var client: Node = await _rc_client_241(rig)
+	client.share_settings = joiner
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		host.share_stats = was[0]
+		host.telemetry_notice_seen = was[1]
+		host.persist = was[2]
+		return failures
+	rm.match_stats().record_hit(0, 1, 30.0, 0, "pickaxe", true) # a real hit, so the match has a record
+	var slot: int = client.slot
+	if not await _wait_for_239(func() -> bool:
+		var s: Dictionary = server.slot_ping_stats(slot)
+		return int(s.get("n", 0)) >= 2 and s.get("share") == true and server.relay_rtt_msec >= 0, 6000):
+		failures.append("no sharing pongs or no host leg: %s, leg %d" % [server.slot_ping_stats(slot), server.relay_rtt_msec])
+	# Sharing joiner: the log and the record both carry the seat.
+	rm._write_balance_log()
+	rm.send_telemetry()
+	var line: Dictionary = _last_json_line_1195(log_path)
+	print("      log line ping: %s" % [line.get("ping")])
+	_check_ping_list_1195(failures, "balance log", line.get("ping"), 1)
+	if records.size() != 1:
+		failures.append("expected one telemetry record, got %d" % records.size())
+	else:
+		var record: Dictionary = records[0]
+		print("      record ping: %s" % [record.get("ping")])
+		_check_ping_list_1195(failures, "telemetry", record.get("ping"), 1)
+		if record.get("ping") is Array and not (record["ping"] as Array).is_empty() and int(record["ping"][0]["host_leg"]) < 0:
+			failures.append("the record's host leg is %s with the relay answering echoes" % record["ping"][0]["host_leg"])
+		var cleaned: Dictionary = RelayScript238.clean_stats_record(JSON.parse_string(JSON.stringify(record)))
+		if cleaned.is_empty():
+			failures.append("the relay rejected the record the host built: %s" % record)
+		else:
+			_check_ping_list_1195(failures, "relay-cleaned", cleaned.get("ping"), 1)
+	# A joiner not sharing (sharing off, or the notice not yet seen): kept in the
+	# local log, left out of the telemetry.
+	for case: Array in [[false, true], [true, false]]:
+		joiner.share_stats = case[0]
+		joiner.telemetry_notice_seen = case[1]
+		if not await _wait_for_239(func() -> bool: return server.slot_ping_stats(slot).get("share") == false, 3000):
+			failures.append("share %s / notice %s: the pong still said share" % case)
+		records.clear()
+		rm._write_balance_log()
+		rm.send_telemetry()
+		_check_ping_list_1195(failures, "log, share %s / notice %s" % case, _last_json_line_1195(log_path).get("ping"), 1)
+		if records.size() != 1 or (records[0] as Dictionary).has("ping"):
+			failures.append("share %s / notice %s: telemetry %s, expected one record without ping" % [case[0], case[1], records])
+	await _rc_close_241(rig)
+	DirAccess.remove_absolute(log_path)
+	host.share_stats = was[0]
+	host.telemetry_notice_seen = was[1]
+	host.persist = was[2]
+	# Nine seats (rejoins): the record keeps the eight with the most samples.
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	for i in 9:
+		stats.ping.append({"avg": 50 + i, "p95": 60, "max": 70, "n": i + 1, "felt": -1, "host_leg": 20, "share": true})
+	var big: Dictionary = StatsSenderScript372.build_record(stats, "classic", ["Flatlands"], "ffa", 60, [], true, 1)
+	_check_ping_list_1195(failures, "nine seats", big.get("ping"), 8)
+	if big.get("ping") is Array and (big["ping"] as Array).size() == 8:
+		var smallest: int = 1000
+		for entry: Dictionary in big["ping"]:
+			smallest = mini(smallest, int(entry["n"]))
+		if smallest != 2:
+			failures.append("the eight kept are not those with the most samples (smallest n %d)" % smallest)
+	if RelayScript238.clean_stats_record(JSON.parse_string(JSON.stringify(big))).is_empty():
+		failures.append("the relay rejected an eight-entry record")
+	var nine: Dictionary = big.duplicate(true)
+	nine["ping"].append({"avg": 1, "p95": 1, "max": 1, "n": 1, "felt": 1, "host_leg": 1})
+	if not RelayScript238.clean_stats_record(nine).is_empty():
+		failures.append("the relay kept a nine-entry ping list")
+	var junk: Dictionary = big.duplicate(true)
+	junk["ping"][0]["avg"] = "x"
+	if not RelayScript238.clean_stats_record(junk).is_empty():
+		failures.append("the relay kept a non-numeric avg")
+	var huge: Dictionary = big.duplicate(true)
+	huge["ping"][0]["max"] = 1.0e9
+	if not RelayScript238.clean_stats_record(huge).is_empty():
+		failures.append("the relay kept a max of 1e9")
 	_scenario_completed = true
 	return failures
 ## #1197: a round opens with "3, 2, 1, GO" after the stage title card. Until GO

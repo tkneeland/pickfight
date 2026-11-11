@@ -1,0 +1,22 @@
+# Required status check on main: a PR merges only after a reviewer pass has
+# labelled it review-passed (autotriage rule 12). pf-automerge.sh and
+# pf-ship.sh already wait for the label; this makes GitHub refuse any other
+# merge path too (owner, 2026-11-10). Re-runs whenever labels change.
+name: review-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  review-passed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require review-passed and no review-blocked
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+        run: |
+          echo "labels: $LABELS"
+          case " $LABELS " in *" review-blocked "*) echo "::error::review-blocked: fix the findings and re-check (rule 12)"; exit 1;; esac
+          case " $LABELS " in *" review-passed "*) exit 0;; esac
+          echo "::error::no review-passed label yet: the reviewer pass must run first (rule 12)"; exit 1

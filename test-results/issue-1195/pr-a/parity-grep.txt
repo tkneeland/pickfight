@@ -1,0 +1,14 @@
+$ git grep -n "PingReadout" -- scripts
+scripts/RemoteClient.gd:47:const PingReadoutScript: GDScript = preload("res://scripts/PingReadout.gd")
+scripts/RemoteClient.gd:1802:	PingReadoutScript.make(_host_hud)
+scripts/RoundManager.gd:3049:# delay) and the host's own leg to the relay. `PingReadout.make` builds the same
+scripts/RoundManager.gd:3054:const PingReadoutScript := preload("res://scripts/PingReadout.gd")
+scripts/RoundManager.gd:3075:		lines.append(PingReadoutScript.line(_slot_name(slot), ping, felt))
+scripts/RoundManager.gd:3078:	if not shown and ui_root.get_node_or_null(PingReadoutScript.NODE_NAME) == null:
+scripts/RoundManager.gd:3080:	var label: Label = PingReadoutScript.make(ui_root)
+scripts/RoundManager.gd:3086:		lines.append(PingReadoutScript.host_leg_line(leg))
+scripts/RoundManager.gd:3088:	label.add_theme_color_override("font_color", PingReadoutScript.color_of(pings))
+
+V12: the readout label is built only through PingReadout.make, from RoundManager.gd
+(host) and RemoteClient.gd (joiner); the joiner's text, colour and visibility come
+from the host's hud frame (UiMirror). No second drawing path.

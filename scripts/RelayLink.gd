@@ -32,6 +32,8 @@ signal peer_joined(peer: int)
 signal peer_left(peer: int)
 ## A remote client sent an envelope: `kind` and its `payload` bytes.
 signal frame_received(peer: int, kind: int, payload: PackedByteArray)
+## The relay answered the host's {"t":"echo","n":N} (issue #1195, the host leg).
+signal echo_received(n: int)
 
 var _socket: WebSocketPeer = null
 var _state: String = STATE_OFFLINE
@@ -135,6 +137,13 @@ func drop_peer(peer: int) -> void:
 	if _socket == null or _socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 	_socket.send_text(JSON.stringify({"t": "drop", "peer": peer}))
+
+## Sends `text` to the relay itself as a control message (issue #1195: the
+## host-leg echo). Dropped while the socket is not open.
+func send_control(text: String) -> void:
+	if _socket == null or _socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	_socket.send_text(text)
 
 ## Sends `text` to relay peer `peer` as a KIND_TEXT envelope.
 func send_text_to(peer: int, text: String) -> void:
@@ -260,6 +269,10 @@ func _handle_control(text: String) -> void:
 				peer_left.emit(id)
 		"error":
 			_give_up()
+		"echo":
+			var n: Variant = msg.get("n")
+			if n is float or n is int:
+				echo_received.emit(int(n))
 
 func _handle_frame(pkt: PackedByteArray) -> void:
 	if pkt.size() < 2:

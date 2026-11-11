@@ -95,8 +95,10 @@ extends Node
 ## The pickaxe is filtered out either way.
 @export var pickup_weapons: Array[Resource] = []
 
-## Seconds of spawn protection at round start (#114). 0 turns it off.
-@export var spawn_protection_sec: float = 1.0
+## Seconds of spawn protection at round start (#114) and on a respawn; 3 s
+## since #1196, which also makes a protected fighter a ghost to the others.
+## 0 turns it off.
+@export var spawn_protection_sec: float = 3.0
 
 ## Chance, 0..1, that a round rolls a modifier. 0 switches them off.
 @export_range(0.0, 1.0) var modifier_chance: float = 0.35
@@ -306,6 +308,7 @@ func _process(_delta: float) -> void:
 	_tick_ghosts()
 	_tick_name_tags()
 	_tick_damage_bars()
+	_ping_readout_tick() # #1195
 	match _state:
 		State.LOBBY, State.COUNTDOWN, State.VICTORY:
 			_tick_lobby()
@@ -976,9 +979,10 @@ func _update_score_label() -> void:
 # --- Spawn protection (issue #114) -------------------------------------------
 #
 # For `spawn_protection_sec` after a round places the players, none of them can
-# take damage, and each blinks to show it. Knockback still applies (owner's
-# call left to us in #114; a shove at spawn is harmless, and blocking it would
-# mean reaching into Player's physics). The lava still eliminates. There is no
+# take damage, and each blinks to show it. Since #1196 (playtest: fighters were
+# shoved off the map at spawn) a protected fighter is also a ghost to the
+# others: no fighter-to-fighter collision or knockback, either way
+# (`Player._sync_spawn_ghosting()`). The lava still eliminates. There is no
 # mid-round spawn to protect: a phone that joins mid-round waits for the next
 # round (ADR-0004), and that round's start protects it with everyone else.
 
@@ -1496,6 +1500,7 @@ func _begin_match() -> void:
 	# Soccer's goals and CTF's captures are the match too (#646).
 	_match_stages.clear()
 	_match_started_msec = GameClockScript.now_msec()
+	_reset_match_ping_1195()
 	_rounds_finished = 0
 	_match_live = true
 	_match_winner_slot = -1
@@ -2238,6 +2243,7 @@ var telemetry_sink: Callable = Callable()
 ## false marks a match that ended without a winner (#643): no winner weapon, and
 ## the rounds played so far.
 func send_telemetry(completed: bool = true) -> bool:
+	_stats.set("ping", _match_ping_1195()) # #1195: the Online seats' ping statistics ride along
 	var host: RefCounted = HostSettingsScript.shared()
 	var scripted: bool = StatsSenderScript.is_scripted(get_tree(), PackedStringArray())
 	if telemetry_sink.is_valid():
@@ -2339,6 +2345,7 @@ var balance_log_path: String = "user://balance_stats.jsonl"
 
 ## The local balance log, only with stats sharing on (#609).
 func _write_balance_log(completed: bool = true) -> bool:
+	_stats.set("ping", _match_ping_1195()) # #1195: the Online seats' ping statistics ride along
 	if not HostSettingsScript.shared().share_stats:
 		return false
 	return _stats.append_line(balance_log_path, _stats.balance_log_line(int(Time.get_unix_time_from_system()), completed, _rounds_finished))
@@ -3141,3 +3148,65 @@ func _on_mode_flag_captured(_team: int, scorer: int) -> void:
 	var ach: Node = _achievements()
 	if ach != null:
 		ach.on_capture(scorer)
+
+# --- Online ping readout and match ping statistics (issue #1195) ---------------
+#
+# A small readout in the HUD's bottom right, during a round with a PC client
+# over the relay: a line per remote seat (name, round trip, the joiner's felt
+# delay) and the host's own leg to the relay. `PingReadout.make` builds the same
+# label on the joiner, and the `hud` frame's UI mirror carries its text, colour
+# and visibility (online parity). Refreshed once a second. At match end each
+# remote seat's average, p95 and max ride into the balance log and telemetry.
+
+const PingReadoutScript := preload("res://scripts/PingReadout.gd")
+var ping_readout_interval_msec: int = 1000
+var _ping_readout_next_msec: int = 0
+
+func _ping_readout_tick() -> void:
+	var now: int = Time.get_ticks_msec()
+	if now < _ping_readout_next_msec:
+		return
+	_ping_readout_next_msec = now + ping_readout_interval_msec
+	var score_label: Node = get_node_or_null(score_label_path) if not score_label_path.is_empty() else null
+	if score_label == null or score_label.get_parent() == null or _controller_server == null \
+			or not _controller_server.has_method("slot_is_online_pc"):
+		return
+	var ui_root: Node = score_label.get_parent()
+	var lines: PackedStringArray = []
+	var pings: Array = []
+	for slot: int in _roster():
+		if not _controller_server.slot_is_online_pc(slot):
+			continue
+		var ping: int = _controller_server.slot_ping_msec(slot)
+		var felt: int = int(_controller_server.slot_ping_stats(slot).get("felt", -1))
+		lines.append(PingReadoutScript.line(_slot_name(slot), ping, felt))
+		pings.append(ping)
+	var shown: bool = not lines.is_empty() and (_state == State.ROUND_ACTIVE or _state == State.ROUND_END)
+	if not shown and ui_root.get_node_or_null(PingReadoutScript.NODE_NAME) == null:
+		return # never built in a Local or Solo match
+	var label: Label = PingReadoutScript.make(ui_root)
+	label.visible = shown
+	if not shown:
+		return
+	var leg: int = int(_controller_server.get("relay_rtt_msec"))
+	if leg >= 0:
+		lines.append(PingReadoutScript.host_leg_line(leg))
+	label.text = "\n".join(lines)
+	label.add_theme_color_override("font_color", PingReadoutScript.color_of(pings))
+
+## Every remote PC seat's ping statistics this match, each with the host's leg
+## to the relay; [] with none (Local, Solo) or no controller server.
+func _match_ping_1195() -> Array:
+	if _controller_server == null or not _controller_server.has_method("match_ping_stats"):
+		return []
+	var leg: int = clampi(int(_controller_server.get("relay_rtt_msec")), -1, 60000)
+	var out: Array = []
+	for stats: Dictionary in _controller_server.match_ping_stats():
+		var entry: Dictionary = stats.duplicate()
+		entry["host_leg"] = leg
+		out.append(entry)
+	return out
+
+func _reset_match_ping_1195() -> void:
+	if _controller_server != null and _controller_server.has_method("reset_ping_stats"):
+		_controller_server.reset_ping_stats()

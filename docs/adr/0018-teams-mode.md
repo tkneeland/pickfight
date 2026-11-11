@@ -35,6 +35,10 @@ owner's default decisions:
 
   So bots fill whichever team the phones leave short. A pick is never
   overruled: if both phones pick Red, Blue stays empty and the lobby waits.
+  Since #1199 a pick is not phone-only: the lobby's player card has a switch
+  (host mouse for any human seat, an Online joiner for its own), and a gamepad's
+  X sends the same pick through `ControllerServer.set_slot_team_pick`. Uneven
+  team sizes never block Start (the lobby only notes it); an empty team still does.
 - **The mode is fixed when the countdown runs out.** The host phone sends
   `{"t":"mode","v":"ffa"|"teams"}`, and ControllerServer heeds it only from
   the host and only in the lobby, countdown and victory phases. Any phone

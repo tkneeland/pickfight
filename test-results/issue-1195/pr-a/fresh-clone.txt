@@ -1,0 +1,3 @@
+$ git clone -q . <scratch>/pf-fresh && godot --headless --path <scratch>/pf-fresh --quit 2>&1 | grep -E "SCRIPT ERROR|Failed to load script"
+(clone of f13c13a)
+(no grep output above = PASS)
