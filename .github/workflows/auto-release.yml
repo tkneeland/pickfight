@@ -1,0 +1,50 @@
+# Keeps itch current without anyone remembering to tag (owner, 2026-11-10:
+# "it always should be"). Every push to main that changes the game tags the
+# next patch version and starts release.yml on it. A tag pushed with
+# GITHUB_TOKEN does not trigger the tag-push run, so this dispatches it;
+# workflow_dispatch is the one event GITHUB_TOKEN may start.
+name: auto-release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scenes/**'
+      - 'scripts/**'
+      - 'controller/**'
+      - 'assets/**'
+      - 'art/**'
+      - 'resources/**'
+      - 'translations/**'
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - 'icon.*'
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag the next patch version and start the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git tag --points-at HEAD | grep -q '^v'; then echo "HEAD already tagged"; exit 0; fi
+          last=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          IFS=. read -r major minor patch <<< "${last#v}"
+          next="v$major.$minor.$((patch + 1))"
+          git tag "$next" HEAD
+          git push origin "$next"
+          gh workflow run release.yml --ref "$next"
+          echo "released $next"
