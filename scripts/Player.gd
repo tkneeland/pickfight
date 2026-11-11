@@ -215,9 +215,11 @@ signal weapon_picked_up(weapon_name: String)
 ## there is no mid-round respawn (ADR-0004): a round is over the same body
 ## every player entered it with.
 var alive: bool = true
-## Spawn protection (#114): set and cleared by RoundManager for about a second
-## after a round places this player. While true, `take_damage()` does nothing
-## and strikes on this player report 0. Knockback still applies.
+## Spawn protection (#114): set and cleared by RoundManager (or Respawn.gd)
+## for `spawn_protection_sec`, 3 s by default, after a round or a respawn
+## places this player. While true, `take_damage()` does nothing and strikes on
+## this player report 0. Issue #1196: it is also a ghost to the other fighters
+## -- see `_sync_spawn_ghosting()`.
 var spawn_protected: bool = false
 ## Issue #236: the team this player fights for in a Teams match (0 red,
 ## 1 blue), or -1 in free-for-all. Set by RoundManager. A teammate's hit
@@ -342,6 +344,7 @@ func _enter_tree() -> void:
 		_build_rig.call_deferred()
 
 func _physics_process(delta: float) -> void:
+	_sync_spawn_ghosting()
 	if not alive:
 		return
 	if _rig_is_live():
@@ -1667,6 +1670,117 @@ func _update_keyboard_vector(delta: float) -> Vector2:
 	# retracted; a real zero vector is reserved for "not touching".
 	_keyboard_t = clamp(_keyboard_t + extend_dir * t_speed * delta, KEYBOARD_MIN_T, 1.0)
 	return Vector2.RIGHT.rotated(_keyboard_angle) * _keyboard_t
+
+# --- Spawn ghosting (issue #1196) -------------------------------------------
+#
+# While spawn protected, this fighter's body and weapon pass through every
+# other fighter's body and weapon, both ways, so nobody is shoved off at spawn:
+# a collision exception between each pair of their bodies (the solver checks
+# either body's list), each head's own sweep told to ignore the other's body,
+# and each head pair left out of the clash correction. Stage, hazards and
+# pickups are untouched: they are not other fighters. Kept up every tick,
+# because a pickup rebuilds a rig with a fresh head. When protection ends, a
+# pair whose bodies still overlap stays ghosted until they come apart, so the
+# solver never pops two stacked fighters out of each other.
+
+## The other fighters this one is ghosted against.
+var _ghosted: Dictionary = {}
+
+func _sync_spawn_ghosting() -> void:
+	if spawn_protected and alive:
+		for node: Node in get_tree().get_nodes_in_group("players"):
+			if node == self or not is_instance_valid(node) or not bool(node.get("alive")):
+				continue
+			if not _ghosted.has(node):
+				_ghosted[node] = true
+			_set_ghosted_with(node, true)
+	if _ghosted.is_empty():
+		return
+	for node: Variant in _ghosted.keys():
+		if not is_instance_valid(node):
+			_ghosted.erase(node)
+			continue
+		var other: Node = node
+		var keep: bool = spawn_protected and alive and bool(other.get("alive"))
+		if keep:
+			continue
+		# The other one's own protection keeps the pair until it ends too.
+		if bool(other.get("spawn_protected")) and bool(other.get("alive")):
+			_ghosted.erase(other)
+			continue
+		if alive and bool(other.get("alive")) and _bodies_overlap(other):
+			continue
+		_set_ghosted_with(other, false)
+		_ghosted.erase(other)
+
+## Every physics body of this fighter another fighter could touch: the body,
+## the weapon head and a flail's ball.
+func ghost_bodies() -> Array[PhysicsBody2D]:
+	var out: Array[PhysicsBody2D] = [self]
+	if _head != null and is_instance_valid(_head):
+		out.append(_head)
+	if _flail != null and _flail.ball != null and is_instance_valid(_flail.ball):
+		out.append(_flail.ball)
+	return out
+
+func _set_ghosted_with(other: Node, on: bool) -> void:
+	if not other.has_method("ghost_bodies"):
+		return
+	var mine: Array[PhysicsBody2D] = ghost_bodies()
+	var theirs: Array[PhysicsBody2D] = other.ghost_bodies()
+	for a: PhysicsBody2D in mine:
+		for b: PhysicsBody2D in theirs:
+			# One side's list is enough (the solver checks both). A pair with a
+			# head keeps it on the head, which is freed with it when a rig is
+			# rebuilt, so no fighter's body is left holding a dead head's RID.
+			var holder: PhysicsBody2D = b if a == self and b != other else a
+			var target: PhysicsBody2D = a if holder == b else b
+			if on:
+				holder.add_collision_exception_with(target)
+			else:
+				holder.remove_collision_exception_with(target)
+				target.remove_collision_exception_with(holder)
+	var their_body: RigidBody2D = other as RigidBody2D
+	for head: PhysicsBody2D in mine.slice(1):
+		_set_head_ghosted(head, their_body, theirs.slice(1), on)
+	for head: PhysicsBody2D in theirs.slice(1):
+		_set_head_ghosted(head, self, mine.slice(1), on)
+
+## `head`'s sweep ignores `body`, and its clash correction ignores `heads`.
+## The lists are replaced rather than edited, which is how a head notices
+## its sweep exclusions changed (`WeaponHead._refresh_own_exclude`).
+func _set_head_ghosted(head: Object, body: RigidBody2D, heads: Array[PhysicsBody2D], on: bool) -> void:
+	var sweep: Array[RID] = (head.get("sweep_exclude") as Array[RID]).duplicate()
+	var rid: RID = body.get_rid()
+	if on and not sweep.has(rid):
+		sweep.append(rid)
+		head.set("sweep_exclude", sweep)
+	elif not on and sweep.has(rid):
+		sweep.erase(rid)
+		head.set("sweep_exclude", sweep)
+	var pairs: Array[Node] = (head.get("pair_exclude") as Array[Node]).duplicate()
+	var changed: bool = false
+	for other_head: PhysicsBody2D in heads:
+		if on and not pairs.has(other_head):
+			pairs.append(other_head)
+			changed = true
+		elif not on and pairs.has(other_head):
+			pairs.erase(other_head)
+			changed = true
+	if changed:
+		head.set("pair_exclude", pairs)
+
+## Whether this fighter's body circle and `other`'s still overlap.
+func _bodies_overlap(other: Node) -> bool:
+	var other_2d: Node2D = other as Node2D
+	if other_2d == null:
+		return false
+	return global_position.distance_to(other_2d.global_position) < _body_radius() + float(other.call("_body_radius"))
+
+func _body_radius() -> float:
+	var shape_node: CollisionShape2D = get_node_or_null("CollisionShape2D") as CollisionShape2D
+	var circle: CircleShape2D = shape_node.shape as CircleShape2D if shape_node != null else null
+	return circle.radius * absf(global_scale.x) if circle != null else 0.0
 
 # --- Knockback and damage ---------------------------------------------------
 

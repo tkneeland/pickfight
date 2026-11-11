@@ -1304,6 +1304,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_guest_victory_prompt_waits_for_host_1186",
 	"koth_hill_never_over_a_pit_1187",
 	"weapon_starts_round_neutral_after_held_aim_1185",
+	"spawn_protection_ghosts_fighters_1196",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4337,6 +4338,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_hill_never_over_a_pit_1187()
 		"weapon_starts_round_neutral_after_held_aim_1185":
 			return await _scenario_weapon_starts_round_neutral_after_held_aim_1185()
+		"spawn_protection_ghosts_fighters_1196":
+			return await _scenario_spawn_protection_ghosts_fighters_1196()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -61230,4 +61233,86 @@ func _scenario_weapon_starts_round_neutral_after_held_aim_1185() -> Array[String
 	server._test_pad_axes[0] = Vector2.ZERO
 	server.set_lobby_state({"phase": "lobby", "players": []})
 	await _teardown(rig["stage"])
+	return failures
+
+## #1196: spawn protection lasts 3 s, and a protected fighter is a ghost to the
+## others. Two fighters spawned overlapping each take a turn swinging their weapon
+## through the other, which stays put and unhurt; once it ends they stay ghosted
+## until they come apart, and after that they collide again: one thrown at the
+## other is stopped by it instead of passing through.
+func _scenario_spawn_protection_ghosts_fighters_1196() -> Array[String]:
+	var failures: Array[String] = []
+	var rm_default: Node = RoundManagerType.new()
+	if not is_equal_approx(float(rm_default.spawn_protection_sec), 3.0):
+		failures.append("spawn protection lasts %.1f s by default, want 3" % rm_default.spawn_protection_sec)
+	rm_default.free()
+	var stage: Node2D = _new_stage()
+	var p0: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND)
+	var p1: RigidBody2D = _spawn_player(stage, NEW_WEAPON_FLOOR_STAND + Vector2(12, 0))
+	# As RoundManager does at round start: placed, then protected.
+	p0.start_round(NEW_WEAPON_FLOOR_STAND)
+	p1.start_round(NEW_WEAPON_FLOOR_STAND + Vector2(12, 0))
+	p0.spawn_protected = true
+	p1.spawn_protected = true
+	await _await_ticks(2)
+	# A swing moves its own fighter (that is how fighters get about), so each
+	# takes a turn swinging through the other, which stands idle: the idle one
+	# is neither shoved nor hurt. Both turns, with a settle
+	# before each, fit inside the 3 s.
+	var turn_ticks: int = int(1.0 * Engine.physics_ticks_per_second)
+	for turn in 2:
+		var swinger: RigidBody2D = p0 if turn == 0 else p1
+		var idle: RigidBody2D = p1 if turn == 0 else p0
+		var side: float = 1.0 if turn == 0 else -1.0
+		# The last turn's swinger comes to rest before it stands idle.
+		idle.set_input_vector(Vector2.ZERO)
+		await _await_ticks(20)
+		var idle_x: float = idle.global_position.x
+		for i in turn_ticks:
+			# Through the idle fighter's body and up over it, never down into
+			# the floor, where a head levering on terrain moves its own fighter.
+			swinger.set_input_vector(Vector2(0.95 * side, -0.15) if (i / 15) % 2 == 0 else Vector2(0.6 * side, -0.7))
+			idle.set_input_vector(Vector2.ZERO)
+			await physics_frame
+		swinger.set_input_vector(Vector2.ZERO)
+		var shoved: float = absf(idle.global_position.x - idle_x)
+		print("      turn %d: %s swung through %s, which moved %.1f px" % [turn, swinger.name, idle.name, shoved])
+		if shoved > 4.0:
+			failures.append("%s's swing shoved protected %s %.1f px" % [swinger.name, idle.name, shoved])
+		if not idle.spawn_protected:
+			failures.append("setup: protection was off during turn %d" % turn)
+	if p0.damage > 0.0 or p1.damage > 0.0:
+		failures.append("protected fighters took damage: %.1f and %.1f" % [p0.damage, p1.damage])
+	if not p0.alive or not p1.alive:
+		failures.append("a protected fighter was eliminated")
+	# Protection ends with them overlapping (stacked again, still protected,
+	# as a 3 s spawn can leave them): no pop apart.
+	p0.set_input_vector(Vector2.ZERO)
+	p1.set_input_vector(Vector2.ZERO)
+	p0.start_round(NEW_WEAPON_FLOOR_STAND)
+	p1.start_round(NEW_WEAPON_FLOOR_STAND + Vector2(12, 0))
+	await _await_ticks(20)
+	p0.spawn_protected = false
+	p1.spawn_protected = false
+	var x0: float = p0.global_position.x
+	var x1: float = p1.global_position.x
+	await _await_ticks(20)
+	if absf(p0.global_position.x - x0) > 16.0 or absf(p1.global_position.x - x1) > 16.0:
+		failures.append("protection ending on an overlap popped them apart (%.1f, %.1f px)" % [
+			absf(p0.global_position.x - x0), absf(p1.global_position.x - x1)])
+	# Apart, the ghosting clears and they collide again.
+	p1.start_round(NEW_WEAPON_FLOOR_STAND + Vector2(260, 0))
+	if not await _await_condition(func() -> bool: return p0._ghosted.is_empty() and p1._ghosted.is_empty(), 1000):
+		failures.append("the pair stayed ghosted after coming apart")
+	if p0.get_collision_exceptions().has(p1) or p1.get_collision_exceptions().has(p0):
+		failures.append("a body collision exception outlived the protection")
+	await _await_ticks(10)
+	for i in 40:
+		p1.linear_velocity = Vector2(-500.0, p1.linear_velocity.y)
+		await physics_frame
+		if p1.global_position.x < p0.global_position.x:
+			break
+	if p1.global_position.x < p0.global_position.x:
+		failures.append("after protection a fighter thrown at another passed through it")
+	await _teardown(stage)
 	return failures
