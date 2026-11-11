@@ -44,6 +44,7 @@ const RemoteHudScript: GDScript = preload("res://scripts/RemoteHud.gd")
 const UiMirrorScript: GDScript = preload("res://scripts/UiMirror.gd")
 const ModifierBannerScript: GDScript = preload("res://scripts/ModifierBanner.gd")
 const HostHudScene: PackedScene = preload("res://scenes/HostHud.tscn")
+const PingReadoutScript: GDScript = preload("res://scripts/PingReadout.gd")
 
 const MAIN_SCENE_PATH: String = "res://scenes/Main.tscn"
 ## Room-code alphabet and length: Relay.CODE_LETTERS (no I and no O) / CODE_LENGTH.
@@ -1793,6 +1794,9 @@ func _build_hud() -> void:
 	# host's recorded events (mirror: it records nothing itself).
 	_host_hud = HostHudScene.instantiate() as CanvasLayer
 	_host_hud.name = "HostHud"
+	# #1195: the in-match ping readout, built and placed by the host's own code
+	# so the mirror only has to carry its text, colour and visibility.
+	PingReadoutScript.make(_host_hud)
 	var feed: Control = _host_hud.get_node("KillFeed") as Control
 	feed.mirror = true
 	# The scene's placeholder texts are the host's own start-up lines, in

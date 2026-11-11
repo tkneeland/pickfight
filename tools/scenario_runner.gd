@@ -1311,6 +1311,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"spawn_protection_ghosts_fighters_1196",
 	"online_ping_stats_avg_p95_max_1195",
 	"remote_client_reports_felt_delay_1195",
+	"online_ping_readout_mirrors_to_joiner_1195",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4358,6 +4359,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_ping_stats_avg_p95_max_1195()
 		"remote_client_reports_felt_delay_1195":
 			return await _scenario_remote_client_reports_felt_delay_1195()
+		"online_ping_readout_mirrors_to_joiner_1195":
+			return await _scenario_online_ping_readout_mirrors_to_joiner_1195()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -61670,4 +61673,76 @@ func _scenario_remote_client_reports_felt_delay_1195() -> Array[String]:
 	if not await _wait_for_239(func() -> bool: return int(server.slot_ping_stats(client.slot).get("felt", -1)) == client.felt_msec(), 3000):
 		failures.append("the host's felt for the seat is %s, the client's %d" % [server.slot_ping_stats(client.slot).get("felt"), client.felt_msec()])
 	await _rc_close_241(rig)
+	return failures
+func _scenario_online_ping_readout_mirrors_to_joiner_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var readout := preload("res://scripts/PingReadout.gd")
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.ping_interval_msec = 200
+	rm.ping_readout_interval_msec = 200
+	var client: Node = await _rc_client_241(rig)
+	if not await _rc_joined_241(rig, client, failures, "Pinger") or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		return failures
+	var ui_root: Node = rm.get_node(rm.score_label_path).get_parent()
+	# The host leg needs the relay's echo answered, and the line the seat's first pong.
+	var ready: bool = await _wait_for_239(func() -> bool:
+		var l: Label = ui_root.get_node_or_null(readout.NODE_NAME) as Label
+		return l != null and l.visible and l.text.contains("Pinger") and server.relay_rtt_msec >= 0 \
+			and l.text.contains(tr("HOST_LEG_MS") % server.relay_rtt_msec), 6000)
+	var host_label: Label = ui_root.get_node_or_null(readout.NODE_NAME) as Label
+	if not ready or host_label == null:
+		failures.append("the host's readout never showed the joiner and the host leg (%s, leg %d)" % [host_label.text if host_label != null else "missing", server.relay_rtt_msec])
+		await _rc_close_241(rig)
+		return failures
+	rm.ping_readout_interval_msec = 1000000 # hold the text still while the mirror catches up
+	await process_frame
+	print("      host readout: '%s'" % host_label.text.replace("\n", " | "))
+	var ping: int = server.slot_ping_msec(client.slot)
+	if not host_label.text.contains(readout.line("Pinger", ping, int(server.slot_ping_stats(client.slot).get("felt", -1)))):
+		failures.append("the readout '%s' lacks the seat's line for ping %d" % [host_label.text, ping])
+	if host_label.get_theme_color("font_color") != LobbyScreenScript230.ping_color(ping):
+		failures.append("readout colour %s, expected the lobby's colour for %d ms" % [host_label.get_theme_color("font_color"), ping])
+	var view_w: float = host_label.get_viewport_rect().size.x
+	var right: float = host_label.get_global_rect().end.x
+	if absf(view_w - right) > 40.0:
+		failures.append("the readout's right edge is at %.0f, the screen's at %.0f" % [right, view_w])
+	var joiner_root: CanvasLayer = client.host_hud()
+	var joiner_label: Label = joiner_root.get_node_or_null(readout.NODE_NAME) as Label if joiner_root != null else null
+	if joiner_label == null:
+		failures.append("the joiner's HUD has no readout label")
+		await _rc_close_241(rig)
+		return failures
+	if not await _wait_for_239(func() -> bool: return joiner_label.text == host_label.text, 4000):
+		failures.append("the joiner's readout '%s' never matched the host's '%s'" % [joiner_label.text, host_label.text])
+	await process_frame
+	if joiner_label.get_theme_color("font_color") != host_label.get_theme_color("font_color"):
+		failures.append("joiner colour %s, host %s" % [joiner_label.get_theme_color("font_color"), host_label.get_theme_color("font_color")])
+	if joiner_label.visible != host_label.visible or not joiner_root.visible:
+		failures.append("joiner visible %s (HUD %s), host %s" % [joiner_label.visible, joiner_root.visible, host_label.visible])
+	if joiner_label.position != host_label.position or joiner_label.size != host_label.size:
+		failures.append("joiner at %s size %s, host at %s size %s" % [joiner_label.position, joiner_label.size, host_label.position, host_label.size])
+	for side: String in ["anchor_left", "anchor_top", "anchor_right", "anchor_bottom"]:
+		if joiner_label.get(side) != host_label.get(side):
+			failures.append("%s: joiner %s, host %s" % [side, joiner_label.get(side), host_label.get(side)])
+	if joiner_label.get_theme_font_size("font_size") != host_label.get_theme_font_size("font_size") \
+			or not joiner_label.has_theme_font_size_override("font_size"):
+		failures.append("font size: joiner %d, host %d" % [joiner_label.get_theme_font_size("font_size"), host_label.get_theme_font_size("font_size")])
+	await _rc_close_241(rig)
+	# Local: no remote seat, so no readout.
+	var built: Dictionary = await _snap_main_251(2)
+	var local_rm: Node = built["rm"]
+	local_rm.ping_readout_interval_msec = 100
+	await _await_condition(func() -> bool: return int(local_rm.get("_state")) == 1, 8000)
+	await _wait_for_239(func() -> bool: return false, 500)
+	var local_label: Label = local_rm.get_node(local_rm.score_label_path).get_parent().get_node_or_null(readout.NODE_NAME) as Label
+	if int(local_rm.get("_state")) != 1:
+		failures.append("the Local round never started (state %d)" % int(local_rm.get("_state")))
+	if local_label != null and local_label.visible:
+		failures.append("a Local match shows the ping readout: '%s'" % local_label.text)
+	await _teardown(built["main"])
 	return failures
