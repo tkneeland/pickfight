@@ -14,6 +14,7 @@ Shipped-feature inventory (evidence: closed issue numbers). Read it before propo
 - Trapped weapon head phases home after a delay (#115)
 - A long head (sword, boomstick) wedged into a wall phases free after 1.5 s, held or released, and turns solid again once its circles are out of the wall (#664)
 - Spawn protection: about 1 s invulnerable, blinking (#114); a protected fighter is neither hurt nor knocked by a meteor or falling rock, like spikes and saws (#991), nor by a boomstick bullet or boomerang (#1004), nor shoved by a ghost's Boo (#1053), nor dragged by a Magnet field (#1056), nor reeled or shoved by a grapple or fishing-rod hook (#1093), nor bashed by a shield (#1098), nor knocked by a flail ball (#1099)
+- Every round start and respawn puts the weapon at rest at the neutral angle, whatever pose the last round ended in (#1185); a drag, held mouse or stick carried across the boundary is ignored until it comes back to centre (a phone or Online mouse drag is recentred for you), so the next drag starts from neutral. Phones, gamepads, PC and Online seats alike; bots aim afresh
 - Round winner keeps their weapon; everyone else respawns with the pickaxe (#6, ADR-0005)
 - Rising lava kill zone ends stalling (#22, #45, ADR-0012)
 - Hitmarkers and debug damage numbers (#33)

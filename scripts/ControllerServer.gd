@@ -314,6 +314,14 @@ class InputSmoother extends RefCounted:
 		_aim = Vector2.ZERO
 		_queue.clear()
 
+	## Jump straight to the newest packet, with nothing left to ease through
+	## (#1185: a drag let in after a respawn starts where it is, not by
+	## sweeping from the pose the last round held).
+	func snap_to_target() -> void:
+		_queue.clear()
+		_aim = target
+		value = target
+
 var _log_input: bool = false
 
 var _http_server: TCPServer = TCPServer.new()
@@ -620,6 +628,7 @@ func _ready() -> void:
 	_slot_bumper_down.resize(_players.size())
 	_slot_bumper_down.fill(-1)
 	_slot_was_alive.resize(_players.size())
+	_slot_await_neutral.resize(_players.size())
 	_slot_name.resize(_players.size())
 	_slot_hat.resize(_players.size())
 	_slot_eyes.resize(_players.size())
@@ -710,6 +719,12 @@ var _slot_release_remote: PackedByteArray = PackedByteArray()
 var _slot_release_toggle: PackedByteArray = PackedByteArray()
 var _slot_release_held: PackedByteArray = PackedByteArray()
 var _slot_was_alive: PackedByteArray = PackedByteArray()
+## Issue #1185: 1 from a slot's respawn until its controller comes back to
+## neutral. Until then the drag held across the round boundary is ignored, so
+## the weapon starts the round at rest and the next drag starts from there.
+var _slot_await_neutral: PackedByteArray = PackedByteArray()
+## How close to the centre a held source must come back to count as neutral.
+const RESPAWN_NEUTRAL_EPSILON: float = 0.1
 ## Last action-press count seen from each remote client; -1 = adopt the next.
 var _slot_press_seen: PackedInt32Array = PackedInt32Array()
 
@@ -795,14 +810,42 @@ func _toggle_release(slot: int) -> void:
 
 ## A fresh round or a respawn starts not released (ADR-0022); a remote client
 ## holds its own toggle, so it is told to clear it.
+##
+## Issue #1185: it also starts with the weapon at rest. A drag held across the
+## round boundary is ignored until the controller comes back to neutral, so a
+## new drag starts from neutral (ADR-0003). The host PC's mouse is recentred
+## here; a phone or Online client is told to recentre its own drag (`recentre`),
+## and a finger lift or a stick let go does the same. Bots compute a fresh
+## vector every tick, so they are not held back.
 func _reset_release_on_respawn(slot: int) -> void:
 	var now_alive: int = 1 if _players[slot].alive else 0
 	if now_alive == 1 and _slot_was_alive[slot] == 0:
 		_slot_release_toggle[slot] = 0
 		_slot_release_remote[slot] = 0
-		if _is_pc_remote(_slot_peers[slot]):
-			_slot_peers[slot].send_text(JSON.stringify({"t": "release", "v": false}))
+		var peer: Variant = _slot_peers[slot]
+		if _is_pc_remote(peer):
+			peer.send_text(JSON.stringify({"t": "release", "v": false}))
+		# Only a drag actually held out waits: recentring a controller already at
+		# rest would race (and eat) the first drag of the round.
+		if _slot_virtual[slot] == 0 and _smoothers[slot].target.length() > RESPAWN_NEUTRAL_EPSILON:
+			_slot_await_neutral[slot] = 1
+			if slot == _host_pc_slot:
+				_host_mouse.reset()
+				_smoothers[slot].push(Vector2.ZERO)
+			if (peer is WebSocketPeer or peer is RemoteSeat) and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
+				peer.send_text(JSON.stringify({"t": "recentre"}))
 	_slot_was_alive[slot] = now_alive
+
+## Issue #1185: the vector to hand `slot`'s player this tick, `smoothed` unless
+## the slot still waits for its controller to come back to neutral.
+func _respawn_gated_input(slot: int, smoothed: Vector2) -> Vector2:
+	if _slot_await_neutral[slot] == 0:
+		return smoothed
+	if _smoothers[slot].target.length() > RESPAWN_NEUTRAL_EPSILON:
+		return Vector2.ZERO
+	_slot_await_neutral[slot] = 0
+	_smoothers[slot].snap_to_target()
+	return _smoothers[slot].value
 
 ## Step every bound slot's ease and hand the result to its player (issue #113).
 func _apply_smoothed_input(delta: float) -> void:
@@ -810,7 +853,7 @@ func _apply_smoothed_input(delta: float) -> void:
 		if (_slot_peers[slot] == null and _slot_virtual[slot] == 0) or _players[slot] == null:
 			continue
 		_reset_release_on_respawn(slot)
-		_players[slot].set_input_vector(_smoothers[slot].step(delta))
+		_players[slot].set_input_vector(_respawn_gated_input(slot, _smoothers[slot].step(delta)))
 		_players[slot].set_input_released(slot_released(slot))
 
 ## Weapon diagnostics run on the physics tick because that is the rate the weapon is
@@ -1323,6 +1366,7 @@ func _unbind(slot: int) -> void:
 	_slot_ready[slot] = 0
 	_clear_release(slot)
 	_slot_was_alive[slot] = 0
+	_slot_await_neutral[slot] = 0
 	_last_weapon[slot] = Vector2(NAN, NAN)
 	_steady_frames[slot] = 0
 	_weak_link.erase(slot) # a socket that takes the slot over starts its own (#777)

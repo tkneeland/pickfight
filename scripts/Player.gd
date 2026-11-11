@@ -708,6 +708,7 @@ func start_round(spawn_pos: Vector2, keeps_weapon: bool = false) -> void:
 	_stomp_lock = 0.0
 	if not keeps_weapon:
 		_assign_weapon_stats(DEFAULT_WEAPON_STATS)
+	_reset_weapon_pose()
 	freeze = false
 	# A leave_round() earlier this frame (an End match re-seating the lobby as the first
 	# round starts) queued set_deferred("freeze", true); it would flush after
@@ -731,6 +732,29 @@ func start_round(spawn_pos: Vector2, keeps_weapon: bool = false) -> void:
 	# interpolated in from wherever the player was eliminated (issue #108).
 	reset_physics_interpolation()
 	_build_rig.call_deferred()
+
+## Issue #1185: the weapon angle a round starts at, the same one a player that
+## has never been given input holds.
+const NEUTRAL_WEAPON_ANGLE: float = 0.0
+
+## Issue #1185: a round starts with the weapon at rest, not in the pose the last
+## round left it in. The rig `start_round()` builds next is built along
+## `weapon_angle`, so the setpoints go back to neutral first, together with
+## the input that drives them and every debug source's own drag state.
+## Input still held on a controller is ControllerServer's to drop
+## (`_reset_release_on_respawn()`).
+func _reset_weapon_pose() -> void:
+	input_vector = Vector2.ZERO
+	_effective_input = Vector2.ZERO
+	_drag_released = true
+	weapon_angle = NEUTRAL_WEAPON_ANGLE
+	weapon_length = _stats.min_reach if _stats != null else weapon_min_length
+	_keyboard_angle = NEUTRAL_WEAPON_ANGLE
+	_keyboard_t = 0.5
+	_mouse_anchor = Vector2(NAN, NAN)
+	_swing_rate = 0.0
+	_swing_tracking = false
+	_pogo_aim = Vector2.DOWN
 
 # --- Weapon rig -------------------------------------------------------------
 

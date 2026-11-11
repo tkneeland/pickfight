@@ -2364,6 +2364,17 @@
     vy = 0;
   }
 
+  // Issue #1185: a new round starts the weapon at rest, so the host asks for a
+  // drag held across the boundary to start again from where it is: the finger
+  // becomes the new anchor (a locked mouse goes back to the centre). The host
+  // ignores the drag until it reads this as neutral.
+  function recentreDrag() {
+    if (!anchor || !point) { return; }
+    if (mouseLocked()) { point = { x: anchor.x, y: anchor.y }; }
+    else { anchor = { x: point.x, y: point.y }; }
+    recompute();
+  }
+
   function releaseIfActive(e) {
     if (e.pointerId === activePointer && e.type === "pointerup" && tapStart && knockedOut() &&
         Date.now() - tapStart.t <= GHOST_TAP_MAX_MS &&
@@ -3689,6 +3700,7 @@
         else if (msg.t === "name") { showStoredName(msg.v); }
         else if (msg.t === "flash") { hostReduceFlash = msg.v === true; applyCalm(); }
         else if (msg.t === "buzz") { buzz(msg.kind); }
+        else if (msg.t === "recentre") { recentreDrag(); }
         else if (msg.t === "dmg") { showDamage(msg.v); }
         else if (msg.t === "lives") { showLives(msg); }
         else if (msg.t === "hill") { showHill(msg); }

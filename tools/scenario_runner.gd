@@ -1303,6 +1303,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"retired_mode_saved_lists_dropped_1172",
 	"online_guest_victory_prompt_waits_for_host_1186",
 	"koth_hill_never_over_a_pit_1187",
+	"weapon_starts_round_neutral_after_held_aim_1185",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4334,6 +4335,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_guest_victory_prompt_waits_for_host_1186()
 		"koth_hill_never_over_a_pit_1187":
 			return await _scenario_koth_hill_never_over_a_pit_1187()
+		"weapon_starts_round_neutral_after_held_aim_1185":
+			return await _scenario_weapon_starts_round_neutral_after_held_aim_1185()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -61181,4 +61184,50 @@ func _scenario_koth_hill_never_over_a_pit_1187() -> Array[String]:
 			failures.append("%s: a moving hill with fewer than 2 spots" % path)
 		await _teardown(rig["stage"], false)
 	_scenario_completed = true
+	return failures
+
+## #1185: a round ended with the weapon held out does not carry that pose into
+## the next one. A pad seat holds its stick up through the round boundary: on
+## the first frame of round 2 the weapon is at the neutral angle, it stays
+## there while the stale stick is still held, and once the stick is let go a
+## new aim drives the weapon as usual.
+func _scenario_weapon_starts_round_neutral_after_held_aim_1185() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "Neutral1185")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	var player: RigidBody2D = players[0]
+	var neutral: float = player.NEUTRAL_WEAPON_ANGLE
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _pad_button_261(0, JOY_BUTTON_A)
+	server.set_lobby_state({"phase": "playing", "players": []})
+	server._test_pad_axes[0] = Vector2(0.0, -1.0)
+	await _await_ticks(40)
+	if absf(wrapf(player.weapon_angle - (-PI * 0.5), -PI, PI)) > 0.1:
+		failures.append("setup: round 1 weapon angle %.2f, not held up" % player.weapon_angle)
+	# Round 1 ends with the stick still held; round 2 starts with it held.
+	player.leave_round()
+	await _await_ticks(5)
+	player.start_round(NEW_WEAPON_FLOOR_STAND)
+	await _await_ticks(1)
+	if absf(wrapf(player.weapon_angle - neutral, -PI, PI)) > 0.01:
+		failures.append("round 2 frame 1: weapon angle %.2f, want neutral %.2f" % [player.weapon_angle, neutral])
+	var head: Vector2 = player.weapon_head_position() - player.global_position
+	if absf(wrapf(head.angle() - neutral, -PI, PI)) > 0.3:
+		failures.append("round 2 frame 1: head at angle %.2f, want near %.2f" % [head.angle(), neutral])
+	await _await_ticks(30)
+	if absf(wrapf(player.weapon_angle - neutral, -PI, PI)) > 0.01:
+		failures.append("the stick held across the boundary snapped the weapon to %.2f" % player.weapon_angle)
+	if player.input_vector != Vector2.ZERO:
+		failures.append("held input %s reached the player before a release" % player.input_vector)
+	# Let go, then aim left: a fresh drag drives the weapon from neutral.
+	server._test_pad_axes[0] = Vector2.ZERO
+	await _await_ticks(5)
+	server._test_pad_axes[0] = Vector2(-1.0, 0.0)
+	await _await_ticks(40)
+	if absf(wrapf(player.weapon_angle - PI, -PI, PI)) > 0.1:
+		failures.append("a new aim after the release left the weapon at %.2f, want %.2f" % [player.weapon_angle, PI])
+	server._test_pad_axes[0] = Vector2.ZERO
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	await _teardown(rig["stage"])
 	return failures
