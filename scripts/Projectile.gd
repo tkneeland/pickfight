@@ -146,7 +146,9 @@ func _hit(collider: Object, point: Vector2) -> void:
 	if victim != null and victim != shooter and victim.is_in_group("players") and victim.alive:
 		# A spawn-protected fighter is not knocked either (#1004); the shot
 		# is still spent and damage is zeroed by the player.
-		if victim is RigidBody2D and victim.get("spawn_protected") != true:
+		# Nor by a protected shooter's shot (#1196).
+		if victim is RigidBody2D and victim.get("spawn_protected") != true \
+				and not (shooter != null and shooter.get("spawn_protected") == true):
 			(victim as RigidBody2D).apply_central_impulse(direction * knockback)
 		if shooter != null and shooter.has_method("land_projectile_hit"):
 			shooter.land_projectile_hit(victim, damage, point, weapon_id)

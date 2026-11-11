@@ -95,8 +95,10 @@ extends Node
 ## The pickaxe is filtered out either way.
 @export var pickup_weapons: Array[Resource] = []
 
-## Seconds of spawn protection at round start (#114). 0 turns it off.
-@export var spawn_protection_sec: float = 1.0
+## Seconds of spawn protection at round start (#114) and on a respawn; 3 s
+## since #1196, which also makes a protected fighter a ghost to the others.
+## 0 turns it off.
+@export var spawn_protection_sec: float = 3.0
 
 ## Chance, 0..1, that a round rolls a modifier. 0 switches them off.
 @export_range(0.0, 1.0) var modifier_chance: float = 0.35
@@ -871,9 +873,10 @@ func _update_score_label() -> void:
 # --- Spawn protection (issue #114) -------------------------------------------
 #
 # For `spawn_protection_sec` after a round places the players, none of them can
-# take damage, and each blinks to show it. Knockback still applies (owner's
-# call left to us in #114; a shove at spawn is harmless, and blocking it would
-# mean reaching into Player's physics). The lava still eliminates. There is no
+# take damage, and each blinks to show it. Since #1196 (playtest: fighters were
+# shoved off the map at spawn) a protected fighter is also a ghost to the
+# others: no fighter-to-fighter collision or knockback, either way
+# (`Player._sync_spawn_ghosting()`). The lava still eliminates. There is no
 # mid-round spawn to protect: a phone that joins mid-round waits for the next
 # round (ADR-0004), and that round's start protects it with everyone else.
 
