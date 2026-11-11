@@ -46,13 +46,18 @@ advance() {  # advance <id>: the marker (everything up to here handled) moves fo
   if [ -z "$cur" ] || id_gt "$1" "$cur"; then echo "$1" > "$LAST"; fi; }
 mark() {  # mark <id> <disposition>: that one message is handled; the marker moves on in check
   echo "$1" >> "$HANDLED"; printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$1" "$2" >> "$PF_STATE/discord-bugs.log"; }
+# $done: ids handled on this machine plus ids that already have a real bot reply in the fetched messages (any machine's
+# reply: a new triagemaster, by succession or failover takeover, has no marker or handled list of its own, #1219). A
+# failover notice ("taking over from ...", pf-hive-failover.sh) is not an answer, the same rule as its unanswered().
+DONE_JQ='(($h | split("\n")) + [.[] | select(.author.bot == true and ((.content // "") | startswith("taking over from ") | not))
+  | .message_reference.message_id // empty]) as $done'
 # The fetched messages minus bots and handled ones, as a JSON array
-pending() { jq --rawfile h "$HANDLED" '($h | split("\n")) as $done | [.[] | select(.author.bot != true) | select(.id | IN($done[]) | not)]'; }
+pending() { jq --rawfile h "$HANDLED" "$DONE_JQ"' | [.[] | select(.author.bot != true) | select(.id | IN($done[]) | not)]'; }
 case "${1:-}" in
   check)
     touch "$HANDLED"; new=$(fetch_new) || exit 2
     # step the marker past the leading run of bot and handled messages, so they are never fetched again
-    done_to=$(echo "$new" | jq -r --rawfile h "$HANDLED" '($h | split("\n")) as $done |
+    done_to=$(echo "$new" | jq -r --rawfile h "$HANDLED" "$DONE_JQ"' |
       (map(.author.bot == true or (.id | IN($done[]))) | index(false)) as $i |
       if $i == null then (last.id // empty) elif $i == 0 then empty else .[$i - 1].id end')
     [ -n "$done_to" ] && advance "$done_to"

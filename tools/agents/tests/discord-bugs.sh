@@ -73,6 +73,21 @@ check "dev check" "$(bash "$D" --dev check)" 1
 bash "$D" --dev reply 1569919897591611600 "Filed as #11" >/dev/null; bash "$D" --dev check >/dev/null
 check "dev marker is its own" "$(cat "$PF_STATE_DIR/.discord-dev-last")" 1569919897591611600
 check "dev reply is logged as dev" "$(grep -c "dev reply: Filed as #11" "$PF_STATE_DIR/discord-bugs.log")" 1
+# #1219: a newly promoted triagemaster (succession or failover takeover) has no marker or handled list; its first --dev
+# check must not wake on the backlog the previous holder already answered. A failover notice is not an answer.
+rep() { echo "{\"id\":\"$1\",\"timestamp\":\"2026-11-10T20:00:00\",\"author\":{\"username\":\"ClaudeChat\",\"bot\":true},\"content\":\"$3\",\"message_reference\":{\"message_id\":\"$2\"},\"attachments\":[],\"embeds\":[]}"; }
+rm -f "$PF_STATE_DIR/.discord-dev-last" "$PF_STATE_DIR/.discord-dev-handled"
+echo "[$(msg 1569919897591611700 austin false "dev: lobby crash"),$(rep 1569919897591611701 1569919897591611700 "Filed as #11"),
+  $(msg 1569919897591611702 sam false "status"),$(rep 1569919897591611703 1569919897591611702 "tkneeland: on 5m")]" > "$T/r/$DV"
+check "promotion: read shows nothing" "$(bash "$D" --dev read | grep -c '^--- ')" 0
+bash "$D" --dev check >/dev/null; check "promotion: answered backlog pends nothing" $? 1
+check "promotion: marker seeded past it" "$(cat "$PF_STATE_DIR/.discord-dev-last")" 1569919897591611703
+rm -f "$PF_STATE_DIR/.discord-dev-last"
+echo "[$(msg 1569919897591611700 austin false "dev: lobby crash"),$(rep 1569919897591611701 1569919897591611700 "Filed as #11"),
+  $(msg 1569919897591611704 sam false "is the build broken?"),$(rep 1569919897591611705 1569919897591611704 "taking over from tkneeland (now schans2)")]" > "$T/r/$DV"
+check "promotion: it is the unanswered one" "$(bash "$D" --dev read | grep -c 'build broken')" 1
+check "promotion: notice-only still pending" "$(bash "$D" --dev check)" 1
+check "promotion: marker stops before it" "$(cat "$PF_STATE_DIR/.discord-dev-last")" 1569919897591611701
 rm "$T/r/$DV"
 check "token on stdin only" "$(grep -c 'Bot tok123"$' "$T/headers.log")" "$(grep -c . "$T/headers.log")"
 check "token never in argv" "$(grep -c tok123 "$T/curl.log")" 0
