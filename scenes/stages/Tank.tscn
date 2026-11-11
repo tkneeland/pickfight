@@ -5,10 +5,10 @@
 [ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MudPatch.tscn" id="mud"]
 
-; Tank (#1202, a no-ledge stage): a walled steel tank. A centre floor (x=-280..280) and two
-; outer floors (x=+-380..+-760), top y=320, split by two 100 px drains at x=+-330, with a
+; Tank (#1202, a no-ledge stage): a walled steel tank. A centre floor (x=-290..290) and two
+; outer floors (x=+-370..+-760), top y=320, split by two 80 px drains at x=+-330, with a
 ; mud patch across the centre floor and a bridge over it (top y=154). Walls to the view
-; edge leave no outer end; the ring-outs are the two drains.
+; edge leave no outer end; the two drains are floored (closed stage).
 [node name="Tank" type="Node2D"]
 script = ExtResource("script")
 background_sky_top = Color(0.09, 0.12, 0.14, 1)
@@ -17,16 +17,16 @@ background_silhouette = Color(0.07, 0.09, 0.1, 1)
 background_layers = PackedStringArray("clouds", "hills")
 
 [node name="FloorLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-570, 340)
-size = Vector2(380, 40)
+position = Vector2(-565, 370)
+size = Vector2(390, 100)
 
 [node name="FloorMid" parent="." instance=ExtResource("platform")]
-position = Vector2(0, 340)
-size = Vector2(560, 40)
+position = Vector2(0, 370)
+size = Vector2(580, 100)
 
 [node name="FloorRight" parent="." instance=ExtResource("platform")]
-position = Vector2(570, 340)
-size = Vector2(380, 40)
+position = Vector2(565, 370)
+size = Vector2(390, 100)
 
 [node name="CentreMud" parent="." instance=ExtResource("mud")]
 position = Vector2(0, 314)
@@ -68,6 +68,15 @@ position = Vector2(-150, 270)
 
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(150, 270)
+
+; DrainShelf (#1202): each 80 px drain is floored at y=420 (on screen), so a fighter who falls in is caught and climbs out; bots fell into open drains within ~9 s. The Tank is closed, damage decides it (exempt from every_stage_can_ring_out).
+[node name="DrainShelfLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-330, 428)
+size = Vector2(80, 16)
+
+[node name="DrainShelfRight" parent="." instance=ExtResource("platform")]
+position = Vector2(330, 428)
+size = Vector2(80, 16)
 
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)

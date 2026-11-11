@@ -1093,15 +1093,15 @@ Switchyard|tinted|Spinner/Stripe4|Color(0.5, 0.36, 0.72, 1)
 Switchyard|tinted|Spinner/Hub|Color(0.3, 0.2, 0.45, 1)
 Switchyard|tinted|YardSpeedStripLeft/Strip|Color(0.1, 0.4, 0.45, 1)
 Switchyard|tinted|YardSpeedStripRight/Strip|Color(0.1, 0.4, 0.45, 1)
-Tank|body|FloorLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -570, 340)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Tank|shape|FloorLeft/FloorLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(380, 40)|oneway=false|disabled=false
-Tank|poly|FloorLeft/FloorLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-190, -20, 190, -20, 190, 20, -190, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Tank|body|FloorMid|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 340)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Tank|shape|FloorMid/FloorMidShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(560, 40)|oneway=false|disabled=false
-Tank|poly|FloorMid/FloorMidVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-280, -20, 280, -20, 280, 20, -280, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Tank|body|FloorRight|StaticBody2D|Transform2D(1, 0, 0, 1, 570, 340)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Tank|shape|FloorRight/FloorRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(380, 40)|oneway=false|disabled=false
-Tank|poly|FloorRight/FloorRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-190, -20, 190, -20, 190, 20, -190, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Tank|body|FloorLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -565, 370)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Tank|shape|FloorLeft/FloorLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(390, 100)|oneway=false|disabled=false
+Tank|poly|FloorLeft/FloorLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-195, -50, 195, -50, 195, 50, -195, 50)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Tank|body|FloorMid|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 370)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Tank|shape|FloorMid/FloorMidShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(580, 100)|oneway=false|disabled=false
+Tank|poly|FloorMid/FloorMidVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-290, -50, 290, -50, 290, 50, -290, 50)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Tank|body|FloorRight|StaticBody2D|Transform2D(1, 0, 0, 1, 565, 370)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Tank|shape|FloorRight/FloorRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(390, 100)|oneway=false|disabled=false
+Tank|poly|FloorRight/FloorRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-195, -50, 195, -50, 195, 50, -195, 50)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Tank|body|CentreMud|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 314)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Tank|body|Bridge|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 166)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Tank|shape|Bridge/BridgeShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(260, 24)|oneway=false|disabled=false
@@ -1112,6 +1112,12 @@ Tank|poly|WallLeft/WallLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Arr
 Tank|body|WallRight|StaticBody2D|Transform2D(1, 0, 0, 1, 780, 20)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Tank|shape|WallRight/WallRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(40, 760)|oneway=false|disabled=false
 Tank|poly|WallRight/WallRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-20, -380, 20, -380, 20, 380, -20, 380)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Tank|body|DrainShelfLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -330, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Tank|shape|DrainShelfLeft/DrainShelfLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(80, 16)|oneway=false|disabled=false
+Tank|poly|DrainShelfLeft/DrainShelfLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-40, -8, 40, -8, 40, 8, -40, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Tank|body|DrainShelfRight|StaticBody2D|Transform2D(1, 0, 0, 1, 330, 428)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Tank|shape|DrainShelfRight/DrainShelfRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(80, 16)|oneway=false|disabled=false
+Tank|poly|DrainShelfRight/DrainShelfRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-40, -8, 40, -8, 40, 8, -40, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Tank|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 480)|layer=1|mask=1|z=0|zrel=true|visible=true|script=res://scripts/KillZone.gd|rise_warning_sec=4.0|surface_depth=2000.0
 Tank|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Tank|tinted|FloorLeft/FloorLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
@@ -1121,6 +1127,8 @@ Tank|tinted|CentreMud/Mud|Color(0.32, 0.21, 0.12, 1)
 Tank|tinted|Bridge/BridgeVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Tank|tinted|WallLeft/WallLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Tank|tinted|WallRight/WallRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Tank|tinted|DrainShelfLeft/DrainShelfLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
+Tank|tinted|DrainShelfRight/DrainShelfRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Treadmill|body|Floor|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 400)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Treadmill|shape|Floor/FloorShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(1500, 40)|oneway=false|disabled=false
 Treadmill|poly|Floor/FloorVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-750, -20, 750, -20, 750, 20, -750, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)

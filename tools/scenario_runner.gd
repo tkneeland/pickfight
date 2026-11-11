@@ -7861,7 +7861,7 @@ const RINGOUT_SHOVE_TICKS: int = 300
 ## check. What it catches is the real mistake -- a stage whose walls, floor or
 ## kill zone were drawn or placed so that nobody can leave it.
 ## The Bowl (#1202) is closed by design: its drain is floored but for a slot narrower than a fighter, since a fightable slot was fallen through by bots within seconds.
-const RINGOUT_EXEMPT_1202: PackedStringArray = ["res://scenes/stages/Bowl.tscn"]
+const RINGOUT_EXEMPT_1202: PackedStringArray = ["res://scenes/stages/Bowl.tscn", "res://scenes/stages/Tank.tscn"]
 func _scenario_every_stage_can_ring_out() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
 	# and well apart from the rest (#168). Per stage nothing changed: one copy,
