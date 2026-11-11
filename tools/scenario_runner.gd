@@ -26207,7 +26207,8 @@ func _scenario_teams_ffa_unchanged_when_off() -> Array[String]:
 	if not rings.is_empty() or outline != Color(0.0, 0.0, 0.0, 1.0) or rm.name_tag(0).get_theme_constant("outline_size") != 6:
 		failures.append("free-for-all name tags had %d rings, outline %s" % [rings.size(), outline])
 	players[1].freeze = true
-	# Past spawn protection (#114), which would zero any hit.
+	# Past spawn protection (#114), which would zero any hit, on either side (#1196).
+	players[0].spawn_protected = false
 	players[1].spawn_protected = false
 	players[0]._land_strike(players[1], HIT_CLEAN_SPEED)
 	if players[1].damage <= 0.0:
@@ -37242,15 +37243,20 @@ func _scenario_soccer_stuck_ball(expect_reset: bool) -> Array[String]:
 	for player: RigidBody2D in rig["players"]:
 		player.teleport_to(centre + Vector2(0.0, -40.0) if expect_reset else far + Vector2(0.0, -40.0))
 		player.linear_velocity = Vector2.ZERO
-	# Keep the fighters parked where we put them.
+	# Keep the fighters parked where we put them. Whether the ball was ever put
+	# back at the centre is watched every tick: once reset it falls from the spawn
+	# and can roll on, so where it lies at the end depends on timing.
 	var elapsed: float = 0.0
+	var moved: bool = false
 	while elapsed < 9.0:
-		await _await_ticks(30)
+		for i in 30:
+			await physics_frame
+			if mode.ball != null and mode.ball.global_position.distance_to(centre) < 100.0:
+				moved = true
 		elapsed += 0.5
 		for player: RigidBody2D in rig["players"]:
 			player.teleport_to(centre + Vector2(0.0, -40.0) if expect_reset else far + Vector2(0.0, -40.0))
 			player.linear_velocity = Vector2.ZERO
-	var moved: bool = mode.ball.global_position.distance_to(centre) < 100.0
 	if expect_reset and not moved:
 		failures.append("the stuck ball never returned to the centre (at %s, centre %s)" % [mode.ball.global_position, centre])
 	if not expect_reset and moved:
