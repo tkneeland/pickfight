@@ -719,6 +719,12 @@ func _on_host_text(text: String) -> void:
 			_send_json({"t": "pong", "n": msg.get("n", 0)})
 		"release":
 			pass # the host owns the toggle now (#481)
+		"recentre":
+			# #1185: a respawn starts the weapon at rest; the mouse drag starts
+			# again from the centre. A held stick is the host's to wait out.
+			if not _pad_driving:
+				_mouse.reset()
+				input_vector = Vector2.ZERO
 		"closed":
 			var closed_reason: String = str(msg.get("reason", "closed"))
 			_return_to_join(reason_text(closed_reason))
