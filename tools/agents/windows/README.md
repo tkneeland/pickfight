@@ -25,12 +25,12 @@ powershell -ExecutionPolicy Bypass -File tools\agents\windows\pf-stop.ps1   -Acc
 
 ## Keep the watchers alive (Task Scheduler), required
 
-Run once: `powershell -ExecutionPolicy Bypass -File tools\agents\windows\pf-install-task.ps1 -Account <handle>`. It registers the task below with a logon trigger plus a 5-minute repeat, so a dead listener is back within 5 minutes, and turns off sleep on AC power (owner, 2026-11-04). The manual version, for reference:
+Run once: `powershell -ExecutionPolicy Bypass -File tools\agents\windows\pf-install-task.ps1 -Account <handle>`. It registers the task below with a logon trigger plus a 5-minute repeat, so a dead listener is back within 5 minutes, and turns off sleep on AC power (owner, 2026-11-04). It runs through `conhost --headless`, so no console window flashes every 5 minutes; re-run the script to update an older task. The manual version, for reference:
 
 Nothing here registers anything. To start the watchers whenever you sign in, run once in PowerShell:
 
 ```powershell
-$a = New-ScheduledTaskAction -Execute "powershell.exe" -Argument '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\Users\<you>\code\pickfight\tools\agents\windows\pf-start.ps1" -Account <handle>'
+$a = New-ScheduledTaskAction -Execute "conhost.exe" -Argument '--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\<you>\code\pickfight\tools\agents\windows\pf-start.ps1" -Account <handle>'
 $t = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 Register-ScheduledTask -TaskName "Pickfight AT watchers" -Action $a -Trigger $t -Description "AT mode watchers (Git Bash)"
 ```
