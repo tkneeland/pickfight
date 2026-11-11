@@ -30,8 +30,8 @@ extends Node
 ## Teams mode (issue #236, ADR-0018): from the host phone only,
 ## `{"t":"gamemode","v":<GameModes id>}` (issue #352) picks the game mode the
 ## same way, and is refused for Hot Potato while Teams is chosen. `{"t":"mode","v":"ffa"|"teams"}` picks the next match's mode, heeded only
-## outside a match (MODE_PHASES); and from any phone, `{"t":"team","v":0|1|-1}`
-## picks Red, Blue or "auto", heeded only in the lobby or countdown
+## outside a match (MODE_PHASES); and from any phone, `{"t":"team","v":0..3|-1}` (0 Red, 1 Blue, 2 Green, 3 Yellow, #1200), and from the host phone `{"t":"teamcount","v":2|3|4}`
+## picks a team or "auto", heeded only in the lobby or countdown
 ## (TEAM_PICK_PHASES). Both are additions: a page that never sends them plays
 ## free-for-all exactly as before, and the lobby state's "teams" and per-player
 ## "team" and "pick" fields are sent only while Teams is chosen.
@@ -154,6 +154,7 @@ const MATCH_PHASES: PackedStringArray = ["playing", "round_end"]
 const HatScript := preload("res://scripts/Hat.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const TeamsScript := preload("res://scripts/Teams.gd")
 const NameFilterScript := preload("res://scripts/NameFilter.gd")
 const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
 ## The eye styles a phone may pick (issue #297), by path (CLAUDE.md).
@@ -541,7 +542,7 @@ var _team_mode: bool = false
 ## Issue #352: the `GameModes` id the host phone chose ("" is Classic), kept in
 ## `HostSettings` so it survives a relaunch. Hot Potato never stands with Teams.
 var _game_mode: String = ""
-## Issue #236: each slot's team pick (0 red, 1 blue), -1 for "auto" -- the
+## Issue #236: each slot's team pick (0 red, 1 blue, 2 green, 3 yellow), -1 for "auto" -- the
 ## default, and what a fresh or released claim goes back to.
 var _slot_team_pick: PackedInt32Array = PackedInt32Array()
 var _last_host: int = -1
@@ -1829,8 +1830,13 @@ func _handle_text(slot: int, text: String) -> void:
 			_weak_link_in[slot] = true # this phone answers pings (#777)
 		"team":
 			var team: Variant = msg.get("v")
-			if _is_number(team) and float(team) in [-1.0, 0.0, 1.0]:
+			if _is_number(team) and float(team) in [-1.0, 0.0, 1.0, 2.0, 3.0]:
 				set_slot_team_pick(slot, int(team))
+		"teamcount":
+			# The host phone's Teams count (#1200): 2, 3 or 4.
+			var count: Variant = msg.get("v")
+			if slot == host_slot() and _is_number(count):
+				apply_host_command("team_count", count)
 
 ## A finite JSON number (JSON gives floats; a scenario may send ints).
 static func _is_number(v: Variant) -> bool:
@@ -2009,23 +2015,32 @@ func _drop_ffa_only_mode() -> void:
 		_game_mode = GameModesScript.CLASSIC
 		HostSettingsScript.shared().set_game_mode(_game_mode)
 
-## Issue #236: `slot`'s team pick, 0 red or 1 blue, or -1 for "auto".
+## Issue #1200: how many teams the next Teams match has: the host's setting (2 to 4), or 2
+## whatever it says when the chosen mode has two sides only (Soccer, Capture the Flag).
+func team_count() -> int:
+	return TeamsScript.clamp_count(HostSettingsScript.shared().team_count, _game_mode)
+
+## Issue #1200: set the team count as the host's Host panel would (a test seam). Whether it was taken.
+func set_team_count(count: int) -> bool:
+	return apply_host_command("team_count", count)
+
+## Issue #236: `slot`'s team pick, 0 red, 1 blue, 2 green or 3 yellow (#1200), or -1 for "auto".
 func slot_team_pick(slot: int) -> int:
 	return _slot_team_pick[slot] if slot >= 0 and slot < _slot_team_pick.size() else -1
 
-## Issue #1199: `slot` picks `team` (0 red, 1 blue, -1 auto) as its phone's team
+## Issue #1199: `slot` picks `team` (0 red, 1 blue, 2 green, 3 yellow, -1 auto) as its phone's team
 ## buttons do: the lobby's player card, a gamepad's X and the Online client send
 ## the same pick. Lobby and countdown only. Returns whether it was taken.
 func set_slot_team_pick(slot: int, team: int) -> bool:
-	if slot < 0 or slot >= _slot_team_pick.size() or team < -1 or team > 1 or not TEAM_PICK_PHASES.has(_phase()):
+	if slot < 0 or slot >= _slot_team_pick.size() or team < -1 or team >= team_count() or not TEAM_PICK_PHASES.has(_phase()):
 		return false
 	_slot_team_pick[slot] = team
 	if _log_input:
 		print("slot %d picked team %d" % [slot, team])
 	return true
 
-## Issue #1199: moves `slot` to the other team than the one the lobby shows it on
-## (Red when it shows none). Returns whether a pick was taken.
+## Issue #1199: moves `slot` to the next team after the one the lobby shows it on, wrapping
+## round the match's teams (#1200; Red when it shows none). Returns whether a pick was taken.
 func toggle_slot_team(slot: int) -> bool:
 	if not bool(_lobby_state.get("teams", false)):
 		return false
@@ -2033,7 +2048,7 @@ func toggle_slot_team(slot: int) -> bool:
 	for entry: Variant in _lobby_state.get("players", []):
 		if entry is Dictionary and int(entry.get("slot", -1)) == slot:
 			shown = int(entry.get("team", -1))
-	return set_slot_team_pick(slot, 1 - shown if shown in [0, 1] else 0)
+	return set_slot_team_pick(slot, (shown + 1) % team_count() if shown >= 0 else 0)
 
 ## Send the lobby state to every connected phone, and keep it for any phone
 ## that binds later. Issue #164: entering a match phase from any other phase
@@ -2648,6 +2663,11 @@ func apply_host_command(cmd: String, arg: Variant = null) -> bool:
 			if not arg is String or not MODE_PHASES.has(phase):
 				return false
 			return set_game_mode(arg)
+		"team_count":
+			if not _is_number(arg) or not MODE_PHASES.has(phase):
+				return false
+			HostSettingsScript.shared().set_team_count(int(arg))
+			return true
 		"stock_lives", "stock_time":
 			if not _is_number(arg) or not MODE_PHASES.has(phase):
 				return false

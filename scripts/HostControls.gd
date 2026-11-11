@@ -25,6 +25,7 @@ const PadMenuScript := preload("res://scripts/PadMenu.gd")
 const TitleScreenScript := preload("res://scripts/TitleScreen.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+const TeamsScript := preload("res://scripts/Teams.gd")
 
 const CONTROL_KEYS: Dictionary = {
 	"local": KEY_C, "online": KEY_O, "solo": KEY_S, "mode": KEY_T, "bots": KEY_B, "target_down": KEY_MINUS,
@@ -49,7 +50,7 @@ const LEAVE_BUTTON_FONT_SIZE: int = 18
 ## #545: Start pressed with the lobby's conditions unmet used to do nothing and
 ## say nothing. The reason shows in the status line for a few seconds.
 const START_NOTICE_MSEC: int = 4000
-const PAD_ORDER: Array[String] = ["online", "local", "solo", "mode", "bots", "bot_skill", "target_down", "target_up", "start"] # focus lands on the match kind first, where Go online was
+const PAD_ORDER: Array[String] = ["online", "local", "solo", "mode", "team_count", "bots", "bot_skill", "target_down", "target_up", "start"] # focus lands on the match kind first, where Go online was
 
 var _screen # the LobbyScreen
 var _controls: Dictionary = {}
@@ -214,6 +215,13 @@ func _build_host_panel(parent: Control) -> void:
 	teams.custom_minimum_size.x = 84.0
 	teams.pressed.connect(press_control.bind("mode"))
 	_controls["mode"] = teams
+	# #1200: how many teams, 2 to 4; a press steps 2, 3, 4 and back. Greyed out in Soccer and Capture the Flag (two sides).
+	var team_count: Button = ScreenKitScript.themed_button(_screen.tr("TEAM_COUNT_BUTTON") % 2, UiThemeScript.VALUE_BUTTON, "team_count")
+	team_count.custom_minimum_size = Vector2(110, STEP_BUTTON_PX)
+	team_count.visible = false
+	team_count.pressed.connect(press_control.bind("team_count"))
+	_controls["team_count"] = team_count
+	teams_row.add_child(team_count)
 	teams_row.add_child(teams)
 	box.add_child(teams_row)
 
@@ -302,6 +310,9 @@ func press_control(id: String) -> void:
 				server.apply_host_command("kind", id)
 		"mode":
 			server.apply_host_command("mode", "ffa" if server.team_mode() else "teams")
+		"team_count":
+			var wanted: int = HostSettingsScript.shared().team_count
+			server.apply_host_command("team_count", TeamsScript.MIN_COUNT if wanted >= TeamsScript.MAX_COUNT else wanted + 1)
 		"bots":
 			# #445: one more bot; #1182: stops at the last free seat like the + button (no wrap to none).
 			var count: int = server.bot_director.bot_count()
@@ -389,7 +400,7 @@ func _note_start_blocked() -> void:
 		notice = _screen.tr("LOBBY_START_NEED_PLAYERS") % [claimed.size(), min_players]
 	elif held > 0:
 		notice = _screen.tr("LOBBY_START_HELD_SEAT") % held
-	elif not last_args.is_empty() and bool(last_args[0].get("teams", false)) and not _screen.both_teams_manned(last_args[0]):
+	elif not last_args.is_empty() and bool(last_args[0].get("teams", false)) and not TeamsScript.all_manned(_screen.team_map(last_args[0]), _screen.team_count_of(last_args[0])):
 		notice = _screen.tr("LOBBY_BOTH_TEAMS_NEED_PLAYER")
 	if notice.is_empty():
 		return
@@ -434,6 +445,10 @@ func refresh() -> void:
 	var teams_on: bool = server.team_mode()
 	control_button("mode").text = _screen.tr("LOBBY_ON") if teams_on else _screen.tr("LOBBY_OFF")
 	_set_variation(control_button("mode"), UiThemeScript.SWITCH_BUTTON_ON if teams_on else UiThemeScript.SWITCH_BUTTON)
+	var count_button: Button = control_button("team_count")
+	count_button.visible = teams_on
+	count_button.text = _screen.tr("TEAM_COUNT_BUTTON") % server.team_count()
+	count_button.disabled = preload("res://scripts/GameModes.gd").max_teams(server.game_mode()) <= TeamsScript.MIN_COUNT # Soccer, CTF
 	control_button("bots").text = str(server.bot_director.bot_count())
 	control_button("bot_skill").text = _screen.tr("BOT_SKILL_" + str(HostSettingsScript.shared().bot_difficulty).to_upper())
 	var leave: Button = control_button("leave")
@@ -523,11 +538,11 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["invite"], ["join_help", "relay_nudge"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode", "team_count"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["invite"], ["join_help", "relay_nudge"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]
-			if button.is_visible_in_tree():
+			if button.is_visible_in_tree() and not button.disabled:
 				row.append(button)
 		if not row.is_empty():
 			rows.append(row)

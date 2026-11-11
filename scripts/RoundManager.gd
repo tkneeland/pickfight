@@ -962,7 +962,7 @@ func _update_score_label() -> void:
 		return
 	var parts: PackedStringArray = PackedStringArray()
 	if _team_mode:
-		for team in TeamsScript.COUNT:
+		for team in _team_count:
 			parts.append(tr("SCORE_TEAM") % [TeamsScript.team_name(team), _team_scores[team]])
 		label.text = "  ".join(parts)
 		return
@@ -1679,7 +1679,7 @@ func victory_data() -> Dictionary:
 		inputs = _controller_server.continue_inputs()
 	return {"slots": slots, "scores": _scores, "winner": -1 if _team_mode else _match_winner_slot,
 		"awards": _all_awards(slots), "winner_team": _match_winner_team if _team_mode else -1,
-		"teams": _teams.duplicate() if _team_mode else {}, "team_scores": _team_scores if _team_mode else PackedInt32Array(),
+		"teams": _teams.duplicate() if _team_mode else {}, "team_scores": _team_scores.slice(0, _team_count) if _team_mode else PackedInt32Array(),
 		"stats": _stats.stat_rows(slots), "inputs": inputs, "names": names, "end_card": _end_card_up}
 
 ## The core awards plus the extra superlatives (issue #325).
@@ -1950,9 +1950,10 @@ func _bots_waiting_for_a_human(roster: Array[int]) -> bool:
 #
 # The host phone picks Free-for-all (the default) or Teams in the lobby; the
 # mode is fixed for a whole match when its countdown runs out. In a Teams
-# match every player is on Red or Blue: each phone's own pick, then everyone
+# match every player is on one of the host's two to four teams, Red, Blue,
+# Green and Yellow (#1200): each phone's own pick, then everyone
 # else balanced onto the smaller team, phones before bots (`Teams.assign()`).
-# A countdown needs both teams manned, and a changed pick or mode cancels it.
+# A countdown needs every team manned, and a changed pick, count or mode cancels it.
 # A round is won by the team with anyone left standing, and scores that team
 # a point; the match is first to the host's "first to N" in team points. The
 # winning team's survivors keep their weapons, as a lone winner does.
@@ -1964,11 +1965,19 @@ func _bots_waiting_for_a_human(roster: Array[int]) -> bool:
 
 ## The current match's mode, fixed at its start: true for a Teams match.
 var _team_mode: bool = false
-## slot -> team (0 red, 1 blue) for the current Teams match, kept across its
+## slot -> team (0 red, 1 blue, 2 green, 3 yellow) for the current Teams match, kept across its
 ## rounds; a player new to the match is balanced in at the next round start.
 var _teams: Dictionary = {}
-## Team round wins this match, [red, blue].
-var _team_scores: PackedInt32Array = PackedInt32Array([0, 0])
+## How many teams the current Teams match has (2 to 4, #1200), fixed with its mode.
+var _team_count: int = TeamsScript.MIN_COUNT
+## Team round wins this match, one per team that exists (Red, Blue, Green, Yellow); the
+## ones past `_team_count` stay 0.
+var _team_scores: PackedInt32Array = _no_team_scores()
+
+static func _no_team_scores() -> PackedInt32Array:
+	var scores := PackedInt32Array()
+	scores.resize(TeamsScript.COUNT)
+	return scores
 ## The team that won the match, or -1.
 var _match_winner_team: int = -1
 ## The team that took the last round, or -1.
@@ -1989,6 +1998,10 @@ func team_mode() -> bool:
 func team_of(slot: int) -> int:
 	return int(_teams.get(slot, TeamsScript.NONE)) if _team_mode else TeamsScript.NONE
 
+## How many teams the current Teams match has.
+func team_count() -> int:
+	return _team_count
+
 ## `team`'s round wins this match.
 func team_score(team: int) -> int:
 	return _team_scores[team] if team >= 0 and team < TeamsScript.COUNT else 0
@@ -1996,6 +2009,12 @@ func team_score(team: int) -> int:
 ## The team that won the match the victory screen is showing, or -1.
 func match_winner_team() -> int:
 	return _match_winner_team
+
+## How many teams the host chose for the next match (2 to 4).
+func _requested_team_count() -> int:
+	if _controller_server != null and _controller_server.has_method("team_count"):
+		return TeamsScript.clamp_count(int(_controller_server.team_count()))
+	return TeamsScript.MIN_COUNT
 
 ## Whether the host phone has chosen Teams for the next match.
 func _requested_team_mode() -> bool:
@@ -2013,24 +2032,25 @@ func _lobby_teams(roster: Array[int]) -> Dictionary:
 				picks[slot] = pick
 		if _is_bot_slot(slot):
 			bots.append(slot)
-	return TeamsScript.assign(roster, picks, bots)
+	return TeamsScript.assign(roster, picks, bots, {}, _requested_team_count())
 
 ## A lobby may count down: always in a free-for-all, and in Teams only with
 ## somebody on each team.
 func _teams_can_start(roster: Array[int]) -> bool:
-	return not _requested_team_mode() or TeamsScript.both_manned(_lobby_teams(roster))
+	return not _requested_team_mode() or TeamsScript.all_manned(_lobby_teams(roster), _requested_team_count())
 
-## What a countdown is cancelled by changing: the mode, and who is on which team.
+## What a countdown is cancelled by changing: the mode, how many teams, and who is on which team.
 func _team_key(roster: Array[int]) -> Array:
 	var on: bool = _requested_team_mode()
-	return [on, _lobby_teams(roster) if on else {}]
+	return [on, _requested_team_count() if on else 0, _lobby_teams(roster) if on else {}]
 
 ## The countdown ran out: fix the mode and the teams for the whole match.
 func _begin_team_match() -> void:
 	_team_mode = lobby_enabled and _requested_team_mode()
 	_latch_game_mode()
+	_team_count = TeamsScript.clamp_count(_requested_team_count(), game_mode) if _team_mode else TeamsScript.MIN_COUNT
 	_teams = _lobby_teams(_roster()) if _team_mode else {}
-	_team_scores = PackedInt32Array([0, 0])
+	_team_scores = _no_team_scores()
 	_match_winner_team = -1
 	_last_winner_team = -1
 	_team_keep_weapon.clear()
@@ -2045,7 +2065,7 @@ func _apply_teams(entering: Array[int]) -> void:
 		for slot: int in entering:
 			if _is_bot_slot(slot):
 				bots.append(slot)
-		_teams = TeamsScript.assign(entering, {}, bots, _teams)
+		_teams = TeamsScript.assign(entering, {}, bots, _teams, _team_count)
 	for slot in _players.size():
 		var player: Variant = _players[slot]
 		if player != null and "team" in player:
@@ -2054,7 +2074,7 @@ func _apply_teams(entering: Array[int]) -> void:
 ## The distinct teams among `slots`, Red first.
 func _teams_of(slots: Array[int]) -> Array[int]:
 	var out: Array[int] = []
-	for team in TeamsScript.COUNT:
+	for team in _team_count:
 		for slot: int in slots:
 			if int(_teams.get(slot, TeamsScript.NONE)) == team:
 				out.append(team)
@@ -2161,8 +2181,17 @@ func _team_scoreboard_entry(slot: int, score_label: Label, name_label: Label) ->
 		name_label.text = "[%s] %s  %s" % [TeamsScript.team_letter(team), _slot_name(slot), TeamsScript.team_name(team)]
 		name_label.add_theme_color_override("font_color", TeamsScript.team_color(team))
 
-## The podium's order in a Teams match: the winning team first, then Red
-## before Blue, then by slot. Strict, as `sort_custom()` needs.
+## The teams' round wins as one line: "RED 3 - 2 BLUE" for two teams, "RED: 3  BLUE: 2  GREEN: 1" for more (#1200).
+func team_score_line() -> String:
+	if _team_count == TeamsScript.MIN_COUNT:
+		return tr("BANNER_TEAM_SCORE") % [_team_scores[TeamsScript.RED], _team_scores[TeamsScript.BLUE]]
+	var parts: PackedStringArray = PackedStringArray()
+	for team in _team_count:
+		parts.append(tr("SCORE_TEAM") % [TeamsScript.team_name(team), _team_scores[team]])
+	return "  ".join(parts)
+
+## The podium's order in a Teams match: the winning team first, then the
+## teams by round wins (Red, Blue, Green, Yellow on a tie), then by slot. Strict, as `sort_custom()` needs.
 func _team_podium_before(a: int, b: int) -> bool:
 	var ta: int = team_of(a)
 	var tb: int = team_of(b)
@@ -2171,6 +2200,8 @@ func _team_podium_before(a: int, b: int) -> bool:
 	if wa != wb:
 		return wa
 	if ta != tb:
+		if ta >= 0 and tb >= 0 and team_score(ta) != team_score(tb):
+			return team_score(ta) > team_score(tb)
 		return ta >= 0 and (tb < 0 or ta < tb)
 	return a < b
 
@@ -2195,7 +2226,12 @@ func _add_team_state(state: Dictionary, roster: Array[int], in_lobby: bool) -> v
 		if in_lobby and _controller_server.has_method("slot_team_pick"):
 			entry["pick"] = int(_controller_server.slot_team_pick(slot))
 	state["teams"] = true
-	state["team_scores"] = [_team_scores[TeamsScript.RED], _team_scores[TeamsScript.BLUE]]
+	var shown_count: int = _requested_team_count() if in_lobby else _team_count
+	state["team_count"] = shown_count
+	# Soccer, Capture the Flag: the host's team count is greyed out (#1200). Always sent while teams show, so the
+	# Online client reads the same answer as the host panel (which asks the server's game mode).
+	state["two_teams_only"] = _controller_server.has_method("game_mode") and GameModesScript.max_teams(str(_controller_server.game_mode())) <= TeamsScript.MIN_COUNT
+	state["team_scores"] = Array(_team_scores.slice(0, shown_count))
 	state["winner_team"] = _match_winner_team
 
 # --- Kill feed, KO credit and match awards (issue #148) ------------------------
@@ -2565,7 +2601,7 @@ func _ko_round_ended(winner_slot: int) -> void:
 	if _team_mode:
 		if feed != null and _last_winner_team != -1:
 			feed.show_banner(tr("BANNER_TEAM_WINS") % TeamsScript.team_name(_last_winner_team),
-				tr("BANNER_TEAM_SCORE") % [_team_scores[TeamsScript.RED], _team_scores[TeamsScript.BLUE]],
+				team_score_line(),
 				TeamsScript.team_color(_last_winner_team))
 		return
 	if feed != null and winner_slot != -1 and _in_round.size() >= 3 and not mode_won():

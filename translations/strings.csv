@@ -146,7 +146,7 @@ JOIN_WAITING,Waiting for the host...,Warte auf den Host...,En attente de l'hôte
 JOIN_WAITING_HOST,"Joined room %s, waiting for the host...","Raum %s beigetreten, warte auf den Host...","Salon %s rejoint, en attente de l'hôte...","Te uniste a la sala %s, esperando al anfitrión...","Entrou na sala %s, esperando o anfitrião...","已加入房间 %s,等待主机...",ルーム %s に参加しました。ホストを待っています...,방 %s에 들어왔어요. 호스트를 기다리는 중...,"Вы в комнате %s, ждём хозяина..."
 JOIN_YOUR_NAME,Your name,Dein Name,Ton nom,Tu nombre,Seu nome,你的名字,あなたの名前,내 이름,Ваше имя
 LOBBY_AUTO,(auto),(auto),(auto),(auto),(auto),(自动),(自動),(자동),(авто)
-LOBBY_BOTH_TEAMS_NEED_PLAYER,Both teams need a player: pick a team on your phone,Beide Teams brauchen einen Spieler: Wähl auf dem Handy ein Team,Chaque équipe veut un joueur : choisis une équipe sur ton téléphone,Ambos equipos necesitan un jugador: elige equipo en tu celular,Os dois times precisam de um jogador: escolha um time no celular,两队都需要玩家:请在手机上选队伍,両チームに最低1人必要です: スマホでチームを選んでね,양 팀 모두 플레이어가 필요해요: 폰에서 팀을 고르세요,В обеих командах нужен игрок: выберите команду на телефоне
+LOBBY_BOTH_TEAMS_NEED_PLAYER,Every team needs a player or a bot,Jedes Team braucht einen Spieler oder einen Bot,Chaque équipe veut un joueur ou un bot,Todos los equipos necesitan un jugador o un bot,Todos os times precisam de um jogador ou um bot,每队都需要一名玩家或机器人,すべてのチームにプレイヤーかボットが必要です,모든 팀에 플레이어나 봇이 필요해요,В каждой команде нужен игрок или бот
 LOBBY_FIRST_TO,First to %d,Erster bis %d,Premier à %d,El primero a %d,O primeiro a %d,先到 %d,先取 %d,선취 %d,До %d
 LOBBY_CAPTURES_TO_WIN,Captures to win %d,Captures zum Sieg %d,Captures pour gagner %d,Capturas para ganar %d,Capturas para vencer %d,夺旗 %d 次获胜,%d回奪取で勝ち,%d회 탈취 승리,Захватов для победы: %d
 LOBBY_GOALS_TO_WIN,Goals to win %d,Tore zum Sieg %d,Buts pour gagner %d,Goles para ganar %d,Gols para vencer %d,进 %d 球获胜,%dゴールで勝ち,%d골 승리,Голов для победы: %d
@@ -263,7 +263,10 @@ STAGE_VENT,Vent,Schacht,Conduit,Ducto,Duto,通风口,ベント,환기구,Вен�
 STAGE_ZIGGURAT,Ziggurat,Zikkurat,Ziggourat,Zigurat,Zigurate,金字神塔,ジッグラト,지구라트,Зиккурат
 STATS_LINE,%s  %d KO  %d dealt  %d taken  %d self  %d pick  %s,%s  %d KO  %d verteilt  %d kassiert  %d selbst  %d Pick  %s,%s  %d KO  %d infligés  %d subis  %d auto  %d obj  %s,%s  %d KO  %d causado  %d recibido  %d auto  %d obj  %s,%s  %d KO  %d causado  %d sofrido  %d auto  %d item  %s,%s  %d 击倒  造成 %d  承受 %d  自爆 %d  道具 %d  %s,%s  %d KO  与 %d  被 %d  自滅 %d  取得 %d  %s,%s  %d KO  준 피해 %d  받은 피해 %d  자멸 %d  획득 %d  %s,%s  %d нок.  нанёс %d  получил %d  сам %d  подборов %d  %s
 TEAM_BLUE,BLUE,BLAU,BLEU,AZUL,AZUL,蓝,青,블루,СИНИЕ
+TEAM_COUNT_BUTTON,%d Teams,%d Teams,%d équipes,%d equipos,%d times,%d队,%dチーム,%d팀,%d команды
+TEAM_GREEN,GREEN,GRÜN,VERT,VERDE,VERDE,绿,緑,그린,ЗЕЛЁНЫЕ
 TEAM_RED,RED,ROT,ROUGE,ROJO,VERMELHO,红,赤,레드,КРАСНЫЕ
+TEAM_YELLOW,YELLOW,GELB,JAUNE,AMARILLO,AMARELO,黄,黄,옐로,ЖЁЛТЫЕ
 VICTORY_CONTINUE_WITH,Continue with %s,Weiter mit %s,Continuer avec %s,Continuar con %s,Continuar com %s,用 %s 继续,%s で続ける,%s(으)로 계속,Продолжить: %s
 VICTORY_INPUT_PAD,A on a gamepad,A am Gamepad,A sur une manette,A en un control,A no controle,手柄上的 A 键,ゲームパッドのA,게임패드의 A,A на геймпаде
 VICTORY_INPUT_PHONE,a tap on your phone,ein Tipp aufs Handy,un tap sur ton téléphone,un toque en tu celular,um toque no celular,在手机上点一下,スマホをタップ,폰을 탭하세요,касание на телефоне
@@ -360,7 +363,7 @@ LOBBY_COUNT,"%d joined, %d bots","%d dabei, %d Bots","%d connectés, %d bots","%
 LOBBY_COUNT_ONE_BOT,"%d joined, 1 bot","%d dabei, 1 Bot","%d connectés, 1 bot","%d unidos, 1 bot","%d entraram, 1 bot","%d 人加入,1 个电脑",%d人参加、ボット1体,"%d명 참가, 봇 1명","Зашли: %d, ботов: 1"
 LOBBY_TEAM_TAG,%s TEAM,TEAM %s,ÉQUIPE %s,EQUIPO %s,TIME %s,%s队,%sチーム,%s팀,КОМАНДА %s
 LOBBY_TEAM_SWITCH,Move to %s,Zu %s wechseln,Passer à %s,Pasar a %s,Ir para %s,换到%s队,%sチームへ,%s팀으로,Перейти: %s
-LOBBY_TEAMS_UNEVEN,Teams are uneven,Teams sind ungleich groß,Équipes inégales,Equipos desiguales,Times desiguais,两队人数不同,チームの人数が違います,팀 인원이 달라요,Команды неравны
+LOBBY_TEAMS_UNEVEN,Teams are uneven,Teams sind ungleich groß,Équipes inégales,Equipos desiguales,Times desiguais,各队人数不同,チームの人数が違います,팀 인원이 달라요,Команды неравны
 LOBBY_STARTING,Get ready!,Macht euch bereit!,Prêts ?,¡Prepárense!,Preparem-se!,准备!,よーい!,준비하세요!,Приготовьтесь!
 LOBBY_NOT_READY_ONE,1 player not ready yet,1 Spieler noch nicht bereit,1 joueur pas encore prêt,1 jugador aún no está listo,1 jogador ainda não está pronto,还有 1 位玩家没准备好,まだ1人準備できていません,아직 1명이 준비 안 했어요,Ещё 1 игрок не готов
 LOBBY_NOT_READY_N,%d players not ready yet,%d Spieler noch nicht bereit,%d joueurs pas encore prêts,%d jugadores aún no están listos,%d jogadores ainda não estão prontos,还有 %d 位玩家没准备好,まだ%d人準備できていません,아직 %d명이 준비 안 했어요,Ещё %d игроков не готовы

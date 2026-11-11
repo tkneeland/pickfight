@@ -296,7 +296,7 @@
   /* Issue #236: the team picker, shown only in a Teams lobby, and the line
      that says which team this phone is on. */
   #team-row { font-size: 20px; display: none; align-items: center; gap: 10px; }
-  #team-row.show { display: flex; }
+  #team-row.show { display: flex; flex-wrap: wrap; row-gap: 8px; max-width: 100%; box-sizing: border-box; }
   #team-row button {
     font: inherit;
     font-size: 20px;
@@ -561,10 +561,12 @@
     border-radius: 12px;
     box-shadow: inset 2px 2px 0 rgba(20, 24, 29, 0.18);
   }
-  #team-row button { padding: 8px 14px; font-size: 22px; box-shadow: 3px 3px 0 var(--ink); }
+  #team-row button { padding: 8px 12px; font-size: 20px; box-shadow: 3px 3px 0 var(--ink); }
   #team-row button.on { background: var(--yellow); }
   #team-red { background: #f24545 !important; color: var(--ink) !important; }
   #team-blue { background: #4d8cff !important; color: var(--ink) !important; }
+  #team-green { background: #40cc59 !important; color: var(--ink) !important; }
+  #team-yellow { background: #fbcc26 !important; color: var(--ink) !important; }
   #team-row button:not(.on) { opacity: 0.6; }
   #team-row button.on { box-shadow: 0 0 0 3px var(--cream), 0 0 0 6px var(--ink), 4px 4px 0 6px var(--ink); }
   #team-line { font-family: var(--display); font-weight: 400; font-size: 24px; text-shadow: 2px 2px 0 var(--ink); }
@@ -629,6 +631,8 @@
   <div id="team-row">Team
     <button id="team-red" type="button">Red</button>
     <button id="team-blue" type="button">Blue</button>
+    <button id="team-green" type="button">Green</button>
+    <button id="team-yellow" type="button">Yellow</button>
     <button id="team-auto" type="button">Auto</button>
   </div>
   <button id="ready-btn" type="button">Ready</button>
@@ -681,6 +685,7 @@
     <button id="menu-end" type="button" class="danger">End match</button>
     <button id="menu-kick" type="button">Kick player</button>
     <button id="menu-mode" type="button">Format: Free-for-all</button>
+    <button id="menu-teamcount" type="button" hidden>Teams: 2</button>
     <div id="menu-gamemodes"></div>
     <button id="menu-stock-lives" type="button" hidden>Lives: 3</button>
     <button id="menu-stock-time" type="button" hidden>Time: 8 min</button>
@@ -753,6 +758,9 @@
         "PHONE_TEAM": "Team",
         "PHONE_TEAM_RED": "Red",
         "PHONE_TEAM_BLUE": "Blue",
+        "PHONE_TEAM_GREEN": "Green",
+        "PHONE_TEAM_YELLOW": "Yellow",
+        "PHONE_TEAM_COUNT": "Teams: {0}",
         "PHONE_TEAM_AUTO": "Auto",
         "PHONE_READY": "Ready",
         "PHONE_HAT_AND_COLOUR": "Hat & colour",
@@ -899,6 +907,9 @@
       "PHONE_TEAM": "Team",
       "PHONE_TEAM_RED": "Rot",
       "PHONE_TEAM_BLUE": "Blau",
+      "PHONE_TEAM_GREEN": "Grün",
+      "PHONE_TEAM_YELLOW": "Gelb",
+      "PHONE_TEAM_COUNT": "Teams: {0}",
       "PHONE_TEAM_AUTO": "Auto",
       "PHONE_READY": "Bereit",
       "PHONE_HAT_AND_COLOUR": "Hut & Farbe",
@@ -1045,6 +1056,9 @@
       "PHONE_TEAM": "Équipe",
       "PHONE_TEAM_RED": "Rouge",
       "PHONE_TEAM_BLUE": "Bleue",
+      "PHONE_TEAM_GREEN": "Vert",
+      "PHONE_TEAM_YELLOW": "Jaune",
+      "PHONE_TEAM_COUNT": "Équipes : {0}",
       "PHONE_TEAM_AUTO": "Auto",
       "PHONE_READY": "Prêt",
       "PHONE_HAT_AND_COLOUR": "Chapeau & couleur",
@@ -1191,6 +1205,9 @@
       "PHONE_TEAM": "Equipo",
       "PHONE_TEAM_RED": "Rojo",
       "PHONE_TEAM_BLUE": "Azul",
+      "PHONE_TEAM_GREEN": "Verde",
+      "PHONE_TEAM_YELLOW": "Amarillo",
+      "PHONE_TEAM_COUNT": "Equipos: {0}",
       "PHONE_TEAM_AUTO": "Auto",
       "PHONE_READY": "Listo",
       "PHONE_HAT_AND_COLOUR": "Sombrero y color",
@@ -1337,6 +1354,9 @@
       "PHONE_TEAM": "Time",
       "PHONE_TEAM_RED": "Vermelho",
       "PHONE_TEAM_BLUE": "Azul",
+      "PHONE_TEAM_GREEN": "Verde",
+      "PHONE_TEAM_YELLOW": "Amarelo",
+      "PHONE_TEAM_COUNT": "Times: {0}",
       "PHONE_TEAM_AUTO": "Auto",
       "PHONE_READY": "Pronto",
       "PHONE_HAT_AND_COLOUR": "Chapéu e cor",
@@ -1483,6 +1503,9 @@
       "PHONE_TEAM": "队伍",
       "PHONE_TEAM_RED": "红",
       "PHONE_TEAM_BLUE": "蓝",
+      "PHONE_TEAM_GREEN": "绿",
+      "PHONE_TEAM_YELLOW": "黄",
+      "PHONE_TEAM_COUNT": "队伍数:{0}",
       "PHONE_TEAM_AUTO": "自动",
       "PHONE_READY": "准备",
       "PHONE_HAT_AND_COLOUR": "帽子和颜色",
@@ -1629,6 +1652,9 @@
       "PHONE_TEAM": "チーム",
       "PHONE_TEAM_RED": "赤",
       "PHONE_TEAM_BLUE": "青",
+      "PHONE_TEAM_GREEN": "緑",
+      "PHONE_TEAM_YELLOW": "黄",
+      "PHONE_TEAM_COUNT": "チーム数: {0}",
       "PHONE_TEAM_AUTO": "自動",
       "PHONE_READY": "準備OK",
       "PHONE_HAT_AND_COLOUR": "帽子とカラー",
@@ -1775,6 +1801,9 @@
       "PHONE_TEAM": "팀",
       "PHONE_TEAM_RED": "레드",
       "PHONE_TEAM_BLUE": "블루",
+      "PHONE_TEAM_GREEN": "그린",
+      "PHONE_TEAM_YELLOW": "옐로",
+      "PHONE_TEAM_COUNT": "팀 수: {0}",
       "PHONE_TEAM_AUTO": "자동",
       "PHONE_READY": "준비",
       "PHONE_HAT_AND_COLOUR": "모자와 색상",
@@ -1921,6 +1950,9 @@
       "PHONE_TEAM": "Команда",
       "PHONE_TEAM_RED": "Красные",
       "PHONE_TEAM_BLUE": "Синие",
+      "PHONE_TEAM_GREEN": "Зелёные",
+      "PHONE_TEAM_YELLOW": "Жёлтые",
+      "PHONE_TEAM_COUNT": "Команд: {0}",
       "PHONE_TEAM_AUTO": "Авто",
       "PHONE_READY": "Готов",
       "PHONE_HAT_AND_COLOUR": "Шапка и цвет",
@@ -2090,6 +2122,8 @@
       "PHONE_TEAM": "#team-row",
       "PHONE_TEAM_RED": "#team-red",
       "PHONE_TEAM_BLUE": "#team-blue",
+      "PHONE_TEAM_GREEN": "#team-green",
+      "PHONE_TEAM_YELLOW": "#team-yellow",
       "PHONE_TEAM_AUTO": "#team-auto",
       "PHONE_READY": "#ready-btn",
       "PHONE_HAT_AND_COLOUR": "#look-btn",
@@ -2485,9 +2519,14 @@
   }
 
   // ---- teams (issue #236) ---------------------------------------------------
-  // Must match Teams.gd: 0 is Red, 1 is Blue.
-  var TEAM_NAMES = [t("PHONE_TEAM_RED"), t("PHONE_TEAM_BLUE")];
-  var TEAM_COLORS = ["#f24545", "#4d8cff"];
+  // Must match Teams.gd: 0 is Red, 1 is Blue, 2 is Green, 3 is Yellow (#1200).
+  var TEAM_NAMES = [t("PHONE_TEAM_RED"), t("PHONE_TEAM_BLUE"), t("PHONE_TEAM_GREEN"), t("PHONE_TEAM_YELLOW")];
+  var TEAM_COLORS = ["#f24545", "#4d8cff", "#40cc59", "#fbcc26"];
+  var TEAM_BUTTON_IDS = ["team-red", "team-blue", "team-green", "team-yellow"];
+  // How many teams the lobby has (2 to 4); 2 from a host that predates the count.
+  function teamCount() {
+    return lobby && typeof lobby.team_count === "number" ? Math.max(2, Math.min(4, lobby.team_count)) : 2;
+  }
   // This phone's team in a Teams lobby or match, or -1 (free-for-all).
   function myTeam() {
     if (!lobby || !lobby.teams) { return -1; }
@@ -2497,7 +2536,7 @@
   // This phone's own pick: 0, 1, or -1 for auto.
   function myPick() {
     var me = playerBySlot(slot);
-    return me && typeof me.pick === "number" ? me.pick : -1;
+    return me && typeof me.pick === "number" && me.pick < teamCount() ? me.pick : -1;
   }
   // The latest lobby state's entry for slot n, or null (no lobby, or no such player).
   function playerBySlot(n) {
@@ -2515,8 +2554,11 @@
     var picking = !!msg.teams && (msg.phase === "lobby" || msg.phase === "countdown");
     teamRowEl.classList.toggle("show", picking);
     var pick = myPick();
-    document.getElementById("team-red").className = pick === 0 ? "on" : "";
-    document.getElementById("team-blue").className = pick === 1 ? "on" : "";
+    for (var ti = 0; ti < TEAM_BUTTON_IDS.length; ti++) {
+      var teamBtn = document.getElementById(TEAM_BUTTON_IDS[ti]);
+      teamBtn.className = pick === ti ? "on" : "";
+      teamBtn.style.display = ti < teamCount() ? "" : "none";
+    }
     document.getElementById("team-auto").className = pick === -1 ? "on" : "";
     teamLineEl.style.display = team >= 0 ? "block" : "none";
     teamLineEl.style.color = team >= 0 ? TEAM_COLORS[team] : "";
@@ -2526,6 +2568,8 @@
   function sendTeam(team) { sendText({ t: "team", v: team }); }
   document.getElementById("team-red").addEventListener("click", function () { sendTeam(0); });
   document.getElementById("team-blue").addEventListener("click", function () { sendTeam(1); });
+  document.getElementById("team-green").addEventListener("click", function () { sendTeam(2); });
+  document.getElementById("team-yellow").addEventListener("click", function () { sendTeam(3); });
   document.getElementById("team-auto").addEventListener("click", function () { sendTeam(-1); });
 
   function sendName() { sendText({ t: "name", v: myName }); }
@@ -3262,6 +3306,8 @@
   var menuKickBtn = document.getElementById("menu-kick");
   // Issue #236: Free-for-all or Teams, only between matches.
   var menuModeBtn = document.getElementById("menu-mode");
+  // Issue #1200: how many teams (2 to 4) in a Teams match; the host greys it out in Soccer and Capture the Flag.
+  var menuTeamCountBtn = document.getElementById("menu-teamcount");
   // Stock lobby controls (issue #354), shown only while the lobby carries lobby.stock.
   var menuStockLivesBtn = document.getElementById("menu-stock-lives");
   var menuStockTimeBtn = document.getElementById("menu-stock-time");
@@ -3338,6 +3384,9 @@
     menuKickBtn.disabled = others === 0;
     menuModeBtn.textContent = lobby.mode === "teams" ? t("PHONE_FORMAT_TEAMS") : t("PHONE_FORMAT_FFA");
     menuModeBtn.disabled = inMatch();
+    menuTeamCountBtn.hidden = lobby.mode !== "teams";
+    menuTeamCountBtn.textContent = t("PHONE_TEAM_COUNT", teamCount());
+    menuTeamCountBtn.disabled = inMatch() || !!lobby.two_teams_only;
     refreshGameModes();
     refreshRulesSummary();
     if (viewShown("menu-rules")) { renderRules(); }
@@ -3465,6 +3514,10 @@
       btn.disabled = inMatch() || (teams && !!row.ffa_only) || (!teams && !!row.teams_only);
     });
   }
+  menuTeamCountBtn.addEventListener("click", function () {
+    if (inMatch() || lobby.two_teams_only) { return; }
+    sendText({ t: "teamcount", v: teamCount() >= 4 ? 2 : teamCount() + 1 });
+  });
   menuModeBtn.addEventListener("click", function () {
     if (inMatch()) { return; }
     sendText({ t: "mode", v: lobby.mode === "teams" ? "ffa" : "teams" });

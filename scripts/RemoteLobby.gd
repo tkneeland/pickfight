@@ -28,6 +28,8 @@ var look_button: Button
 var help_button: Button
 var host_row: HBoxContainer
 var mode_button: Button
+## The host row's team count (#1200), 2 to 4: shown while Teams is chosen, greyed out in Soccer and Capture the Flag.
+var team_count_button: Button
 var target_label: Label
 var leave_button: Button
 var ready_button: Button
@@ -78,6 +80,9 @@ func build(parent: Node, copy_pressed: Callable) -> void:
 	right.add_child(host_row)
 	mode_button = ScreenKitScript.themed_button("", UiThemeScript.SWITCH_BUTTON, "Mode")
 	host_row.add_child(mode_button)
+	team_count_button = ScreenKitScript.themed_button("", UiThemeScript.VALUE_BUTTON, "TeamCount")
+	team_count_button.visible = false
+	host_row.add_child(team_count_button)
 	var down: Button = ScreenKitScript.themed_button("-", UiThemeScript.STEP_BUTTON, "TargetDown")
 	host_row.add_child(down)
 	target_label = ScreenKitScript.themed_label("", 22, UiThemeScript.MUTED_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "TargetLabel")
@@ -99,10 +104,12 @@ func build(parent: Node, copy_pressed: Callable) -> void:
 	down.pressed.connect(func() -> void: step_target.emit(-1))
 	up.pressed.connect(func() -> void: step_target.emit(1))
 	mode_button.pressed.connect(func() -> void: toggle_mode.emit())
+	team_count_button.pressed.connect(func() -> void: step_team_count.emit())
 
 signal team_picked(team: int)
 signal step_target(delta: int)
 signal toggle_mode
+signal step_team_count
 
 ## Your look and How to play take focus only while a gamepad is the active
 ## input, as the host's buttons do only under its pad menu (HostControls.set_pad_menu),

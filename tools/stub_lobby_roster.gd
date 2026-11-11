@@ -41,8 +41,14 @@ var teams_on: bool = false
 var team_picks: Dictionary = {}
 var bot_slots: Array[int] = []
 
+## How many teams the host chose (#1200), 2 to 4.
+var team_count_wanted: int = 2
+
 func team_mode() -> bool:
 	return teams_on
+
+func team_count() -> int:
+	return team_count_wanted
 
 func slot_team_pick(slot: int) -> int:
 	return int(team_picks.get(slot, -1))

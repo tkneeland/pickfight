@@ -12,7 +12,8 @@ owner's default decisions:
 
 - The host phone picks *Free-for-all* (the default) or *Teams* in the lobby.
   It never changes mid-match.
-- There are two teams, Red and Blue. Each phone may pick one, and anyone who
+- There are two teams, Red and Blue (amended by #1200: the host may raise this
+  to three or four, adding Green and Yellow, see Amendment). Each phone may pick one, and anyone who
   has not picked is auto-balanced. A match cannot start with a team empty.
   Bots fill the smaller team.
 - Friendly fire is off for strikes, projectiles, the flail ball and the
@@ -92,6 +93,40 @@ owner's default decisions:
   - The victory screen reads "RED TEAM WINS!".
   - The announcer says "Red team wins!" or "Blue team wins!".
   - The kill feed, KO credit and awards stay per player.
+
+## Amendment: Green and Yellow (#1200)
+
+The host may play with 2, 3 or 4 teams. Everything above holds for N teams.
+
+- **Team ids.** 0 Red, 1 Blue, 2 Green, 3 Yellow, -1 none. `Teams.COUNT` is
+  the four teams that exist; `MIN_COUNT` 2 and `MAX_COUNT` 4 bound a match.
+- **The count is a host setting.** `HostSettings.team_count` (saved, default 2)
+  is set by the `team_count` host command: the Host panel's "N Teams" button
+  next to the Teams switch (cycles 2, 3, 4), the gamepad menu, the phone
+  menu's `teamcount` message (host only) and the Online host row. Lobby only.
+- **Soccer and Capture the Flag stay at two.** `GameModes.max_teams()` is 2
+  for them (`two_teams_only`). `ControllerServer.team_count()` is the
+  effective count, so the host's stored choice survives a trip through Soccer;
+  the button is greyed out there. Classic, King of the Hill, Sudden Death and
+  Stock take up to four.
+- **Balance.** `assign()` takes the match's count: a pick or kept team outside
+  it is treated as auto, and everyone else goes to the smallest team, lowest
+  index on a tie. Start needs every team in the count manned (`all_manned`);
+  uneven sizes still only note (#1199). Bots fill the smallest team.
+- **Lobby state.** Carries `team_count`, `team_scores` (sliced to the count)
+  and `two_teams_only`, so the Online client and phones draw the same cards,
+  switch cycle (`(team + 1) % count`) and host row. The snapshot already
+  carries the team as a byte.
+- **Letters.** The colour-blind letter is the first character of the
+  translated name, except that a later team whose first character an earlier
+  team has takes its next character, so letters are distinct in every language.
+  Where that next character would be unclear, `Teams.LETTER_OVERRIDES` picks one
+  from the name: Yellow is L in German (Gelb), Spanish (Amarillo) and
+  Portuguese (Amarelo).
+- **Scoring and screens.** Round and match wins are counted per team over the
+  count. The score label and banner list every team (two teams keep
+  `RED n - m BLUE`). The victory screen, podium and announcer name the winner:
+  two new announcer lines, "Green team wins!" and "Yellow team wins!".
 
 ## Consequences
 
