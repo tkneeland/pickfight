@@ -1,0 +1,11 @@
+$ godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --scenarios=snapshot_capture_cost_8_players_1195,remote_client_interp_adapts_to_snapshot_rate_1195,remote_client_interp_slews_not_jumps_1195,remote_client_interpolates_100ms_behind,remote_effects_wait_for_interp_delay_976
+      capture+delta+encode: mean 1610.0 us over 300 frames (260 B/frame)
+PASS  snapshot_capture_cost_8_players_1195
+      60 Hz (16 ms gaps): interp_msec=40
+      30 Hz (33 ms gaps): interp_msec=66
+PASS  remote_client_interp_adapts_to_snapshot_rate_1195
+      500 ms of slew moved the delay 30.00 ms
+PASS  remote_client_interp_slews_not_jumps_1195
+PASS  remote_client_interpolates_100ms_behind
+PASS  remote_effects_wait_for_interp_delay_976
+5 passed, 0 failed, 5 total

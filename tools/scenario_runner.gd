@@ -1320,6 +1320,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_reports_felt_delay_1195",
 	"online_ping_readout_mirrors_to_joiner_1195",
 	"match_end_logs_ping_stats_1195",
+	"remote_client_interp_adapts_to_snapshot_rate_1195",
+	"remote_client_interp_slews_not_jumps_1195",
+	"snapshot_capture_cost_8_players_1195",
+	"online_game_added_delay_budget_1195",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4385,6 +4389,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_ping_readout_mirrors_to_joiner_1195()
 		"match_end_logs_ping_stats_1195":
 			return await _scenario_match_end_logs_ping_stats_1195()
+		"remote_client_interp_adapts_to_snapshot_rate_1195":
+			return await _scenario_remote_client_interp_adapts_to_snapshot_rate_1195()
+		"remote_client_interp_slews_not_jumps_1195":
+			return await _scenario_remote_client_interp_slews_not_jumps_1195()
+		"snapshot_capture_cost_8_players_1195":
+			return await _scenario_snapshot_capture_cost_8_players_1195()
+		"online_game_added_delay_budget_1195":
+			return await _scenario_online_game_added_delay_budget_1195()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -28060,8 +28072,8 @@ func _scenario_snapshot_stream_reaches_remote_client() -> Array[String]:
 	var bytes_per_sec: int = int(total * 1000.0 / WINDOW_MSEC)
 	print("      %d frames in %d ms (%.1f Hz), %d full" % [frames.size(), WINDOW_MSEC, hz, fulls])
 	print("      bandwidth_bytes_per_sec=%d" % bytes_per_sec)
-	if hz < 25.0 or hz > 35.0:
-		failures.append("the stream ran at %.1f Hz, expected about 30" % hz)
+	if absf(hz - ControllerServerScript.SNAPSHOT_HZ) > 5.0: # #1195: follows the shipped rate
+		failures.append("the stream ran at %.1f Hz, expected about %.0f" % [hz, ControllerServerScript.SNAPSHOT_HZ])
 	if fulls < 2 or fulls > 4:
 		failures.append("%d full snapshots in 3 s, expected about 3" % fulls)
 	if bytes_per_sec > SNAPSHOT_BUDGET_BPS_251:
@@ -58705,7 +58717,10 @@ func _scenario_online_client_enter_readies() -> Array[String]:
 	client._input(enter)
 	if not client._ready_button.button_pressed:
 		failures.append("Enter on a focused Ready did not ready once")
-	client._ready_button.set_pressed_no_signal(false)
+	# Un-ready as a click does (it sends "ready" false and holds the button for
+	# the echo): a local-only reset is undone by the next snapshot's mirror of
+	# the host's ready, every frame at 60 Hz (#1195).
+	client._ready_button.button_pressed = false
 	# Ignored with a text field focused.
 	var field := LineEdit.new()
 	client.add_child(field)
@@ -62090,8 +62105,8 @@ func _scenario_remote_client_reports_felt_delay_1195() -> Array[String]:
 		await _rc_close_241(rig)
 		return failures
 	var felt: int = client.felt_msec()
-	var floor_msec: int = RemoteClientScript241.INTERP_MSEC - int(1000.0 / ControllerServerScript.SNAPSHOT_HZ) - 5
-	print("      felt delay on loopback: %d ms (floor %d: the drawn pose is INTERP_MSEC behind)" % [felt, floor_msec])
+	var floor_msec: int = client.interp_msec() - int(1000.0 / ControllerServerScript.SNAPSHOT_HZ) - 5
+	print("      felt delay on loopback: %d ms (floor %d: the drawn pose is interp_msec() behind, #1195 PR B)" % [felt, floor_msec])
 	if felt < floor_msec:
 		failures.append("felt %d ms is under %d: the probe is not watching the drawn, interpolated pose" % [felt, floor_msec])
 	# The next pong carries it to the host.
@@ -62299,4 +62314,118 @@ func _scenario_match_end_logs_ping_stats_1195() -> Array[String]:
 	if not RelayScript238.clean_stats_record(huge).is_empty():
 		failures.append("the relay kept a max of 1e9")
 	_scenario_completed = true
+	return failures
+# --- Issue #1195 PR B: adaptive interpolation delay and the 60 Hz stream -------------
+const SNAPSHOT_CAPTURE_BUDGET_USEC_1195: int = 4000
+## A client that never connects, its real-clock render off so the fake-clock
+## calls below are the only ones moving the delay.
+func _interp_client_1195(rig: Dictionary) -> Node:
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	client.set_process(false)
+	return client
+## Feeds `count` gaps of `gap` ms, then slews the delay for `settle_msec` of fake
+## wall time; returns the settled interp_msec().
+func _interp_settle_1195(client: Node, gap: int, count: int, settle_msec: int = 2000) -> int:
+	for i in count:
+		client._note_snapshot_gap(gap)
+	client._slew_interp(0)
+	for t in range(100, settle_msec + 1, 100):
+		client._slew_interp(t)
+	return client.interp_msec()
+## D3: the delay settles near 40 ms at 60 Hz and 66-100 at 30 Hz, stays at
+## INTERP_MSEC with too few gaps, snaps back on a stall, and the effects queue
+## follows it (#976).
+func _scenario_remote_client_interp_adapts_to_snapshot_rate_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": []}
+	var c60: Node = await _interp_client_1195(rig)
+	var at60: int = _interp_settle_1195(c60, 16, 40)
+	print("      60 Hz (16 ms gaps): interp_msec=%d" % at60)
+	if at60 < 40 or at60 > 60:
+		failures.append("16 ms gaps settled at %d ms, expected 40-60" % at60)
+	c60._note_snapshot_gap(600)
+	if c60.interp_msec() != RemoteClientScript241.INTERP_MSEC:
+		failures.append("a 600 ms stall left the delay at %d, expected %d at once" % [c60.interp_msec(), RemoteClientScript241.INTERP_MSEC])
+	var c30: Node = await _interp_client_1195(rig)
+	var at30: int = _interp_settle_1195(c30, 33, 40)
+	print("      30 Hz (33 ms gaps): interp_msec=%d" % at30)
+	if at30 < 66 or at30 > 100:
+		failures.append("33 ms gaps settled at %d ms, expected 66-100" % at30)
+	var few: Node = await _interp_client_1195(rig)
+	var at_few: int = _interp_settle_1195(few, 16, 10)
+	if at_few != RemoteClientScript241.INTERP_MSEC:
+		failures.append("10 gaps moved the delay to %d, expected %d" % [at_few, RemoteClientScript241.INTERP_MSEC])
+	c30.set_process(true)
+	c30._render()
+	if c30.effects.delay_msec != c30.interp_msec():
+		failures.append("effects.delay_msec is %d, interp_msec() %d" % [c30.effects.delay_msec, c30.interp_msec()])
+	await _rc_close_241(rig)
+	return failures
+## D3: the live delay moves INTERP_SLEW_MS_PER_SEC per wall second, not at once.
+func _scenario_remote_client_interp_slews_not_jumps_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": []}
+	var client: Node = await _interp_client_1195(rig)
+	for i in 40:
+		client._note_snapshot_gap(16)
+	if client.interp_msec() != RemoteClientScript241.INTERP_MSEC:
+		failures.append("the delay moved before any slew: %d" % client.interp_msec())
+	client._slew_interp(1000)
+	client._slew_interp(1500)
+	var moved: float = RemoteClientScript241.INTERP_MSEC - client._interp_live
+	print("      500 ms of slew moved the delay %.2f ms" % moved)
+	if absf(moved - 30.0) > 1.0:
+		failures.append("500 ms of slew moved the delay %.2f ms, expected 30 +- 1" % moved)
+	await _rc_close_241(rig)
+	return failures
+## D4: one capture + delta + encode of an 8-player round, the host's per-frame
+## stream cost (rate-independent), stays within a quarter of a 60 Hz frame.
+func _scenario_snapshot_capture_cost_8_players_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = await _snap_main_251(8)
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	var players: Array[RigidBody2D] = []
+	for slot: int in server.virtual_slots():
+		players.append(server.player_in_slot(slot) as RigidBody2D)
+	if players.size() != 8 or not await _await_condition(func() -> bool: return _all_alive(players), BOT_START_MSEC):
+		failures.append("the 8-bot round never started (%d bots)" % players.size())
+		await _teardown(built["main"])
+		_scenario_completed = true
+		return failures
+	const ITERATIONS: int = 300
+	var previous: Dictionary = SnapshotCaptureScript251.capture(rm)
+	var total_usec: int = 0
+	var bytes: int = 0
+	for i in ITERATIONS:
+		await physics_frame
+		var start: int = Time.get_ticks_usec()
+		var world: Dictionary = SnapshotCaptureScript251.capture(rm)
+		var frame: Dictionary = SnapshotCaptureScript251.delta(world, previous)
+		var payload: PackedByteArray = SnapshotScript251.encode(frame)
+		total_usec += Time.get_ticks_usec() - start
+		bytes += payload.size()
+		previous = world
+	var mean_usec: float = float(total_usec) / ITERATIONS
+	print("      capture+delta+encode: mean %.1f us over %d frames (%.0f B/frame)" % [mean_usec, ITERATIONS, float(bytes) / ITERATIONS])
+	if mean_usec > SNAPSHOT_CAPTURE_BUDGET_USEC_1195:
+		failures.append("capture+delta+encode took %.1f us per frame, budget %d" % [mean_usec, SNAPSHOT_CAPTURE_BUDGET_USEC_1195])
+	await _teardown(built["main"])
+	_scenario_completed = true
+	return failures
+## S9: today's game-added budget (fixed 100 ms plus half a 30 Hz interval) minus
+## PR B's (the delay settled at the shipped rate plus half its interval) is at
+## least 50 ms.
+func _scenario_online_game_added_delay_budget_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": []}
+	var client: Node = await _interp_client_1195(rig)
+	var hz: float = ControllerServerScript.SNAPSHOT_HZ
+	var settled: int = _interp_settle_1195(client, roundi(1000.0 / hz), 40)
+	var before: float = RemoteClientScript241.INTERP_MSEC + 1000.0 / 30.0 / 2.0
+	var after: float = settled + 1000.0 / hz / 2.0
+	print("      before=%.1f ms after=%.1f ms (settled %d at %.0f Hz) difference=%.1f" % [before, after, settled, hz, before - after])
+	if before - after < 50.0:
+		failures.append("the game-added delay dropped %.1f ms, expected >= 50" % (before - after))
+	await _rc_close_241(rig)
 	return failures
