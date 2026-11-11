@@ -31,6 +31,17 @@ SEEN=$PF_STATE/.pf-triage-seen; touch "$SEEN"
 [ -f "$PF_STATE/.msg-wake-handled" ] || pf_mtime "$PF_STATE/msg-wake.txt" > "$PF_STATE/.msg-wake-handled" 2>/dev/null
 META_TICKETS=${META_TICKETS:-"702 720 619"}   # meta tickets that never count as a peer's dev queue
 while true; do
+  : > "$PF_STATE/.triage-watch-alive"   # heartbeat for pf-tm-check.sh (rule 19), every poll and tick
+  # every 6h the triagemaster self-checks its duties (autotriage.md rule 19); first in the loop so other wakes
+  # never postpone it. A FAIL wakes Claude to fix it.
+  if pf_is_triagemaster; then
+    last=$(cat "$PF_STATE/.pf-tmcheck-last" 2>/dev/null || echo 0)
+    if [ $(( $(date +%s) - last )) -ge 21600 ]; then
+      date +%s > "$PF_STATE/.pf-tmcheck-last"
+      f=$(bash "$(dirname "$0")/pf-tm-check.sh" --quiet 2>/dev/null | grep '^FAIL' | head -n 1)
+      [ -n "$f" ] && { echo "TM_CHECK_FAIL ${f#FAIL }"; exit 0; }
+    fi
+  fi
   issues=$(gh api --paginate "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null | jq -s 'add // []' 2>/dev/null)   # every page, one array
   [ "$issues" = "[]" ] && issues=""
   # open PRs once per poll, not per ticket (empty on failure: then only branches count)
@@ -93,15 +104,6 @@ while true; do
       done
     fi
   fi
-  # every 6h the triagemaster self-checks its duties (autotriage.md rule 19); a FAIL wakes Claude to fix it
-  if pf_is_triagemaster; then
-    last=$(cat "$PF_STATE/.pf-tmcheck-last" 2>/dev/null || echo 0)
-    if [ $(( $(date +%s) - last )) -ge 21600 ]; then
-      date +%s > "$PF_STATE/.pf-tmcheck-last"
-      f=$(bash "$(dirname "$0")/pf-tm-check.sh" --quiet 2>/dev/null | grep '^FAIL' | head -n 1)
-      [ -n "$f" ] && { echo "TM_CHECK_FAIL ${f#FAIL }"; exit 0; }
-    fi
-  fi
   # idle 10 min in short ticks so a channel message (pf-msg.sh listen -> msg-wake.txt) wakes us within PF_TICK seconds
   tick=0
   while [ "$tick" -lt 60 ]; do
@@ -112,8 +114,18 @@ while true; do
       echo "$wm" > "$PF_STATE/.msg-wake-handled"; head -n 1 "$PF_STATE/msg-wake.txt"; exit 0
     fi
     # Discord #bug-reports (autotriage.md rule 18): once a minute, triagemaster only, once the bot token is set up
+    : > "$PF_STATE/.triage-watch-alive"
     if [ $((tick % 6)) = 0 ] && [ -f "$PF_STATE/pf-discord.conf" ] && pf_is_triagemaster; then
-      n=$(bash "$(dirname "$0")/pf-discord-bugs.sh" check 2>/dev/null) && { echo "DISCORD_BUG $n new in #bug-reports"; exit 0; }
+      n=$(bash "$(dirname "$0")/pf-discord-bugs.sh" check 2>"$PF_STATE/discord-check.err"); rc=$?
+      [ "$rc" = 0 ] && { echo "DISCORD_BUG $n new in #bug-reports"; exit 0; }
+      if [ "$rc" = 2 ]; then   # Discord unreadable: wake after 10 failed checks in a row, then at most hourly
+        f=$(( $(cat "$PF_STATE/.discord-fails" 2>/dev/null || echo 0) + 1 )); echo "$f" > "$PF_STATE/.discord-fails"
+        dl=$(cat "$PF_STATE/.discord-fail-woke" 2>/dev/null || echo 0)
+        if [ "$f" -ge 10 ] && [ $(( $(date +%s) - dl )) -ge 3600 ]; then
+          date +%s > "$PF_STATE/.discord-fail-woke"
+          echo "TM_CHECK_FAIL Discord #bug-reports unreadable for 10 min: $(head -c 160 "$PF_STATE/discord-check.err" | tr '\n' ' ') (run pf-tm-check.sh)"; exit 0
+        fi
+      else echo 0 > "$PF_STATE/.discord-fails"; fi
     fi
   done
 done
