@@ -69,7 +69,7 @@ case $cmd in
     echo "$out" | jq -r '.[] | "\(.user.id)  \(.user.username)  roles: \(.roles | join(","))"' ;;
   post)
     c=$(chan "$1") || exit 2
-    djson POST "/channels/$c/messages" "$(jq -n --arg t "${2:0:1990}" '{content: $t, allowed_mentions: {parse: [], users: ([ | scan("<@!?([0-9]+)>") | .[0]] | unique | .[0:100])}}')" | jq -r '.id // .' ;;
+    djson POST "/channels/$c/messages" "$(jq -n --arg t "${2:0:1990}" --argjson am "$(pf_discord_mentions "${2:0:1990}")" '{content: $t, allowed_mentions: $am}')" | jq -r '.id // .' ;;
   topic)
     c=$(chan "$1") || exit 2; djson PATCH "/channels/$c" "$(jq -n --arg t "$2" '{topic: $t}')" | jq -r '"#\(.name // "?") topic: \(.topic // .message)"' ;;
   rename)

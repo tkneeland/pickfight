@@ -17,3 +17,9 @@ dcurl() { local path=$1 t=${PF_DISCORD_TIMEOUT:-15} a; shift
   for a in "$@"; do [ "$a" = -X ] && t=${PF_DISCORD_WRITE_TIMEOUT:-45}; done   # reads and polls 15 s; a write gets longer so a slow post is not retried into a duplicate
   printf 'header = "Authorization: Bot %s"\nurl = "%s%s"\n' "$PF_DISCORD_TOKEN" "$PF_DISCORD_API" "$path" | curl -s -m "$t" -K - "$@"; }
 pf_discord_need_token() { [ -n "$PF_DISCORD_TOKEN" ] || { echo "$1: no PF_DISCORD_TOKEN in $PF_DISCORD_CONF (ask the owner for the bot token)" >&2; exit 2; }; }
+# pf_discord_mentions <text>: the allowed_mentions JSON for a post. Pings only users written as <@id> in the text who are
+# also listed in the conf's PF_DISCORD_PING_IDS (comma-separated, devs who asked to be pinged; kept out of the public repo).
+# Ids quoted from untrusted reports never ping; @everyone and roles never do.
+PF_DISCORD_PING_IDS=$(pf_discord_conf PF_DISCORD_PING_IDS)
+pf_discord_mentions() { jq -nc --arg t "$1" --arg ok "$PF_DISCORD_PING_IDS" \
+  '($ok | split(",") | map(select(length > 0))) as $ok | {parse: [], users: ([$t | scan("<@!?([0-9]+)>") | .[0]] | unique | map(select(. as $i | $ok | index($i))))}'; }
