@@ -9,7 +9,8 @@
 #   pf-discord-bugs.sh read           print those messages (id, time, author, text, attachment URLs), oldest first.
 #                                     Marks nothing: a report stays new until it is handled (reply or ack)
 #   pf-discord-bugs.sh reply <id> <text>   post <text> as a reply to message <id> (pings only allowlisted <@id>s, and only with --dev; public replies never ping) and mark that one handled
-#   pf-discord-bugs.sh ack <id> <reason>   mark that one message handled without replying; the reason is logged
+#   pf-discord-bugs.sh ack <id> <reason>   mark that one message handled without replying (the bot reacts ☑️, so a
+#                                          new triagemaster skips it too); the reason is logged
 # Each message is handled on its own (owner, 2026-11-10: feature requests were skipped when a reply to a later
 # report marked everything before it). Unhandled reports keep waking the watcher until each gets a reply or ack.
 # Every disposition is appended to $PF_STATE/discord-bugs.log.
@@ -24,6 +25,7 @@ LAST=$PF_STATE/.discord-$K-last
 HANDLED=$PF_STATE/.discord-$K-handled   # ids handled after the marker, one per line
 pf_discord_need_token pf-discord-bugs
 SORT_IDS='sort_by(.id | [length, .])'
+ACK_EMOJI_URL=%E2%98%91%EF%B8%8F   # ☑️, the bot's "acked" reaction (a ✅ is a Dev's approval)
 # id_gt a b: a is a later Discord id than b
 id_gt() { [ "${#1}" -gt "${#2}" ] || { [ "${#1}" = "${#2}" ] && [[ "$1" > "$2" ]]; }; }
 # Every message after the marker, oldest first, as one JSON array: pages of 50 until a short page (at most 20 pages),
@@ -49,8 +51,10 @@ mark() {  # mark <id> <disposition>: that one message is handled; the marker mov
 # $done: ids handled on this machine plus ids that already have a real bot reply in the fetched messages (any machine's
 # reply: a new triagemaster, by succession or failover takeover, has no marker or handled list of its own, #1219). A
 # failover notice ("taking over from ...", pf-hive-failover.sh) is not an answer, the same rule as its unanswered().
+# An ack leaves the bot's ACK_EMOJI reaction on the message, so an acked one is skipped the same way (#1239).
 DONE_JQ='(($h | split("\n")) + [.[] | select(.author.bot == true and ((.content // "") | startswith("taking over from ") | not))
-  | .message_reference.message_id // empty]) as $done'
+  | .message_reference.message_id // empty]
+  + [.[] | select(any(.reactions[]?; .me == true and ((.emoji.name // "") | startswith("\u2611")))) | .id]) as $done'
 # The fetched messages minus bots and handled ones, as a JSON array
 pending() { jq --rawfile h "$HANDLED" "$DONE_JQ"' | [.[] | select(.author.bot != true) | select(.id | IN($done[]) | not)]'; }
 case "${1:-}" in
@@ -79,6 +83,9 @@ case "${1:-}" in
   ack)
     case ${2:-} in ""|*[!0-9]*) echo "usage: pf-discord-bugs.sh ack <message id> <reason>" >&2; exit 2;; esac
     [ -n "${3:-}" ] || { echo "usage: pf-discord-bugs.sh ack <message id> <reason>: say why it needs no ticket" >&2; exit 2; }
+    # the bot's reaction is the Discord-side trace a new triagemaster reads (#1239); never ✅, the Dev approval
+    code=$(dcurl "/channels/$CH/messages/$2/reactions/$ACK_EMOJI_URL/@me" -o /dev/null -w '%{http_code}' -X PUT -H 'Content-Length: 0')
+    case $code in 2??) ;; *) echo "pf-discord-bugs: could not react to $2 (HTTP $code; the bot needs Add Reactions): handled here only" >&2;; esac
     mark "$2" "$K ack: $3"; echo "handled $2" ;;
   approvals)
     dev=$(dcurl "/guilds/$PF_DISCORD_GUILD/roles" | jq -r '.[] | select(.name == "Dev") | .id' 2>/dev/null)
@@ -113,6 +120,8 @@ case "${1:-}" in
     if [ -z "$perm" ]; then echo "WARN could not read the bot's permissions"
     elif [ $(( perm & 8 )) != 0 ] || [ $(( perm & need )) = "$need" ]; then echo "PASS bot may read #$cname and reply"
     else echo "FAIL bot lacks View Channel, Send Messages or Read Message History (rule 18 replies need all three): the owner fixes its role"; exit 2; fi
+    # Add Reactions (64): an ack's reaction is how a new triagemaster knows it was handled (#1239); without it, acks stay local
+    [ -n "$perm" ] && [ $(( perm & 8 )) = 0 ] && [ $(( perm & 64 )) = 0 ] && echo "WARN bot lacks Add Reactions: acks are remembered on this machine only"
     # Message Content intent: without it Discord hands bots empty text, so every report reads as blank
     case $(echo "$probe" | jq -r '[.[] | select(.author.bot != true)] as $p | if ($p|length) == 0 then "none"
         elif ([$p[] | select(.content == "" and (.attachments|length) == 0 and (.embeds|length) == 0 and ((.sticker_items // [])|length) == 0)] | length) == ($p|length) then "blank" else "ok" end' 2>/dev/null) in
