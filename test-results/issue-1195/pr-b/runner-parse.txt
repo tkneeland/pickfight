@@ -1,0 +1,8 @@
+$ godot --headless --path . --check-only -s tools/scenario_runner.gd 2>&1 | grep -E "SCRIPT ERROR|Parse Error"
+ERROR: res://art/ui/pickfight_theme.tres:95 - Parse Error: [ext_resource] referenced non-existent resource at: res://art/fonts/Nunito-Variable.ttf.
+ERROR: res://art/ui/pickfight_theme.tres:95 - Parse Error: [ext_resource] referenced non-existent resource at: res://art/fonts/Nunito-Variable.ttf.
+(only the theme's font import lines: this checkout has no .godot import cache; no script error)
+$ grep -c "^		_:$" tools/scenario_runner.gd
+1
+$ bash tools/list_scenarios.sh --check
+list_scenarios --check: OK, 1262 names, each with one dispatcher arm

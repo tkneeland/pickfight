@@ -131,3 +131,31 @@ pf_usage_backfill() {
 pf_channel_fresh() {
   awk -F'|' -v me="$PF_ACCOUNT" -v now="$(date +%s)" '$3=="USAGE" && $2!=me && now-$1<21600 {f=1} END {exit !f}' "$PF_STATE/msg-inbox.log" 2>/dev/null
 }
+# pf_claude_at: epoch of the newest write to any Claude Code transcript (*.jsonl, sessions and subagents) under this
+# account's projects/ dir, i.e. the last message or tool call of any session (#1233). The status line and supervisors
+# rewrite usage-snapshot.json without a session, so its mtime is not evidence. The projects dir comes from the
+# snapshot's transcript_path (Windows backslashes normalised). Empty when unknown.
+pf_claude_at() {
+  local tp pd f m best=0
+  tp=$(jq -r '.transcript_path // empty' "$PF_STATE/usage-snapshot.json" 2>/dev/null | tr '\\' / | tr -d '\r'); [ -n "$tp" ] || return 0
+  pd=$(dirname "$(dirname "$tp")"); [ -d "$pd" ] || return 0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    m=$(pf_mtime "$f"); [ "${m:-0}" -gt "$best" ] && best=$m
+  done <<EOT
+$(find "$pd" -maxdepth 4 -name '*.jsonl' -mmin -1440 2>/dev/null)
+EOT
+  if [ "$best" = 0 ]; then best=$(pf_mtime "$tp") || return 0; fi
+  [ -n "$best" ] && echo "$best"
+  return 0
+}
+# pf_peer_claude_at <handle>: epoch from the handle's newest USAGE line's claude_at=, empty when that line is over 1 h
+# old or carries none (an older line's value is never reused).
+pf_peer_claude_at() {
+  local line e ts
+  line=$(awk -F'|' -v h="$1" '$2==h && $3=="USAGE" && $1+0>=m {m=$1+0; l=$0} END {print l}' "$PF_STATE/msg-inbox.log" 2>/dev/null)
+  [ -n "$line" ] || return 0
+  e=${line%%|*}; e=${e%.*}; [ $(( $(date +%s) - e )) -lt 3600 ] || return 0
+  ts=$(echo "$line" | sed -n 's/.* claude_at=\([0-9TZ:-]*\).*/\1/p'); [ -n "$ts" ] || return 0
+  pf_iso_to_epoch "$ts"
+}

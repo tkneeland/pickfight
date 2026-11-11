@@ -1,0 +1,8 @@
+$ godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --scenarios=snapshot_stream_reaches_remote_client,online_game_added_delay_budget_1195,remote_client_interp_adapts_to_snapshot_rate_1195  (SNAPSHOT_HZ 60)
+PASS  snapshot_stream_reaches_remote_client
+      before=116.7 ms after=48.3 ms (settled 40 at 60 Hz) difference=68.3
+PASS  online_game_added_delay_budget_1195
+      60 Hz (16 ms gaps): interp_msec=40
+      30 Hz (33 ms gaps): interp_msec=66
+PASS  remote_client_interp_adapts_to_snapshot_rate_1195
+3 passed, 0 failed, 3 total

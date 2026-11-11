@@ -81,6 +81,17 @@ size = Vector2(420, 40)
 position = Vector2(510, 320)
 size = Vector2(420, 40)
 
+; Pit shelves (#1202): the 140 px pits between keep and bastions were instant deaths (first fall at
+; 3.3 s in the bot sweep). A shelf 100 px below the floors (top y=402, kill zone y=480) catches a body
+; knocked in, which then climbs back. The bastions' outer edges stay open sky for ring-outs.
+[node name="PitShelfLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-230, 410)
+size = Vector2(130, 16)
+
+[node name="PitShelfRight" parent="." instance=ExtResource("platform")]
+position = Vector2(230, 410)
+size = Vector2(130, 16)
+
 ; Spawns 0 and 1 in the keep, sheltered by both walls at round start.
 ; Spawns 2 and 3 on the bastions, already exposed on their outer edge.
 ; All four 50 px above their platform's top (y=300), same drop convention

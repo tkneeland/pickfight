@@ -30,7 +30,7 @@
 ; (x=465..635), both top y=228, sitting almost squarely over each bank's
 ; outer shoulder -- a 132 px climb, nearly straight up, one hook for the
 ; pickaxe and a committed effort for the sword or dagger. They are set
-; outboard of Spawn0-3 (all inboard, x=-430..430) rather than over them, so
+; outboard of the spawns (x=-410..410 for the first four, #1202) rather than over them, so
 ; every spawn opens under open sky, not under a ceiling. RockLedgeRight
 ; falls on the right one only: the left ledge stays a permanent safe perch
 ; and vantage point, so a player pressured off the bridge or the right ledge
@@ -41,7 +41,9 @@
 ; kill zone, and the banks are far enough apart that a shove from the bridge
 ; or from a bank's outer edge sends a player past the far edge and out.
 ; every_stage_can_ring_out holds the same way Erosion and Gauntlet's canyons
-; do -- there is no floor under the gap to catch a bad landing.
+; do. Since #1202 a shelf 72 px down in each gap (y=432) catches a drop
+; straight off the bridge or a bank's inner edge; a body flung past a bank's
+; outer edge, or hard enough to clear the shelf, is still out.
 ;
 ; All four spawns share one height (y=320, all on the banks), so the rising
 ; kill zone (ADR-0012) reaches them together -- nobody is left holding lower
@@ -95,30 +97,44 @@ position = Vector2(0, -430)
 position = Vector2(640, -430)
 interval_sec = 7.0
 
+; Pit shelves (#1202): a ledge 72 px below the bank tops in each pit (kill zone y=500, shelf top
+; y=432). A body knocked into the pit lands here and climbs back instead of dying on the spot. The
+; outer edges stay open sky, so ring-outs are still possible.
+[node name="PitShelfLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-265, 440)
+size = Vector2(110, 16)
+
+[node name="PitShelfRight" parent="." instance=ExtResource("platform")]
+position = Vector2(265, 440)
+size = Vector2(110, 16)
+
+; Stage review (#1202): Spawn2/3 were 25 px from the bank's pit edge (x=+-330), so the first shove
+; ended the round (median first fall 1.4 s in the bot sweep). Spawns are now at least 80 px from
+; the pit edge and 60 px from the outer edge.
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-415, 320)
+position = Vector2(-600, 320)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(415, 320)
+position = Vector2(600, 320)
 
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-355, 320)
+position = Vector2(-500, 320)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(355, 320)
+position = Vector2(500, 320)
 
 ; Spawns 4-7 (issue #137): eight players. Four on each bank, 60 px apart, all inboard of the lookout ledges.
 [node name="Spawn4" type="Marker2D" parent="."]
-position = Vector2(-475, 320)
+position = Vector2(-410, 320)
 
 [node name="Spawn5" type="Marker2D" parent="."]
-position = Vector2(475, 320)
+position = Vector2(410, 320)
 
 [node name="Spawn6" type="Marker2D" parent="."]
-position = Vector2(-535, 320)
+position = Vector2(-660, 320)
 
 [node name="Spawn7" type="Marker2D" parent="."]
-position = Vector2(535, 320)
+position = Vector2(660, 320)
 
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 500)

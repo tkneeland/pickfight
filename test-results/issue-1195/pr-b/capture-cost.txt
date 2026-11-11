@@ -1,0 +1,3 @@
+$ godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --scenario=snapshot_capture_cost_8_players_1195  (run at SNAPSHOT_HZ 30, before raising it; the cost is per call)
+      capture+delta+encode: mean 1610.0 us over 300 frames (260 B/frame)
+PASS  snapshot_capture_cost_8_players_1195

@@ -7,7 +7,9 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 - `pf-env.sh`: sourced by all; resolves the account, conf, `PF_STATE` dir and helpers (`pf_budget_ok`, `pf_daynight`, `pf_is_triagemaster`).
 - `pf-at-mode.sh`: prints `AT·day`, `AT·night` or `MT`, plus `·TM off` while the ticket-maker is off.
 - `pf-ticketmaker.sh [on|off]`: prints or sets the ticket-maker switch (rule 11).
-- `pf-triage-watch.sh`: zero-token poller; exits with one line (UNTRIAGED, MYTICKET, FEATURES? PR, PEER_BEACON, IDLE_SLOTS, AUSTIN_QUEUE_LOW, MSG, DISCORD_BUG, TM_CHECK_FAIL) when Claude must act.
+- `pf-triage-watch.sh`: zero-token poller; exits with one line (UNTRIAGED, MYTICKET, FEATURES? PR, PEER_BEACON, IDLE_SLOTS, AUSTIN_QUEUE_LOW, DEV_IDLE, MSG, DISCORD_BUG, TM_CHECK_FAIL) when Claude must act.
+- `pf-beacon.sh`: sends the USAGE beacon; it ends with `claude_at=<ISO>`, the newest Claude transcript write on the account (`pf_claude_at`; the status line and supervisors do not move it), which the triagemaster's `DEV_IDLE` wake reads (rule 21, #1233). Accounts sharing one machine share a `projects/` dir and report each other's activity; headless `claude -p` accounts send no `claude_at` and are never checked.
+- `tests/dev-idle.sh`: offline test for `claude_at` and the `DEV_IDLE` wake (stubbed inbox, `gh`, `curl`).
 - `pf-discord-env.sh`: sourced by both Discord scripts: the bot conf (`$PF_STATE/pf-discord.conf`), server and channel ids, and `dcurl` (token on stdin, never argv).
 - `tests/discord-bugs.sh`, `tests/discord-admin.sh`: offline tests for the Discord scripts and `pf-tm-check.sh` (stub `curl`/`gh`, scratch `PF_STATE_DIR`).
 - `pf-discord.sh channels|read|watch|roles|members|post|topic|rename|create|role-create|role-add|role-remove|api`: the PickFight Discord server for any account when its user asks (rule 20); channels by id or name fragment; same bot conf as `pf-discord-bugs.sh`.
