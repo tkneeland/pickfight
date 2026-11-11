@@ -142,17 +142,17 @@ Cage|tinted|BarRight/BarRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Cage|tinted|FilletRoofLeft/FilletRoofLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Cage|tinted|FilletRoofRight/FilletRoofRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Cage|tinted|Slab/SlabVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Carousel|body|ShoulderLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -655, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Carousel|shape|ShoulderLeft/ShoulderLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(270, 40)|oneway=false|disabled=false
-Carousel|poly|ShoulderLeft/ShoulderLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-135, -20, 135, -20, 135, 20, -135, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Carousel|body|ShoulderRight|StaticBody2D|Transform2D(1, 0, 0, 1, 655, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Carousel|shape|ShoulderRight/ShoulderRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(270, 40)|oneway=false|disabled=false
-Carousel|poly|ShoulderRight/ShoulderRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-135, -20, 135, -20, 135, 20, -135, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Carousel|body|ShoulderLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -660, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Carousel|shape|ShoulderLeft/ShoulderLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(260, 40)|oneway=false|disabled=false
+Carousel|poly|ShoulderLeft/ShoulderLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-130, -20, 130, -20, 130, 20, -130, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
+Carousel|body|ShoulderRight|StaticBody2D|Transform2D(1, 0, 0, 1, 660, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Carousel|shape|ShoulderRight/ShoulderRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(260, 40)|oneway=false|disabled=false
+Carousel|poly|ShoulderRight/ShoulderRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-130, -20, 130, -20, 130, 20, -130, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Carousel|body|Hub|StaticBody2D|Transform2D(1, 0, 0, 1, 0, 320)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Carousel|shape|Hub/HubShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(180, 40)|oneway=false|disabled=false
 Carousel|poly|Hub/HubVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-90, -20, 90, -20, 90, 20, -90, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Carousel|body|SeesawLeft|AnimatableBody2D|Transform2D(1, 0, 0, 1, -380, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Carousel|body|SeesawRight|AnimatableBody2D|Transform2D(1, 0, 0, 1, 380, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Carousel|body|SeesawLeft|AnimatableBody2D|Transform2D(1, 0, 0, 1, -360, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Carousel|body|SeesawRight|AnimatableBody2D|Transform2D(1, 0, 0, 1, 360, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Carousel|body|Spinner|AnimatableBody2D|Transform2D(1, 0, 0, 1, 0, 38)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Carousel|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 480)|layer=1|mask=1|z=0|zrel=true|visible=true|script=res://scripts/KillZone.gd|rise_warning_sec=4.0|surface_depth=2000.0
 Carousel|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
@@ -166,7 +166,6 @@ Carousel|tinted|SeesawLeft/Stripe2|Color(0.5, 0.36, 0.72, 1)
 Carousel|tinted|SeesawLeft/Stripe3|Color(0.5, 0.36, 0.72, 1)
 Carousel|tinted|SeesawLeft/Stripe4|Color(0.5, 0.36, 0.72, 1)
 Carousel|tinted|SeesawLeft/Stripe5|Color(0.5, 0.36, 0.72, 1)
-Carousel|tinted|SeesawLeft/Stripe6|Color(0.5, 0.36, 0.72, 1)
 Carousel|tinted|SeesawLeft/Hub|Color(0.3, 0.2, 0.45, 1)
 Carousel|tinted|SeesawRight/Visual|Color(0.62, 0.48, 0.85, 1)
 Carousel|tinted|SeesawRight/Stripe0|Color(0.5, 0.36, 0.72, 1)
@@ -175,7 +174,6 @@ Carousel|tinted|SeesawRight/Stripe2|Color(0.5, 0.36, 0.72, 1)
 Carousel|tinted|SeesawRight/Stripe3|Color(0.5, 0.36, 0.72, 1)
 Carousel|tinted|SeesawRight/Stripe4|Color(0.5, 0.36, 0.72, 1)
 Carousel|tinted|SeesawRight/Stripe5|Color(0.5, 0.36, 0.72, 1)
-Carousel|tinted|SeesawRight/Stripe6|Color(0.5, 0.36, 0.72, 1)
 Carousel|tinted|SeesawRight/Hub|Color(0.3, 0.2, 0.45, 1)
 Carousel|tinted|Spinner/Visual|Color(0.62, 0.48, 0.85, 1)
 Carousel|tinted|Spinner/Stripe0|Color(0.5, 0.36, 0.72, 1)
@@ -586,24 +584,18 @@ Pillars|poly|PillarFarLeft/PillarFarLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|Pac
 Pillars|body|PillarFarRight|StaticBody2D|Transform2D(1, 0, 0, 1, 640, 270)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Pillars|shape|PillarFarRight/PillarFarRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(140, 300)|oneway=false|disabled=false
 Pillars|poly|PillarFarRight/PillarFarRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-70, -150, 70, -150, 70, 150, -70, 150)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Pillars|body|ShelfOuterLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -780, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Pillars|shape|ShelfOuterLeft/ShelfOuterLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(140, 16)|oneway=false|disabled=false
-Pillars|poly|ShelfOuterLeft/ShelfOuterLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-70, -8, 70, -8, 70, 8, -70, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Pillars|body|ShelfFarLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -480, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Pillars|body|ShelfFarLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -480, 248)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Pillars|shape|ShelfFarLeft/ShelfFarLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(160, 16)|oneway=false|disabled=false
 Pillars|poly|ShelfFarLeft/ShelfFarLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-80, -8, 80, -8, 80, 8, -80, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Pillars|body|ShelfLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -160, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Pillars|body|ShelfLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -160, 248)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Pillars|shape|ShelfLeft/ShelfLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(160, 16)|oneway=false|disabled=false
 Pillars|poly|ShelfLeft/ShelfLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-80, -8, 80, -8, 80, 8, -80, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Pillars|body|ShelfRight|StaticBody2D|Transform2D(1, 0, 0, 1, 160, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Pillars|body|ShelfRight|StaticBody2D|Transform2D(1, 0, 0, 1, 160, 248)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Pillars|shape|ShelfRight/ShelfRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(160, 16)|oneway=false|disabled=false
 Pillars|poly|ShelfRight/ShelfRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-80, -8, 80, -8, 80, 8, -80, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Pillars|body|ShelfFarRight|StaticBody2D|Transform2D(1, 0, 0, 1, 480, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Pillars|body|ShelfFarRight|StaticBody2D|Transform2D(1, 0, 0, 1, 480, 248)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Pillars|shape|ShelfFarRight/ShelfFarRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(160, 16)|oneway=false|disabled=false
 Pillars|poly|ShelfFarRight/ShelfFarRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-80, -8, 80, -8, 80, 8, -80, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Pillars|body|ShelfOuterRight|StaticBody2D|Transform2D(1, 0, 0, 1, 780, 300)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Pillars|shape|ShelfOuterRight/ShelfOuterRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(140, 16)|oneway=false|disabled=false
-Pillars|poly|ShelfOuterRight/ShelfOuterRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-70, -8, 70, -8, 70, 8, -70, 8)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
 Pillars|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 480)|layer=1|mask=1|z=0|zrel=true|visible=true|script=res://scripts/KillZone.gd|rise_warning_sec=4.0|surface_depth=2000.0
 Pillars|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
 Pillars|tinted|PillarLeft/PillarLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
@@ -611,12 +603,10 @@ Pillars|tinted|PillarMid/PillarMidVisual|Color(0.16470589, 0.20392157, 0.2509804
 Pillars|tinted|PillarRight/PillarRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pillars|tinted|PillarFarLeft/PillarFarLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pillars|tinted|PillarFarRight/PillarFarRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Pillars|tinted|ShelfOuterLeft/ShelfOuterLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pillars|tinted|ShelfFarLeft/ShelfFarLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pillars|tinted|ShelfLeft/ShelfLeftVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pillars|tinted|ShelfRight/ShelfRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pillars|tinted|ShelfFarRight/ShelfFarRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
-Pillars|tinted|ShelfOuterRight/ShelfOuterRightVisual|Color(0.16470589, 0.20392157, 0.2509804, 1)
 Pistons|body|BastionLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -780, 380)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Pistons|shape|BastionLeft/BastionLeftShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(400, 40)|oneway=false|disabled=false
 Pistons|poly|BastionLeft/BastionLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-200, -20, 200, -20, 200, 20, -200, 20)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)

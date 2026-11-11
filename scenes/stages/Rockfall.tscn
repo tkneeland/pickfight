@@ -30,7 +30,7 @@
 ; (x=465..635), both top y=228, sitting almost squarely over each bank's
 ; outer shoulder -- a 132 px climb, nearly straight up, one hook for the
 ; pickaxe and a committed effort for the sword or dagger. They are set
-; outboard of Spawn0-3 (all inboard, x=-430..430) rather than over them, so
+; outboard of the spawns (x=-410..410 for the first four, #1202) rather than over them, so
 ; every spawn opens under open sky, not under a ceiling. RockLedgeRight
 ; falls on the right one only: the left ledge stays a permanent safe perch
 ; and vantage point, so a player pressured off the bridge or the right ledge
@@ -41,7 +41,9 @@
 ; kill zone, and the banks are far enough apart that a shove from the bridge
 ; or from a bank's outer edge sends a player past the far edge and out.
 ; every_stage_can_ring_out holds the same way Erosion and Gauntlet's canyons
-; do -- there is no floor under the gap to catch a bad landing.
+; do. Since #1202 a shelf 72 px down in each gap (y=432) catches a drop
+; straight off the bridge or a bank's inner edge; a body flung past a bank's
+; outer edge, or hard enough to clear the shelf, is still out.
 ;
 ; All four spawns share one height (y=320, all on the banks), so the rising
 ; kill zone (ADR-0012) reaches them together -- nobody is left holding lower

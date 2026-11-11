@@ -59333,12 +59333,10 @@ func _scenario_stage_builder_rebuilds_stages_from_definitions_1046() -> Array[St
 			{"type": "Platform", "pos": [320, 270], "size": [140, 300]},
 			{"type": "Platform", "pos": [-640, 270], "size": [140, 300]},
 			{"type": "Platform", "pos": [640, 270], "size": [140, 300]},
-			{"type": "Platform", "pos": [-780, 300], "size": [140, 16]},
-			{"type": "Platform", "pos": [-480, 300], "size": [160, 16]},
-			{"type": "Platform", "pos": [-160, 300], "size": [160, 16]},
-			{"type": "Platform", "pos": [160, 300], "size": [160, 16]},
-			{"type": "Platform", "pos": [480, 300], "size": [160, 16]},
-			{"type": "Platform", "pos": [780, 300], "size": [140, 16]}, kill_floor]},
+			{"type": "Platform", "pos": [-480, 248], "size": [160, 16]},
+			{"type": "Platform", "pos": [-160, 248], "size": [160, 16]},
+			{"type": "Platform", "pos": [160, 248], "size": [160, 16]},
+			{"type": "Platform", "pos": [480, 248], "size": [160, 16]}, kill_floor]},
 	}
 	for stage_name: String in defs:
 		var built: Dictionary = builder.build(defs[stage_name])
