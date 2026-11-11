@@ -1,0 +1,4 @@
+$ godot --headless --fixed-fps 60 --path . -s tools/scenario_runner.gd -- --scenario=snapshot_stream_reaches_remote_client  (SNAPSHOT_HZ 60)
+      180 frames in 3000 ms (60.0 Hz), 3 full
+      bandwidth_bytes_per_sec=17695
+PASS  snapshot_stream_reaches_remote_client

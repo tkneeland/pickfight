@@ -58658,7 +58658,10 @@ func _scenario_online_client_enter_readies() -> Array[String]:
 	client._input(enter)
 	if not client._ready_button.button_pressed:
 		failures.append("Enter on a focused Ready did not ready once")
-	client._ready_button.set_pressed_no_signal(false)
+	# Un-ready as a click does (it sends "ready" false and holds the button for
+	# the echo): a local-only reset is undone by the next snapshot's mirror of
+	# the host's ready, every frame at 60 Hz (#1195).
+	client._ready_button.button_pressed = false
 	# Ignored with a text field focused.
 	var field := LineEdit.new()
 	client.add_child(field)
@@ -62043,8 +62046,8 @@ func _scenario_remote_client_reports_felt_delay_1195() -> Array[String]:
 		await _rc_close_241(rig)
 		return failures
 	var felt: int = client.felt_msec()
-	var floor_msec: int = RemoteClientScript241.INTERP_MSEC - int(1000.0 / ControllerServerScript.SNAPSHOT_HZ) - 5
-	print("      felt delay on loopback: %d ms (floor %d: the drawn pose is INTERP_MSEC behind)" % [felt, floor_msec])
+	var floor_msec: int = client.interp_msec() - int(1000.0 / ControllerServerScript.SNAPSHOT_HZ) - 5
+	print("      felt delay on loopback: %d ms (floor %d: the drawn pose is interp_msec() behind, #1195 PR B)" % [felt, floor_msec])
 	if felt < floor_msec:
 		failures.append("felt %d ms is under %d: the probe is not watching the drawn, interpolated pose" % [felt, floor_msec])
 	# The next pong carries it to the host.
