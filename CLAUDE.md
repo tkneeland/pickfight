@@ -8,6 +8,10 @@ Issues live as GitHub Issues in `tkneeland/pickfight`. See `docs/agents/issue-tr
 
 Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
+### Team memory (the hive)
+
+Every session on every account reads `docs/agents/team-memory.md` first: the hive's shared rules and the devs' preferences. Add to it by PR when your dev gives team-wide feedback.
+
 ### Collaboration
 
 Two devs work in parallel, each with their own agent. Before claiming an issue,

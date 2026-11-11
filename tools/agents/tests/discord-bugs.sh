@@ -66,6 +66,14 @@ check "marker waits for it" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 15698765
 bash "$D" reply 1569876514017780001 "Filed as #10" >/dev/null; bash "$D" check >/dev/null; check "both handled" $? 1
 check "marker past both" "$(cat "$PF_STATE_DIR/.discord-bugs-last")" 1569876514017780002
 echo '[]' > "$T/r/$C"; rm -f "$T/r/${M}_after_1569876514017780002"
+# --dev: the private #hive channel keeps its own marker and handled list
+DV="channels_1569919897591611552_messages_limit_50"
+echo "[$(msg 1569919897591611600 austin false "dev: lobby crash")]" > "$T/r/$DV"
+check "dev check" "$(bash "$D" --dev check)" 1
+bash "$D" --dev reply 1569919897591611600 "Filed as #11" >/dev/null; bash "$D" --dev check >/dev/null
+check "dev marker is its own" "$(cat "$PF_STATE_DIR/.discord-dev-last")" 1569919897591611600
+check "dev reply is logged as dev" "$(grep -c "dev reply: Filed as #11" "$PF_STATE_DIR/discord-bugs.log")" 1
+rm "$T/r/$DV"
 check "token on stdin only" "$(grep -c 'Bot tok123"$' "$T/headers.log")" "$(grep -c . "$T/headers.log")"
 check "token never in argv" "$(grep -c tok123 "$T/curl.log")" 0
 rm "$T/r/${M}_after_1569876514017779959"

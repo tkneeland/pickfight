@@ -1,5 +1,9 @@
 #!/bin/bash
-# The PickFight Discord server's #bug-reports channel, read by the triagemaster (autotriage.md rule 18).
+# The PickFight Discord server's report channels, read by the triagemaster (autotriage.md rule 18): the public
+# #change-requests (each report is filed as needs-triage and waits for a dev's ✅) and, with --dev first, the private
+# #hive (a dev's report is already approved). Approvals:
+#   pf-discord-bugs.sh approvals      one line "<issue> <discord user>" per open needs-triage issue whose source
+#                                     message (a "Discord message: <id>" line in its body) has a ✅ from a Dev-role member
 #   pf-discord-bugs.sh check          exit 0 and print "N" when N messages from people (not bots) are not handled yet;
 #                                     exit 1 when there are none; exit 2 when not set up or Discord fails
 #   pf-discord-bugs.sh read           print those messages (id, time, author, text, attachment URLs), oldest first.
@@ -15,9 +19,9 @@
 # Discord ids are 64-bit; they are compared as strings (length, then text) because jq numbers lose precision past 2^53.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 . "$(dirname "$0")/pf-discord-env.sh"
-LAST=$PF_STATE/.discord-bugs-last
-HANDLED=$PF_STATE/.discord-bugs-handled   # ids handled after the marker, one per line
-CH=$PF_DISCORD_BUGS
+if [ "${1:-}" = --dev ]; then shift; CH=$PF_DISCORD_DEV; K=dev; else CH=$PF_DISCORD_BUGS; K=bugs; fi
+LAST=$PF_STATE/.discord-$K-last
+HANDLED=$PF_STATE/.discord-$K-handled   # ids handled after the marker, one per line
 pf_discord_need_token pf-discord-bugs
 SORT_IDS='sort_by(.id | [length, .])'
 # id_gt a b: a is a later Discord id than b
@@ -66,11 +70,24 @@ case "${1:-}" in
     body=$(jq -n --arg t "${3:0:1900}" --arg id "$2" '{content: $t, message_reference: {message_id: $id}, allowed_mentions: {parse: []}}')
     code=$(dcurl "/channels/$CH/messages" -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" -d "$body")
     echo "discord reply: $code"; [ "$code" = 200 ] || exit 2
-    mark "$2" "reply: ${3:0:200}" ;;
+    mark "$2" "$K reply: ${3:0:200}" ;;
   ack)
     case ${2:-} in ""|*[!0-9]*) echo "usage: pf-discord-bugs.sh ack <message id> <reason>" >&2; exit 2;; esac
     [ -n "${3:-}" ] || { echo "usage: pf-discord-bugs.sh ack <message id> <reason>: say why it needs no ticket" >&2; exit 2; }
-    mark "$2" "ack: $3"; echo "handled $2" ;;
+    mark "$2" "$K ack: $3"; echo "handled $2" ;;
+  approvals)
+    dev=$(dcurl "/guilds/$PF_DISCORD_GUILD/roles" | jq -r '.[] | select(.name == "Dev") | .id' 2>/dev/null)
+    [ -n "$dev" ] || { echo "pf-discord-bugs: no Dev role on the server" >&2; exit 2; }
+    gh issue list -R "$REPO" --state open --label needs-triage -L 200 --json number,body \
+      -q '.[] | "\(.number) \(.body | capture("Discord message: (?<id>[0-9]+)").id // "")"' 2>/dev/null |
+    while read -r n id; do
+      [ -n "$id" ] || continue
+      for u in $(dcurl "/channels/$PF_DISCORD_BUGS/messages/$id/reactions/%E2%9C%85?limit=100" | jq -r '.[]?.id' 2>/dev/null); do
+        who=$(dcurl "/guilds/$PF_DISCORD_GUILD/members/$u" | jq -r --arg d "$dev" 'select(.roles | index($d)) | .user.username' 2>/dev/null)
+        [ -n "$who" ] && { echo "$n $who"; break; }
+      done
+    done
+    exit 0 ;;
   status)
     me=$(dcurl "/users/@me"); name=$(echo "$me" | jq -r '.username // empty' 2>/dev/null)
     [ -n "$name" ] || { echo "FAIL discord token rejected: $(echo "$me" | head -c 120)"; exit 2; }
