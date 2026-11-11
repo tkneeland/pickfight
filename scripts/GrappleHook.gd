@@ -200,7 +200,9 @@ func _meet(collider: Object, point: Vector2) -> void:
 			rope_length = maxf((global_position - shooter.global_position).length(), float(_stats.reel_min_length))
 			return
 		if node != shooter and bool(node.get("alive")):
-			if bool(_stats.hook_reels_players) and node is RigidBody2D and node.get("spawn_protected") != true:
+			# #1196: a protected caster reels nobody either.
+			var ghosted: bool = node.get("spawn_protected") == true or shooter.get("spawn_protected") == true
+			if bool(_stats.hook_reels_players) and node is RigidBody2D and not ghosted:
 				shooter.land_projectile_hit(node, float(_stats.projectile_damage), point)
 				if bool(node.get("alive")):
 					if node.has_method("note_reeled"):
@@ -213,7 +215,7 @@ func _meet(collider: Object, point: Vector2) -> void:
 					state = State.HOME
 				return
 			# A spawn-protected fighter is neither reeled nor knocked (#1093).
-			if node is RigidBody2D and node.get("spawn_protected") != true:
+			if node is RigidBody2D and not ghosted:
 				var toward: Vector2 = (shooter.global_position - (node as Node2D).global_position).normalized()
 				(node as RigidBody2D).apply_central_impulse(toward * float(_stats.projectile_knockback))
 			shooter.land_projectile_hit(node, float(_stats.projectile_damage), point)

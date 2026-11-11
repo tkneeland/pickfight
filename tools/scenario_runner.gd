@@ -61316,5 +61316,33 @@ func _scenario_spawn_protection_ghosts_fighters_1196() -> Array[String]:
 			break
 	if p1.global_position.x < p0.global_position.x:
 		failures.append("after protection a fighter thrown at another passed through it")
+	# A protected fighter's shot neither hurts nor shoves anyone; an unprotected
+	# one's still does (the control).
+	for protected_shooter: bool in [true, false]:
+		p0.spawn_protected = protected_shooter
+		p1.spawn_protected = false
+		p1.damage = 0.0
+		p1.linear_velocity = Vector2.ZERO
+		await _await_ticks(30)  # at rest after the throw above
+		var shot: Node2D = BoomstickProjectileScene.instantiate() as Node2D
+		shot.shooter = p0
+		shot.direction = Vector2.LEFT
+		shot.damage = 10.0
+		shot.knockback = 600.0
+		stage.add_child(shot)
+		shot.global_position = p1.global_position + Vector2(30, 0)
+		var before_x: float = p1.global_position.x
+		shot._hit(p1, p1.global_position)
+		await _await_ticks(4)  # an impulse shows from the next physics step
+		var kick: float = absf(p1.global_position.x - before_x)
+		var label: String = "protected" if protected_shooter else "unprotected"
+		if protected_shooter and (p1.damage > 0.0 or kick > 1.0):
+			failures.append("a protected shooter's bullet still hit: damage %.1f, pushed %.1f px" % [p1.damage, kick])
+		if not protected_shooter and (p1.damage <= 0.0 or kick < 3.0):
+			failures.append("control: an unprotected shooter's bullet did nothing (damage %.1f, pushed %.1f px)" % [p1.damage, kick])
+		print("      %s shooter's bullet: damage %.1f, pushed %.1f px in 4 ticks" % [label, p1.damage, kick])
+		if is_instance_valid(shot):
+			shot.queue_free()
+	p0.spawn_protected = false
 	await _teardown(stage)
 	return failures

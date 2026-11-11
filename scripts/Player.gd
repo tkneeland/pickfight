@@ -1889,7 +1889,8 @@ func _land_strike(victim: Node, speed: float, stomp: bool = false) -> void:
 func _deliver_hit(victim: Node, amount: float, point: Vector2, recoil: bool = true, before_report: Callable = Callable()) -> float:
 	if is_teammate(victim):
 		return 0.0
-	if victim.get("spawn_protected") == true:
+	# Either side protected (#1196: a protected fighter hurts nobody either).
+	if spawn_protected or victim.get("spawn_protected") == true:
 		amount = 0.0
 	amount = victim.take_damage(amount, point, self, recoil)
 	if before_report.is_valid():
