@@ -34,6 +34,14 @@ var hill_radius: float = 110.0
 ## standing player's centre sits.
 const GROUND_DROP: float = 1200.0
 const STAND_HEIGHT: float = 50.0
+## Issue #1187: the hill is only placed where someone can stand. Floor must lie
+## within `FLOOR_REACH` below its centre, and under at least `FLOOR_NEEDED` of
+## the `FLOOR_SAMPLES` points spread across its width, the centre among them.
+const FLOOR_REACH: float = 200.0
+const FLOOR_SAMPLES: Array[float] = [-0.8, -0.4, 0.0, 0.4, 0.8]
+const FLOOR_NEEDED: int = 3
+## Step, px, of the sideways search for standable ground (#1187).
+const SEARCH_STEP: float = 40.0
 ## Seconds alone in the hill that win the round.
 var seconds_to_win: float = 15.0
 ## slot -> seconds held alone this round.
@@ -107,6 +115,7 @@ func start_round(slots: Array[int]) -> void:
 			for p: Vector2 in points:
 				sum += p
 			hill_position = _on_the_ground(sum / float(points.size()))
+	_keep_hill_off_pits()
 	_active = true
 	_build_hud()
 	_update_hud()
@@ -157,6 +166,71 @@ func _on_the_ground(point: Vector2) -> Vector2:
 	if hit.is_empty():
 		return point
 	return Vector2(point.x, (hit["position"] as Vector2).y - STAND_HEIGHT)
+
+## The physics space to ask about floor, or null with none to ask.
+func _space() -> PhysicsDirectSpaceState2D:
+	if round_manager == null or not is_instance_valid(round_manager) or not (round_manager as Node).is_inside_tree():
+		return null
+	var world: World2D = (round_manager as Node).get_viewport().find_world_2d()
+	return world.direct_space_state if world != null else null
+
+## Whether someone can stand on a hill centred at `point` (#1187): floor under
+## its centre and under most of its width. True with no physics space to ask.
+func is_standable(point: Vector2) -> bool:
+	var space: PhysicsDirectSpaceState2D = _space()
+	if space == null:
+		return true
+	var found: int = 0
+	for frac: float in FLOOR_SAMPLES:
+		var from: Vector2 = point + Vector2(frac * hill_radius, 0.0)
+		var query := PhysicsRayQueryParameters2D.create(from, from + Vector2(0.0, FLOOR_REACH), 1)
+		if not space.intersect_ray(query).is_empty():
+			found += 1
+		elif frac == 0.0:
+			return false
+	return found >= FLOOR_NEEDED
+
+## Issue #1187: a hill over a pit can never be held. Drops authored spots that
+## are not standable (a hill that moves needs two left); if the hill itself is
+## not standable, moves it to another standable spot, else to the nearest
+## standable ground in a sideways search across the spawns' span.
+func _keep_hill_off_pits() -> void:
+	if round_manager == null:
+		return
+	var good: Array[Vector2] = []
+	for spot: Vector2 in hill_spots:
+		if is_standable(spot):
+			good.append(spot)
+	if good.size() != hill_spots.size():
+		hill_spots = good
+		_spot_index = 0
+		hill_moves = hill_moves and good.size() > 1
+	if is_standable(hill_position):
+		return
+	if not good.is_empty():
+		hill_position = good[0]
+		return
+	var points: Array[Vector2] = round_manager._stage_spawn_points
+	if points.is_empty():
+		return
+	var lo: float = points[0].x
+	var hi: float = points[0].x
+	var sum := Vector2.ZERO
+	for p: Vector2 in points:
+		lo = minf(lo, p.x)
+		hi = maxf(hi, p.x)
+		sum += p
+	var centre: Vector2 = sum / float(points.size())
+	var steps: int = int(ceilf(maxf(centre.x - lo, hi - centre.x) / SEARCH_STEP))
+	for i in range(0, steps + 1):
+		for sign_x: float in [1.0, -1.0]:
+			var x: float = centre.x + sign_x * float(i) * SEARCH_STEP
+			if x < lo or x > hi:
+				continue
+			var candidate: Vector2 = _on_the_ground(Vector2(x, centre.y))
+			if is_standable(candidate):
+				hill_position = candidate
+				return
 
 ## Reads the stage's hill spots (#377): the hill starts on the first. A stage
 ## with none leaves `hill_position` to the spawn-centre fallback.

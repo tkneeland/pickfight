@@ -1301,6 +1301,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"mode_lists_derive_from_game_modes_1172",
 	"retired_mode_saved_lists_dropped_1172",
 	"online_guest_victory_prompt_waits_for_host_1186",
+	"koth_hill_never_over_a_pit_1187",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4328,6 +4329,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_retired_mode_saved_lists_dropped_1172()
 		"online_guest_victory_prompt_waits_for_host_1186":
 			return await _scenario_online_guest_victory_prompt_waits_for_host_1186()
+		"koth_hill_never_over_a_pit_1187":
+			return await _scenario_koth_hill_never_over_a_pit_1187()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -42097,8 +42100,8 @@ func _bots_close_445(rig: Dictionary) -> void:
 ## Humans in the roster: every claimed seat that is not a bot.
 func _humans_445(server: Node) -> int:
 	return server.claimed_slots().size() - server.bot_director.bot_count()
-## The counter adds bots one press at a time, wraps to none after the last free
-## seat, and never takes a seat a human holds: eight seats in all.
+## The counter adds bots one press at a time, stops after the last free
+## seat (stays there, #1182), and never takes a seat a human holds: eight seats in all.
 func _scenario_host_bot_counter_adds_bots_and_caps_at_eight_seats() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = await _bots_rig_445("local", false, failures)
@@ -42119,8 +42122,8 @@ func _scenario_host_bot_counter_adds_bots_and_caps_at_eight_seats() -> Array[Str
 	if server.bot_director.bot_count() != 8 or server.claimed_slots().size() != 8:
 		failures.append("asking for 50 bots gave %d bots on %d seats, expected 8 on 8" % [server.bot_director.bot_count(), server.claimed_slots().size()])
 	screen.press_control("bots")
-	if server.bot_director.bot_count() != 0:
-		failures.append("a press at the cap left %d bots, expected the counter to wrap to 0" % server.bot_director.bot_count())
+	if server.bot_director.bot_count() != 8:
+		failures.append("a press at the cap left %d bots, expected it to stay at 8 (#1182)" % server.bot_director.bot_count())
 	# A human's seat is not the counter's to take: one phone leaves 7 for bots.
 	var phone := WebSocketPeer.new()
 	var got: Dictionary = await _join_phone(phone, "bots445-cap", rig["phones"])
@@ -61071,4 +61074,35 @@ func _scenario_online_guest_victory_prompt_waits_for_host_1186() -> Array[String
 		if prompt.text != wait_text:
 			failures.append("guest prompt did not switch back to waiting: '%s'" % prompt.text)
 	await _rc_close_241(rig)
+	return failures
+
+## #1187: on every stage in Main's rotation, the King of the Hill hill (and each
+## spot a moving hill hops between) sits over floor, never over a pit. The hill
+## is read after start_round, where the pit check has already moved it.
+func _scenario_koth_hill_never_over_a_pit_1187() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		paths.append(scene.resource_path)
+	main_scene.free()
+	if paths.size() < 40:
+		failures.append("only %d stages in the rotation" % paths.size())
+	for path: String in paths:
+		var rig: Dictionary = _koth_stage_rig(path)
+		if not await _mode_started(rig):
+			failures.append("%s: the King of the Hill round never started" % path)
+			await _teardown(rig["stage"], false)
+			continue
+		await _await_ticks(5)
+		var hill: Node = rig["rm"].game_mode_node()
+		if not hill.is_standable(hill.hill_position):
+			failures.append("%s: hill at %s has no floor under it" % [path, hill.hill_position])
+		for spot: Vector2 in hill.hill_spots:
+			if not hill.is_standable(spot):
+				failures.append("%s: hill spot %s has no floor under it" % [path, spot])
+		if hill.hill_moves and hill.hill_spots.size() < 2:
+			failures.append("%s: a moving hill with fewer than 2 spots" % path)
+		await _teardown(rig["stage"], false)
+	_scenario_completed = true
 	return failures
