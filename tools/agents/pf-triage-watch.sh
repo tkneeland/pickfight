@@ -9,6 +9,8 @@
 #                      NIGHT_AGENTS, 1 past FIVE_H_SLOW_USED, 0 past FIVE_H_STOP_USED or the weekly stop)
 #   AUSTIN_QUEUE_LOW <n>  (triagemaster only, ticket-maker on) hourly: a peer has fewer than 5 ready dev tickets; Claude files and assigns more
 #   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line from pf-msg.sh listen (msg-wake.txt); checked every PF_TICK (10) s while idle
+#   DISCORD_BUG <n> new in #bug-reports  (triagemaster only, pf-discord.conf set up) people posted in the Discord server's
+#                      #bug-reports channel; checked once a minute while idle; Claude reads them with pf-discord-bugs.sh read
 # Tickets the open PRs are working on, space-separated: Closes|Fixes|Resolves|Refs #N in a title or body (one PR may
 # close several tickets, #1147), or a head branch named for the ticket. $1 = gh pr list --json number,body,title,headRefName
 pf_pr_tickets() {
@@ -98,6 +100,10 @@ while true; do
     wm=$(pf_mtime "$PF_STATE/msg-wake.txt")
     if [ -n "$wm" ] && [ -s "$PF_STATE/msg-wake.txt" ] && [ "$wm" != "$(cat "$PF_STATE/.msg-wake-handled" 2>/dev/null)" ]; then
       echo "$wm" > "$PF_STATE/.msg-wake-handled"; head -n 1 "$PF_STATE/msg-wake.txt"; exit 0
+    fi
+    # Discord #bug-reports (autotriage.md rule 18): once a minute, triagemaster only, once the bot token is set up
+    if [ $((tick % 6)) = 0 ] && [ -f "$PF_STATE/pf-discord.conf" ] && pf_is_triagemaster; then
+      n=$(bash "$(dirname "$0")/pf-discord-bugs.sh" check 2>/dev/null) && { echo "DISCORD_BUG $n new in #bug-reports"; exit 0; }
     fi
   done
 done
