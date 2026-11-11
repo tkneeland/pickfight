@@ -258,7 +258,9 @@ func apply(info: Dictionary) -> void:
 	_meta.text = "\n".join(lines)
 	_meta.visible = not lines.is_empty()
 	var own_team: int = int(info.get("team", TeamsScript.NONE))
-	_team_target = 1 - own_team if own_team == TeamsScript.RED or own_team == TeamsScript.BLUE else TeamsScript.NONE
+	var team_count: int = clampi(int(info.get("team_count", TeamsScript.MIN_COUNT)), TeamsScript.MIN_COUNT, TeamsScript.MAX_COUNT)
+	# The switch moves a seat to the next team, round and round (#1200): Blue to Red with two teams, to Green with three.
+	_team_target = (own_team + 1) % team_count if own_team >= 0 and own_team < TeamsScript.COUNT else TeamsScript.NONE
 	_team_switch.visible = bool(info.get("team_switch", false)) and _team_target != TeamsScript.NONE
 	if _team_switch.visible:
 		_team_switch.text = tr("LOBBY_TEAM_SWITCH") % TeamsScript.team_name(_team_target)

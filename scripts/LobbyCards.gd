@@ -88,8 +88,10 @@ func refresh(state: Dictionary, join_source: Object) -> void:
 	var teams: bool = bool(state.get("teams", false))
 	var entries: Array = state["players"].duplicate()
 	if teams:
-		entries = entries.filter(func(e: Dictionary) -> bool: return int(e.get("team", -1)) == 0) \
-			+ entries.filter(func(e: Dictionary) -> bool: return int(e.get("team", -1)) != 0)
+		var by_team: Array = []
+		for team_index: int in TeamsScript.COUNT:
+			by_team.append_array(entries.filter(func(e: Dictionary) -> bool: return int(e.get("team", -1)) == team_index))
+		entries = by_team + entries.filter(func(e: Dictionary) -> bool: return int(e.get("team", -1)) < 0 or int(e.get("team", -1)) >= TeamsScript.COUNT)
 	var can_kick: bool = server != null and server.has_method("pc_runs_room") and server.pc_runs_room()
 	var host_pc: int = server.host_pc_slot() if server != null and server.has_method("host_pc_slot") else -1
 	var bots: int = 0
@@ -124,8 +126,12 @@ func refresh(state: Dictionary, join_source: Object) -> void:
 		if teams:
 			var team: int = int(entry.get("team", -1))
 			var text: String = _screen.tr("LOBBY_TEAM_TAG") % TeamsScript.team_name(team)
-			info["team_text"] = text + (" " + _screen.tr("LOBBY_AUTO") if int(entry.get("pick", team)) == TeamsScript.NONE else "")
+			var pick: int = int(entry.get("pick", team))
+			if pick >= _screen.team_count_of(state):
+				pick = TeamsScript.NONE # a pick past the match's teams (Yellow after dropping to 2) acts as Auto
+			info["team_text"] = text + (" " + _screen.tr("LOBBY_AUTO") if pick == TeamsScript.NONE else "")
 			info["team"] = team
+			info["team_count"] = _screen.team_count_of(state)
 			# #1199: a human's team switch: the host screen moves any seat, a joiner only its own.
 			info["team_switch"] = not is_bot and (server == null or not server.has_method("is_joiner_view") or slot == server.host_pc_slot()) \
 				and ["lobby", "countdown"].has(str(state.get("phase", "lobby")))

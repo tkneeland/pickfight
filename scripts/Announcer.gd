@@ -188,8 +188,10 @@ func _on_round_won(slot: int, round_manager: Node) -> void:
 func _on_match_won(_slot: int) -> void:
 	say(&"announce_winner")
 
-## Issue #236: "Red team wins!" / "Blue team wins!", by team (0 red, 1 blue).
-const TEAM_WIN_LINES: PackedStringArray = ["announce_red_team_wins", "announce_blue_team_wins"]
+## Issue #236: "Red team wins!" / "Blue team wins!", by team (0 red, 1 blue), and since #1200 "Green team
+## wins!" / "Yellow team wins!" (2, 3).
+const TEAM_WIN_LINES: PackedStringArray = ["announce_red_team_wins", "announce_blue_team_wins",
+	"announce_green_team_wins", "announce_yellow_team_wins"]
 
 ## A Teams match won (issue #236): the winning team's line.
 func _on_team_match_won(team: int) -> void:

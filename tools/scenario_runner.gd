@@ -1310,6 +1310,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lobby_teams_uneven_note_1199",
 	"koth_hill_radius_scales_with_stage_1198",
 	"spawn_protection_ghosts_fighters_1196",
+	"teams_n_team_balance_and_letters_1200",
+	"teams_count_setting_and_panel_1200",
+	"teams_four_team_match_scoring_1200",
+	"teams_four_teams_online_joiner_1200",
+	"teams_controller_page_four_teams_1200",
 	"online_ping_stats_avg_p95_max_1195",
 	"remote_client_reports_felt_delay_1195",
 	"online_ping_readout_mirrors_to_joiner_1195",
@@ -4359,6 +4364,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_koth_hill_radius_scales_with_stage_1198()
 		"spawn_protection_ghosts_fighters_1196":
 			return await _scenario_spawn_protection_ghosts_fighters_1196()
+		"teams_n_team_balance_and_letters_1200":
+			return await _scenario_teams_n_team_balance_and_letters_1200()
+		"teams_count_setting_and_panel_1200":
+			return await _scenario_teams_count_setting_and_panel_1200()
+		"teams_four_team_match_scoring_1200":
+			return await _scenario_teams_four_team_match_scoring_1200()
+		"teams_four_teams_online_joiner_1200":
+			return await _scenario_teams_four_teams_online_joiner_1200()
+		"teams_controller_page_four_teams_1200":
+			return await _scenario_teams_controller_page_four_teams_1200()
 		"online_ping_stats_avg_p95_max_1195":
 			return await _scenario_online_ping_stats_avg_p95_max_1195()
 		"remote_client_reports_felt_delay_1195":
@@ -16201,7 +16216,7 @@ const LOBBY_COUNTDOWN_SEC: float = 0.3
 const LOBBY_SETTLE_TICKS: int = 5
 ## Three players over a lobby-enabled RoundManager and the lobby stub roster,
 ## slots 0 and 1 claimed. Players spawn in clear sky like the pickup rounds.
-func _new_lobby_round(target: int, pause_sec: float = 0.0, scoreboard: Control = null) -> Dictionary:
+func _new_lobby_round(target: int, pause_sec: float = 0.0, scoreboard: Control = null, seats: int = 3) -> Dictionary:
 	var stage := Node2D.new()
 	get_root().add_child(stage)
 	var container := Node2D.new()
@@ -16210,7 +16225,7 @@ func _new_lobby_round(target: int, pause_sec: float = 0.0, scoreboard: Control =
 	var players: Array[RigidBody2D] = []
 	var paths: Array[NodePath] = []
 	var spawns := PackedVector2Array()
-	for i in 3:
+	for i in seats:
 		var player: RigidBody2D = PlayerScene.instantiate() as RigidBody2D
 		player.name = "LobbyP%d" % i
 		player.start_in_round = false
@@ -25637,9 +25652,9 @@ const TEAM_ROUND_PAUSE_SEC_236: float = 1.5
 ## A lobby round (`_new_lobby_round`) set to Teams, with `slots` claimed and
 ## the phones' `picks`, and a score label wired up.
 func _new_team_round_236(target: int, slots: Array[int], picks: Dictionary, teams_on: bool = true,
-		pause_sec: float = 0.0, scoreboard: Control = null) -> Dictionary:
+		pause_sec: float = 0.0, scoreboard: Control = null, seats: int = 3) -> Dictionary:
 	RoundManagerScript.modifier_rolls_enabled = false
-	var loop: Dictionary = _new_lobby_round(target, pause_sec, scoreboard)
+	var loop: Dictionary = _new_lobby_round(target, pause_sec, scoreboard, seats)
 	var roster: Node = loop["roster"]
 	roster.slots = slots
 	roster.teams_on = teams_on
@@ -25750,8 +25765,8 @@ func _scenario_teams_cannot_start_with_empty_team() -> Array[String]:
 	print("      both on Red, both ready: phase '%s', status '%s'" % [rm.lobby_phase(), status])
 	if rm.lobby_phase() != "lobby" or players[0].alive or players[1].alive:
 		failures.append("with Blue empty the match went to '%s'" % rm.lobby_phase())
-	if not status.begins_with("Both teams need a player"):
-		failures.append("the lobby screen said '%s', not that both teams need a player" % status)
+	if not status.begins_with("Every team needs a player"):
+		failures.append("the lobby screen said '%s', not that every team needs a player" % status)
 	roster.team_picks = {0: TeamsScript236.RED, 1: TeamsScript236.BLUE}
 	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "countdown", ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("with a player on each team the countdown never started ('%s')" % rm.lobby_phase())
@@ -26291,12 +26306,12 @@ func _scenario_controller_page_team_picker_and_mode_toggle() -> Array[String]:
 	if mode_click < 0 or not page.substr(mode_click, 120).contains("if (inMatch()) { return; }"):
 		failures.append("the mode toggle's click is not guarded against a match in progress")
 	var re := RegEx.new()
-	re.compile('var TEAM_COLORS = \\["(#[0-9a-fA-F]{6})", "(#[0-9a-fA-F]{6})"\\];')
+	re.compile('var TEAM_COLORS = \\["(#[0-9a-fA-F]{6})", "(#[0-9a-fA-F]{6})", "(#[0-9a-fA-F]{6})", "(#[0-9a-fA-F]{6})"\\];')
 	var m: RegExMatch = re.search(page)
 	if m == null:
 		failures.append("the page has no TEAM_COLORS")
 	else:
-		for team in 2:
+		for team in 4:
 			var phone: Color = Color.html(m.get_string(team + 1))
 			if not _color_close(phone, TeamsScript236.COLORS[team], 0.03):
 				failures.append("the phone's %s is %s, the host screen's %s" % [
@@ -52195,7 +52210,7 @@ func _scenario_team_letters_752() -> Array[String]:
 	TranslationServer.set_locale("en")
 	if teams_script.team_letter(0) != "R" or teams_script.team_letter(1) != "B":
 		failures.append("the English letters are '%s' and '%s', expected R and B" % [teams_script.team_letter(0), teams_script.team_letter(1)])
-	if teams_script.team_letter(-1) != "" or teams_script.team_letter(2) != "":
+	if teams_script.team_letter(-1) != "" or teams_script.team_letter(4) != "":
 		failures.append("a team that does not exist has a letter")
 	TranslationServer.set_locale(was_locale)
 	# The badge control.
@@ -52205,7 +52220,7 @@ func _scenario_team_letters_752() -> Array[String]:
 	badge.set_team(1)
 	if not badge.visible or badge.letter() != "B":
 		failures.append("switching the badge to Blue left it showing '%s'" % badge.letter())
-	for none: int in [-1, 2, 9]:
+	for none: int in [-1, 4, 9]:
 		badge.set_team(none)
 		if badge.visible or badge.letter() != "":
 			failures.append("the badge for team %d is shown ('%s')" % [none, badge.letter()])
@@ -61589,6 +61604,320 @@ func _scenario_spawn_protection_ghosts_fighters_1196() -> Array[String]:
 	p0.spawn_protected = false
 	await _teardown(stage)
 	return failures
+
+# --- Four teams (issue #1200, ADR-0018) -----------------------------------------------
+const LOCALES_1200: PackedStringArray = ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]
+
+## #1200: N-team auto-balance spreads players evenly and honours picks and kept teams; a pick
+## outside the match's count is auto; Soccer and Capture the Flag clamp to two teams; every team
+## has its own letter in every language, and Green and Yellow read G and Y on the badge.
+func _scenario_teams_n_team_balance_and_letters_1200() -> Array[String]:
+	var failures: Array[String] = []
+	var teams_script: GDScript = load("res://scripts/Teams.gd")
+	var no_bots: Array[int] = []
+	var cases: Array = [
+		# [slots, picks, count, expected]
+		[[0, 1, 2, 3, 4, 5], {}, 3, {0: 0, 1: 1, 2: 2, 3: 0, 4: 1, 5: 2}],
+		[[0, 1, 2, 3], {}, 4, {0: 0, 1: 1, 2: 2, 3: 3}],
+		[[0, 1, 2, 3, 4, 5, 6, 7], {}, 4, {0: 0, 1: 1, 2: 2, 3: 3, 4: 0, 5: 1, 6: 2, 7: 3}],
+		[[0, 1, 2, 3], {0: 3, 1: 3}, 4, {0: 3, 1: 3, 2: 0, 3: 1}],
+		# A pick of Yellow in a three-team match is outside the count: the player is balanced instead.
+		[[0, 1, 2], {0: 3}, 3, {0: 0, 1: 1, 2: 2}],
+	]
+	for c: Array in cases:
+		var slots: Array[int] = []
+		slots.assign(c[0])
+		var got: Dictionary = teams_script.assign(slots, c[1], no_bots, {}, int(c[2]))
+		if got != c[3]:
+			failures.append("assign(%s, picks %s, %d teams) gave %s, expected %s" % [c[0], c[1], c[2], got, c[3]])
+	var kept: Dictionary = teams_script.assign([0, 1, 2, 3] as Array[int], {}, no_bots, {0: 2, 1: 2}, 3)
+	if kept.get(0) != 2 or kept.get(1) != 2 or kept.get(2) != 0 or kept.get(3) != 1:
+		failures.append("kept teams in a 3-team match gave %s, expected 0:2 1:2 2:0 3:1" % [kept])
+	var counted: Array[int] = teams_script.counts({0: 0, 1: 2, 2: 2, 3: 3}, 4)
+	if counted != [1, 0, 2, 1] or not teams_script.all_manned({0: 0, 1: 1, 2: 2}, 3) or teams_script.all_manned({0: 0, 1: 1, 2: 1}, 3):
+		failures.append("counts / all_manned are wrong: %s" % [counted])
+	if teams_script.clamp_count(9) != 4 or teams_script.clamp_count(0) != 2 or teams_script.clamp_count(3) != 3:
+		failures.append("clamp_count did not clamp to 2..4")
+	for mode_id: String in ["soccer", "capture_the_flag"]:
+		if teams_script.clamp_count(4, mode_id) != 2:
+			failures.append("%s allowed %d teams, expected 2" % [mode_id, teams_script.clamp_count(4, mode_id)])
+	for mode_id: String in ["", "king_of_the_hill", "stock", "sudden_death"]:
+		if teams_script.clamp_count(4, mode_id) != 4:
+			failures.append("'%s' did not allow four teams" % mode_id)
+	if teams_script.team_letter(2) == "" or teams_script.team_letter(4) != "" or teams_script.team_letter(-1) != "":
+		failures.append("team_letter(2) empty, or a team that does not exist has a letter")
+	var badge: Control = load("res://scripts/TeamBadge.gd").new()
+	badge.set_team(2)
+	if badge.letter() != teams_script.team_letter(2):
+		failures.append("the badge for Green reads '%s'" % badge.letter())
+	badge.free()
+	var old_locale: String = TranslationServer.get_locale()
+	for locale: String in LOCALES_1200:
+		TranslationServer.set_locale(locale)
+		var seen: Dictionary = {}
+		for team in 4:
+			var letter: String = teams_script.team_letter(team)
+			if letter == "" or teams_script.team_name(team) == "TEAM_%s" % teams_script.NAMES[team]:
+				failures.append("%s: team %d has no letter or no translated name" % [locale, team])
+			if seen.has(letter):
+				failures.append("%s: teams %d and %d share the letter '%s'" % [locale, seen[letter], team, letter])
+			seen[letter] = team
+		if locale == "en":
+			var en: String = ""
+			for team in 4:
+				en += teams_script.team_letter(team)
+			if en != "RBGY":
+				failures.append("English letters read '%s', expected RBGY" % en)
+	TranslationServer.set_locale(old_locale)
+	_scenario_completed = true
+	return failures
+
+## #1200: the host's team count on a real server: 2 to 4, host only, lobby only, held at 2 for
+## Soccer and Capture the Flag; the lobby state and the host panel carry it; picks 0..3 are taken.
+func _scenario_teams_count_setting_and_panel_1200() -> Array[String]:
+	var failures: Array[String] = []
+	var built: Dictionary = _new_bot_main()
+	var main: Node = built["main"]
+	var server: Node = built["server"]
+	var rm: Node = built["rm"]
+	get_root().add_child(main)
+	await _await_ticks(5)
+	_phone_ws_port = server.ws_port
+	var joined: Array[WebSocketPeer] = []
+	for i in 2:
+		var peer := WebSocketPeer.new()
+		await _join_phone(peer, "team-count-%d" % i, joined)
+		joined.append(peer)
+	joined[0].send_text(JSON.stringify({"t": "mode", "v": "teams"}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS * 2)
+	if server.team_count() != 2:
+		failures.append("a fresh host has %d teams, expected 2" % server.team_count())
+	joined[1].send_text(JSON.stringify({"t": "teamcount", "v": 4}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if server.team_count() != 2:
+		failures.append("a non-host phone changed the team count to %d" % server.team_count())
+	joined[0].send_text(JSON.stringify({"t": "teamcount", "v": 3}))
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS * 2)
+	if server.team_count() != 3:
+		failures.append("the host's phone asked for 3 teams and got %d" % server.team_count())
+	var msg: Dictionary = _last_lobby_msg_236(joined[1])
+	if int(msg.get("team_count", -1)) != 3 or msg.get("team_scores", []).size() != 3 or bool(msg.get("two_teams_only", false)):
+		failures.append("the lobby frame carried team_count %s, team_scores %s, two_teams_only %s" % [msg.get("team_count"), msg.get("team_scores"), msg.get("two_teams_only")])
+	for team in [2, -1, 0]:
+		joined[1].send_text(JSON.stringify({"t": "team", "v": team}))
+		await _poll_phones(joined, 2)
+		if server.slot_team_pick(1) != team:
+			failures.append("a phone's pick of team %d read back as %d" % [team, server.slot_team_pick(1)])
+	for beyond in [3, 4]: # past the match's 3 teams (#1200)
+		joined[1].send_text(JSON.stringify({"t": "team", "v": beyond}))
+		await _poll_phones(joined, 2)
+		if server.slot_team_pick(1) == beyond:
+			failures.append("a pick of team %d was taken with 3 teams" % beyond)
+	# The host panel's button.
+	var screen: Node = rm._lobby_screen
+	var button: Button = screen.control_button("team_count")
+	await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+	if button == null or not button.visible or button.disabled:
+		failures.append("the host panel's team count button is not shown and enabled with Teams on")
+	else:
+		var want: String = TranslationServer.translate("TEAM_COUNT_BUTTON") % 3
+		if button.text != want:
+			failures.append("the button reads '%s', expected '%s'" % [button.text, want])
+		button.pressed.emit()
+		if server.team_count() != 4:
+			failures.append("the button took 3 teams to %d, expected 4" % server.team_count())
+		button.pressed.emit()
+		if server.team_count() != 2:
+			failures.append("the button took 4 teams to %d, expected 2" % server.team_count())
+	# Two-sided modes hold the effective count at 2 and grey the button out, keeping the host's choice.
+	server.apply_host_command("team_count", 4)
+	for mode_id: String in ["soccer", "capture_the_flag"]:
+		if not server.set_game_mode(mode_id):
+			failures.append("%s could not be chosen with Teams on" % mode_id)
+			continue
+		await _poll_phones(joined, LOBBY_SETTLE_TICKS)
+		if server.team_count() != 2 or (button != null and not button.disabled):
+			failures.append("%s: team_count() %d, button disabled %s; expected 2 and disabled" % [mode_id, server.team_count(), button.disabled if button != null else "n/a"])
+		var held: Dictionary = _last_lobby_msg_236(joined[1])
+		if int(held.get("team_count", -1)) != 2 or held.get("two_teams_only", false) != true:
+			failures.append("%s: the lobby frame said team_count %s, two_teams_only %s" % [mode_id, held.get("team_count"), held.get("two_teams_only")])
+	for mode_id: String in ["king_of_the_hill", "stock", "sudden_death"]:
+		if not server.set_game_mode(mode_id):
+			failures.append("%s could not be chosen with Teams on" % mode_id)
+			continue
+		if server.team_count() != 4:
+			failures.append("%s allowed %d teams, expected 4" % [mode_id, server.team_count()])
+	# Mid-match the count is refused.
+	server.set_game_mode("")
+	server.set_lobby_state({"phase": "playing", "teams": true, "players": [{"slot": 0, "team": 0}]})
+	if server.apply_host_command("team_count", 2) or server.team_count() != 4:
+		failures.append("the team count changed mid-match (%d)" % server.team_count())
+	server.apply_host_command("team_count", 2)
+	await _close_phones(joined)
+	await _teardown(main)
+	_scenario_completed = true
+	return failures
+
+## #1200: a four-team match on the round loop. The round runs until one team is left, the score
+## line lists all four, and Yellow winning the match gives the victory data, title, announcer
+## line and podium order of the right team.
+func _scenario_teams_four_team_match_scoring_1200() -> Array[String]:
+	var failures: Array[String] = []
+	await physics_frame
+	var sfx: Node = _sfx()
+	var announcer: Node = sfx.announcer if sfx != null else null
+	if announcer != null:
+		announcer.clear()
+	var loop: Dictionary = _new_team_round_236(2, [0, 1, 2, 3], {0: 0, 1: 1, 2: 2, 3: 3}, true, 0.0, null, 4)
+	var players: Array[RigidBody2D] = loop["players"]
+	var roster: Node = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	roster.team_count_wanted = 4
+	await _await_ticks(LOBBY_SETTLE_TICKS)
+	var state: Dictionary = roster.last_state()
+	if int(state.get("team_count", -1)) != 4 or state.get("team_scores", []).size() != 4:
+		failures.append("the lobby told the phones team_count %s, team_scores %s" % [state.get("team_count"), state.get("team_scores")])
+	if _state_teams_236(state) != {0: 0, 1: 1, 2: 2, 3: 3}:
+		failures.append("the lobby put the four players on %s" % [_state_teams_236(state)])
+	roster.ready_slots = {0: true, 1: true, 2: true, 3: true}
+	for round_number in 2:
+		if not await _await_condition(func() -> bool: return players[0].alive and players[3].alive, ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("round %d never started" % (round_number + 1))
+			await _teardown(loop["stage"])
+			return failures
+		for i in 4:
+			if players[i].team != i:
+				failures.append("round %d: player %d was on team %d" % [round_number + 1, i, players[i].team])
+		players[0].eliminate()
+		players[1].eliminate()
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		if rm.lobby_phase() != "playing" or not players[2].alive or not players[3].alive:
+			failures.append("round %d ended with two teams still standing ('%s')" % [round_number + 1, rm.lobby_phase()])
+		players[2].eliminate()
+		await _await_ticks(LOBBY_SETTLE_TICKS)
+		if round_number == 0:
+			var label: String = (loop["score_label"] as Label).text
+			print("      score label: '%s'" % label)
+			for part: String in ["RED: 0", "BLUE: 0", "GREEN: 0", "YELLOW: 1"]:
+				if not label.contains(part):
+					failures.append("the score line '%s' lacks '%s'" % [label, part])
+			if rm.lobby_phase() == "victory":
+				failures.append("one Yellow win of two ended the match")
+	if not await _await_condition(func() -> bool: return rm.lobby_phase() == "victory", ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("two Yellow wins never reached the victory screen ('%s')" % rm.lobby_phase())
+		await _teardown(loop["stage"])
+		return failures
+	state = roster.last_state()
+	var title: String = rm._lobby_screen.victory_title().text if rm._lobby_screen != null and rm._lobby_screen.victory_title() != null else ""
+	print("      victory: team %d, title '%s', winner_team %s team_scores %s" % [rm.match_winner_team(), title, state.get("winner_team"), state.get("team_scores")])
+	if rm.match_winner_team() != 3 or rm.team_score(3) != 2 or rm.team_score(0) != 0:
+		failures.append("the match went to team %d on %d, expected Yellow on 2" % [rm.match_winner_team(), rm.team_score(3)])
+	if int(state.get("winner_team", -1)) != 3 or state.get("team_scores") != [0, 0, 0, 2]:
+		failures.append("the phones were told winner_team %s, team_scores %s; expected 3 and [0, 0, 0, 2]" % [state.get("winner_team"), state.get("team_scores")])
+	if title != "YELLOW TEAM WINS!":
+		failures.append("the victory screen said '%s', not 'YELLOW TEAM WINS!'" % title)
+	var data: Dictionary = rm.victory_data()
+	var order: Array = data.get("slots", [])
+	if order.is_empty() or int(order[0]) != 3:
+		failures.append("the podium put slot %s first, expected the Yellow player (3): %s" % [order[0] if not order.is_empty() else "none", order])
+	if announcer != null:
+		await _await_condition(func() -> bool: return announcer.said.has("announce_yellow_team_wins"), ANNOUNCER_WAIT_MSEC)
+		if not announcer.said.has("announce_yellow_team_wins"):
+			failures.append("the announcer said %s, never 'Yellow team wins'" % [announcer.said])
+	await _teardown(loop["stage"])
+	_scenario_completed = true
+	return failures
+
+## #1200: an Online joiner is told the team count and the colours: its lobby cards, its team
+## switch cycle, the host row's count button, the victory screen and the snapshot all handle
+## Green and Yellow through the host's own drawing code.
+func _scenario_teams_four_teams_online_joiner_1200() -> Array[String]:
+	var failures: Array[String] = []
+	var teams_script: GDScript = load("res://scripts/Teams.gd")
+	var frame: Dictionary = _classic_frame_1132([
+		{"slot": 0, "ready": true, "name": "Hosty", "color": "e69f00", "team": 0, "pick": -1},
+		{"slot": 1, "ready": false, "name": "Me", "color": "56b4e9", "team": 2, "pick": 2},
+		{"slot": 2, "ready": false, "name": "Yel", "color": "009e73", "team": 3, "pick": -1}])
+	frame["teams"] = true
+	frame["team_count"] = 3
+	frame["team_scores"] = [0, 0, 0]
+	frame["two_teams_only"] = false
+	var client: Node = await _joiner_1132(frame)
+	var screen: Node = client._lobby.screen
+	var own: Control = screen._players.card(1)
+	if own == null or own.team_switch() == null:
+		failures.append("the joiner's own card has no team switch")
+	else:
+		var picked: Array[int] = []
+		client._lobby.team_picked.connect(func(team: int) -> void: picked.append(team))
+		own.team_switch().pressed.emit()
+		if picked != [0]:
+			failures.append("on Green of 3 teams the switch asked for %s, expected [0] (Red wraps)" % [picked])
+	var count_button: Button = client._lobby.team_count_button
+	if count_button == null:
+		failures.append("the joiner's host row has no team count button")
+	elif client._is_host() != count_button.visible:
+		failures.append("the count button's visibility (%s) does not follow host status (%s)" % [count_button.visible, client._is_host()])
+	elif client._is_host() and count_button.text != TranslationServer.translate("TEAM_COUNT_BUTTON") % 3:
+		failures.append("the count button reads '%s'" % count_button.text)
+	# A four-team frame: Green moves on to Yellow.
+	frame["team_count"] = 4
+	frame["team_scores"] = [0, 0, 0, 0]
+	client._on_host_text(JSON.stringify(frame))
+	await process_frame
+	own = screen._players.card(1)
+	var picked_four: Array[int] = []
+	client._lobby.team_picked.connect(func(team: int) -> void: picked_four.append(team))
+	if own != null and own.team_switch() != null:
+		own.team_switch().pressed.emit()
+	if picked_four != [3]:
+		failures.append("on Green of 4 teams the switch asked for %s, expected [3] (Yellow)" % [picked_four])
+	# Two-sided modes: the host row's button is greyed out.
+	frame["two_teams_only"] = true
+	frame["team_count"] = 2
+	client._on_host_text(JSON.stringify(frame))
+	await process_frame
+	if client._is_host() and not client._lobby.team_count_button.disabled:
+		failures.append("Soccer's count button is not greyed out on the joiner")
+	# The victory screen: Yellow wins with four teams.
+	var data: Dictionary = {"slots": [2, 0, 1], "scores": PackedInt32Array([0, 0, 0]), "winner": -1, "winner_team": 3,
+		"teams": {0: 0, 1: 2, 2: 3}, "team_scores": PackedInt32Array([1, 0, 1, 2]), "awards": [], "stats": []}
+	client.effects.show_victory(data)
+	var title: String = client.effects.victory.victory_title().text
+	if title != "YELLOW TEAM WINS!":
+		failures.append("the joiner's victory title is '%s', not 'YELLOW TEAM WINS!'" % title)
+	if client.effects.victory.victory_title().get_theme_color("font_color") != teams_script.team_color(3):
+		failures.append("the joiner's victory title is not in Yellow")
+	# The snapshot keeps team 3 and team 2 on the wire.
+	var world: Dictionary = _rc_world_241(1, 1)
+	world["players"][0]["team"] = 3
+	world["players"][1]["team"] = 2
+	var decoded: Dictionary = _rc_codec_241(world)
+	var got: Array = []
+	for p: Dictionary in decoded.get("players", []):
+		got.append(int(p.get("team", -9)))
+	if got != [3, 2]:
+		failures.append("the snapshot carried teams %s, expected [3, 2]" % [got])
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## #1200: the phone page ships the Green and Yellow buttons, the count control and the strings
+## for all nine languages.
+func _scenario_teams_controller_page_four_teams_1200() -> Array[String]:
+	var failures: Array[String] = []
+	var page: String = FileAccess.get_file_as_string("res://controller/index.html")
+	for needle: String in ['id="team-green"', 'id="team-yellow"', 'id="menu-teamcount"', '"teamcount"']:
+		if not page.contains(needle):
+			failures.append("the controller page lacks %s" % needle)
+	for key: String in ["PHONE_TEAM_GREEN", "PHONE_TEAM_YELLOW", "PHONE_TEAM_COUNT"]:
+		var count: int = page.count("\"" + key + "\":")
+		if count < 9:
+			failures.append("%s is defined %d times in the page's dictionaries, expected at least 9 (one per language)" % [key, count])
+	_scenario_completed = true
+	return failures
+
 # --- Issue #1195: Online ping readout, felt delay and match statistics ------------
 ## Answers the next ping the host sends `remote` after holding it `hold_msec`,
 ## with `extra` merged into the pong. Returns false when no ping came.

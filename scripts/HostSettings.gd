@@ -19,6 +19,7 @@ extends RefCounted
 ## The voice volume slider (#824, announcer and grunts) lives in `SfxSettings`'
 ## audio rows and is saved by `Sfx`, not here.
 
+const TeamsScript := preload("res://scripts/Teams.gd")
 const SfxScript := preload("res://scripts/Sfx.gd")
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
 const LanguagesScript := preload("res://scripts/Languages.gd")
@@ -112,6 +113,9 @@ var stock_time_limit: int = 480
 const MIN_MODE_TARGET: int = 1
 const MAX_MODE_TARGET: int = 10
 var soccer_goals: int = 3
+## Teams (#1200): how many teams a Teams match has, 2 to 4 (Red, Blue, Green, Yellow). Soccer and
+## Capture the Flag play two whatever this says (`Teams.clamp_count`).
+var team_count: int = 2 # Teams.MIN_COUNT
 ## Bot skill (#682), one for every bot in the room: "easy", "normal" (today's
 ## bots) or "hard". `Bot.gd` holds the multiplier table.
 const BOT_DIFFICULTIES: Array[String] = ["easy", "normal", "hard"]
@@ -349,6 +353,10 @@ func set_modifier_enabled(mode_id: String, modifier_id: String, enabled: bool) -
 func _game_modes() -> GDScript:
 	return load("res://scripts/GameModes.gd") as GDScript
 
+func set_team_count(count: int) -> void:
+	team_count = clampi(count, TeamsScript.MIN_COUNT, TeamsScript.MAX_COUNT)
+	save_settings()
+
 func set_stock_lives(lives: int) -> void:
 	stock_lives = clampi(lives, STOCK_MIN_LIVES, STOCK_MAX_LIVES)
 	save_settings()
@@ -488,6 +496,7 @@ func restore_defaults() -> void:
 	stock_lives = 3
 	stock_time_limit = 480
 	soccer_goals = 3
+	team_count = 2
 	bot_difficulty = "normal"
 	ctf_captures = 2
 	cosmetic_pick = {"hat": "none", "eyes": "round", "color": -1}
@@ -596,6 +605,8 @@ func load_settings() -> void:
 		player_numbers = numbers_on if numbers_on is bool else false
 		var lives: Variant = config.get_value(SECTION, "stock_lives", 3)
 		stock_lives = clampi(int(lives), STOCK_MIN_LIVES, STOCK_MAX_LIVES) if lives is int else 3
+		var teams_n: Variant = config.get_value(SECTION, "team_count", 2)
+		team_count = clampi(int(teams_n), TeamsScript.MIN_COUNT, TeamsScript.MAX_COUNT) if teams_n is int else TeamsScript.MIN_COUNT
 		var goals: Variant = config.get_value(SECTION, "soccer_goals", 3)
 		soccer_goals = clampi(int(goals), MIN_MODE_TARGET, MAX_MODE_TARGET) if goals is int else 3
 		var skill: Variant = config.get_value(SECTION, "bot_difficulty", "normal")
@@ -637,6 +648,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "filter_names", filter_names)
 	config.set_value(SECTION, "player_numbers", player_numbers)
 	config.set_value(SECTION, "stock_lives", stock_lives)
+	config.set_value(SECTION, "team_count", team_count)
 	config.set_value(SECTION, "soccer_goals", soccer_goals)
 	config.set_value(SECTION, "bot_difficulty", bot_difficulty)
 	config.set_value(SECTION, "ctf_captures", ctf_captures)

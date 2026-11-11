@@ -452,7 +452,10 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 	_picked_mode = mode_id
 	var joiner: bool = join_source != null and join_source.has_method("is_joiner_view") # the room's settings come in the frame (#1127)
 	var stage_text: String = StagesRulesScreenScript.stage_count_text_from_state(mode_id, state) if joiner else StagesRulesScreenScript.stage_count_text(mode_id)
-	_lobby_target_label.text = "%s%s - %s - %s" % [GameModesScript.display_name(mode_id), " - " + tr("MODE_TEAMS") if teams else "", target_text, stage_text]
+	var teams_text: String = ""
+	if teams:
+		teams_text = " - " + (tr("TEAM_COUNT_BUTTON") % team_count_of(state) if team_count_of(state) > TeamsScript.MIN_COUNT else tr("MODE_TEAMS"))
+	_lobby_target_label.text = "%s%s - %s - %s" % [GameModesScript.display_name(mode_id), teams_text, target_text, stage_text]
 	_stages_summary.text = StagesRulesScreenScript.summary_from_state(mode_id, state) if joiner else StagesRulesScreenScript.summary(mode_id)
 	_host.set_target(target_kind, int(state["target"]))
 	_select_mode_card(mode_id)
@@ -466,18 +469,18 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 		if not is_bot and not host_seat and not bool(entry.get("ready", false)):
 			humans_waiting += 1
 	var joined: int = state["players"].size()
-	var can_start: bool = state["phase"] != "countdown" and joined >= min_players and humans_waiting == 0 and (not teams or both_teams_manned(state))
+	var can_start: bool = state["phase"] != "countdown" and joined >= min_players and humans_waiting == 0 and (not teams or TeamsScript.all_manned(team_map(state), team_count_of(state)))
 	if state["phase"] == "countdown":
 		_lobby_status.text = tr("LOBBY_STARTING")
 	elif joined < min_players:
 		_lobby_status.text = (tr("LOBBY_ONLINE_WAITING") if online else tr("LOBBY_SCAN_TO_JOIN")) % [joined, min_players]
-	elif teams and not both_teams_manned(state):
+	elif teams and not TeamsScript.all_manned(team_map(state), team_count_of(state)):
 		_lobby_status.text = tr("LOBBY_BOTH_TEAMS_NEED_PLAYER")
 	elif humans_waiting > 0:
 		_lobby_status.text = tr("LOBBY_NOT_READY_ONE") if humans_waiting == 1 else tr("LOBBY_NOT_READY_N") % humans_waiting
 	else:
 		_lobby_status.text = tr("LOBBY_ENTER_OR_START")
-	if teams and state["phase"] != "countdown" and both_teams_manned(state) and teams_uneven(state):
+	if teams and state["phase"] != "countdown" and TeamsScript.all_manned(team_map(state), team_count_of(state)) and TeamsScript.uneven(team_map(state), team_count_of(state)):
 		_lobby_status.text += "
 " + tr("LOBBY_TEAMS_UNEVEN") # a note only: START stays lit (#1199)
 	if state["phase"] != "countdown" and Time.get_ticks_msec() < _host.start_notice_until_msec:
@@ -653,23 +656,18 @@ static func ping_text(ms: int) -> String:
 static func ping_color(ms: int) -> Color:
 	return PING_WARN_COLOR if ms > PING_WARN_MSEC else PING_OK_COLOR
 
-## Issue #236: whether a Teams lobby state has somebody on each team.
-static func both_teams_manned(state: Dictionary) -> bool:
-	var counts: Array[int] = [0, 0]
-	for entry: Dictionary in state["players"]:
-		var team: int = int(entry.get("team", -1))
-		if team >= 0 and team < TeamsScript.COUNT:
-			counts[team] += 1
-	return counts[0] > 0 and counts[1] > 0
+## How many teams a Teams lobby state has (#1200): its "team_count", 2 when a host that predates it sent none.
+static func team_count_of(state: Dictionary) -> int:
+	return clampi(int(state.get("team_count", TeamsScript.MIN_COUNT)), TeamsScript.MIN_COUNT, TeamsScript.MAX_COUNT)
 
-## Issue #1199: whether a Teams lobby state has a different number of players on each team.
-static func teams_uneven(state: Dictionary) -> bool:
-	var counts: Array[int] = [0, 0]
+## A Teams lobby state's players as slot -> team (#236, #1199), for `Teams.all_manned` and `Teams.uneven`.
+static func team_map(state: Dictionary) -> Dictionary:
+	var teams: Dictionary = {}
 	for entry: Dictionary in state["players"]:
-		var team: int = int(entry.get("team", -1))
-		if team >= 0 and team < TeamsScript.COUNT:
-			counts[team] += 1
-	return counts[0] != counts[1]
+		var slot: int = int(entry.get("slot", -1))
+		if slot >= 0:
+			teams[slot] = int(entry.get("team", -1))
+	return teams
 
 ## The victory screen's title, or null before the panels are built.
 func victory_title() -> Label:
