@@ -25,6 +25,7 @@ case \$url in
       jq --arg id "\$rid" --arg r "\$ref" '. + [{id: \$id, author: {bot: true}, content: "taking over from tkneeland (now agage-JG)", message_reference: {message_id: \$r}}]' "$T/msgs.json" > "$T/m2" && mv "$T/m2" "$T/msgs.json"; fi
     id=\$(( \$(cat "$T/rivalbase") + c + 1 ))
     jq --arg id "\$id" --arg r "\$ref" --arg t "\$txt" '. + [{id: \$id, author: {bot: true}, content: \$t, message_reference: {message_id: \$r}}]' "$T/msgs.json" > "$T/m2" && mv "$T/m2" "$T/msgs.json"
+    if [ -f "$T/postlost" ]; then exit 28; fi   # the post landed but the response timed out
     echo "{\"id\":\"\$id\"}";;
   */channels/*/messages/*) [ "\$method" = DELETE ] && { id=\${url##*/}; jq --arg id "\$id" 'map(select(.id != \$id))' "$T/msgs.json" > "$T/m2" && mv "$T/m2" "$T/msgs.json"; };;
   *) printf '%s %s\n' "\$url" "\$body" >> "$T/ntfy.log";;
@@ -113,6 +114,25 @@ acct schans2; bash "$H" takeover "$M" >/dev/null; check "non-successor takeover 
 jq -s '.' <(human "$(mkid $((PF_NOW - 200)) 1)") > "$T/msgs.json"
 acct agage-JG; bash "$H" takeover "$(mkid $((PF_NOW - 200)) 1)" >/dev/null; check "young message takeover exits 3" $? 3
 check "dcurl has a timeout" "$(grep -c -- '-m 15' "$T/args.log" | awk '{print ($1 > 0)}')" 1
+# a stale local marker never outvotes a newer takeover, and an expired or superseded one is removed
+acct schans2; real=$(date +%s); : > "$PF_STATE_DIR/msg-inbox.log"
+echo "agage-JG $((real + 3000)) $((real - 1000))" > "$PF_STATE_DIR/pf-takeover"
+printf '%s|tkneeland|TM|tkneeland until failover %s (from agage-JG)\n' "$((real - 10))" $((real + 7200)) >> "$PF_STATE_DIR/msg-inbox.log"
+check "newer TM beats an older local marker" "$(bash "$AG/pf-succession.sh" 2>/dev/null)" tkneeland
+check "superseded marker removed" "$([ -f "$PF_STATE_DIR/pf-takeover" ] && echo kept || echo gone)" gone
+: > "$PF_STATE_DIR/msg-inbox.log"; echo "agage-JG $((real + 3000)) $((real - 10))" > "$PF_STATE_DIR/pf-takeover"
+printf '%s|tkneeland|TM|tkneeland until failover %s\n' "$((real - 500))" $((real + 7200)) >> "$PF_STATE_DIR/msg-inbox.log"
+check "newer local marker beats an older TM" "$(bash "$AG/pf-succession.sh" 2>/dev/null)" agage-JG
+echo "agage-JG $((real - 5)) $((real - 9000))" > "$PF_STATE_DIR/pf-takeover"; : > "$PF_STATE_DIR/msg-inbox.log"; echo tkneeland > "$PF_STATE_DIR/pf-triagemaster"
+check "expired local marker ignored" "$(bash "$AG/pf-succession.sh" 2>/dev/null)" tkneeland
+check "expired marker removed" "$([ -f "$PF_STATE_DIR/pf-takeover" ] && echo kept || echo gone)" gone
+# writes get the longer limit, reads the 15 s one
+check "post uses the write limit" "$(grep -c -- '-m 45' "$T/args.log" | awk '{print ($1 > 0)}')" 1
+# a notice POST that times out but landed is found, not posted twice
+setup_inboxes 100; jq -s '.' <(human "$M") > "$T/msgs.json"; touch "$T/postlost"
+acct agage-JG; out=$(bash "$H" takeover "$M"); check "lost post response: takeover still wins" "$out" "TAKEOVER_OK from tkneeland"
+check "and posted exactly one notice" "$(jq '[.[] | select(.author.bot)] | length' "$T/msgs.json")" 1
+rm -f "$T/postlost"
 # I) two machines never both take over: a rival's earlier notice lands while agage-JG posts
 setup_inboxes 100; jq -s '.' <(human "$M") > "$T/msgs.json"; touch "$T/race"
 acct agage-JG; out=$(bash "$H" takeover "$M"); rc=$?

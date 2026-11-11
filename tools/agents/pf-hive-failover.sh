@@ -102,8 +102,12 @@ EOT
     before=$(echo "$msgs" | jq -r --arg i "$id" '[.[] | select(.message_reference.message_id == $i) | .id] | join(" ")')
     body=$(jq -n --arg t "${NOTICE}${h} (now ${PF_ACCOUNT})" --arg id "$id" '{content: $t, message_reference: {message_id: $id}, allowed_mentions: {parse: []}}')
     mine=$(dcurl "/channels/$PF_DISCORD_DEV/messages" -X POST -H "Content-Type: application/json" -d "$body" | jq -r '.id // empty')
-    [ -n "$mine" ] || { echo "pf-hive-failover: could not post the notice" >&2; exit 2; }
     after=$(fetch) || exit 2
+    # a post that timed out may still have landed: find our own new notice instead of posting a second one
+    [ -n "$mine" ] || mine=$(echo "$after" | jq -r --arg i "$id" --arg t "(now ${PF_ACCOUNT})" --arg n "$NOTICE" --arg b " $before " '
+      [.[] | .id as $mid | select(.message_reference.message_id == $i and (.content | startswith($n)) and (.content | endswith($t)) and ($b | contains(" " + $mid + " ") | not)) | .id]
+      | sort_by([length, .]) | first // empty')
+    [ -n "$mine" ] || { echo "pf-hive-failover: could not post the notice" >&2; exit 2; }
     # the earliest notice posted since we looked wins; a later one yields (deleting its own message is best effort)
     win=$(echo "$after" | jq -r --arg i "$id" --arg n "$NOTICE" --arg b " $before " '
       [.[] | .id as $mid | select(.message_reference.message_id == $i and (.content | startswith($n)) and ($b | contains(" " + $mid + " ") | not)) | .id]
@@ -115,7 +119,7 @@ EOT
     # take the role the way pf-succession.sh reads it: a TM "<me> until failover <expiry>" on the private channel (and a
     # local copy), honoured by pf-succession.sh on every machine until it expires
     exp=$(( $(now) + ${PF_HIVE_TAKEOVER_SECS:-21600} ))
-    echo "$PF_ACCOUNT $exp" > "$PF_STATE/pf-takeover"; echo "$PF_ACCOUNT" > "$PF_STATE/pf-triagemaster"
+    echo "$PF_ACCOUNT $exp $(now)" > "$PF_STATE/pf-takeover"; echo "$PF_ACCOUNT" > "$PF_STATE/pf-triagemaster"
     bash "$PF_DIR/pf-msg.sh" send TM "$PF_ACCOUNT until failover $exp (from $h, #hive $id)" >/dev/null 2>&1
     echo "TAKEOVER_OK from $h"; exit 0 ;;
   *) echo "usage: pf-hive-failover.sh check|takeover <message id>" >&2; exit 2 ;;
