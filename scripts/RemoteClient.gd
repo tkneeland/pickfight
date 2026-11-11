@@ -857,8 +857,11 @@ func felt_msec() -> int:
 
 ## Whether this joiner shares match stats (#1195, D8): the same two-part
 ## consent the host's own telemetry needs (#617), from this PC's settings.
+## Scenarios point this at their own settings (one process runs host and joiner).
+var share_settings: RefCounted = null
+
 func shares_stats() -> bool:
-	var settings: RefCounted = HostSettingsScript1195.shared()
+	var settings: RefCounted = share_settings if share_settings != null else HostSettingsScript1195.shared()
 	return settings.share_stats and settings.telemetry_notice_seen
 
 ## The mouse moved by `relative` pixels while captured (what `_input` calls).

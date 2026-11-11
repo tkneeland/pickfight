@@ -10,7 +10,9 @@ a hit in), mode popularity and the average match length. A match the host
 abandoned (#643) has "completed": false and "rounds_played" and no winner
 weapon; a record without "completed" counts as completed. Completed and
 abandoned matches are counted separately, and abandoned ones still count toward
-damage and hits. Bad lines are skipped.
+damage and hits. An Online match (#1195) may carry "ping": per remote seat
+{"avg", "p95", "max", "n", "felt", "host_leg"} in ms (-1 not measured); their
+means are printed last. Bad lines are skipped.
 """
 import json
 import sys
@@ -78,7 +80,41 @@ def main(argv):
     print("\nMode popularity")
     for mode, count in modes.most_common():
         print("%-18s %4d  %5.1f%%" % (mode, count, 100.0 * count / len(records)))
+    print_ping(records)
     return 0
+
+
+PING_FIELDS = ("avg", "p95", "max", "felt", "host_leg")
+
+
+def ping_summary(records):
+    """Issue #1195: the mean of each remote seat's ping fields over every record
+    with a "ping" list; -1 (not measured) values are left out. Returns
+    (seats, {field: mean or None})."""
+    values = defaultdict(list)
+    seats = 0
+    for rec in records:
+        entries = rec.get("ping")
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            seats += 1
+            for field in PING_FIELDS:
+                value = entry.get(field)
+                if isinstance(value, (int, float)) and value >= 0:
+                    values[field].append(value)
+    return seats, {f: (sum(values[f]) / len(values[f]) if values[f] else None) for f in PING_FIELDS}
+
+
+def print_ping(records):
+    seats, means = ping_summary(records)
+    if not seats:
+        return
+    shown = ["%.0f" % means[f] if means[f] is not None else "-" for f in PING_FIELDS]
+    print("\nOnline ping (remote seats): %d seats" % seats)
+    print("avg / p95 / max / felt / host leg (ms): %s" % " / ".join(shown))
 
 
 if __name__ == "__main__":

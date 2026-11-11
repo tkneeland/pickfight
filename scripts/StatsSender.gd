@@ -19,6 +19,9 @@ signal finished(status: int)
 
 const TIMEOUT_MSEC: int = 10000
 const SfxScript := preload("res://scripts/Sfx.gd")
+const MatchStatsScript := preload("res://scripts/MatchStats.gd")
+## The most ping entries a record carries (Relay.STATS_MAX_PING_ENTRIES).
+const PING_MAX_ENTRIES: int = 8
 
 var _peer: WebSocketPeer
 var _payload: String = ""
@@ -55,6 +58,14 @@ static func build_record(stats: RefCounted, mode: String, stages: Array, format:
 	}
 	if completed:
 		record["winner_weapon"] = stats.best_weapon_of(winner_slots)
+	# #1195: an Online match's per-seat ping statistics, only for joiners who
+	# share stats themselves (D8), at most PING_MAX_ENTRIES (the relay rejects
+	# a longer list) with the most samples kept. Never a slot, name or colour.
+	var ping_list: Variant = stats.get("ping")
+	if ping_list is Array:
+		var entries: Array = MatchStatsScript.ping_entries(ping_list, true, PING_MAX_ENTRIES)
+		if not entries.is_empty():
+			record["ping"] = entries
 	return record
 
 ## Whether `tree` is a scripted run: a `-s` script's loop (the scenario runner,

@@ -23,7 +23,9 @@ extends Node
 ##        413 over STATS_MAX_BYTES, 429 rate limited, 503 cannot write. The
 ##        record is rebuilt from known fields only; the IP is never stored or
 ##        logged (the rate limiter keys on a salted hash that dies with the
-##        process); the timestamp is rounded down to the hour.
+##        process); the timestamp is rounded down to the hour. An Online match
+##        may carry "ping": up to 8 anonymous per-seat round-trip summaries
+##        (issue #1195).
 ##
 ## Control messages (text JSON):
 ##   to host:   {"t":"room","code":"ABCD","token":"<16 hex>"} (a reclaim adds
@@ -141,6 +143,11 @@ const STATS_MAX_WEAPONS: int = 40
 const STATS_MAX_NAME_CHARS: int = 40
 const STATS_MAX_LENGTH_SEC: int = 86400
 const STATS_MAX_ROUNDS: int = 1000
+## Issue #1195: at most this many per-seat ping entries, each of these fields,
+## every one a number of ms in -1..STATS_MAX_PING_MSEC (-1 = not measured).
+const STATS_MAX_PING_ENTRIES: int = 8
+const STATS_PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", "host_leg"]
+const STATS_MAX_PING_MSEC: int = 60000
 ## Records allowed per IP per hour.
 @export var stats_limit_per_hour: int = 30
 ## Where records are appended. Set PICKFIGHT_STATS_PATH to a file on a mounted
@@ -465,6 +472,24 @@ static func clean_stats_record(raw: Variant) -> Dictionary:
 		if not (rounds is int or (rounds is float and float(rounds) == floorf(float(rounds)))) or float(rounds) < 0.0 or float(rounds) > STATS_MAX_ROUNDS:
 			return {}
 		cleaned["rounds_played"] = int(rounds)
+	if rec.has("ping"):
+		# Issue #1195: an Online match's per-seat round trips, anonymous.
+		var ping: Variant = rec["ping"]
+		if not (ping is Array) or (ping as Array).size() > STATS_MAX_PING_ENTRIES:
+			return {}
+		var entries: Array = []
+		for entry: Variant in ping:
+			if not (entry is Dictionary):
+				return {}
+			var clean_entry: Dictionary = {}
+			for field: String in STATS_PING_FIELDS:
+				var value: Variant = (entry as Dictionary).get(field)
+				if not (value is int or (value is float and is_finite(value))) or float(value) < -1.0 or float(value) > STATS_MAX_PING_MSEC:
+					return {}
+				clean_entry[field] = int(value)
+			entries.append(clean_entry)
+		if not entries.is_empty():
+			cleaned["ping"] = entries
 	return cleaned
 
 static func _append_line(path: String, line: String) -> bool:

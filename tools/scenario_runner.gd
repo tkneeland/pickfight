@@ -1312,6 +1312,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_ping_stats_avg_p95_max_1195",
 	"remote_client_reports_felt_delay_1195",
 	"online_ping_readout_mirrors_to_joiner_1195",
+	"match_end_logs_ping_stats_1195",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4361,6 +4362,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_remote_client_reports_felt_delay_1195()
 		"online_ping_readout_mirrors_to_joiner_1195":
 			return await _scenario_online_ping_readout_mirrors_to_joiner_1195()
+		"match_end_logs_ping_stats_1195":
+			return await _scenario_match_end_logs_ping_stats_1195()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -61745,4 +61748,133 @@ func _scenario_online_ping_readout_mirrors_to_joiner_1195() -> Array[String]:
 	if local_label != null and local_label.visible:
 		failures.append("a Local match shows the ping readout: '%s'" % local_label.text)
 	await _teardown(built["main"])
+	return failures
+## The last JSON line of `path`, or {}.
+func _last_json_line_1195(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var lines: PackedStringArray = FileAccess.get_file_as_string(path).strip_edges().split("\n")
+	var parsed: Variant = JSON.parse_string(lines[lines.size() - 1]) if lines.size() > 0 else null
+	return parsed if parsed is Dictionary else {}
+## The match-end ping list: six numeric fields and nothing that names a seat.
+func _check_ping_list_1195(failures: Array[String], what: String, list: Variant, want_n: int) -> void:
+	if not list is Array or (list as Array).size() != want_n:
+		failures.append("%s: ping list %s, expected %d entries" % [what, list, want_n])
+		return
+	for entry: Variant in list:
+		if not entry is Dictionary:
+			failures.append("%s: entry %s is not an object" % [what, entry])
+			continue
+		var keys: Array = (entry as Dictionary).keys()
+		keys.sort()
+		if keys != ["avg", "felt", "host_leg", "max", "n", "p95"]:
+			failures.append("%s: entry fields %s, expected exactly avg/p95/max/n/felt/host_leg" % [what, keys])
+		for key: Variant in keys:
+			var v: Variant = entry[key]
+			if not (v is int or v is float) or float(v) < -1.0 or float(v) > 60000.0:
+				failures.append("%s: %s = %s is not a number in -1..60000" % [what, key, v])
+func _scenario_match_end_logs_ping_stats_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var host: RefCounted = HostSettingsScript372.shared()
+	var was: Array = [host.share_stats, host.telemetry_notice_seen, host.persist]
+	host.persist = false
+	host.share_stats = true
+	host.telemetry_notice_seen = true
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		host.share_stats = was[0]
+		host.telemetry_notice_seen = was[1]
+		host.persist = was[2]
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.ping_interval_msec = 200
+	var log_path: String = "user://balance_stats_scenario_1195.jsonl"
+	DirAccess.remove_absolute(log_path)
+	rm.balance_log_path = log_path
+	var records: Array = []
+	rm.telemetry_sink = func(record: Dictionary) -> void: records.append(record)
+	var joiner: RefCounted = HostSettingsScript372.new()
+	joiner.persist = false
+	joiner.share_stats = true
+	joiner.telemetry_notice_seen = true
+	var client: Node = await _rc_client_241(rig)
+	client.share_settings = joiner
+	if not await _rc_joined_241(rig, client, failures) or not await _rc_start_round_241(rig, client, failures):
+		await _rc_close_241(rig)
+		host.share_stats = was[0]
+		host.telemetry_notice_seen = was[1]
+		host.persist = was[2]
+		return failures
+	rm.match_stats().record_hit(0, 1, 30.0, 0, "pickaxe", true) # a real hit, so the match has a record
+	var slot: int = client.slot
+	if not await _wait_for_239(func() -> bool:
+		var s: Dictionary = server.slot_ping_stats(slot)
+		return int(s.get("n", 0)) >= 2 and s.get("share") == true and server.relay_rtt_msec >= 0, 6000):
+		failures.append("no sharing pongs or no host leg: %s, leg %d" % [server.slot_ping_stats(slot), server.relay_rtt_msec])
+	# Sharing joiner: the log and the record both carry the seat.
+	rm._write_balance_log()
+	rm.send_telemetry()
+	var line: Dictionary = _last_json_line_1195(log_path)
+	print("      log line ping: %s" % [line.get("ping")])
+	_check_ping_list_1195(failures, "balance log", line.get("ping"), 1)
+	if records.size() != 1:
+		failures.append("expected one telemetry record, got %d" % records.size())
+	else:
+		var record: Dictionary = records[0]
+		print("      record ping: %s" % [record.get("ping")])
+		_check_ping_list_1195(failures, "telemetry", record.get("ping"), 1)
+		if record.get("ping") is Array and not (record["ping"] as Array).is_empty() and int(record["ping"][0]["host_leg"]) < 0:
+			failures.append("the record's host leg is %s with the relay answering echoes" % record["ping"][0]["host_leg"])
+		var cleaned: Dictionary = RelayScript238.clean_stats_record(JSON.parse_string(JSON.stringify(record)))
+		if cleaned.is_empty():
+			failures.append("the relay rejected the record the host built: %s" % record)
+		else:
+			_check_ping_list_1195(failures, "relay-cleaned", cleaned.get("ping"), 1)
+	# A joiner not sharing (sharing off, or the notice not yet seen): kept in the
+	# local log, left out of the telemetry.
+	for case: Array in [[false, true], [true, false]]:
+		joiner.share_stats = case[0]
+		joiner.telemetry_notice_seen = case[1]
+		if not await _wait_for_239(func() -> bool: return server.slot_ping_stats(slot).get("share") == false, 3000):
+			failures.append("share %s / notice %s: the pong still said share" % case)
+		records.clear()
+		rm._write_balance_log()
+		rm.send_telemetry()
+		_check_ping_list_1195(failures, "log, share %s / notice %s" % case, _last_json_line_1195(log_path).get("ping"), 1)
+		if records.size() != 1 or (records[0] as Dictionary).has("ping"):
+			failures.append("share %s / notice %s: telemetry %s, expected one record without ping" % [case[0], case[1], records])
+	await _rc_close_241(rig)
+	DirAccess.remove_absolute(log_path)
+	host.share_stats = was[0]
+	host.telemetry_notice_seen = was[1]
+	host.persist = was[2]
+	# Nine seats (rejoins): the record keeps the eight with the most samples.
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	for i in 9:
+		stats.ping.append({"avg": 50 + i, "p95": 60, "max": 70, "n": i + 1, "felt": -1, "host_leg": 20, "share": true})
+	var big: Dictionary = StatsSenderScript372.build_record(stats, "classic", ["Flatlands"], "ffa", 60, [], true, 1)
+	_check_ping_list_1195(failures, "nine seats", big.get("ping"), 8)
+	if big.get("ping") is Array and (big["ping"] as Array).size() == 8:
+		var smallest: int = 1000
+		for entry: Dictionary in big["ping"]:
+			smallest = mini(smallest, int(entry["n"]))
+		if smallest != 2:
+			failures.append("the eight kept are not those with the most samples (smallest n %d)" % smallest)
+	if RelayScript238.clean_stats_record(JSON.parse_string(JSON.stringify(big))).is_empty():
+		failures.append("the relay rejected an eight-entry record")
+	var nine: Dictionary = big.duplicate(true)
+	nine["ping"].append({"avg": 1, "p95": 1, "max": 1, "n": 1, "felt": 1, "host_leg": 1})
+	if not RelayScript238.clean_stats_record(nine).is_empty():
+		failures.append("the relay kept a nine-entry ping list")
+	var junk: Dictionary = big.duplicate(true)
+	junk["ping"][0]["avg"] = "x"
+	if not RelayScript238.clean_stats_record(junk).is_empty():
+		failures.append("the relay kept a non-numeric avg")
+	var huge: Dictionary = big.duplicate(true)
+	huge["ping"][0]["max"] = 1.0e9
+	if not RelayScript238.clean_stats_record(huge).is_empty():
+		failures.append("the relay kept a max of 1e9")
+	_scenario_completed = true
 	return failures

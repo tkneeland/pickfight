@@ -22,7 +22,7 @@ An Online match, and a Couch match where a phone cannot reach the host over Wi-F
 
 ### 2. Anonymous match stats (on by default)
 
-At the end of each match the host sends one record to the relay: damage, hits and knockouts per weapon by real players, the game mode, the stages played, whether it was free-for-all or teams, the match length, the winning weapon, and whether the match finished. It contains no names, colours, devices, Steam IDs or any other player ID. Bots are left out. The relay does not store or log the sender's IP address. It keeps only a salted hash in memory, to limit how often one sender can post, and that is lost when the relay restarts. Stored times are rounded to the hour. We use the stats only to balance weapons, modes and stages.
+At the end of each match the host sends one record to the relay: damage, hits and knockouts per weapon by real players, the game mode, the stages played, whether it was free-for-all or teams, the match length, the winning weapon, and whether the match finished. In an Online match it also carries, for each remote player who has match stats sharing on themselves, a summary of their connection: the average, 95th-percentile and highest round trip to the host, their measured input delay, and the host's own round trip to the relay, in milliseconds. These numbers carry no name, slot, colour or location. It contains no names, colours, devices, Steam IDs or any other player ID. Bots are left out. The relay does not store or log the sender's IP address. It keeps only a salted hash in memory, to limit how often one sender can post, and that is lost when the relay restarts. Stored times are rounded to the hour. We use the stats only to balance weapons, modes and stages, and the connection numbers only to make Online play less laggy.
 
 The first time you launch the game, a notice says this and offers "Got it" or "Turn off". Nothing is sent before you have dismissed it. You can change your mind any time in Settings > More options > Share anonymous match stats.
 
@@ -51,7 +51,7 @@ Steam's own privacy policy applies to what Steam does with this. We do not send 
 - **Online name:** the last name you used on the PC join screen (`user://remote_client.cfg`).
 - **Lifetime stats:** matches, wins, KOs and favourite weapon, kept on your own device only (`user://career.cfg` on PC; browser local storage on a phone). Clearing a phone browser's site data resets it.
 - **Achievements:** `user://achievements.cfg`.
-- **Clips and balance log:** pressing F9 saves a short replay clip in `user://clips/`. The host also appends a local damage log (`user://balance_stats.jsonl`) that is never sent anywhere.
+- **Clips and balance log:** pressing F9 saves a short replay clip in `user://clips/`. The host also appends a local damage log (`user://balance_stats.jsonl`, with each Online remote player's connection summary) that is never sent anywhere.
 
 "user://" is the game's own folder in your operating system's application data. Delete it to remove all of this.
 
