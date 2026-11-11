@@ -1250,6 +1250,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ice_patches_overlapping_keep_grip_off_refactor_modes",
 	"controller_page_review_fixes_refactor_phone",
 	"online_client_lobby_copy_code",
+	"online_client_lobby_entry_without_ready_1222",
 	"online_client_attention_on_countdown",
 	"online_client_enter_readies",
 	"online_client_lobby_title_names_host",
@@ -4232,6 +4233,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_controller_page_review_fixes_refactor_phone()
 		"online_client_lobby_copy_code":
 			return await _scenario_online_client_lobby_copy_code()
+		"online_client_lobby_entry_without_ready_1222":
+			return await _scenario_online_client_lobby_entry_without_ready_1222()
 		"online_client_attention_on_countdown":
 			return await _scenario_online_client_attention_on_countdown()
 		"online_client_enter_readies":
@@ -58476,6 +58479,32 @@ func _scenario_online_client_lobby_copy_code() -> Array[String]:
 	await process_frame
 	_scenario_completed = true
 	return failures
+## #1222: a lobby roster entry without "ready" or "name" renders as an unready,
+## unnamed card instead of raising a SCRIPT ERROR in LobbyCards.
+func _scenario_online_client_lobby_entry_without_ready_1222() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScene241.instantiate()
+	client.settings_path = ""
+	get_root().add_child(client)
+	await process_frame
+	client.room_code = "WXYZ"
+	client._set_state(RcState241.CONNECTING)
+	client._on_host_text(JSON.stringify({"slot": 2}))
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "", "players": [{"slot": 2, "ready": false}]}))
+	await process_frame
+	# The frame carries a target, so the shared LobbyCards/LobbyScreen refresh runs.
+	client._on_host_text(JSON.stringify({"t": "lobby", "phase": "lobby", "host": 0, "target": 5, "count": 0, "teams": false, "game_mode": "",
+		"players": [{"slot": 2}, {"slot": 3, "ready": true}]}))
+	await process_frame
+	var cards: Array[Control] = client._lobby.screen.player_cards()
+	if cards.size() != 2:
+		failures.append("the lobby drew %d player cards for 2 roster entries, one without ready" % cards.size())
+	if client.find_child("CopyCode", true, false) == null:
+		failures.append("the client lobby lost its Copy code button")
+	client.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
 ## #1034: a countdown starting while the client window is unfocused asks the OS
 ## for attention once; with focus none; a later round start does not ask again
 ## for the same countdown. The real request is a no-op headless.
@@ -58647,11 +58676,11 @@ func _scenario_online_client_lobby_title_names_host() -> Array[String]:
 	client._refresh_lobby()
 	if client._lobby_title.text != "Room ABCD - hosted by Sam":
 		failures.append("with the host named the title reads '%s'" % client._lobby_title.text)
-	client.lobby["players"] = [{"name": "", "slot": 0, "color": "ff0000"}]
+	client.lobby["players"] = [{"name": "", "slot": 0, "ready": false, "color": "ff0000"}]
 	client._refresh_lobby()
 	if client._lobby_title.text != "Room ABCD":
 		failures.append("an unnamed host leaves the title '%s'" % client._lobby_title.text)
-	client.lobby["players"] = [{"name": "Sam", "slot": 0, "color": "ff0000"}]
+	client.lobby["players"] = [{"name": "Sam", "slot": 0, "ready": false, "color": "ff0000"}]
 	client.lobby["phase"] = "countdown"
 	client.lobby["count"] = 3
 	client._refresh_lobby()
