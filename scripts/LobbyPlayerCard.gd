@@ -16,6 +16,8 @@ signal badge_pressed(slot: int)
 signal kick_pressed(slot: int)
 ## A first Kick press armed the button (#992); the lobby disarms every other card.
 signal kick_armed(slot: int)
+## The team switch was pressed (#1199): move this seat to `team`.
+signal team_pressed(slot: int, team: int)
 
 const PreviewScript := preload("res://scripts/CosmeticsPreview.gd")
 const PadPickerCardScript := preload("res://scripts/PadPickerCard.gd")
@@ -51,6 +53,8 @@ var _kick_left: float = 0.0
 var _pill: StringName = &""
 var _strip_color: Color = Color.TRANSPARENT
 var _team_chip: Control
+var _team_switch: Button
+var _team_target: int = TeamsScript.NONE
 
 func _init(seat_slot: int = -1) -> void:
 	slot = seat_slot
@@ -108,6 +112,11 @@ func _init(seat_slot: int = -1) -> void:
 	_meta = ScreenKitScript.themed_label("", SMALL_FONT_SIZE, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "Meta", TextServer.AUTOWRAP_WORD_SMART)
 	_meta.visible = false
 	box.add_child(_meta)
+	_team_switch = ScreenKitScript.themed_button("", UiThemeScript.ACTION_BUTTON, "TeamSwitch")
+	_team_switch.add_theme_font_size_override("font_size", SMALL_FONT_SIZE + 2)
+	_team_switch.visible = false
+	_team_switch.pressed.connect(func() -> void: team_pressed.emit(slot, _team_target))
+	box.add_child(_team_switch)
 	var spacer := Control.new()
 	spacer.name = "Spacer"
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -165,6 +174,11 @@ func kick_is_armed() -> bool:
 ## The Kick button, or null.
 func kick_button() -> Button:
 	return _kick if _kick.visible else null
+
+## The "Move to Blue" team switch (#1199), or null while the card has none (a
+## free-for-all, a bot, a seat the viewer does not drive).
+func team_switch() -> Button:
+	return _team_switch if _team_switch.visible else null
 
 ## The team badge, hidden outside a Teams match (#752).
 func team_chip() -> Control:
@@ -243,6 +257,11 @@ func apply(info: Dictionary) -> void:
 		lines.append(tr("LOBBY_PAD_TIP"))
 	_meta.text = "\n".join(lines)
 	_meta.visible = not lines.is_empty()
+	var own_team: int = int(info.get("team", TeamsScript.NONE))
+	_team_target = 1 - own_team if own_team == TeamsScript.RED or own_team == TeamsScript.BLUE else TeamsScript.NONE
+	_team_switch.visible = bool(info.get("team_switch", false)) and _team_target != TeamsScript.NONE
+	if _team_switch.visible:
+		_team_switch.text = tr("LOBBY_TEAM_SWITCH") % TeamsScript.team_name(_team_target)
 	clickable = bool(info.get("clickable", false))
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if clickable else Control.CURSOR_ARROW
 	_kick.visible = bool(info.get("kickable", false))

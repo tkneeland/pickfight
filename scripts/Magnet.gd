@@ -106,8 +106,10 @@ func _apply_field(delta: float) -> bool:
 	# A protected fighter's weapon head is dragged by the field too, and the haft
 	# takes the fighter with it, so the head is skipped as well (#1056).
 	var protected_heads: Dictionary = {}
+	# #1196: a protected wielder's field hauls no other fighter at all.
+	var wielder_protected: bool = wielder.get("spawn_protected") == true
 	for node: Node in get_tree().get_nodes_in_group("players"):
-		if node.get("spawn_protected") == true and node.has_method("weapon_head_rid"):
+		if (wielder_protected or node.get("spawn_protected") == true) and node.has_method("weapon_head_rid"):
 			protected_heads[node.weapon_head_rid()] = true
 	for result: Dictionary in space.intersect_shape(query, MAX_RESULTS):
 		var body: RigidBody2D = result["collider"] as RigidBody2D
@@ -116,7 +118,8 @@ func _apply_field(delta: float) -> bool:
 		seen[body.get_instance_id()] = true
 		if not _is_movable(body):
 			continue
-		if body.get("spawn_protected") == true or protected_heads.has(body.get_rid()):
+		if body.get("spawn_protected") == true or protected_heads.has(body.get_rid()) \
+				or (wielder_protected and body.is_in_group("players")):
 			continue  # just respawned: not hauled off its ledge (#1056)
 		var to_wielder: Vector2 = wielder.global_position - body.global_position
 		var distance: float = to_wielder.length()

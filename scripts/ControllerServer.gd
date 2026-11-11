@@ -1807,11 +1807,8 @@ func _handle_text(slot: int, text: String) -> void:
 			_weak_link_in[slot] = true # this phone answers pings (#777)
 		"team":
 			var team: Variant = msg.get("v")
-			var phase: String = _phase()
-			if _is_number(team) and float(team) in [-1.0, 0.0, 1.0] and TEAM_PICK_PHASES.has(phase):
-				_slot_team_pick[slot] = int(team)
-				if _log_input:
-					print("slot %d picked team %d" % [slot, _slot_team_pick[slot]])
+			if _is_number(team) and float(team) in [-1.0, 0.0, 1.0]:
+				set_slot_team_pick(slot, int(team))
 
 ## A finite JSON number (JSON gives floats; a scenario may send ints).
 static func _is_number(v: Variant) -> bool:
@@ -1993,6 +1990,28 @@ func _drop_ffa_only_mode() -> void:
 ## Issue #236: `slot`'s team pick, 0 red or 1 blue, or -1 for "auto".
 func slot_team_pick(slot: int) -> int:
 	return _slot_team_pick[slot] if slot >= 0 and slot < _slot_team_pick.size() else -1
+
+## Issue #1199: `slot` picks `team` (0 red, 1 blue, -1 auto) as its phone's team
+## buttons do: the lobby's player card, a gamepad's X and the Online client send
+## the same pick. Lobby and countdown only. Returns whether it was taken.
+func set_slot_team_pick(slot: int, team: int) -> bool:
+	if slot < 0 or slot >= _slot_team_pick.size() or team < -1 or team > 1 or not TEAM_PICK_PHASES.has(_phase()):
+		return false
+	_slot_team_pick[slot] = team
+	if _log_input:
+		print("slot %d picked team %d" % [slot, team])
+	return true
+
+## Issue #1199: moves `slot` to the other team than the one the lobby shows it on
+## (Red when it shows none). Returns whether a pick was taken.
+func toggle_slot_team(slot: int) -> bool:
+	if not bool(_lobby_state.get("teams", false)):
+		return false
+	var shown: int = -1
+	for entry: Variant in _lobby_state.get("players", []):
+		if entry is Dictionary and int(entry.get("slot", -1)) == slot:
+			shown = int(entry.get("team", -1))
+	return set_slot_team_pick(slot, 1 - shown if shown in [0, 1] else 0)
 
 ## Send the lobby state to every connected phone, and keep it for any phone
 ## that binds later. Issue #164: entering a match phase from any other phase
@@ -3058,6 +3077,8 @@ func _pad_button_pressed(device: int, button: int) -> void:
 	# Issue #660: A is a KO'd pad seat's ghost action.
 	if button == JOY_BUTTON_A and slot != -1 and MATCH_PHASES.has(_phase()) \
 			and not _input_gated() and _ghost_action(slot):
+		return
+	if button == JOY_BUTTON_X and slot != -1 and toggle_slot_team(slot): # #1199: a Teams lobby's team switch
 		return
 	if button == JOY_BUTTON_A or button == JOY_BUTTON_START:
 		if slot == -1:
