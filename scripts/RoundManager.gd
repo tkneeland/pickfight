@@ -411,7 +411,9 @@ func _try_start_round() -> void:
 	_kill_zone_home_y = NAN
 	_state = State.ROUND_ACTIVE
 	_show_stage_title()
-	if _round_countdown_on():
+	var counts_down: bool = _round_countdown_on() and not _skip_round_countdown
+	_skip_round_countdown = false
+	if counts_down:
 		_begin_round_countdown()
 	else:
 		_start_spawn_protection()
@@ -428,6 +430,7 @@ func _begin_round_play() -> void:
 
 # --- Round countdown (issue #1197) --------------------------------------------
 #
+# Round 1 of a match skips it: the lobby's own 3-2-1 has just run.
 # After the stage title card, "3, 2, 1, GO" steps by `round_countdown_step_sec`
 # on game time (a pause holds it). The fighters stand spawned but held
 # (`Player.round_locked`) and spawn protected; at GO they are let go, the
@@ -441,6 +444,9 @@ var _countdown_start_msec: int = -1
 var _countdown_step: int = 4
 ## The round the running countdown belongs to.
 var _countdown_round: int = 0
+## Set as a match begins: its round 1 follows the lobby countdown, so it does
+## not count down again. Consumed by the next round that starts.
+var _skip_round_countdown: bool = false
 
 func _round_countdown_on() -> bool:
 	if round_countdown_step_sec <= 0.0:
@@ -1518,6 +1524,8 @@ func _begin_match() -> void:
 	var party: Node = _achievements()
 	if party != null:
 		party.on_match_started(_roster())
+	# The lobby's own 3-2-1 just ran: round 1 goes straight in (#1197, Sam).
+	_skip_round_countdown = true
 	_try_start_round()
 
 func _tick_lobby() -> void:

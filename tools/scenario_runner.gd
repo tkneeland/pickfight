@@ -61240,7 +61240,8 @@ func _scenario_weapon_starts_round_neutral_after_held_aim_1185() -> Array[String
 ## has not started (no `round_started`, so no "FIGHT!", modifier, mode, pickups
 ## or lava); 3, 2 and 1 each tick, the steps show on the round countdown card,
 ## and at GO the fighters are let go and the protection's own time starts.
-## With Settings > "Round countdown" off, the round starts at once.
+## With Settings > "Round countdown" off, the round starts at once, and so
+## does round 1 of a match, which follows the lobby's own 3-2-1.
 func _scenario_round_countdown_holds_fighters_until_go_1197() -> Array[String]:
 	var failures: Array[String] = []
 	var sfx: Node = get_root().get_node_or_null("Sfx")
@@ -61334,5 +61335,20 @@ func _scenario_round_countdown_holds_fighters_until_go_1197() -> Array[String]:
 			failures.append("switched off: the round still counted down (started %s, locked %s)" % [started2[0], players2[0].round_locked])
 		sfx.round_countdown = was
 		await _teardown(loop2["stage"], false)
+	# Round 1 of a match: begun from the lobby, it goes straight in.
+	var loop3: Dictionary = _new_round_loop(ABANDON_GRACE_SEC * 100.0)
+	var rm3: Node = loop3["round_manager"]
+	var players3: Array[RigidBody2D] = loop3["players"]
+	rm3.round_countdown_step_sec = 0.3
+	await _await_ticks(2)
+	rm3._begin_match()  # roster still empty: round 1 waits for it
+	var roster3: _LiveRoster = loop3["roster"]
+	roster3.slots = [0, 1]
+	roster3.live = [0, 1]
+	if not await _await_condition(func() -> bool: return _all_alive(players3), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round 1: never spawned")
+	elif rm3.round_countdown_active() or players3[0].round_locked:
+		failures.append("round 1 of a match counted down after the lobby's 3-2-1")
+	await _teardown(loop3["stage"], false)
 	_scenario_completed = true
 	return failures
