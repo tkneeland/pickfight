@@ -1300,6 +1300,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_joiner_lobby_focus_follows_pad_1170",
 	"mode_lists_derive_from_game_modes_1172",
 	"retired_mode_saved_lists_dropped_1172",
+	"koth_hill_never_over_a_pit_1187",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4325,6 +4326,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return _scenario_mode_lists_derive_from_game_modes_1172()
 		"retired_mode_saved_lists_dropped_1172":
 			return _scenario_retired_mode_saved_lists_dropped_1172()
+		"koth_hill_never_over_a_pit_1187":
+			return await _scenario_koth_hill_never_over_a_pit_1187()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -61034,5 +61037,36 @@ func _scenario_retired_mode_saved_lists_dropped_1172() -> Array[String]:
 		if loaded.disabled_stages_by_mode.has(id):
 			failures.append("the old global list wrongly seeded %s" % id)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	_scenario_completed = true
+	return failures
+
+## #1187: on every stage in Main's rotation, the King of the Hill hill (and each
+## spot a moving hill hops between) sits over floor, never over a pit. The hill
+## is read after start_round, where the pit check has already moved it.
+func _scenario_koth_hill_never_over_a_pit_1187() -> Array[String]:
+	var failures: Array[String] = []
+	var main_scene: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	var paths: Array[String] = []
+	for scene: PackedScene in main_scene.get_node("RoundManager").stage_scenes:
+		paths.append(scene.resource_path)
+	main_scene.free()
+	if paths.size() < 40:
+		failures.append("only %d stages in the rotation" % paths.size())
+	for path: String in paths:
+		var rig: Dictionary = _koth_stage_rig(path)
+		if not await _mode_started(rig):
+			failures.append("%s: the King of the Hill round never started" % path)
+			await _teardown(rig["stage"], false)
+			continue
+		await _await_ticks(5)
+		var hill: Node = rig["rm"].game_mode_node()
+		if not hill.is_standable(hill.hill_position):
+			failures.append("%s: hill at %s has no floor under it" % [path, hill.hill_position])
+		for spot: Vector2 in hill.hill_spots:
+			if not hill.is_standable(spot):
+				failures.append("%s: hill spot %s has no floor under it" % [path, spot])
+		if hill.hill_moves and hill.hill_spots.size() < 2:
+			failures.append("%s: a moving hill with fewer than 2 spots" % path)
+		await _teardown(rig["stage"], false)
 	_scenario_completed = true
 	return failures
