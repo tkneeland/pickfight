@@ -447,6 +447,10 @@ func _input(event: InputEvent) -> void:
 		_ready_button.button_pressed = not _ready_button.button_pressed # A or Start readies in the lobby (#518)
 		get_viewport().set_input_as_handled() # else a focused Ready also takes it as ui_accept and flips back (#550)
 		return
+	if pad_button != null and pad_button.pressed and not menu_open and pad_button.button_index == JOY_BUTTON_X \
+			and _ready_button != null and _ready_button.is_visible_in_tree() and _lobby_toggle_team():
+		get_viewport().set_input_as_handled() # X moves this player to the other team in a Teams lobby (#1199)
+		return
 	if enter_readies(event):
 		get_viewport().set_input_as_handled() # a focused Ready also takes Enter as ui_accept (#550)
 		return
@@ -1781,6 +1785,7 @@ func _build_lobby_panel() -> void:
 	_target_label = _lobby.target_label
 	_lobby.toggle_mode.connect(func() -> void:
 		_send_json({"t": "mode", "v": "ffa" if lobby.get("mode") == "teams" else "teams"}))
+	_lobby.team_picked.connect(func(team: int) -> void: _send_json({"t": "team", "v": team}))
 	_lobby.step_target.connect(func(delta: int) -> void:
 		_send_json({"t": "target", "n": int(lobby.get("target", 5)) + delta}))
 	_leave_button = _lobby.leave_button
@@ -1925,6 +1930,17 @@ func lobby_title_text() -> String:
 			if not host_name.is_empty():
 				return tr("JOIN_ROOM_HOSTED") % [room_code, host_name]
 	return tr("JOIN_ROOM_TITLE") % room_code
+
+## Issue #1199: sends the pick that moves this player to the other team, when
+## the lobby is a Teams one that shows it on a team. Whether it was sent.
+func _lobby_toggle_team() -> bool:
+	if not bool(lobby.get("teams", false)) or not ["lobby", "countdown"].has(str(lobby.get("phase", ""))):
+		return false
+	for entry: Variant in lobby.get("players", []):
+		if entry is Dictionary and int(entry.get("slot", -2)) == slot and int(entry.get("team", -1)) in [0, 1]:
+			_send_json({"t": "team", "v": 1 - int(entry["team"])})
+			return true
+	return false
 
 ## Redraws the host's lobby screen from the `lobby` frame (#1127): the same call
 ## RoundManager makes, with this client's RemoteLobby standing in for the server.

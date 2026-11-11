@@ -29,7 +29,17 @@ var round_manager: Node
 ## the centre of the stage's spawn points.
 var hill_position: Vector2 = Vector2.ZERO
 ## Radius, px, of the hill: a live player whose centre is within it is on it.
-var hill_radius: float = 110.0
+## `start_round()` sets it from the stage's view width (#1198); this is the
+## floor, the size on a normal 1600-wide view. The ring drawn, the capture test
+## and the Online client's `net_state()` all read this one value.
+const BASE_RADIUS: float = 110.0
+const BASE_VIEW_WIDTH: float = 1600.0
+var hill_radius: float = BASE_RADIUS
+
+## The hill radius for a stage whose view is `view_width` px wide (#1198): it
+## grows in proportion (a 2240 view gets 154), never below `BASE_RADIUS`.
+static func radius_for_view(view_width: float) -> float:
+	return maxf(BASE_RADIUS, BASE_RADIUS * view_width / BASE_VIEW_WIDTH)
 ## How far below the spawn centre to look for floor, and how far above it a
 ## standing player's centre sits.
 const GROUND_DROP: float = 1200.0
@@ -108,6 +118,7 @@ func start_round(slots: Array[int]) -> void:
 		hold_time[slot] = 0.0
 	_watch_players()
 	_load_stage_hill()
+	hill_radius = _radius_for_stage()
 	if hill_position == Vector2.ZERO and round_manager != null:
 		var points: Array[Vector2] = round_manager._stage_spawn_points
 		if not points.is_empty():
@@ -247,6 +258,14 @@ func _load_stage_hill() -> void:
 	hill_moves = bool(stage.hill_moves) and hill_spots.size() > 1
 	if hill_position == Vector2.ZERO and not hill_spots.is_empty():
 		hill_position = hill_spots[0]
+
+## The hill radius for the current stage's view (#1198); the base radius with
+## no stage to ask.
+func _radius_for_stage() -> float:
+	var stage: Variant = round_manager.get("_current_stage") if round_manager != null else null
+	if stage == null or not is_instance_valid(stage) or not (stage as Object).has_method("get_view_rect"):
+		return BASE_RADIUS
+	return radius_for_view((stage.get_view_rect() as Rect2).size.x)
 
 ## The spot the hill hops to next, or `hill_position` if it does not move.
 func next_hill_position() -> Vector2:

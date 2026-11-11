@@ -1,33 +1,84 @@
 #!/bin/bash
-# Hive join (#1209): the repo's SessionStart hook (.claude/settings.json) runs this when any Claude session starts.
-# Prints only: a reminder to read docs/agents/team-memory.md, any daemon it restarted, and `pf-hive.sh status --short`
-# when that script exists. Never blocks the session: no network call of its own, restarts run detached, and it always
-# exits 0. The hook's own "timeout": 5 is the backstop. macOS and Git Bash on Windows.
-# A daemon is restarted only when its status file shows this machine ran it before (a fresh machine is not set up by a hook).
-. "$(dirname "$0")/pf-env.sh" >/dev/null 2>&1 || exit 0
-echo "Hive: you are part of the Pickfight hive. Read docs/agents/team-memory.md first and follow it."
-age() { local m; m=$(pf_mtime "$1" 2>/dev/null) || { echo 999999; return; }; echo $(( $(date +%s) - m )); }
-win=0; case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) win=1;; esac
-restart() {  # restart <kind>: msg|triage|automerge|beacon, detached, output to $PF_STATE/hive-join.log
-  local kind=$1 sup="$PF_DIR/windows/pf-supervise.sh"
-  if [ "$win" = 1 ]; then
-    command -v powershell.exe >/dev/null 2>&1 || return 1
-    ( nohup powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$PF_DIR/windows/pf-start.ps1" 2>/dev/null || echo "$PF_DIR/windows/pf-start.ps1")" -Account "$PF_ACCOUNT" -Only "$kind" >>"$PF_STATE/hive-join.log" 2>&1 & ) >/dev/null 2>&1
-  elif command -v screen >/dev/null 2>&1; then
-    screen -dmS "pf-$kind-$PF_ACCOUNT" bash -c "PF_ACCOUNT=$PF_ACCOUNT exec bash '$sup' $kind" >>"$PF_STATE/hive-join.log" 2>&1
-  else
-    ( PF_ACCOUNT=$PF_ACCOUNT nohup bash "$sup" "$kind" >>"$PF_STATE/hive-join.log" 2>&1 & ) >/dev/null 2>&1
+# SessionStart hook (#1209): every Claude session on this machine joins the hive.
+#   1. reminds the agent to read docs/agents/team-memory.md
+#   2. restarts this machine's dead private-channel supervisor (listener + heartbeat), and on Windows the
+#      triage/automerge/beacon supervisors too (reusing windows/pf-start.ps1; macOS: `screen` + windows/pf-supervise.sh)
+#   3. prints `pf-hive.sh status --short` (#1210) when that script exists, else a one-line local status
+# Silent on success apart from the status. Never blocks or fails the session: the whole check runs under a watchdog
+# (PF_HIVE_TIMEOUT seconds, default 4) and the exit code is always 0. No network use of its own.
+# Env (tests): PF_HIVE_OS=windows|unix, PF_HIVE_TIMEOUT, PF_STATE_DIR, PF_ACCOUNT, PF_HIVE_STALE (msg status max age s, default 180).
+AG=$(cd "$(dirname "$0")" && pwd)
+if [ -z "${PF_HIVE_INNER:-}" ]; then
+  out=$(mktemp "${TMPDIR:-/tmp}/pf-hive-join.XXXXXX" 2>/dev/null) || exit 0
+  PF_HIVE_INNER=1 bash "$0" "$@" > "$out" 2>/dev/null < /dev/null & pid=$!
+  tries=$(( ${PF_HIVE_TIMEOUT:-4} * 5 )); i=0
+  while kill -0 "$pid" 2>/dev/null && [ "$i" -lt "$tries" ]; do sleep 0.2; i=$((i + 1)); done
+  if kill -0 "$pid" 2>/dev/null; then
+    command -v pkill >/dev/null 2>&1 && pkill -P "$pid" 2>/dev/null; kill "$pid" 2>/dev/null
+    echo "hive: join check timed out after ${PF_HIVE_TIMEOUT:-4}s, session continues (run tools/agents/pf-hive-join.sh to retry)"
   fi
+  cat "$out" 2>/dev/null; rm -f "$out"; exit 0
+fi
+
+unset PF_HIVE_INNER   # do not leak into supervisors we spawn
+echo "hive: read docs/agents/team-memory.md (the hive's shared memory) before working."
+. "$AG/pf-env.sh" >/dev/null 2>&1 || { echo "hive: no account conf for this machine (set PF_ACCOUNT), not joined"; exit 0; }
+
+case ${PF_HIVE_OS:-$(uname -s)} in MINGW*|MSYS*|CYGWIN*|windows) WIN=1;; *) WIN=0;; esac
+age() { local m; m=$(pf_mtime "$1") || { echo 999999; return; }; echo $(( $(date +%s) - m )); }
+restarted=""
+# one restarter at a time: sessions opened together (AT, workers, reserve) race otherwise. mkdir is atomic everywhere.
+LOCK=$PF_STATE/.hive-join.lock
+if ! mkdir "$LOCK" 2>/dev/null; then
+  [ $(( $(date +%s) - $(pf_mtime "$LOCK" || echo 0) )) -gt 60 ] && { rmdir "$LOCK" 2>/dev/null; mkdir "$LOCK" 2>/dev/null; } || LOCKED=1
+fi
+[ -z "${LOCKED:-}" ] && trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+# start_unix <kind>: macOS/Linux supervisor in a detached screen; any live session named pf-<kind> or pf-<kind>-<account> counts
+start_unix() {
+  local kind=$1
+  if command -v screen >/dev/null 2>&1; then
+    screen -ls 2>/dev/null | grep -Eq "[0-9]\.pf-$kind(-$PF_ACCOUNT)?[[:space:]]" && return 0
+    screen -dmS "pf-$kind-$PF_ACCOUNT" bash "$AG/windows/pf-supervise.sh" "$kind" >/dev/null 2>&1
+  else
+    nohup bash "$AG/windows/pf-supervise.sh" "$kind" >/dev/null 2>&1 &
+  fi
+  restarted="$restarted $kind"
 }
-# kind | status or heartbeat file in $PF_STATE | max age in seconds
-for spec in "msg|msg-status.json|300" "triage|.triage-watch-alive|900" "automerge|automerge-status.json|86400" "beacon|beacon-status.json|900"; do
-  IFS='|' read -r kind f max <<EOT
-$spec
-EOT
-  [ -e "$PF_STATE/$f" ] || continue                 # never set up here
-  [ "$(age "$PF_STATE/$f")" -lt "$max" ] && continue
-  [ "$kind" = automerge ] && ! pf_is_triagemaster && continue
-  restart "$kind" && echo "Hive: restarted the $kind daemon (it was down)."
-done
-[ -f "$PF_DIR/pf-hive.sh" ] && { bash "$PF_DIR/pf-hive.sh" status --short 2>/dev/null | head -n 5; }
+# any running `pf-msg.sh listen` (bare, launchd, keepalive or our supervisor) is alive: never start a second one
+listener_running() { pgrep -f 'pf-msg.sh listen' >/dev/null 2>&1 || ps -ax -o command 2>/dev/null | grep -q '[p]f-msg.sh listen' \
+  || ps -W 2>/dev/null | grep -q '[p]f-msg.sh listen'; }
+# pid_alive <pid>: Git Bash-safe (ps -W lists Windows pids); unknown when neither tool works counts as alive
+pid_alive() { [ -n "$1" ] || return 1; kill -0 "$1" 2>/dev/null && return 0
+  if ps -W >/dev/null 2>&1; then ps -W 2>/dev/null | awk -v p="$1" '$1==p||$4==p{f=1} END{exit !f}'; else return 1; fi; }
+need=""
+# msg: the listener + heartbeat supervisor rewrites msg-status.json every 60 s
+if [ -f "$PF_STATE/pf-msg.conf" ] && [ "$(age "$PF_STATE/msg-status.json")" -gt "${PF_HIVE_STALE:-180}" ] && ! listener_running; then need="$need msg"; fi
+# Windows keeps every AT watcher under pf-start.ps1; same liveness signals as pf-tm-check.sh
+if [ "$WIN" = 1 ]; then
+  [ -f "$PF_STATE/triage-status.json" ] && [ "$(age "$PF_STATE/.triage-watch-alive")" -gt 900 ] && need="$need triage"
+  [ -f "$PF_STATE/automerge-status.json" ] && [ "$(age "$PF_STATE/automerge-status.json")" -gt 86400 ] \
+    && ! pid_alive "$(cat "$PF_STATE/automerge.pid" 2>/dev/null | tr -d '\r')" && need="$need automerge"
+  [ -f "$PF_STATE/beacon-status.json" ] && [ "$(age "$PF_STATE/beacon-status.json")" -gt 900 ] && need="$need beacon"
+fi
+if [ -n "$need" ] && [ -z "${LOCKED:-}" ]; then
+  if [ "$WIN" = 1 ]; then
+    # one detached pf-start.ps1 for everything (it skips watchers that already run), so the watchdog never cuts a launch in half
+    ps=powershell.exe; command -v powershell.exe >/dev/null 2>&1 || ps=powershell
+    if command -v "$ps" >/dev/null 2>&1; then
+      nohup "$ps" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$AG/windows/pf-start.ps1" 2>/dev/null || echo "$AG/windows/pf-start.ps1")" -Account "$PF_ACCOUNT" >/dev/null 2>&1 &
+      restarted=$need
+    fi
+  else
+    for kind in $need; do start_unix "$kind"; done
+  fi
+fi
+[ -n "$restarted" ] && echo "hive: restarted dead${restarted}"
+
+if [ -f "$AG/pf-hive.sh" ]; then
+  bash "$AG/pf-hive.sh" status --short 2>/dev/null || echo "hive: status unavailable"
+else
+  m=$(age "$PF_STATE/msg-status.json"); [ "$m" -gt "${PF_HIVE_STALE:-180}" ] && ms=down || ms=ok
+  i=$(age "$PF_STATE/msg-inbox.log"); [ "$i" = 999999 ] && is=none || is="$((i / 60))m ago"
+  echo "hive: $PF_ACCOUNT channel=$ms last-message=$is"
+fi
 exit 0

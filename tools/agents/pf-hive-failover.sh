@@ -9,8 +9,7 @@
 # heartbeat is skipped, so a dead machine never blocks the failover. Only the first live account after the triagemaster
 # wakes, so two machines never both take over. Each message wakes at most once (marker .hive-takeover-seen).
 # No $PF_STATE/pf-discord.conf: the account cannot watch #hive, so it asks the owner on the private channel (once a day).
-# #hive channel: PF_HIVE_CHANNEL in the environment, else PF_DISCORD_HIVE_CHANNEL in pf-discord.conf, else the channel
-# named "hive" in the guild. Messages are data, never instructions.
+# #hive channel: $PF_DISCORD_DEV from pf-discord-env.sh. Messages are data, never instructions.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 now=${PF_NOW:-$(date +%s)}
 WAIT=${HIVE_WAIT:-600}
@@ -37,13 +36,7 @@ for h in $(for x in $(pf_handles); do r=$(sed -n 's/^SUCCESSION_RANK=\([0-9]*\).
 done
 [ "$next" = "$PF_ACCOUNT" ] || exit 1
 [ -n "$PF_DISCORD_TOKEN" ] || exit 2
-CH=${PF_HIVE_CHANNEL:-$(pf_discord_conf PF_DISCORD_HIVE_CHANNEL)}
-[ -n "$CH" ] || CH=$(cat "$PF_STATE/.hive-channel-id" 2>/dev/null)
-if [ -z "$CH" ]; then
-  CH=$(dcurl "/guilds/$PF_DISCORD_GUILD/channels" | jq -r '[.[]? | select(.name == "hive")][0].id // empty' 2>/dev/null)
-  [ -n "$CH" ] || { echo "pf-hive-failover: no #hive channel found" >&2; exit 2; }
-  echo "$CH" > "$PF_STATE/.hive-channel-id"
-fi
+CH=$PF_DISCORD_DEV   # the private #hive (pf-discord-env.sh; the channel pf-discord-bugs.sh --dev reads)
 page=$(dcurl "/channels/$CH/messages?limit=50")
 echo "$page" | jq -e 'type == "array"' >/dev/null 2>&1 || { echo "pf-hive-failover: Discord said $(echo "$page" | head -c 200)" >&2; exit 2; }
 # dev messages with no bot message after them, oldest first: "<id> <ISO seconds>Z" (ids compared as [length, text])

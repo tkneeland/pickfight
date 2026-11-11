@@ -100,6 +100,7 @@ func build(parent: Node, copy_pressed: Callable) -> void:
 	up.pressed.connect(func() -> void: step_target.emit(1))
 	mode_button.pressed.connect(func() -> void: toggle_mode.emit())
 
+signal team_picked(team: int)
 signal step_target(delta: int)
 signal toggle_mode
 
@@ -122,6 +123,11 @@ func set_looks(list: Array) -> void:
 	_looks = list
 
 # --- What the cards ask a server --------------------------------------------------
+
+## The joiner's own card asks for `team` (#1199); the client sends it to the host.
+func request_team(slot: int, team: int) -> void:
+	if slot == own_slot:
+		team_picked.emit(team)
 
 func is_joiner_view() -> bool:
 	return true
