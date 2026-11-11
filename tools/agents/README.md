@@ -8,6 +8,7 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 - `pf-at-mode.sh`: prints `AT·day`, `AT·night` or `MT`, plus `·TM off` while the ticket-maker is off.
 - `pf-ticketmaker.sh [on|off]`: prints or sets the ticket-maker switch (rule 11).
 - `pf-triage-watch.sh`: zero-token poller; exits with one line (UNTRIAGED, MYTICKET, FEATURES? PR, PEER_BEACON, IDLE_SLOTS, AUSTIN_QUEUE_LOW, MSG, DISCORD_BUG, TM_CHECK_FAIL) when Claude must act.
+- `pf-discord.sh channels|read|watch|roles|members|post|topic|rename|create|role-create|role-add|role-remove|api`: the PickFight Discord server for any account when its user asks (rule 20); channels by id or name fragment; same bot conf as `pf-discord-bugs.sh`.
 - `pf-tm-check.sh [--quiet]`: triagemaster self-check (rule 19): one PASS / WARN / FAIL line per duty (role, AT mode, gh, watchers running, beacons, Discord `#bug-reports` readable, untriaged issues, stale review-blocked PRs), each FAIL with its fix; exit 1 on any FAIL. The watcher runs it every 6h and wakes with `TM_CHECK_FAIL`.
 - `pf-discord-bugs.sh check|read|reply <id> <text>|status`: the PickFight Discord server's `#bug-reports` channel for the triagemaster (rule 18). Bot token in `$PF_STATE/pf-discord.conf` as `PF_DISCORD_TOKEN=...` (never commit it); the bot must be in the server. `check` is what the watcher's `DISCORD_BUG` wake runs once a minute.
 - `pf-automerge.sh`: merges green mergeable PRs labelled `review-passed` (rule 12), comments on conflicting ones; leaves conflict-risk PRs to the triagemaster.
