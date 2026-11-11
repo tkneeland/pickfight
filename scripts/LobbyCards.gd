@@ -99,6 +99,8 @@ func refresh(state: Dictionary, join_source: Object) -> void:
 	for entry: Dictionary in entries:
 		if order.size() >= SEATS:
 			break
+		if not entry.has("slot"):
+			continue
 		var slot: int = int(entry["slot"])
 		seen[slot] = true
 		var is_bot: bool = server != null and server.has_method("is_virtual") and server.is_virtual(slot)
