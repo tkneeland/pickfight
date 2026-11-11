@@ -15,6 +15,7 @@ damage and hits. An Online match (#1195) may carry "ping": per remote seat
 means are printed last. Bad lines are skipped.
 """
 import json
+import math
 import sys
 from collections import Counter, defaultdict
 
@@ -88,24 +89,53 @@ PING_FIELDS = ("avg", "p95", "max", "felt", "host_leg")
 
 
 def ping_summary(records):
-    """Issue #1195: the mean of each remote seat's ping fields over every record
-    with a "ping" list; -1 (not measured) values are left out. Returns
-    (seats, {field: mean or None})."""
-    values = defaultdict(list)
+    """Issue #1195: the ping fields of each remote seat over every record with a
+    "ping" list; -1 (not measured) values are left out. avg and p95 are means
+    weighted by the seat's sample count "n" (an entry without a usable n counts
+    once; the p95 mean is not a true pooled p95); max is the largest max; felt is
+    an unweighted mean per seat; host_leg is one value per record (every seat of a
+    record shares the host's leg), averaged over records. Returns
+    (seats, {field: value or None})."""
+    weighted = defaultdict(list)  # field -> [(value, weight)]
+    plain = defaultdict(list)  # field -> [value]
     seats = 0
     for rec in records:
         entries = rec.get("ping")
         if not isinstance(entries, list):
             continue
+        leg_seen = False
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
             seats += 1
-            for field in PING_FIELDS:
+            weight = entry.get("n")
+            if not isinstance(weight, (int, float)) or not math.isfinite(weight) or weight < 1:
+                weight = 1
+            for field in ("avg", "p95"):
                 value = entry.get(field)
                 if isinstance(value, (int, float)) and value >= 0:
-                    values[field].append(value)
-    return seats, {f: (sum(values[f]) / len(values[f]) if values[f] else None) for f in PING_FIELDS}
+                    weighted[field].append((value, weight))
+            value = entry.get("max")
+            if isinstance(value, (int, float)) and value >= 0:
+                plain["max"].append(value)
+            value = entry.get("felt")
+            if isinstance(value, (int, float)) and value >= 0:
+                plain["felt"].append(value)
+            value = entry.get("host_leg")
+            if not leg_seen and isinstance(value, (int, float)) and value >= 0:
+                plain["host_leg"].append(value)
+                leg_seen = True
+
+    def combine(field):
+        if field in ("avg", "p95"):
+            pairs = weighted[field]
+            return sum(v * w for v, w in pairs) / sum(w for _, w in pairs) if pairs else None
+        values = plain[field]
+        if not values:
+            return None
+        return max(values) if field == "max" else sum(values) / len(values)
+
+    return seats, {f: combine(f) for f in PING_FIELDS}
 
 
 def print_ping(records):
@@ -114,7 +144,7 @@ def print_ping(records):
         return
     shown = ["%.0f" % means[f] if means[f] is not None else "-" for f in PING_FIELDS]
     print("\nOnline ping (remote seats): %d seats" % seats)
-    print("avg / p95 / max / felt / host leg (ms): %s" % " / ".join(shown))
+    print("avg (n-weighted) / p95 (n-weighted mean) / max (largest) / felt / host leg (ms): %s" % " / ".join(shown))
 
 
 if __name__ == "__main__":

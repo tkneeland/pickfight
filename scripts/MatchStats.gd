@@ -124,6 +124,9 @@ var tie_seed: int = -1
 ## RoundManager at match end: [{"avg","p95","max","n","felt","host_leg","share"}]
 ## (ms, clamped to -1..60000), anonymous (no slot, name or colour).
 var ping: Array = []
+## The most any ping statistic may say, ms (ControllerServer and RoundManager use
+## this; relay/Relay.gd's STATS_MAX_PING_MSEC is its own copy, kept equal).
+const PING_MAX_MSEC: int = 60000
 ## The fields of a ping entry that are logged and sent ("share" only filters).
 const PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", "host_leg"]
 
@@ -687,7 +690,7 @@ static func ping_entries(list: Array, only_shared: bool, cap: int) -> Array:
 		var clean: Dictionary = {}
 		for field: String in PING_FIELDS:
 			var v: Variant = (entry as Dictionary).get(field, -1)
-			clean[field] = clampi(int(v), -1, 60000) if (v is int or (v is float and is_finite(v))) else -1
+			clean[field] = clampi(int(v), -1, PING_MAX_MSEC) if (v is int or (v is float and is_finite(v))) else -1
 		out.append(clean)
 	if cap > 0 and out.size() > cap:
 		out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["n"]) > int(b["n"]))
