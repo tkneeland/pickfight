@@ -355,6 +355,8 @@ LOBBY_PLAYERS,Players,Spieler,Joueurs,Jugadores,Jogadores,玩家,プレイヤー
 LOBBY_COUNT,"%d joined, %d bots","%d dabei, %d Bots","%d connectés, %d bots","%d unidos, %d bots","%d entraram, %d bots","%d 人加入,%d 个电脑",%d人参加、ボット%d体,"%d명 참가, 봇 %d명","Зашли: %d, ботов: %d"
 LOBBY_COUNT_ONE_BOT,"%d joined, 1 bot","%d dabei, 1 Bot","%d connectés, 1 bot","%d unidos, 1 bot","%d entraram, 1 bot","%d 人加入,1 个电脑",%d人参加、ボット1体,"%d명 참가, 봇 1명","Зашли: %d, ботов: 1"
 LOBBY_TEAM_TAG,%s TEAM,TEAM %s,ÉQUIPE %s,EQUIPO %s,TIME %s,%s队,%sチーム,%s팀,КОМАНДА %s
+LOBBY_TEAM_SWITCH,Move to %s,Zu %s wechseln,Passer à %s,Pasar a %s,Ir para %s,换到%s队,%sチームへ,%s팀으로,Перейти: %s
+LOBBY_TEAMS_UNEVEN,Teams are uneven,Teams sind ungleich groß,Équipes inégales,Equipos desiguales,Times desiguais,两队人数不同,チームの人数が違います,팀 인원이 달라요,Команды неравны
 LOBBY_STARTING,Get ready!,Macht euch bereit!,Prêts ?,¡Prepárense!,Preparem-se!,准备!,よーい!,준비하세요!,Приготовьтесь!
 LOBBY_NOT_READY_ONE,1 player not ready yet,1 Spieler noch nicht bereit,1 joueur pas encore prêt,1 jugador aún no está listo,1 jogador ainda não está pronto,还有 1 位玩家没准备好,まだ1人準備できていません,아직 1명이 준비 안 했어요,Ещё 1 игрок не готов
 LOBBY_NOT_READY_N,%d players not ready yet,%d Spieler noch nicht bereit,%d joueurs pas encore prêts,%d jugadores aún no están listos,%d jogadores ainda não estão prontos,还有 %d 位玩家没准备好,まだ%d人準備できていません,아직 %d명이 준비 안 했어요,Ещё %d игроков не готовы

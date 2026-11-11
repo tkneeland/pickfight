@@ -123,6 +123,9 @@ func refresh(state: Dictionary, join_source: Object) -> void:
 			var text: String = _screen.tr("LOBBY_TEAM_TAG") % TeamsScript.team_name(team)
 			info["team_text"] = text + (" " + _screen.tr("LOBBY_AUTO") if int(entry.get("pick", team)) == TeamsScript.NONE else "")
 			info["team"] = team
+			# #1199: a human's team switch: the host screen moves any seat, a joiner only its own.
+			info["team_switch"] = not is_bot and (server == null or not server.has_method("is_joiner_view") or slot == server.host_pc_slot()) \
+				and ["lobby", "countdown"].has(str(state.get("phase", "lobby")))
 		seat_card.apply(info)
 		if server != null and server.has_method("pad_claim") and server.pad_claim(slot):
 			seat_card.add_picker(server)
@@ -163,6 +166,7 @@ func _new_card(slot: int) -> Control:
 	seat_card.badge_pressed.connect(_screen._on_badge_pressed)
 	seat_card.kick_pressed.connect(_screen._on_kick_pressed)
 	seat_card.kick_armed.connect(_on_kick_armed)
+	seat_card.team_pressed.connect(_screen._on_team_pressed)
 	return seat_card
 
 ## Arming one card's Kick disarms any other armed card (#992).

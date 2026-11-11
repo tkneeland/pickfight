@@ -477,6 +477,9 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 		_lobby_status.text = tr("LOBBY_NOT_READY_ONE") if humans_waiting == 1 else tr("LOBBY_NOT_READY_N") % humans_waiting
 	else:
 		_lobby_status.text = tr("LOBBY_ENTER_OR_START")
+	if teams and state["phase"] != "countdown" and both_teams_manned(state) and teams_uneven(state):
+		_lobby_status.text += "
+" + tr("LOBBY_TEAMS_UNEVEN") # a note only: START stays lit (#1199)
 	if state["phase"] != "countdown" and Time.get_ticks_msec() < _host.start_notice_until_msec:
 		_lobby_status.text = _host.start_notice
 	_host.set_start_ready(can_start or state["phase"] == "countdown") # lit while the countdown runs
@@ -604,6 +607,14 @@ func _on_badge_pressed(slot: int) -> void:
 		if not _last_lobby_args.is_empty():
 			refresh_lobby.callv(_last_lobby_args)
 
+## Issue #1199: a card's team switch. The host screen picks for any seat, an Online
+## joiner's RemoteLobby sends its own pick to the host.
+func _on_team_pressed(slot: int, team: int) -> void:
+	if _server != null and _server.has_method("set_slot_team_pick"):
+		_server.set_slot_team_pick(slot, team)
+	elif not _last_lobby_args.is_empty() and _last_lobby_args[2] != null and _last_lobby_args[2].has_method("request_team"):
+		_last_lobby_args[2].request_team(slot, team)
+
 func _on_kick_pressed(slot: int) -> void:
 	if _server != null:
 		_server.host_pc_command("kick", slot)
@@ -650,6 +661,15 @@ static func both_teams_manned(state: Dictionary) -> bool:
 		if team >= 0 and team < TeamsScript.COUNT:
 			counts[team] += 1
 	return counts[0] > 0 and counts[1] > 0
+
+## Issue #1199: whether a Teams lobby state has a different number of players on each team.
+static func teams_uneven(state: Dictionary) -> bool:
+	var counts: Array[int] = [0, 0]
+	for entry: Dictionary in state["players"]:
+		var team: int = int(entry.get("team", -1))
+		if team >= 0 and team < TeamsScript.COUNT:
+			counts[team] += 1
+	return counts[0] != counts[1]
 
 ## The victory screen's title, or null before the panels are built.
 func victory_title() -> Label:
