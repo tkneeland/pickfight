@@ -46,13 +46,13 @@ while true; do
   [ "$issues" = "[]" ] && issues=""
   # open PRs once per poll, not per ticket (empty on failure: then only branches count)
   pr_tickets=$(pf_pr_tickets "$(gh pr list --repo "$REPO" --state open -L 200 --json number,body,title,headRefName 2>/dev/null)")
+  cr_busy=0
   if [ -n "$issues" ]; then
     if pf_is_triagemaster; then
       u=$(echo "$issues" | jq -r '.[] | select(.pull_request==null) | select(((.labels|map(.name)|map(test("^p[123]$"))|any)|not) or ((.assignees|length)==0)) | .number' | tr '\n' ' ')
       [ -n "${u// /}" ] && { echo "UNTRIAGED $u"; exit 0; }
     fi
     # rule 6: one conflict-risk ticket in flight across all devs; while one is in progress, the others wait (no MYTICKET)
-    cr_busy=0
     for c in $(echo "$issues" | jq -r '.[] | select(.pull_request==null) | select(any(.labels[]; .name=="conflict-risk")) | .number'); do
       pf_ticket_in_progress "$c" "$pr_tickets" && { cr_busy=1; break; }
     done
@@ -97,7 +97,9 @@ while true; do
     startable=1
     if [ "$active" -lt "$min" ] && [ "$(bash "$(dirname "$0")/pf-ticketmaker.sh")" = off ]; then
       startable=0
-      for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.labels[]; .name=="ready-for-agent")) | select((.assignees|length)==0 or any(.assignees[]; .login==$me)) | .number'); do
+      for n in $(echo "$issues" | jq -r --arg me "$PF_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.labels[]; .name=="ready-for-agent")) | select((.assignees|length)==0 or any(.assignees[]; .login==$me)) | "\(.number)|\(any(.labels[]; .name=="conflict-risk"))"'); do
+        cr=${n#*|}; n=${n%%|*}
+        [ "$cr" = true ] && [ "$cr_busy" = 1 ] && continue   # held by rule 6, not startable
         pf_ticket_in_progress "$n" "$pr_tickets" || { startable=1; break; }
       done
     fi
