@@ -50,7 +50,8 @@ var _staggered: Dictionary = {}
 const OCCUPIED_RADIUS: float = 90.0
 ## With no free spawn, a return waits this long and asks again (#1188).
 const STAGGER_SEC: float = 0.5
-## After this many pushes the player comes back anyway: never wait forever.
+## After this many pushes the player comes back anyway, at the spawn farthest
+## from the other fighters (farthest_spawn's own pick): never wait forever.
 const MAX_STAGGERS: int = 4
 
 func _init(manager: Node, players: Dictionary, delay_sec: float = 1.5) -> void:
@@ -80,7 +81,16 @@ func tick(_delta: float) -> void:
 	for slot: int in _pending.keys():
 		_pending[slot] = float(_pending[slot]) - _delta
 		if float(_pending[slot]) <= 0.0:
-			respawn_now(slot)
+			# Issue #1188: every spawn taken (someone standing on it, or just
+			# returned to it): this player waits its own short timer instead of
+			# stacking. Only the timer defers; respawn_now() always places the
+			# fighter at once, as the tiebreakers and steal_life call it.
+			if is_instance_valid(watched.get(slot)) and int(_staggered.get(slot, 0)) < MAX_STAGGERS \
+					and _is_taken(farthest_spawn(slot), slot):
+				_staggered[slot] = int(_staggered.get(slot, 0)) + 1
+				_pending[slot] = STAGGER_SEC
+			else:
+				respawn_now(slot)
 	_tick_protection()
 
 ## Back in at the spawn farthest from the others, a pickaxe in hand.
@@ -90,12 +100,6 @@ func respawn_now(slot: int) -> void:
 	if not is_instance_valid(player) or not _still_claimed(slot):
 		return
 	var spot: Vector2 = farthest_spawn(slot)
-	# Issue #1188: every spawn taken (someone standing on it, or just returned
-	# to it): this player waits its own short timer instead of stacking.
-	if _is_taken(spot, slot) and int(_staggered.get(slot, 0)) < MAX_STAGGERS:
-		_staggered[slot] = int(_staggered.get(slot, 0)) + 1
-		_pending[slot] = STAGGER_SEC
-		return
 	_staggered.erase(slot)
 	if float(round_manager.spawn_protection_sec) > 0.0:
 		_claimed[slot] = spot

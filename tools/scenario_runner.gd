@@ -45886,7 +45886,33 @@ func _scenario_respawn_same_tick_deaths_take_distinct_spawns_1188() -> Array[Str
 			back += 1
 	if back != 2 or not respawn.is_pending(2):
 		failures.append("with 2 free spawns for 3 fighters, %d came back and slot 2 pending is %s" % [back, respawn.is_pending(2)])
+	# A tiebreak while slot 2's return is deferred still puts it back (the
+	# Soccer/CTF begin_tiebreak shape: respawn_now, then cancel).
+	respawn.respawn_now(2)
+	respawn.cancel(2)
+	if not rig["players"][2].alive:
+		failures.append("respawn_now while deferred did not place the fighter")
+	# Soccer (a second respawning mode): same-tick KOs land on distinct points.
 	await _teardown(rig["stage"])
+	var soc: Dictionary = _mode_rig(3, GameModesType.SOCCER)
+	if not await _mode_started(soc):
+		await _teardown(soc["stage"])
+		return failures + ["the Soccer round never started"]
+	soc["rm"]._stage_spawn_points = points
+	var sw: Dictionary = {}
+	for i in 3:
+		sw[i] = soc["players"][i]
+		soc["players"][i].teleport_to(Vector2(2000.0 + 100.0 * i, 400.0))
+	var sres: RefCounted = RespawnScript605.new(soc["rm"], sw, 1.5)
+	for i in 3:
+		soc["players"][i].eliminate()
+		sres.queue(i)
+	sres.tick(2.0)
+	for i in 3:
+		for j in range(i + 1, 3):
+			if soc["players"][i].global_position.distance_to(soc["players"][j].global_position) < 50.0:
+				failures.append("Soccer: slots %d and %d respawned stacked" % [i, j])
+	await _teardown(soc["stage"])
 	return failures
 func _scenario_respawn_alone_does_not_always_pick_spawn0_605() -> Array[String]:
 	var failures: Array[String] = []
