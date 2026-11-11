@@ -87,7 +87,7 @@ position = Vector2(-420, 190)
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(420, 190)
 
-; Spawns 2 and 3 (issue #36): Spawn2 beside IslandB's pickup, 60 px clear of it. Spawn3 on IslandD (#199: swapped with Spawn7, so two, three and four players split left/right as evenly as they can).
+; Spawns 2 and 3 (issue #36): Spawn2 beside IslandB's pickup, about 68 px clear of it (pickup x=-140, spawn x=-200). Spawn3 on IslandD (#199: swapped with Spawn7, so two, three and four players split left/right as evenly as they can).
 [node name="Spawn2" type="Marker2D" parent="."]
 position = Vector2(-200, 190)
 

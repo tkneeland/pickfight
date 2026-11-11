@@ -12254,8 +12254,9 @@ func _scenario_ice_patch_summit_spawns_clear() -> Array[String]:
 	await _teardown(stage)
 	return failures
 ## Stage safety pass (#1202): the catch ledges added to Islands, Footbridge,
-## Summit and Treadmill sit fully inside the 1600x900 view (tops at y<=420, so
-## a fighter standing on one is seen; edges within x=+-816, the posts included)
+## Summit and Treadmill sit fully inside the 1600x900 view (tops a body height above
+## the view's bottom edge, edges and end posts within its x range, read from
+## Stage.get_view_rect())
 ## and the kill zones stay no deeper than they were (Islands and Footbridge
 ## y=480, Summit and Treadmill y=700), so a fall is a visible KO.
 func _scenario_stage_safety_ledges_on_screen_1202() -> Array[String]:
@@ -12269,16 +12270,27 @@ func _scenario_stage_safety_ledges_on_screen_1202() -> Array[String]:
 	for stage_name: String in wanted:
 		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
 		get_root().add_child(stage)
+		var view: Rect2 = stage.get_view_rect()
 		for ledge_name: String in wanted[stage_name][0]:
 			var ledge: StaticBody2D = stage.get_node_or_null(ledge_name) as StaticBody2D
 			if ledge == null:
 				failures.append("%s lost its %s" % [stage_name, ledge_name])
 				continue
 			var top: float = ledge.position.y - ledge.size.y / 2.0
-			if top > 420.0:
-				failures.append("%s %s top y=%.0f is below the visible area (max 420)" % [stage_name, ledge_name, top])
-			if absf(ledge.position.x) + ledge.size.x / 2.0 > 800.0:
-				failures.append("%s %s runs past x=+-800" % [stage_name, ledge_name])
+			# A fighter standing on it must be seen: the top sits at least a body radius above
+			# the view bottom edge (the feet are visible and the head clears).
+			if top > view.end.y - PLAYER_RADIUS:
+				failures.append("%s %s top y=%.0f is too near or below the view bottom (%.0f)" % [stage_name, ledge_name, top, view.end.y])
+			if ledge.position.x - ledge.size.x / 2.0 < view.position.x or ledge.position.x + ledge.size.x / 2.0 > view.end.x:
+				failures.append("%s %s runs outside the view x range" % [stage_name, ledge_name])
+		for post_name: String in ["EndPostLeft", "EndPostRight"]:
+			var post: StaticBody2D = stage.get_node_or_null(post_name) as StaticBody2D
+			if post == null:
+				if stage_name != "Islands":
+					failures.append("%s lost its %s" % [stage_name, post_name])
+				continue
+			if post.position.x - post.size.x / 2.0 < view.position.x or post.position.x + post.size.x / 2.0 > view.end.x:
+				failures.append("%s %s is outside the view (an invisible wall)" % [stage_name, post_name])
 		var kill: Node2D = stage.get_node_or_null("KillZone") as Node2D
 		if kill == null or kill.position.y > float(wanted[stage_name][1]):
 			failures.append("%s kill zone is missing or deeper than y=%.0f" % [stage_name, wanted[stage_name][1]])
@@ -20941,6 +20953,19 @@ func _stage_spawn_sweep(path: String, offset: Vector2) -> Array[String]:
 	if spawns.size() < STAGE_MIN_SPAWNS:
 		failures.append("%s: declared %d spawn point(s), needs at least %d" % [
 			path, spawns.size(), STAGE_MIN_SPAWNS])
+	# #1202: a spawn must not start inside solid ground (a body radius of
+	# clearance), which the settle check below would not notice.
+	await physics_frame
+	var query := PhysicsShapeQueryParameters2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = PLAYER_RADIUS
+	query.shape = circle
+	query.collision_mask = 1
+	for i in spawns.size():
+		query.transform = Transform2D(0.0, spawns[i])
+		if not stage.get_world_2d().direct_space_state.intersect_shape(query, 1).is_empty():
+			failures.append("%s spawn %d at %s overlaps solid ground (body radius %.0f)" % [
+				path, i, spawns[i], PLAYER_RADIUS])
 	for i in spawns.size():
 		var player: RigidBody2D = _spawn_player(stage, spawns[i])
 		await _await_ticks(60)

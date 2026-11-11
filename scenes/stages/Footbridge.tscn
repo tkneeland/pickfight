@@ -67,17 +67,17 @@ size = Vector2(80, 16)
 position = Vector2(760, 340)
 size = Vector2(80, 16)
 
-; End posts (#1202): a 16 px post at each end ledge (x=+-800..816) stops a fighter running along the ledge off the screen. The left is 220 px tall (top y=190); the right is 160 px (top y=250), low enough that a body shoved along the bank still clears it, which keeps the every-stage ring-out sweep (a 1800 px/s shove at spawn height) passing.
+; End posts (#1202): a 16 px post at each end ledge (x=+-784..800) stops a fighter running along the ledge off the screen. The left is 220 px tall (top y=190); the right is 160 px (top y=250), low enough that a body shoved along the bank still clears it, which keeps the every-stage ring-out sweep (a 1800 px/s shove at spawn height) passing.
 [node name="EndPostLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-808, 300)
+position = Vector2(-792, 300)
 size = Vector2(16, 220)
 
 [node name="EndPostRight" parent="." instance=ExtResource("platform")]
-position = Vector2(808, 330)
+position = Vector2(792, 330)
 size = Vector2(16, 160)
 
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-640, 250)
+position = Vector2(-640, 210)
 
 [node name="Spawn1" type="Marker2D" parent="."]
 position = Vector2(640, 210)
