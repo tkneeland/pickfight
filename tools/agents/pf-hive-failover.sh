@@ -64,6 +64,16 @@ due() {
   [ "$(successor "$H")" = "$PF_ACCOUNT" ]
 }
 holder_for() { [ "${1:--}" != - ] && echo "$1" || pf_triagemaster; }
+# finish_claim <old holder>: take the role the way pf-succession.sh reads it: a TM "<me> until failover <expiry>" on the
+# private channel plus a local marker, honoured on every machine until it expires. Idempotent: a live marker of ours is kept.
+finish_claim() {
+  local exp m_who m_exp
+  [ -f "$PF_STATE/pf-takeover" ] && read -r m_who m_exp _ < "$PF_STATE/pf-takeover"
+  if [ "$m_who" = "$PF_ACCOUNT" ] && [ "${m_exp:-0}" -gt "$(now)" ]; then echo "$PF_ACCOUNT" > "$PF_STATE/pf-triagemaster"; return 0; fi
+  exp=$(( $(now) + ${PF_HIVE_TAKEOVER_SECS:-21600} ))
+  echo "$PF_ACCOUNT $exp $(now)" > "$PF_STATE/pf-takeover"; echo "$PF_ACCOUNT" > "$PF_STATE/pf-triagemaster"
+  bash "$PF_DIR/pf-msg.sh" send TM "$PF_ACCOUNT until failover $exp (from $1, #hive $2)" >/dev/null 2>&1
+}
 case "${1:-}" in
   check)
     if [ -z "$PF_DISCORD_TOKEN" ]; then   # not set up: ask the owner once per 6h, never fail silently
@@ -95,6 +105,9 @@ EOT
     # re-check right before acting, on fresh data: a stale wake, an earlier takeover (its notice restarts the clock) or
     # a different successor all mean another machine owns this one
     if ! due "$id" "$nid" "$nowh"; then
+      if [ "$nowh" = "$PF_ACCOUNT" ]; then   # our own notice is already there (a retry after a lost post): finish the claim
+        finish_claim "$H" "$id"; echo "TAKEOVER_OK (notice already posted)"; exit 0
+      fi
       [ "$H" = "$PF_ACCOUNT" ] && { echo "already the holder"; exit 0; }
       echo "not due, or not the successor: another machine owns message $id"; exit 3
     fi
@@ -116,11 +129,7 @@ EOT
       dcurl "/channels/$PF_DISCORD_DEV/messages/$mine" -X DELETE >/dev/null 2>&1
       echo "another machine took over first (notice $win)"; exit 3
     fi
-    # take the role the way pf-succession.sh reads it: a TM "<me> until failover <expiry>" on the private channel (and a
-    # local copy), honoured by pf-succession.sh on every machine until it expires
-    exp=$(( $(now) + ${PF_HIVE_TAKEOVER_SECS:-21600} ))
-    echo "$PF_ACCOUNT $exp $(now)" > "$PF_STATE/pf-takeover"; echo "$PF_ACCOUNT" > "$PF_STATE/pf-triagemaster"
-    bash "$PF_DIR/pf-msg.sh" send TM "$PF_ACCOUNT until failover $exp (from $h, #hive $id)" >/dev/null 2>&1
+    finish_claim "$h" "$id"
     echo "TAKEOVER_OK from $h"; exit 0 ;;
   *) echo "usage: pf-hive-failover.sh check|takeover <message id>" >&2; exit 2 ;;
 esac

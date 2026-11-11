@@ -133,6 +133,21 @@ setup_inboxes 100; jq -s '.' <(human "$M") > "$T/msgs.json"; touch "$T/postlost"
 acct agage-JG; out=$(bash "$H" takeover "$M"); check "lost post response: takeover still wins" "$out" "TAKEOVER_OK from tkneeland"
 check "and posted exactly one notice" "$(jq '[.[] | select(.author.bot)] | length' "$T/msgs.json")" 1
 rm -f "$T/postlost"
+# retry after a lost post whose first run died before claiming: the existing notice is ours, so finish the claim
+setup_inboxes 100; jq -s '.' <(human "$M") <(bot "$(mkid $((PF_NOW - 60)) 2)" "$M" "taking over from tkneeland (now agage-JG)") > "$T/msgs.json"
+acct agage-JG; rm -f "$PF_STATE_DIR/pf-takeover"; : > "$T/ntfy.log"
+out=$(bash "$H" takeover "$M"); check "retry finishes the claim" "$out" "TAKEOVER_OK (notice already posted)"
+check "retry wrote the marker" "$(cut -d' ' -f1 "$PF_STATE_DIR/pf-takeover")" agage-JG
+check "retry sent the TM" "$(grep -c 'TM agage-JG until failover' "$T/ntfy.log")" 1
+bash "$H" takeover "$M" >/dev/null; check "retry again sends no second TM" "$(grep -c 'TM agage-JG until failover' "$T/ntfy.log")" 1
+check "and posted no new notice" "$(jq '[.[] | select(.author.bot)] | length' "$T/msgs.json")" 1
+# pf-succession.sh keeps its own args (--post) when a (here expired) failover marker is in the inbox: the weekly handoff still sends TM
+acct schans2; rt=$(date +%s); : > "$T/ntfy.log"; rm -f "$PF_STATE_DIR/pf-takeover" "$PF_STATE_DIR/pf-triagemaster"
+printf '%s|agage-JG|TM|agage-JG until failover %s\n' "$rt" $((rt - 5)) > "$PF_STATE_DIR/msg-inbox.log"
+printf '%s|tkneeland|USAGE|10%% 96%% 2099-01-01T00:00:00Z r5=2099-01-01T00:00:00Z at=%s\n' "$rt" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$PF_STATE_DIR/msg-inbox.log"
+echo '{"rate_limits":{"seven_day":{"used_percentage":10,"resets_at":4102444800},"five_hour":{"used_percentage":5,"resets_at":4102444800}}}' > "$PF_STATE_DIR/usage-snapshot.json"
+check "handoff picks the stand-in" "$(PF_ACCOUNTS_DIR= bash "$AG/pf-succession.sh" --post 2>/dev/null)" schans2
+check "handoff TM still sent with --post" "$(grep -c 'TM schans2 until' "$T/ntfy.log")" 1
 # I) two machines never both take over: a rival's earlier notice lands while agage-JG posts
 setup_inboxes 100; jq -s '.' <(human "$M") > "$T/msgs.json"; touch "$T/race"
 acct agage-JG; out=$(bash "$H" takeover "$M"); rc=$?

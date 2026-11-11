@@ -16,9 +16,11 @@ pf_usage_backfill
 # The newest wins; an expired or superseded local marker is removed, so a stale file never outvotes a later takeover.
 fo=$( { awk -F'|' '$3=="TM" && $4 ~ /^[^ ]+ until failover [0-9]+/ {split($4, w, " "); print $1, w[1], w[4], "inbox"}' "$INBOX_FILE" 2>/dev/null
         [ -f "$PF_STATE/pf-takeover" ] && awk '{print ($3 ? $3 : 0), $1, $2, "local"}' "$PF_STATE/pf-takeover"; } | sort -n | tail -n 1)
-if [ -n "$fo" ]; then set -- $fo
-  if [ "$4" = inbox ] || [ "$3" -le "$now" ]; then rm -f "$PF_STATE/pf-takeover"; fi   # superseded by a newer TM, or expired
-  if [ "$3" -gt "$now" ]; then echo "$2" > "$PF_STATE/pf-triagemaster"; echo "$2"; exit 0; fi
+if [ -n "$fo" ]; then read -r fo_at fo_who fo_exp fo_src <<EOT
+$fo
+EOT
+  if [ "$fo_src" = inbox ] || [ "$fo_exp" -le "$now" ]; then rm -f "$PF_STATE/pf-takeover"; fi   # superseded by a newer TM, or expired
+  if [ "$fo_exp" -gt "$now" ]; then echo "$fo_who" > "$PF_STATE/pf-triagemaster"; echo "$fo_who"; exit 0; fi
 fi
 # no fresh beacon from any other account (no channel, listener down and backfill failed): make no decision
 pf_channel_fresh || { pf_triagemaster; exit 0; }
