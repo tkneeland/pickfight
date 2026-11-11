@@ -8,8 +8,14 @@
 # private channel when it takes over.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 now=$(date +%s)
+INBOX_FILE=$PF_STATE/msg-inbox.log
 iso2e() { pf_iso_to_epoch "$1" || echo 0; }
 pf_usage_backfill
+# A #hive failover (pf-hive-failover.sh takeover) holds the role until it expires: the newest TM "<h> until failover <expiry>"
+# in the inbox or this account's own pf-takeover file, unexpired, wins over the beacon computation.
+fo=$( { awk -F'|' '$3=="TM" && $4 ~ /^[^ ]+ until failover [0-9]+/ {split($4, w, " "); print $1, w[1], w[4]}' "$INBOX_FILE" 2>/dev/null
+        [ -f "$PF_STATE/pf-takeover" ] && awk -v n="$now" '{print n, $1, $2}' "$PF_STATE/pf-takeover"; } | sort -n | tail -n 1)
+if [ -n "$fo" ]; then set -- $fo; if [ "${3:-0}" -gt "$now" ]; then echo "$2" > "$PF_STATE/pf-triagemaster"; echo "$2"; exit 0; fi; fi
 # no fresh beacon from any other account (no channel, listener down and backfill failed): make no decision
 pf_channel_fresh || { pf_triagemaster; exit 0; }
 beacon() { pf_beacon "$1"; }  # sets b_age b_used b_reset for handle $1 (pf-env.sh)

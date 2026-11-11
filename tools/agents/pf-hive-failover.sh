@@ -5,7 +5,7 @@
 #   pf-hive-failover.sh check            one pass. Exit 0 and print "HIVE_TAKEOVER <msg id>" when THIS account must take
 #                                        over; 1 nothing to do (or this account is the holder, or not the successor);
 #                                        2 not set up or Discord unreadable (no pf-discord.conf: asks the owner once per 6h)
-#   pf-hive-failover.sh takeover <id>    the woken agent runs it: posts "taking over from <holder> (now <me>)" as a reply
+#   pf-hive-failover.sh takeover <id>    the woken agent runs it; re-checks the clock and that it is the successor first (exit 3 if not): posts "taking over from <holder> (now <me>)" as a reply
 #                                        to <id>, keeps the claim only if that notice is the earliest of the notices posted
 #                                        meanwhile (a rival's earlier one wins and ours is deleted: exit 3), then records
 #                                        this account as triagemaster and sends TM on the private channel. The agent then
@@ -48,11 +48,20 @@ fetch() {  # the newest 50 messages of #hive as a JSON array; fails when Discord
 unanswered() {
   echo "$1" | jq -r --arg n "$NOTICE" '
     sort_by(.id | [length, .]) as $all
-    | $all[] | select(.author.bot != true) | .id as $id
+    | $all[] | select(.author.bot != true and (.type // 0 | IN(0, 19)) and ((.content // "") != "")) | .id as $id
     | [$all[] | select(.author.bot == true and .message_reference.message_id == $id)] as $r
     | select(([$r[] | select(.content | startswith($n) | not)] | length) == 0)
     | ([$r[] | select(.content | startswith($n))] | last) as $t
     | "\($id) \($t.id // "-") \($t.content // "" | capture("\\(now (?<w>[^)]+)\\)").w // "-")"'
+}
+# due <id> <notice id or -> <new holder or ->: 0 when the 10 min clock has run out (from the newest notice, if any), the
+# message is under 24h old, this account is not the holder and it is the designated successor. Sets H (the holder).
+due() {
+  local t0; t0=$(snow "$1"); [ "$2" != - ] && t0=$(snow "$2")
+  [ $(( $(now) - t0 )) -ge "$SECS" ] || return 1
+  [ $(( $(now) - $(snow "$1") )) -le 86400 ] || return 1
+  H=$(holder_for "$3"); [ "$H" = "$PF_ACCOUNT" ] && return 1
+  [ "$(successor "$H")" = "$PF_ACCOUNT" ]
 }
 holder_for() { [ "${1:--}" != - ] && echo "$1" || pf_triagemaster; }
 case "${1:-}" in
@@ -66,13 +75,8 @@ case "${1:-}" in
       exit 2
     fi
     msgs=$(fetch) || exit 2
-    n=$(now)
     unanswered "$msgs" | while read -r id nid nowh; do
-      t0=$(snow "$id"); [ "$nid" != - ] && t0=$(snow "$nid")
-      [ $(( n - t0 )) -ge "$SECS" ] || continue
-      [ $(( n - $(snow "$id") )) -le 86400 ] || continue
-      h=$(holder_for "$nowh"); [ "$h" = "$PF_ACCOUNT" ] && continue
-      [ "$(successor "$h")" = "$PF_ACCOUNT" ] || continue
+      due "$id" "$nid" "$nowh" || continue
       # debounce: a wake for this message and this notice is not repeated for 5 min (the agent may be mid-takeover)
       st=$PF_STATE/.hive-failover-$id-$nid; w=$(pf_mtime "$st" || true); w=${w:-0}
       [ $(( $(date +%s) - w )) -lt 300 ] && continue
@@ -88,8 +92,13 @@ case "${1:-}" in
     read -r _ nid nowh <<EOT
 $line
 EOT
-    h=$(holder_for "$nowh")
-    [ "$h" = "$PF_ACCOUNT" ] && { echo "already the holder"; exit 0; }
+    # re-check right before acting, on fresh data: a stale wake, an earlier takeover (its notice restarts the clock) or
+    # a different successor all mean another machine owns this one
+    if ! due "$id" "$nid" "$nowh"; then
+      [ "$H" = "$PF_ACCOUNT" ] && { echo "already the holder"; exit 0; }
+      echo "not due, or not the successor: another machine owns message $id"; exit 3
+    fi
+    h=$H
     before=$(echo "$msgs" | jq -r --arg i "$id" '[.[] | select(.message_reference.message_id == $i) | .id] | join(" ")')
     body=$(jq -n --arg t "${NOTICE}${h} (now ${PF_ACCOUNT})" --arg id "$id" '{content: $t, message_reference: {message_id: $id}, allowed_mentions: {parse: []}}')
     mine=$(dcurl "/channels/$PF_DISCORD_DEV/messages" -X POST -H "Content-Type: application/json" -d "$body" | jq -r '.id // empty')
@@ -103,8 +112,11 @@ EOT
       dcurl "/channels/$PF_DISCORD_DEV/messages/$mine" -X DELETE >/dev/null 2>&1
       echo "another machine took over first (notice $win)"; exit 3
     fi
-    echo "$PF_ACCOUNT" > "$PF_STATE/pf-triagemaster"
-    bash "$PF_DIR/pf-msg.sh" send TM "$PF_ACCOUNT until failover from $h answered #hive $id" >/dev/null 2>&1
+    # take the role the way pf-succession.sh reads it: a TM "<me> until failover <expiry>" on the private channel (and a
+    # local copy), honoured by pf-succession.sh on every machine until it expires
+    exp=$(( $(now) + ${PF_HIVE_TAKEOVER_SECS:-21600} ))
+    echo "$PF_ACCOUNT $exp" > "$PF_STATE/pf-takeover"; echo "$PF_ACCOUNT" > "$PF_STATE/pf-triagemaster"
+    bash "$PF_DIR/pf-msg.sh" send TM "$PF_ACCOUNT until failover $exp (from $h, #hive $id)" >/dev/null 2>&1
     echo "TAKEOVER_OK from $h"; exit 0 ;;
   *) echo "usage: pf-hive-failover.sh check|takeover <message id>" >&2; exit 2 ;;
 esac

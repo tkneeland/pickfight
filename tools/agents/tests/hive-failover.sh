@@ -14,6 +14,7 @@ echo 1 > "$T/counter"
 cat > "$T/bin/curl" <<EOF2
 #!/bin/bash
 cfg=\$(cat); url=\$(printf '%s\n' "\$cfg" | sed -n 's/^url = "\(.*\)"/\1/p')
+printf '%s\n' "\$*" >> "$T/args.log"
 method=GET; body=""; prev=""
 for a in "\$@"; do [ "\$prev" = -X ] && method=\$a; [ "\$prev" = -d ] && body=\$a; prev=\$a; done
 case \$url in
@@ -37,6 +38,7 @@ mkid() { echo $(( ( ($1 * 1000 - 1420070400000) << 22 ) + $2 )); }   # id for ep
 H=$AG/pf-hive-failover.sh
 # acct <name>: switch to that account's state dir, token set up
 acct() { export PF_ACCOUNT=$1 PF_STATE_DIR=$T/state-$1; mkdir -p "$PF_STATE_DIR"
+  echo "PF_MSG_TOPIC=pf-test" > "$PF_STATE_DIR/pf-msg.conf"
   [ -f "$PF_STATE_DIR/pf-discord.conf" ] || echo "PF_DISCORD_TOKEN=tok-$1" > "$PF_STATE_DIR/pf-discord.conf"; }
 # inbox for an account: HELLO ages given per peer
 hello() { echo "$(( PF_NOW - $2 ))|$1|HELLO|$1" >> "$PF_STATE_DIR/msg-inbox.log"; }
@@ -87,6 +89,30 @@ check "fresh notice wakes nobody" "$(tm)" "rc=1 rc=1 rc=1 "
 export PF_NOW=$((PF_NOW + 700)); rm -f "$T"/state-*/.hive-failover-*
 check "dead taker failed over in turn" "$(for a in tkneeland schans2; do wake $a; done | tr '\n' ' ')" "rc=1 HIVE_TAKEOVER $M rc=0 "
 export PF_NOW=1800000000
+check "role taken through the private channel" "$(grep -c 'TM agage-JG until failover 18' "$T/ntfy.log")" 1
+check "local takeover marker" "$(cut -d' ' -f1 "$T/state-agage-JG/pf-takeover")" agage-JG
+# the next pf-succession run keeps the taker (it used to recompute the role away); an expired marker does not
+acct schans2; real=$(date +%s)
+printf '%s|agage-JG|TM|agage-JG until failover %s (from tkneeland)\n' "$real" $((real + 3600)) >> "$PF_STATE_DIR/msg-inbox.log"
+echo tkneeland > "$PF_STATE_DIR/pf-triagemaster"
+check "succession honours a live takeover" "$(bash "$AG/pf-succession.sh" 2>/dev/null)" agage-JG
+check "and writes it to the role file" "$(cat "$PF_STATE_DIR/pf-triagemaster")" agage-JG
+: > "$PF_STATE_DIR/msg-inbox.log"; printf '%s|agage-JG|TM|agage-JG until failover %s\n' "$real" $((real - 5)) >> "$PF_STATE_DIR/msg-inbox.log"
+echo tkneeland > "$PF_STATE_DIR/pf-triagemaster"
+check "an expired takeover is not honoured" "$(bash "$AG/pf-succession.sh" 2>/dev/null)" tkneeland
+# takeover re-checks on fresh data: a second machine acting on a stale wake exits 3 and posts nothing
+setup_inboxes 100; jq -s '.' <(human "$M") > "$T/msgs.json"
+acct agage-JG; bash "$H" takeover "$M" >/dev/null
+nb=$(jq '[.[] | select(.author.bot)] | length' "$T/msgs.json")
+acct schans2; bash "$H" takeover "$M" >/dev/null; check "second takeover (fresh notice) exits 3" $? 3
+check "and posts no notice" "$(jq '[.[] | select(.author.bot)] | length' "$T/msgs.json")" "$nb"
+# a machine that is not the designated successor refuses even with an old, unanswered message
+setup_inboxes 100; jq -s '.' <(human "$M") > "$T/msgs.json"
+acct schans2; bash "$H" takeover "$M" >/dev/null; check "non-successor takeover exits 3" $? 3
+# and a message under 10 minutes old is not due
+jq -s '.' <(human "$(mkid $((PF_NOW - 200)) 1)") > "$T/msgs.json"
+acct agage-JG; bash "$H" takeover "$(mkid $((PF_NOW - 200)) 1)" >/dev/null; check "young message takeover exits 3" $? 3
+check "dcurl has a timeout" "$(grep -c -- '-m 15' "$T/args.log" | awk '{print ($1 > 0)}')" 1
 # I) two machines never both take over: a rival's earlier notice lands while agage-JG posts
 setup_inboxes 100; jq -s '.' <(human "$M") > "$T/msgs.json"; touch "$T/race"
 acct agage-JG; out=$(bash "$H" takeover "$M"); rc=$?
