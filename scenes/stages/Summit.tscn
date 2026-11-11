@@ -59,29 +59,38 @@ size = Vector2(100, 16)
 position = Vector2(-340, 384)
 size = Vector2(140, 8)
 
+; Edge shelves (#1202): a ledge 72 px below each end of the floor (top y=452, kill zone y=700) catches a fighter knocked off an end, who climbs back. Spawns pulled inboard to at least 110 px from the ends. Past the shelves is still open sky, so hard hits still ring out.
+[node name="EdgeShelfLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-890, 460)
+size = Vector2(280, 16)
+
+[node name="EdgeShelfRight" parent="." instance=ExtResource("platform")]
+position = Vector2(890, 460)
+size = Vector2(280, 16)
+
 [node name="Spawn0" type="Marker2D" parent="."]
-position = Vector2(-700, 320)
+position = Vector2(-640, 320)
 
 [node name="Spawn1" type="Marker2D" parent="."]
-position = Vector2(700, 320)
+position = Vector2(640, 320)
 
 [node name="Spawn2" type="Marker2D" parent="."]
-position = Vector2(-620, 320)
+position = Vector2(-570, 320)
 
 [node name="Spawn3" type="Marker2D" parent="."]
-position = Vector2(620, 320)
+position = Vector2(570, 320)
 
 [node name="Spawn4" type="Marker2D" parent="."]
-position = Vector2(-540, 320)
+position = Vector2(-500, 320)
 
 [node name="Spawn5" type="Marker2D" parent="."]
-position = Vector2(540, 320)
+position = Vector2(500, 320)
 
 [node name="Spawn6" type="Marker2D" parent="."]
-position = Vector2(-460, 320)
+position = Vector2(-440, 320)
 
 [node name="Spawn7" type="Marker2D" parent="."]
-position = Vector2(460, 320)
+position = Vector2(440, 320)
 
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 700)

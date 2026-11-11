@@ -66,6 +66,15 @@ position = Vector2(700, 388)
 size = Vector2(100, 16)
 launch_speed = 1250.0
 
+; Edge shelves (#1202; spawns unchanged): bots leapt off the ledges past the pads and fell off the floor ends within seconds. A ledge 72 px below each end of the floor (top y=452, kill zone y=700) catches them; past it is still open sky.
+[node name="EdgeShelfLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-890, 460)
+size = Vector2(280, 16)
+
+[node name="EdgeShelfRight" parent="." instance=ExtResource("platform")]
+position = Vector2(890, 460)
+size = Vector2(280, 16)
+
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-600, 100)
 
