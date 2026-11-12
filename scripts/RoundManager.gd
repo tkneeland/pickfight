@@ -415,18 +415,19 @@ func _try_start_round() -> void:
 	_kill_zone_home_y = NAN
 	_state = State.ROUND_ACTIVE
 	_round_play_begun = false
-	var title_shown: bool = _show_stage_title()
 	var counts_down: bool = _round_countdown_on() and not _skip_round_countdown
 	_skip_round_countdown = false
 	if counts_down:
-		_begin_round_countdown(title_shown)
+		_begin_round_countdown(_show_stage_title())
 	else:
 		_start_spawn_protection()
-		_begin_round_play()
+		_begin_round_play(true)
 
 ## Everything a round runs once its fighters are let go: at once, or at the
 ## countdown's GO (#1197).
-func _begin_round_play() -> void:
+## `show_title`: the round has no countdown, so its stage title goes up here,
+## after the modifier and mode banners, as it did before #1197.
+func _begin_round_play(show_title: bool = false) -> void:
 	_round_play_begun = true
 	# The survival clocks start here, not at the spawn, so the hold before GO
 	# counts toward nobody's survival time (#1197).
@@ -439,6 +440,8 @@ func _begin_round_play() -> void:
 	_start_game_mode()
 	_pickup_director.start()
 	_start_kill_zone_rise()
+	if show_title:
+		_show_stage_title()
 	round_started.emit()
 
 # --- Round countdown (issue #1197) --------------------------------------------
@@ -2611,7 +2614,9 @@ func _ko_round_started() -> void:
 	var stale_feed: Control = kill_feed()
 	if stale_feed != null and stale_feed.has_method("clear_banners"):
 		stale_feed.clear_banners() # a late banner must not land in this round (#613)
-	_stats.begin_round(_in_round, GameClockScript.now_msec())
+	# No survival clock starts at the spawn: `_begin_round_play()` starts them at
+	# GO, so a round that ends during the hold credits nobody with it (#1197).
+	_stats.begin_round([], GameClockScript.now_msec())
 	_career_kos.clear()
 	_career_self_kos.clear()
 
@@ -2746,7 +2751,8 @@ func _start_game_mode() -> void:
 	# it (Stock would hand them lives no `cancel_respawn` ever takes back).
 	var slots: Array[int] = []
 	for slot: int in _in_round:
-		if not round_countdown_active() or (slot >= 0 and slot < _players.size() 				and is_instance_valid(_players[slot]) and bool(_players[slot].get("alive"))):
+		if not round_countdown_active() or (slot >= 0 and slot < _players.size()
+				and is_instance_valid(_players[slot]) and bool(_players[slot].get("alive"))):
 			slots.append(slot)
 	_game_mode_node.start_round(slots)
 

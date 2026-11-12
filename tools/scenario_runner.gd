@@ -62641,13 +62641,16 @@ func _scenario_round_countdown_round_over_before_go_1197() -> Array[String]:
 		await _teardown(loop["stage"])
 		return failures
 	# Round 2 counts down; slot 1 leaves during the hold.
+	var round1_survival: Array[int] = [int(rm._stats.survival_msec.get(0, 0))]
 	order.clear()
 	go_msec[0] = -1
 	if not await _await_condition(func() -> bool: return rm.round_countdown_active() and _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
 		failures.append("round 2 never started counting down")
 		await _teardown(loop["stage"])
 		return failures
-	await _await_ticks(3)
+	# Half a second into the hold (title 0.4 s + 3 x 0.3 s before GO), so a
+	# clock started at the spawn would show.
+	await _await_ticks(30)
 	players[1].leave_round()
 	if not await _await_condition(func() -> bool: return order.has("won"), 3000):
 		failures.append("a round left during the hold never ended (order %s)" % [order])
@@ -62662,8 +62665,10 @@ func _scenario_round_countdown_round_over_before_go_1197() -> Array[String]:
 		failures.append("the countdown card stayed up after the round ended")
 	if players[0].round_locked:
 		failures.append("the winner was still held after the round ended")
-	var survived: int = int(rm._stats.survival_msec.get(0, 0))
-	print("      slot 0 survival over both rounds %d ms" % survived)
+	var survived: int = int(rm._stats.survival_msec.get(0, 0)) - round1_survival[0]
+	print("      slot 0 survival in the round left during the hold %d ms" % survived)
+	if survived > 150:
+		failures.append("the winner of a round left during the hold was credited %d ms survival, want ~0" % survived)
 	await _teardown(loop["stage"], false)
 	_scenario_completed = true
 	return failures
