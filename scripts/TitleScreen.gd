@@ -27,12 +27,14 @@ const TITLE_WISHLIST_KEY: Key = KEY_W
 ## The key that quits from the title screen (#718).
 const TITLE_QUIT_KEY: Key = KEY_Q
 
-const TITLE_KINDS: Array[String] = ["local", "online", "solo", "editor"]
-const TITLE_KEYS: Dictionary = {"local": KEY_C, "online": KEY_O, "solo": KEY_S, "editor": KEY_E}
+const TITLE_KINDS: Array[String] = ["local", "online", "solo"]
+const TITLE_KEYS: Dictionary = {"local": KEY_C, "online": KEY_O, "solo": KEY_S}
+## The key that opens the stage editor from the title screen (#1047).
+const TITLE_EDITOR_KEY: Key = KEY_E
 const TITLE_BUTTON_FONT_SIZE: int = 40
 ## The logo as the mockup frames it (#546), and each card's colour variation.
 const TITLE_LOGO_SIZE: Vector2 = Vector2(1360, 300)
-const TITLE_CARD_VARIATIONS: Dictionary = {"local": &"TitleCardOrange", "online": &"TitleCardSky", "solo": &"TitleCardGreen", "editor": &"TitleCardOrange", "host": &"TitleCardSky", "join": &"TitleCardOrange"}
+const TITLE_CARD_VARIATIONS: Dictionary = {"local": &"TitleCardOrange", "online": &"TitleCardSky", "solo": &"TitleCardGreen", "host": &"TitleCardSky", "join": &"TitleCardOrange"}
 const TITLE_CARD_HEIGHT: float = 210.0
 ## The fork after Online (#1075): Host a room or Join a friend, with a Back path.
 const FORK_KINDS: Array[String] = ["host", "join"]
@@ -212,11 +214,9 @@ func build() -> void:
 	cards.add_theme_constant_override("separation", 40)
 	box.add_child(cards)
 	var labels: Dictionary = {"local": ["TITLE_COUCH", "TITLE_COUCH_HINT"], "online": ["TITLE_ONLINE", "TITLE_ONLINE_HINT"],
-		"solo": ["TITLE_SOLO", "TITLE_SOLO_HINT"], "editor": ["TITLE_EDITOR", "TITLE_EDITOR_HINT"]}
+		"solo": ["TITLE_SOLO", "TITLE_SOLO_HINT"]}
 	var previous: Button = null
 	for kind: String in TITLE_KINDS:
-		if kind == "editor" and DemoBuildScript.is_active():
-			continue # the demo has no stage editor (#1047)
 		var button := _build_card(kind, labels[kind][0], labels[kind][1])
 		cards.add_child(button)
 		_title_buttons[kind] = button
@@ -249,10 +249,21 @@ func build() -> void:
 	_title_buttons["credits"] = credits_button
 	quit_button.focus_neighbor_right = quit_button.get_path_to(credits_button)
 	credits_button.focus_neighbor_left = credits_button.get_path_to(quit_button)
-	var last_card: Button = previous # the last card built (the demo leaves out the editor, #1047)
+	# Stage editor (#1047): beside Credits, one D-pad step right of it; not in the demo build.
+	if not DemoBuildScript.is_active():
+		var editor_button := ScreenKitScript.themed_button(_screen.tr("TITLE_EDITOR"), UiThemeScript.ACTION_BUTTON, "Title_editor", true)
+		editor_button.tooltip_text = _screen.tr("TITLE_EDITOR_HINT")
+		editor_button.pressed.connect(press_title.bind("editor"))
+		bottom_row.add_child(editor_button)
+		_title_buttons["editor"] = editor_button
+		credits_button.focus_neighbor_right = credits_button.get_path_to(editor_button)
+		editor_button.focus_neighbor_left = editor_button.get_path_to(credits_button)
+	var last_card: Button = _title_buttons[TITLE_KINDS[TITLE_KINDS.size() - 1]]
 	last_card.focus_neighbor_bottom = last_card.get_path_to(quit_button)
 	quit_button.focus_neighbor_top = quit_button.get_path_to(last_card)
 	credits_button.focus_neighbor_top = credits_button.get_path_to(last_card)
+	if _title_buttons.has("editor"):
+		(_title_buttons["editor"] as Button).focus_neighbor_top = (_title_buttons["editor"] as Button).get_path_to(last_card)
 	# The Online fork (#1075): Host a room or Join a friend, in place of the three cards.
 	_main_nodes.assign([pick, cards, footer, bottom_row])
 	_fork_box = VBoxContainer.new()

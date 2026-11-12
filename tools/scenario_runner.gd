@@ -63525,8 +63525,8 @@ func _scenario_stage_test_play_round_trip_1047() -> Array[String]:
 	_scenario_completed = true
 	return failures
 
-## The title screen has a fourth card, Stage editor (E), which opens the editor;
-## the demo build leaves it out.
+## The title screen's bottom row has Stage editor (E) beside Credits, which opens
+## the editor (the button and the E key); the demo build leaves it out.
 func _scenario_title_stage_editor_card_1047() -> Array[String]:
 	var failures: Array[String] = []
 	_test_play_reset_1047()
@@ -63538,13 +63538,26 @@ func _scenario_title_stage_editor_card_1047() -> Array[String]:
 	screen.show_title(true)
 	var card: Button = screen.title_button("editor")
 	if card == null or not card.is_visible_in_tree():
-		failures.append("no visible Stage editor card on the title screen")
+		failures.append("no visible Stage editor button on the title screen")
 	else:
 		card.pressed.emit()
 		if _scene_changes_1047 != [StageTestPlay1047.EDITOR_SCENE]:
 			failures.append("the Stage editor card went to %s" % [_scene_changes_1047])
 		if rig["server"].match_kind() != "":
 			failures.append("the Stage editor card picked a match kind '%s'" % rig["server"].match_kind())
+	_scene_changes_1047.clear()
+	var e_key := InputEventKey.new()
+	e_key.pressed = true
+	e_key.physical_keycode = KEY_E
+	Input.parse_input_event(e_key)
+	await _await_ticks(2)
+	if _scene_changes_1047 != [StageTestPlay1047.EDITOR_SCENE]:
+		failures.append("the E key on the title screen went to %s" % [_scene_changes_1047])
+	var credits: Button = screen.title_button("credits")
+	if card != null and (credits.get_node_or_null(credits.focus_neighbor_right) != card or card.get_node_or_null(card.focus_neighbor_left) != credits):
+		failures.append("Stage editor is not one D-pad step right of Credits")
+	if card != null and screen.title_button("local").get_parent() == card.get_parent():
+		failures.append("Stage editor sits among the play cards, not in the bottom row")
 	await _kind_close_435(rig)
 	_scene_changes_1047.clear()
 	DemoBuildType1047.forced = 1
