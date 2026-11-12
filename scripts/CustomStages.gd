@@ -34,6 +34,9 @@ static var fail_renames_for_test: bool = false
 ## What the last recovery could not put back (#1253): one line per stranded
 ## file kept in place because its rename failed. Empty when all went well.
 static var recovery_problems: PackedStringArray = PackedStringArray()
+## The stages the last recovery kept as recovered copies (#1255), by key.
+static var recovery_notes: PackedStringArray = PackedStringArray()
+static var _stray_re: RegEx = null
 ## A stranded save's file name: `<key>.json.bak` / `.tmp` (numbered `-2`, `-3`
 ## when taken), or the older `<key>.bak` / `.tmp`. Group 1 is the key, 2 the kind.
 const STRAY_PATTERN: String = "(?i)^(.+?)(?:\\.json)?\\.(bak|tmp)(?:-\\d+)?$"
@@ -105,6 +108,8 @@ static func name_problem(stage_name: String, builtin_names: PackedStringArray) -
 ## At most `MAX_STAGES`.
 static func list() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	recovery_problems = PackedStringArray()
+	recovery_notes = PackedStringArray()
 	var dir := DirAccess.open(stages_dir())
 	if dir == null:
 		return out
@@ -125,41 +130,85 @@ static func list() -> Array[Dictionary]:
 
 ## A save cut short (a crash between `_write_safely()`'s steps) can leave a
 ## stage as a `.bak` (the old file set aside) or a `.tmp` (the new one not yet
-## moved in), named as `STRAY_PATTERN` reads. When no `<key>.json` exists, in
-## any letter case, a `.bak` is put back, or else a `.tmp` that reads as a valid
-## stage is moved in. A stray is removed only once its stage is safely in place
-## (or it is a `.tmp` that is not a stage): when the rename back fails, it is
-## kept and the failure is listed in `recovery_problems` (#1253), so the only
-## copy of a stage is never deleted.
+## moved in), named as `STRAY_PATTERN` reads. Strays are taken in sorted order,
+## `.bak` before `.tmp` (an old file set aside beats an unfinished new one):
+## - a `.tmp` that is not a valid stage is an unfinished write: removed;
+## - with no `<key>.json` in place (any letter case), the stray is put back as
+##   it. A `.bak` is put back unchecked on purpose: it is the only copy, and an
+##   invalid one is then listed with its reason rather than lost;
+## - with one in place, a stray holding the same text is a leftover: removed;
+## - one holding anything else is never deleted (#1255): it is kept as its own
+##   stage, `<name> (recovered)` (numbered when taken), named in `recovery_notes`.
+## A stray that cannot be moved is kept where it is and named in
+## `recovery_problems` (#1253), so no copy of a stage is ever lost.
 static func _recover_stranded() -> void:
-	recovery_problems = PackedStringArray()
 	var dir_path: String = stages_dir()
 	var files: PackedStringArray = DirAccess.get_files_at(dir_path)
-	var present: Dictionary = {}
+	files.sort()
+	var present: Dictionary = {} # lower-case key -> key as saved
 	for file: String in files:
 		if file.get_extension().to_lower() == EXTENSION:
-			present[file.get_basename().to_lower()] = true
-	var stray_re := RegEx.create_from_string(STRAY_PATTERN)
-	for kind: String in ["bak", "tmp"]: # an old file set aside beats an unfinished new one
+			present[file.get_basename().to_lower()] = file.get_basename()
+	if _stray_re == null:
+		_stray_re = RegEx.create_from_string(STRAY_PATTERN)
+	for kind: String in ["bak", "tmp"]:
 		for file: String in files:
-			var m: RegExMatch = stray_re.search(file)
+			var m: RegExMatch = _stray_re.search(file)
 			if m == null or m.get_string(2).to_lower() != kind:
 				continue
 			var key: String = m.get_string(1)
 			var stray: String = ProjectSettings.globalize_path(dir_path.path_join(file))
-			if present.has(key.to_lower()):
-				DirAccess.remove_absolute(stray) # the stage is in place: a leftover
-				continue
-			var usable: bool = kind == "bak" or bool(StageDefScript.validate_text(FileAccess.get_file_as_string(stray))["ok"])
-			if not usable:
+			var text: String = FileAccess.get_file_as_string(stray)
+			var checked: Dictionary = StageDefScript.validate_text(text)
+			if kind == "tmp" and not bool(checked["ok"]):
 				DirAccess.remove_absolute(stray) # an unfinished write that is not a stage
 				continue
-			var err: Error = ERR_CANT_CREATE if fail_renames_for_test else DirAccess.rename_absolute(stray, ProjectSettings.globalize_path(path_of(key)))
-			if err == OK:
-				present[key.to_lower()] = true
+			if not present.has(key.to_lower()):
+				var err: Error = _rename(stray, ProjectSettings.globalize_path(path_of(key)))
+				if err == OK:
+					present[key.to_lower()] = key
+				else:
+					_keep_problem(file, err)
+				continue
+			if text == FileAccess.get_file_as_string(path_of(present[key.to_lower()])):
+				DirAccess.remove_absolute(stray) # the same stage is in place: a leftover
+				continue
+			var recovered: String = _recovered_key(key, present)
+			var moved: Error
+			if bool(checked["ok"]):
+				# Renamed inside too, so opening and saving it never lands back on `key`.
+				var def: Dictionary = StageDefScript.to_json_data(checked["def"])
+				def["name"] = recovered
+				moved = OK if _write_safely(path_of(recovered), JSON.stringify(def, "\t"), "") == "" else ERR_CANT_CREATE
+				if moved == OK:
+					DirAccess.remove_absolute(stray)
 			else:
-				recovery_problems.append("%s (%s)" % [file, error_string(err)])
-				push_warning("CustomStages: could not restore %s: %s; it is kept" % [file, error_string(err)])
+				moved = _rename(stray, ProjectSettings.globalize_path(path_of(recovered)))
+			if moved == OK:
+				present[recovered.to_lower()] = recovered
+				recovery_notes.append(recovered)
+			else:
+				_keep_problem(file, moved)
+
+static func _rename(from: String, to: String) -> Error:
+	return ERR_CANT_CREATE if fail_renames_for_test else DirAccess.rename_absolute(from, to)
+
+static func _keep_problem(file: String, err: Error) -> void:
+	recovery_problems.append("%s (%s)" % [file, error_string(err)])
+	push_warning("CustomStages: could not restore %s: %s; it is kept" % [file, error_string(err)])
+
+## A free key for a recovered copy of `key`: "<key> (recovered)", then
+## "(recovered 2)", ..., the base cut so the name fits `MAX_NAME_LENGTH`.
+static func _recovered_key(key: String, present: Dictionary) -> String:
+	var n: int = 1
+	while true:
+		var suffix: String = " (recovered)" if n == 1 else " (recovered %d)" % n
+		var base: String = key.left(StageDefScript.MAX_NAME_LENGTH - suffix.length()).strip_edges()
+		var candidate: String = base + suffix
+		if not present.has(candidate.to_lower()):
+			return candidate
+		n += 1
+	return key
 
 ## The name of a file beside `g_path` for `kind` ("tmp" or "bak"):
 ## `<g_path>.<kind>`, or numbered `-2`, `-3`, ... while that name is taken, so a

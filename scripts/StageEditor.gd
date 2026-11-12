@@ -1177,9 +1177,16 @@ func show_open_list() -> void:
 	rows.add_theme_constant_override("separation", 8)
 	scroll.add_child(rows)
 	var entries: Array[Dictionary] = CustomStagesScript.list()
-	# #1253: a stranded save that could not be put back is kept, and said so.
+	# #1253, #1255: what recovering an unfinished save did, at the top of the list.
+	var notes: PackedStringArray = PackedStringArray()
 	if not CustomStagesScript.recovery_problems.is_empty():
-		_message = _trf("STAGE_EDITOR_RECOVERY_FAILED", ", ".join(CustomStagesScript.recovery_problems))
+		notes.append(_trf("STAGE_EDITOR_RECOVERY_FAILED", ", ".join(CustomStagesScript.recovery_problems)))
+	if not CustomStagesScript.recovery_notes.is_empty():
+		notes.append(_trf("STAGE_EDITOR_RECOVERED_COPY", ", ".join(CustomStagesScript.recovery_notes)))
+	if not notes.is_empty():
+		var note: Label = ScreenKitScript.themed_label("\n".join(notes), 18, UiThemeScript.HINT_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "RecoveryNote", TextServer.AUTOWRAP_WORD_SMART)
+		rows.add_child(note)
+		_message = "\n".join(notes)
 		_refresh()
 	if entries.is_empty():
 		rows.add_child(ScreenKitScript.themed_label(tr("STAGE_EDITOR_OPEN_EMPTY"), 20, UiThemeScript.HINT_LABEL))

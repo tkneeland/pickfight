@@ -1350,6 +1350,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_editor_test_play_round_trip_1047",
 	"stage_editor_asks_before_replacing_1047",
 	"stage_editor_reports_failed_recovery_1253",
+	"custom_stage_recovery_keeps_differing_copies_1255",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4475,6 +4476,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_editor_asks_before_replacing_1047()
 		"stage_editor_reports_failed_recovery_1253":
 			return await _scenario_stage_editor_reports_failed_recovery_1253()
+		"custom_stage_recovery_keeps_differing_copies_1255":
+			return await _scenario_custom_stage_recovery_keeps_differing_copies_1255()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -64062,3 +64065,65 @@ func _scenario_stage_editor_reports_failed_recovery_1253() -> Array[String]:
 	CustomStages1047.dir_override = ""
 	_scenario_completed = true
 	return failures
+
+## #1255: recovery never deletes a stray that differs from the stage in place: it
+## becomes "<name> (recovered)" (renamed inside too), numbered when taken, in a
+## deterministic order; identical leftovers go; the Open popup lists what happened.
+func _scenario_custom_stage_recovery_keeps_differing_copies_1255() -> Array[String]:
+	var failures: Array[String] = []
+	var dir: String = _stages_dir_1047()
+	CustomStages1047.save(_stage_def_1049("Lone", 800.0), PackedStringArray())
+	var strays: Array = [
+		["Lone.json.bak", JSON.stringify(_stage_def_1049("Lone", 600.0))],
+		["Lone.json.bak-2", JSON.stringify(_stage_def_1049("Lone", 500.0))],
+		["Lone.json.tmp", FileAccess.get_file_as_string(CustomStages1047.path_of("Lone"))],
+		["Lone.json.tmp-2", "{"],
+	]
+	for stray: Array in strays:
+		var f := FileAccess.open(dir.path_join(stray[0]), FileAccess.WRITE)
+		f.store_string(stray[1])
+		f.close()
+	var keys: Array = CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"])
+	keys.sort()
+	if keys != ["Lone", "Lone (recovered 2)", "Lone (recovered)"]:
+		failures.append("recovery gave %s" % [keys])
+	if CustomStages1047.load_stage("Lone")["def"]["parts"][0]["size"][0] != 800.0:
+		failures.append("the stage in place was changed")
+	var first: Dictionary = CustomStages1047.load_stage("Lone (recovered)")
+	var second: Dictionary = CustomStages1047.load_stage("Lone (recovered 2)")
+	if not first["ok"] or first["def"]["name"] != "Lone (recovered)" or first["def"]["parts"][0]["size"][0] != 600.0:
+		failures.append("the first stray was not kept as 'Lone (recovered)': %s" % [first])
+	if not second["ok"] or second["def"]["parts"][0]["size"][0] != 500.0:
+		failures.append("the second stray was not kept as 'Lone (recovered 2)': %s" % [second])
+	if CustomStages1047.recovery_notes != PackedStringArray(["Lone (recovered)", "Lone (recovered 2)"]):
+		failures.append("recovery_notes is %s" % [CustomStages1047.recovery_notes])
+	for f2 in DirAccess.get_files_at(dir):
+		if f2.get_extension() != "json":
+			failures.append("recovery left %s" % f2)
+	# A second list() starts clean.
+	CustomStages1047.list()
+	if not CustomStages1047.recovery_notes.is_empty() or not CustomStages1047.recovery_problems.is_empty():
+		failures.append("a clean list() kept the last recovery's messages")
+	# The Open popup shows the messages at the top of its list.
+	var f3 := FileAccess.open(dir.path_join("Lone.json.bak"), FileAccess.WRITE)
+	f3.store_string(JSON.stringify(_stage_def_1049("Lone", 400.0)))
+	f3.close()
+	var editor: Node = load(StageEditorScene1047).instantiate()
+	get_root().add_child(editor)
+	await process_frame
+	editor.show_open_list()
+	var note: Label = editor.find_child("RecoveryNote", true, false) as Label
+	if note == null or not note.text.contains("Lone (recovered 3)"):
+		failures.append("the Open popup does not show the recovered copy: %s" % [note.text if note != null else "no note"])
+	editor.close_popup()
+	editor.queue_free()
+	await process_frame
+	# No folder at all: list() is empty and holds no stale messages.
+	CustomStages1047.recovery_problems = PackedStringArray(["stale"])
+	CustomStages1047.dir_override = dir.path_join("missing")
+	if not CustomStages1047.list().is_empty() or not CustomStages1047.recovery_problems.is_empty():
+		failures.append("list() of a missing folder kept stale messages")
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
