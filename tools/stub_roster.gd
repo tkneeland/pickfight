@@ -70,3 +70,10 @@ func slot_pressed_ready(slot: int) -> bool:
 func clear_ready() -> void:
 	ready_taps.clear()
 	cleared_ready += 1
+
+## Every `share_stage_def()` call as `[id, def]` (#1049): the custom stage's
+## definition the real server sends to each Online PC joiner.
+var shared_stages: Array = []
+
+func share_stage_def(id: int, def: Dictionary) -> void:
+	shared_stages.append([id, def])

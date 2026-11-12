@@ -99,6 +99,29 @@ static func validate(data: Variant) -> Dictionary:
 		"schema": SCHEMA_VERSION, "name": String(d["name"]), "parts": clean_parts,
 		"spawns": clean_spawns, "modes": modes}}
 
+## An accepted (normalised) definition back in its JSON shape: vectors as [x, y]
+## arrays, ready for `JSON.stringify()` (#1049: sent to Online joiners; #1047:
+## saved to a file). `validate()` of the result gives `def` back.
+static func to_json_data(def: Dictionary) -> Dictionary:
+	var parts: Array = []
+	for part: Dictionary in def.get("parts", []):
+		var out: Dictionary = {"type": part["type"], "pos": _arr(part["pos"])}
+		if part.has("size"):
+			out["size"] = _arr(part["size"])
+		if not (part.get("params", {}) as Dictionary).is_empty():
+			out["params"] = (part["params"] as Dictionary).duplicate()
+		parts.append(out)
+	var spawns: Array = []
+	for p: Vector2 in def.get("spawns", []):
+		spawns.append(_arr(p))
+	var data: Dictionary = {"schema": SCHEMA_VERSION, "name": String(def.get("name", "")), "parts": parts, "spawns": spawns}
+	if not (def.get("modes", []) as Array).is_empty():
+		data["modes"] = (def["modes"] as Array).duplicate()
+	return data
+
+static func _arr(v: Vector2) -> Array:
+	return [v.x, v.y]
+
 static func _check_part(raw: Variant, i: int) -> Dictionary:
 	if typeof(raw) != TYPE_DICTIONARY:
 		return {"reason": "part %d must be an object" % i}

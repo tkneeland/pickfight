@@ -1334,6 +1334,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_game_added_delay_budget_1195",
 	"round_countdown_unlock_clears_held_release_1197",
 	"round_countdown_round_over_before_go_1197",
+	"custom_stage_def_round_trips_and_packs_1049",
+	"custom_stage_def_sent_to_pc_joiners_1049",
+	"custom_stage_round_shares_def_1049",
+	"remote_client_builds_custom_stage_1049",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4427,6 +4431,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_round_countdown_unlock_clears_held_release_1197()
 		"round_countdown_round_over_before_go_1197":
 			return await _scenario_round_countdown_round_over_before_go_1197()
+		"custom_stage_def_round_trips_and_packs_1049":
+			return await _scenario_custom_stage_def_round_trips_and_packs_1049()
+		"custom_stage_def_sent_to_pc_joiners_1049":
+			return await _scenario_custom_stage_def_sent_to_pc_joiners_1049()
+		"custom_stage_round_shares_def_1049":
+			return await _scenario_custom_stage_round_shares_def_1049()
+		"remote_client_builds_custom_stage_1049":
+			return await _scenario_remote_client_builds_custom_stage_1049()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -63009,5 +63021,225 @@ func _scenario_round_countdown_round_over_before_go_1197() -> Array[String]:
 	if survived > 150:
 		failures.append("the winner of a round left during the hold was credited %d ms survival, want ~0" % survived)
 	await _teardown(loop["stage"], false)
+	_scenario_completed = true
+	return failures
+# --- Issue #1049: custom stages Online -----------------------------------------
+
+const StageDef1049 := preload("res://scripts/StageDef.gd")
+const StageBuilder1049 := preload("res://scripts/StageBuilder.gd")
+
+## A valid stage definition in its JSON shape, `name` and its platform's width varied.
+func _stage_def_1049(name: String = "Ledges", width: float = 800.0) -> Dictionary:
+	var spawns: Array = []
+	for i in 8:
+		spawns.append([-300.0 + i * 80.0, -40.0])
+	return {"schema": 1, "name": name, "modes": ["stock"], "spawns": spawns,
+		"parts": [{"type": "Platform", "pos": [0.0, 0.0], "size": [width, 24.0], "params": {"one_way": true}},
+			{"type": "Platform", "pos": [-500.0, -200.0], "size": [200.0, 24.0]},
+			{"type": "KillFloor", "pos": [0.0, 900.0]}]}
+
+## A stage's parts and spawns as comparable lines: name, kind, position, size.
+func _stage_lines_1049(stage: Node) -> PackedStringArray:
+	var lines := PackedStringArray()
+	for child in stage.get_children():
+		var line: String = "%s %s %s" % [child.name, child.get_class(), child.get("position")]
+		if child.get("size") != null:
+			line += " size %s one_way %s" % [child.get("size"), child.get("one_way")]
+		lines.append(line)
+	return lines
+
+## The definition survives the round trip to JSON and back, rides along on a
+## built stage, and survives packing the stage into a PackedScene.
+func _scenario_custom_stage_def_round_trips_and_packs_1049() -> Array[String]:
+	var failures: Array[String] = []
+	var checked: Dictionary = StageDef1049.validate(_stage_def_1049())
+	if not checked["ok"]:
+		failures.append("the fixture definition was rejected: %s" % checked["reason"])
+		return failures
+	var data: Dictionary = StageDef1049.to_json_data(checked["def"])
+	var again: Dictionary = StageDef1049.validate_text(JSON.stringify(data))
+	if not again["ok"] or again["def"] != checked["def"]:
+		failures.append("to_json_data() did not round-trip: %s" % again["reason"])
+	var built: Dictionary = StageBuilder1049.build(_stage_def_1049())
+	var stage: Node2D = built["stage"]
+	if StageBuilder1049.def_of(stage) != data:
+		failures.append("the built stage does not carry its definition: %s" % [StageBuilder1049.def_of(stage)])
+	var want: PackedStringArray = _stage_lines_1049(stage)
+	var scene: PackedScene = StageBuilder1049.pack(stage)
+	var copy: Node = scene.instantiate()
+	if StageBuilder1049.def_of(copy) != data:
+		failures.append("the packed stage lost its definition")
+	if _stage_lines_1049(copy) != want:
+		failures.append("the packed stage differs: %s, wanted %s" % [_stage_lines_1049(copy), want])
+	if copy.get("mode_weights") != stage.get("mode_weights"):
+		failures.append("the packed stage lost its mode weights")
+	var bare := Node2D.new()
+	if StageBuilder1049.def_of(bare) != {}:
+		failures.append("a stage with no definition reported one")
+	bare.free()
+	stage.free()
+	copy.free()
+	_scenario_completed = true
+	return failures
+
+## The host sends a custom stage's definition to each Online PC joiner, never to a
+## phone; a built-in stage sends nothing and clears it; a PC joiner binding while
+## a custom stage is in play is sent it then. The biggest definition the limits
+## allow is a frame of a few KB.
+func _scenario_custom_stage_def_sent_to_pc_joiners_1049() -> Array[String]:
+	var failures: Array[String] = []
+	var fx: Array = await _damage_bar_fixture()
+	var server: Node = fx[1]
+	var host_slot: int = fx[3]
+	var free: Array[int] = []
+	for slot in 3:
+		if slot != host_slot:
+			free.append(slot)
+	var link := _Link689.new()
+	fx[0].add_child(link)
+	var pc: Variant = _remote_seat_review_net(link, 7, false)
+	var phone: Variant = _remote_seat_review_net(link, 8, true)
+	server._slot_peers[free[0]] = pc
+	server._slot_peers[free[1]] = phone
+	var def: Dictionary = _stage_def_1049()
+	server.share_stage_def(47, def)
+	var frames: Array = []
+	for text in link.texts:
+		frames.append(JSON.parse_string(text))
+	if frames.size() != 1 or not frames[0] is Dictionary or frames[0].get("t") != "stage_def" or int(frames[0].get("id", -1)) != 47 or frames[0].get("def") != JSON.parse_string(JSON.stringify(def)):
+		failures.append("one stage_def frame for id 47 to the PC joiner was wanted, sent %s" % [link.texts])
+	var size: int = link.texts[0].to_utf8_buffer().size() if not link.texts.is_empty() else 0
+	link.texts.clear()
+	server.share_stage_def(3, {})
+	if not link.texts.is_empty() or not server.shared_stage_message().is_empty():
+		failures.append("a built-in stage sent %s or kept a shared stage" % [link.texts])
+	server.share_stage_def(48, def)
+	link.texts.clear()
+	server._slot_peers[free[0]] = null
+	server._attach(free[0], pc)
+	var late: bool = false
+	for text in link.texts:
+		var frame: Variant = JSON.parse_string(text)
+		if frame is Dictionary and frame.get("t") == "stage_def" and int(frame.get("id", -1)) == 48:
+			late = true
+	if not late:
+		failures.append("a PC joiner binding mid-round was not sent the custom stage")
+	# The biggest definition the limits allow is still a modest frame.
+	var big: Dictionary = _stage_def_1049()
+	var parts: Array = []
+	for i in StageDef1049.MAX_PARTS - 1:
+		parts.append({"type": "Platform", "pos": [-3000.123 + i * 90.0, -2000.456], "size": [80.5, 24.5], "params": {"one_way": true}})
+	parts.append({"type": "KillFloor", "pos": [0.0, 2900.0]})
+	big["parts"] = parts
+	var spawns: Array = []
+	for i in StageDef1049.MAX_SPAWNS:
+		spawns.append([-3999.999 + i * 400.0, -2999.999])
+	big["spawns"] = spawns
+	big["name"] = "W".repeat(StageDef1049.MAX_NAME_LENGTH)
+	var big_ok: Dictionary = StageDef1049.validate(big)
+	if not big_ok["ok"]:
+		failures.append("the biggest fixture definition is invalid: %s" % big_ok["reason"])
+	var big_bytes: int = JSON.stringify({"t": "stage_def", "id": 65535, "def": big}).to_utf8_buffer().size()
+	if big_bytes > 16384:
+		failures.append("the biggest stage_def frame is %d bytes, over 16 KB" % big_bytes)
+	print("    stage_def frame: fixture %d bytes, biggest %d bytes" % [size, big_bytes])
+	fx[0].queue_free()
+	await _await_ticks(2)
+	_scenario_completed = true
+	return failures
+
+## A round dealt onto a custom stage hands its definition to the server; a
+## built-in stage hands an empty one.
+func _scenario_custom_stage_round_shares_def_1049() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _koth_stage_rig(STAGE_PATHS[0])
+	var rm: Node = rig["rm"]
+	var roster: Node = rig["roster"]
+	await _await_ticks(2)
+	var built: Dictionary = StageBuilder1049.build(_stage_def_1049())
+	var custom: PackedScene = StageBuilder1049.pack(built["stage"])
+	built["stage"].free()
+	var customs: Array[PackedScene] = [custom]
+	rm.stage_scenes = customs
+	roster.shared_stages.clear()
+	rm._swap_stage()
+	var want: Dictionary = StageDef1049.to_json_data(StageDef1049.validate(_stage_def_1049())["def"])
+	if roster.shared_stages.size() != 1 or roster.shared_stages[0][0] != 0 or roster.shared_stages[0][1] != want:
+		failures.append("the custom stage's swap shared %s, wanted [0, its definition]" % [roster.shared_stages])
+	var builtins: Array[PackedScene] = [load(STAGE_PATHS[0]) as PackedScene]
+	rm.stage_scenes = builtins
+	roster.shared_stages.clear()
+	rm._swap_stage()
+	if roster.shared_stages.size() != 1 or roster.shared_stages[0][1] != {}:
+		failures.append("a built-in stage's swap shared %s, wanted an empty definition" % [roster.shared_stages])
+	await _teardown(rig["stage"], false)
+	_scenario_completed = true
+	return failures
+
+## The Online client builds a custom stage id from the host's definition with the
+## host's builder: identical parts and spawns; nothing before the definition comes,
+## then built when it does; a rejected definition or one for a built-in id is
+## ignored; a changed definition for the same id rebuilds it.
+func _scenario_remote_client_builds_custom_stage_1049() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var custom_id: int = RemoteClientScript241.stage_paths().size()
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(custom_id, 1)))
+	client._render()
+	if client.has_stage():
+		failures.append("a custom stage id drew a stage before its definition arrived")
+	var def: Dictionary = _stage_def_1049()
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id, "def": def}))
+	client._render()
+	await process_frame
+	var host_stage: Node2D = StageBuilder1049.build(def)["stage"]
+	var want: PackedStringArray = _stage_lines_1049(host_stage)
+	host_stage.free()
+	var got: Node = client._stage
+	if got == null or not client.has_stage() or client.stage_id() != custom_id:
+		failures.append("the custom stage was not built once its definition arrived")
+	else:
+		# The client's stage also grows its backdrop on entering the tree; compare the built parts.
+		var built: PackedStringArray = PackedStringArray()
+		for line in _stage_lines_1049(got):
+			if line.begins_with("Part") or line.begins_with("KillZone") or line.begins_with("Spawn"):
+				built.append(line)
+		if built != want:
+			failures.append("the client's custom stage differs from the host's:\n%s\nwanted\n%s" % ["\n".join(built), "\n".join(want)])
+		if got.get("stage_index") != custom_id:
+			failures.append("the custom stage's stage_index is %s, wanted %d" % [got.get("stage_index"), custom_id])
+	# A changed definition for the same id rebuilds it.
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id, "def": _stage_def_1049("Wider", 1200.0)}))
+	client._render()
+	await process_frame
+	var wider: Node = client._stage
+	if wider == null or wider == got or wider.get_node_or_null("Part0") == null or wider.get_node("Part0").size.x != 1200.0:
+		failures.append("a changed definition for the shown id did not rebuild the stage")
+	# Hostile or misplaced definitions are dropped; the stage on screen stays.
+	var hostile: Dictionary = _stage_def_1049("Evil")
+	hostile["parts"].append({"type": "Script", "pos": [0, 0]})
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id, "def": hostile}))
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id, "def": "not a definition"}))
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": 0, "def": _stage_def_1049("Shadow")}))
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": "x", "def": def}))
+	client._render()
+	await process_frame
+	if client._stage != wider or client._custom_stage.get("def", {}).get("name") != "Wider":
+		failures.append("a rejected or misplaced definition replaced the custom stage")
+	# A rejected definition for an id never shown draws nothing there.
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(custom_id + 1, 1)))
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 1, "def": hostile}))
+	client._render()
+	await process_frame
+	if client.has_stage():
+		failures.append("a custom id whose definition was rejected drew a stage")
+	# A built-in id still loads its own scene.
+	client.apply_snapshot(_rc_codec_241(_rc_world_241(0, 1)))
+	client._render()
+	await process_frame
+	if client._stage == null or client._stage.scene_file_path != RemoteClientScript241.stage_paths()[0]:
+		failures.append("a built-in id no longer loads its scene after a custom stage")
+	await _rc_close_241(rig)
 	_scenario_completed = true
 	return failures

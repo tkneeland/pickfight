@@ -16,6 +16,11 @@ extends RefCounted
 ## Parts are named `Part0`, `Part1`, ... in definition order (a definition
 ## carries no part names). Not wired into the rotation or the host toggles yet;
 ## that waits for the editor (#1047).
+##
+## #1049: every built stage carries its definition, in its JSON shape
+## (`StageDef.to_json_data()`), as the `DEF_META` metadata, which `pack()` keeps.
+## The host sends it to each Online joiner, who rebuilds the same stage with this
+## same builder after checking it with the same limits.
 
 const StageDefScript := preload("res://scripts/StageDef.gd")
 const StageScript := preload("res://scripts/Stage.gd")
@@ -26,6 +31,8 @@ const KillFloorScene := preload("res://scenes/parts/KillFloor.tscn")
 ## the same as the built-in mode stages (Bastion, Mesa, Pitch).
 const TAGGED_MODE_WEIGHT: float = 4.0
 const OTHER_MODE_WEIGHT: float = 0.3
+## The metadata key a built stage keeps its definition under (#1049).
+const DEF_META: StringName = &"stage_def"
 
 ## Builds a stage from JSON text. {"ok", "reason", "stage"}: the stage is null
 ## when the definition is rejected, and "reason" says why.
@@ -36,6 +43,23 @@ static func build_text(text: String) -> Dictionary:
 ## never built). Same result shape as `build_text()`.
 static func build(data: Variant) -> Dictionary:
 	return _wrap(StageDefScript.validate(data))
+
+## The definition a stage was built from, in its JSON shape, or {} for a
+## built-in stage (#1049).
+static func def_of(stage: Node) -> Dictionary:
+	if stage == null or not stage.has_meta(DEF_META):
+		return {}
+	var def: Variant = stage.get_meta(DEF_META)
+	return def if def is Dictionary else {}
+
+## A built stage (not yet in the tree) as a PackedScene the rotation can hold
+## like a built-in one; its definition rides along as metadata (#1049).
+static func pack(stage: Node2D) -> PackedScene:
+	for child in stage.get_children():
+		child.owner = stage
+	var scene := PackedScene.new()
+	scene.pack(stage)
+	return scene
 
 static func _wrap(checked: Dictionary) -> Dictionary:
 	if not bool(checked["ok"]):
@@ -48,6 +72,7 @@ static func _build_valid(def: Dictionary) -> Node2D:
 	var node_name: String = String(def["name"]).validate_node_name()
 	stage.name = node_name if node_name != "" else "CustomStage"
 	stage.set_meta("custom_stage_name", def["name"])
+	stage.set_meta(DEF_META, StageDefScript.to_json_data(def))
 	var modes: Array = def["modes"]
 	if not modes.is_empty():
 		var weights: Dictionary = {"_other": OTHER_MODE_WEIGHT}
