@@ -1338,6 +1338,17 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"custom_stage_def_sent_to_pc_joiners_1049",
 	"custom_stage_round_shares_def_1049",
 	"remote_client_builds_custom_stage_1049",
+	"custom_stages_store_1047",
+	"custom_stages_off_by_default_1047",
+	"round_manager_loads_custom_stages_1047",
+	"custom_stage_preview_drawn_1047",
+	"stage_test_play_round_trip_1047",
+	"title_stage_editor_card_1047",
+	"stage_editor_new_stage_is_valid_1047",
+	"stage_editor_draw_move_resize_delete_1047",
+	"stage_editor_save_open_import_export_1047",
+	"stage_editor_test_play_round_trip_1047",
+	"stage_editor_asks_before_replacing_1047",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4439,6 +4450,28 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_custom_stage_round_shares_def_1049()
 		"remote_client_builds_custom_stage_1049":
 			return await _scenario_remote_client_builds_custom_stage_1049()
+		"custom_stages_store_1047":
+			return await _scenario_custom_stages_store_1047()
+		"custom_stages_off_by_default_1047":
+			return await _scenario_custom_stages_off_by_default_1047()
+		"round_manager_loads_custom_stages_1047":
+			return await _scenario_round_manager_loads_custom_stages_1047()
+		"custom_stage_preview_drawn_1047":
+			return await _scenario_custom_stage_preview_drawn_1047()
+		"stage_test_play_round_trip_1047":
+			return await _scenario_stage_test_play_round_trip_1047()
+		"title_stage_editor_card_1047":
+			return await _scenario_title_stage_editor_card_1047()
+		"stage_editor_new_stage_is_valid_1047":
+			return await _scenario_stage_editor_new_stage_is_valid_1047()
+		"stage_editor_draw_move_resize_delete_1047":
+			return await _scenario_stage_editor_draw_move_resize_delete_1047()
+		"stage_editor_save_open_import_export_1047":
+			return await _scenario_stage_editor_save_open_import_export_1047()
+		"stage_editor_test_play_round_trip_1047":
+			return await _scenario_stage_editor_test_play_round_trip_1047()
+		"stage_editor_asks_before_replacing_1047":
+			return await _scenario_stage_editor_asks_before_replacing_1047()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -63139,7 +63172,9 @@ func _scenario_custom_stage_def_sent_to_pc_joiners_1049() -> Array[String]:
 	var big_ok: Dictionary = StageDef1049.validate(big)
 	if not big_ok["ok"]:
 		failures.append("the biggest fixture definition is invalid: %s" % big_ok["reason"])
-	var big_bytes: int = JSON.stringify({"t": "stage_def", "id": 65535, "def": big}).to_utf8_buffer().size()
+	# Measured as the host sends it: the built stage's normalised definition.
+	var big_wire: Dictionary = StageDef1049.to_json_data(big_ok["def"]) if big_ok["ok"] else big
+	var big_bytes: int = JSON.stringify({"t": "stage_def", "id": 65535, "def": big_wire}).to_utf8_buffer().size()
 	if big_bytes > 16384:
 		failures.append("the biggest stage_def frame is %d bytes, over 16 KB" % big_bytes)
 	print("    stage_def frame: fixture %d bytes, biggest %d bytes" % [size, big_bytes])
@@ -63172,6 +63207,12 @@ func _scenario_custom_stage_round_shares_def_1049() -> Array[String]:
 	rm._swap_stage()
 	if roster.shared_stages.size() != 1 or roster.shared_stages[0][1] != {}:
 		failures.append("a built-in stage's swap shared %s, wanted an empty definition" % [roster.shared_stages])
+	rm.stage_scenes = customs
+	rm._swap_stage()
+	roster.shared_stages.clear()
+	rm._clear_stage()
+	if roster.shared_stages.size() != 1 or roster.shared_stages[0][1] != {}:
+		failures.append("clearing the stage (back to the lobby) shared %s, wanted an empty definition" % [roster.shared_stages])
 	await _teardown(rig["stage"], false)
 	_scenario_completed = true
 	return failures
@@ -63225,8 +63266,27 @@ func _scenario_remote_client_builds_custom_stage_1049() -> Array[String]:
 	client._on_host_text(JSON.stringify({"t": "stage_def", "id": "x", "def": def}))
 	client._render()
 	await process_frame
-	if client._stage != wider or client._custom_stage.get("def", {}).get("name") != "Wider":
-		failures.append("a rejected or misplaced definition replaced the custom stage")
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 0.5, "def": _stage_def_1049("Half")}))
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": 70000, "def": _stage_def_1049("Huge")}))
+	if client._stage != wider or (client._custom_stages.get(custom_id, {}) as Dictionary).get("name") != "Wider" or client._custom_stages.size() != 1:
+		failures.append("a rejected or misplaced definition was kept or replaced the custom stage: %s" % [client._custom_stages.keys()])
+	# Unknown keys are not kept: the stored definition is the checked, normalised one.
+	var extra: Dictionary = _stage_def_1049("Extra")
+	extra["junk"] = "x".repeat(1000)
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 2, "def": extra}))
+	if (client._custom_stages.get(custom_id + 2, {}) as Dictionary).has("junk"):
+		failures.append("an unknown key in the definition was stored")
+	# A mid-round stage change: the next stage's definition arrives while the old
+	# one is on screen; the old one still rebuilds (night variant) until the swap.
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 3, "def": _stage_def_1049("Next")}))
+	client._sync_stage(true)
+	await process_frame
+	if client._stage == null or client._stage.get_node_or_null("Part0") == null or client._stage.get_node("Part0").size.x != 1200.0:
+		failures.append("the shown custom stage was lost when the next one's definition arrived")
+	for i in 6:
+		client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 10 + i, "def": _stage_def_1049("Many%d" % i)}))
+	if client._custom_stages.size() != RemoteClientScript241.CUSTOM_STAGES_KEPT:
+		failures.append("the client kept %d custom definitions, wanted %d" % [client._custom_stages.size(), RemoteClientScript241.CUSTOM_STAGES_KEPT])
 	# A rejected definition for an id never shown draws nothing there.
 	client.apply_snapshot(_rc_codec_241(_rc_world_241(custom_id + 1, 1)))
 	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 1, "def": hostile}))
@@ -63241,5 +63301,694 @@ func _scenario_remote_client_builds_custom_stage_1049() -> Array[String]:
 	if client._stage == null or client._stage.scene_file_path != RemoteClientScript241.stage_paths()[0]:
 		failures.append("a built-in id no longer loads its scene after a custom stage")
 	await _rc_close_241(rig)
+	_scenario_completed = true
+	return failures
+# --- Issue #1047: stage editor (store, rotation, toggles) -----------------------
+
+const CustomStages1047 := preload("res://scripts/CustomStages.gd")
+const StageRotation1047 := preload("res://scripts/StageRotation.gd")
+const HostSettings1047 := preload("res://scripts/HostSettings.gd")
+const StagePreviews1047 := preload("res://scripts/StagePreviews.gd")
+
+## A fresh temp folder for the store, emptied; CustomStages uses it until reset.
+func _stages_dir_1047() -> String:
+	var dir: String = OS.get_temp_dir().path_join("pf_stages_1047_%d" % OS.get_process_id())
+	DirAccess.make_dir_recursive_absolute(dir)
+	var d := DirAccess.open(dir)
+	if d != null:
+		for f in d.get_files():
+			d.remove(f)
+	CustomStages1047.dir_override = dir
+	return dir
+
+## Saving, listing, loading, import, export and delete, each checked by StageDef;
+## names that are empty or a built-in stage's are refused.
+func _scenario_custom_stages_store_1047() -> Array[String]:
+	var failures: Array[String] = []
+	var dir: String = _stages_dir_1047()
+	var builtins := PackedStringArray(["Flatlands", "Pitch"])
+	var saved: Dictionary = CustomStages1047.save(_stage_def_1049("My Ledges?"), builtins)
+	if not saved["ok"] or saved["key"] != "My Ledges" or not FileAccess.file_exists(saved["path"]):
+		failures.append("a good stage was not saved as 'My Ledges': %s" % [saved])
+	for bad: Array in [[_stage_def_1049("flatlands"), "built-in"], [_stage_def_1049("???"), "letter or digit"], [_stage_def_1049("- -"), "letter or digit"]]:
+		var res: Dictionary = CustomStages1047.save(bad[0], builtins)
+		if res["ok"] or not String(res["reason"]).contains(bad[1]):
+			failures.append("saving '%s' gave %s, wanted a refusal about '%s'" % [bad[0]["name"], res, bad[1]])
+	var invalid: Dictionary = _stage_def_1049("Short")
+	invalid["spawns"] = [[0, 0]]
+	if CustomStages1047.save(invalid, builtins)["ok"]:
+		failures.append("a definition with one spawn was saved")
+	# A broken file dropped in by hand is listed with its reason and never built.
+	var f := FileAccess.open(dir.path_join("Broken.json"), FileAccess.WRITE)
+	f.store_string("{\"schema\": 1,")
+	f.close()
+	var listed: Array[Dictionary] = CustomStages1047.list()
+	var keys: Array = listed.map(func(e: Dictionary) -> String: return e["key"])
+	if keys != ["Broken", "My Ledges"] or listed[0]["ok"] or not listed[1]["ok"]:
+		failures.append("list() gave %s" % [listed.map(func(e: Dictionary) -> String: return "%s ok=%s" % [e["key"], e["ok"]])])
+	var loaded: Dictionary = CustomStages1047.load_stage("My Ledges")
+	if not loaded["ok"] or loaded["def"]["name"] != "My Ledges?" or loaded["def"]["parts"].size() != 3:
+		failures.append("load_stage() gave %s" % [loaded])
+	var scenes: Array[PackedScene] = CustomStages1047.scenes(builtins)
+	if scenes.size() != 1 or HostSettings1047.name_of(scenes[0].resource_path) != "My Ledges":
+		failures.append("scenes() gave %d scenes, the first keyed '%s'" % [scenes.size(), HostSettings1047.name_of(scenes[0].resource_path) if not scenes.is_empty() else ""])
+	# Building the scenes again (a lobby refresh) works the same.
+	if CustomStages1047.scenes(builtins).size() != 1:
+		failures.append("a second scenes() call did not give the stage again")
+	# Export to an outside file, then import it under a new name.
+	var outside: String = OS.get_temp_dir().path_join("pf_export_1047_%d.json" % OS.get_process_id())
+	var exp: Dictionary = CustomStages1047.export_file(_stage_def_1049("Shared"), outside)
+	if not exp["ok"] or not CustomStages1047.read_file(outside)["ok"]:
+		failures.append("export_file() did not write a readable stage: %s" % [exp])
+	var imp: Dictionary = CustomStages1047.import_file(outside, builtins)
+	if not imp["ok"] or imp["key"] != "Shared" or not CustomStages1047.load_stage("Shared")["ok"]:
+		failures.append("import_file() did not store 'Shared': %s" % [imp])
+	if CustomStages1047.import_file(dir.path_join("Broken.json"), builtins)["ok"]:
+		failures.append("a broken file was imported")
+	if not CustomStages1047.delete("Shared") or CustomStages1047.load_stage("Shared")["ok"] or CustomStages1047.delete("Shared"):
+		failures.append("delete() did not remove 'Shared' exactly once")
+	# Review of #1252: a save or import over an existing stage (any case) is refused
+	# with "exists" until the caller says to overwrite.
+	var again: Dictionary = CustomStages1047.save(_stage_def_1049("my ledges", 600.0), builtins)
+	if again["ok"] or not again["exists"] or again["key"] != "My Ledges":
+		failures.append("saving over 'My Ledges' (another case) was not refused as existing: %s" % [again])
+	if CustomStages1047.load_stage("My Ledges")["def"]["parts"][0]["size"][0] != 800.0:
+		failures.append("a refused save changed the stored stage")
+	var replaced: Dictionary = CustomStages1047.save(_stage_def_1049("my ledges", 600.0), builtins, true)
+	var keys_now: Array = CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"])
+	if not replaced["ok"] or keys_now.count("my ledges") + keys_now.count("My Ledges") != 1 or CustomStages1047.load_stage("my ledges")["def"]["parts"][0]["size"][0] != 600.0:
+		failures.append("overwrite did not replace the stage in one file: %s, keys %s" % [replaced, keys_now])
+	CustomStages1047.export_file(_stage_def_1049("my ledges"), outside)
+	if not CustomStages1047.import_file(outside, builtins)["exists"]:
+		failures.append("importing over an existing stage was not refused as existing")
+	# A case-only rename moves the file safely and keeps the stage's switches.
+	var hs_before: Dictionary = HostSettings1047.shared().custom_stages_on.duplicate(true)
+	HostSettings1047.shared().custom_stages_on = {"classic": PackedStringArray(["my ledges"])}
+	var renamed: Dictionary = CustomStages1047.save(_stage_def_1049("MY LEDGES", 700.0), builtins, true)
+	var keys_after: Array = CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"])
+	if not renamed["ok"] or not keys_after.has("MY LEDGES") or keys_after.has("my ledges") or HostSettings1047.shared().custom_stages_on["classic"] != PackedStringArray(["MY LEDGES"]):
+		failures.append("a case-only rename gave %s, keys %s, switches %s" % [renamed, keys_after, HostSettings1047.shared().custom_stages_on])
+	for f2 in DirAccess.get_files_at(dir):
+		if f2.get_extension() != "json":
+			failures.append("a save left %s in the store" % f2)
+	HostSettings1047.shared().custom_stages_on = hs_before
+	# A failed write (a full disk) leaves the saved stage and nothing else behind.
+	CustomStages1047.fail_writes_for_test = true
+	var failed: Dictionary = CustomStages1047.save(_stage_def_1049("MY LEDGES", 300.0), builtins, true)
+	CustomStages1047.fail_writes_for_test = false
+	if failed["ok"] or CustomStages1047.load_stage("MY LEDGES")["def"]["parts"][0]["size"][0] != 700.0:
+		failures.append("a failed write replaced the saved stage: %s" % [failed])
+	for f3 in DirAccess.get_files_at(dir):
+		if f3.get_extension() != "json":
+			failures.append("a failed write left %s in the store" % f3)
+	# A failed export keeps the external copy already there.
+	CustomStages1047.export_file(_stage_def_1049("Kept"), outside)
+	CustomStages1047.fail_writes_for_test = true
+	var bad_export: Dictionary = CustomStages1047.export_file(_stage_def_1049("Lost"), outside)
+	CustomStages1047.fail_writes_for_test = false
+	if bad_export["ok"] or CustomStages1047.read_file(outside)["def"].get("name") != "Kept":
+		failures.append("a failed export replaced the file already there: %s" % [bad_export])
+	for f4 in DirAccess.get_files_at(outside.get_base_dir()):
+		if f4.begins_with(outside.get_file().get_basename()) and f4 != outside.get_file():
+			failures.append("an export left %s beside the target" % f4)
+	# A crash mid-save: list() restores a stranded .bak, moves in a valid .tmp,
+	# and drops a broken one, leaving only .json files.
+	var good_text: String = JSON.stringify(_stage_def_1049("Stranded"))
+	for stray: Array in [["Stranded.bak", good_text], ["Orphan.tmp", JSON.stringify(_stage_def_1049("Orphan"))], ["Junk.tmp", "{"]]:
+		var sf := FileAccess.open(dir.path_join(stray[0]), FileAccess.WRITE)
+		sf.store_string(stray[1])
+		sf.close()
+	var listed_keys: Array = CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"])
+	if not listed_keys.has("Stranded") or not listed_keys.has("Orphan") or listed_keys.has("Junk"):
+		failures.append("stranded files were not recovered: %s" % [listed_keys])
+	for f5 in DirAccess.get_files_at(dir):
+		if f5.get_extension() != "json":
+			failures.append("recovery left %s in the store" % f5)
+	# Invisible characters are stripped from the name and the key.
+	var sneaky: Dictionary = CustomStages1047.save(_stage_def_1049("Zero\u200bWidth\u202e"), builtins)
+	if not sneaky["ok"] or sneaky["key"] != "ZeroWidth" or CustomStages1047.load_stage("ZeroWidth")["def"]["name"] != "ZeroWidth":
+		failures.append("invisible characters were kept: %s" % [sneaky])
+	# A name in another script keeps its letters.
+	var ja: Dictionary = CustomStages1047.save(_stage_def_1049("空の足場"), builtins)
+	if not ja["ok"] or ja["key"] != "空の足場":
+		failures.append("a Japanese name was saved as %s" % [ja])
+	# Deleting forgets the stage's switches, so a new one of that name starts off.
+	var hs: RefCounted = HostSettings1047.shared()
+	var before: Dictionary = hs.custom_stages_on.duplicate(true)
+	hs.custom_stages_on = {"classic": PackedStringArray(["空の足場", "Other"])}
+	CustomStages1047.delete("空の足場")
+	if hs.custom_stages_on["classic"] != PackedStringArray(["Other"]):
+		failures.append("deleting a stage left its switch on: %s" % [hs.custom_stages_on])
+	hs.custom_stages_on = before
+	DirAccess.remove_absolute(outside)
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
+## Custom stages join the rotation's known stages but are off by default in
+## every mode, are offered in the general modes only, are switched on per
+## mode, never fill the all-off fallback and do not count for World Tour.
+func _scenario_custom_stages_off_by_default_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stages_dir_1047()
+	CustomStages1047.save(_stage_def_1049("Mine"), PackedStringArray())
+	var settings: RefCounted = HostSettings1047.new()
+	settings.persist = false
+	var rotation: RefCounted = StageRotation1047.new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = [load(STAGE_PATHS[0]) as PackedScene, load(STAGE_PATHS[1]) as PackedScene]
+	scenes.append_array(CustomStages1047.scenes(PackedStringArray()))
+	rotation.scenes = scenes
+	var first: String = HostSettings1047.name_of(STAGE_PATHS[0])
+	if not settings.known_stages.has("Mine") or settings.custom_stages != PackedStringArray(["Mine"]):
+		failures.append("known %s, custom %s: the custom stage is not known as custom" % [settings.known_stages, settings.custom_stages])
+	if settings.builtin_stages().has("Mine") or not settings.builtin_stages().has(first):
+		failures.append("builtin_stages() gave %s" % [settings.builtin_stages()])
+	for mode_id: String in ["classic", "stock", "king_of_the_hill"]:
+		if settings.on_stages_for(mode_id).has("Mine"):
+			failures.append("the custom stage is on by default in %s" % mode_id)
+		if not settings.stages_for_mode(mode_id).has("Mine"):
+			failures.append("the custom stage is not offered in %s" % mode_id)
+	if settings.stages_for_mode("soccer").has("Mine"):
+		failures.append("the custom stage is offered in Soccer")
+	if not settings.set_stage_enabled_for("classic", "Mine", true) or not settings.on_stages_for("classic").has("Mine") or settings.on_stages_for("king_of_the_hill").has("Mine"):
+		failures.append("switching it on in Classic did not take, or leaked into another mode")
+	if not settings.set_stage_enabled_for("stock", "Mine", true) or not settings.on_stages_for("stock").has("Mine"):
+		failures.append("switching it on in Stock did not take")
+	# All off: the fallback deals built-in stages only.
+	settings.set_all_stages_for("classic", false)
+	if settings.enabled_stages_for("classic").has("Mine") or settings.enabled_stages_for("classic").is_empty():
+		failures.append("the all-off fallback gave %s" % [settings.enabled_stages_for("classic")])
+	settings.set_all_stages_for("classic", true)
+	if not settings.on_stages_for("classic").has("Mine"):
+		failures.append("All on did not switch the custom stage on")
+	# The last stage switched on cannot be switched off.
+	settings.set_all_stages_for("king_of_the_hill", false)
+	settings.set_stage_enabled_for("king_of_the_hill", "Mine", true)
+	if settings.set_stage_enabled_for("king_of_the_hill", "Mine", false):
+		failures.append("the last stage on in a mode could be switched off")
+	# Review of #1252: an off custom stage is not "one left on" for a built-in one.
+	settings.set_all_stages_for("sudden_death", true)
+	settings.set_stage_enabled_for("sudden_death", "Mine", false)
+	var second: String = HostSettings1047.name_of(STAGE_PATHS[1])
+	settings.set_stage_enabled_for("sudden_death", second, false)
+	if settings.set_stage_enabled_for("sudden_death", first, false) or not settings.on_stages_for("sudden_death").has(first):
+		failures.append("the last built-in stage on could be switched off while the custom stage was off")
+	# Restore defaults switches custom stages off again.
+	settings.restore_defaults()
+	if settings.on_stages_for("classic").has("Mine") or not settings.custom_stages_on.is_empty():
+		failures.append("Restore defaults left the custom stage on")
+	# With every stage off the rotation deals built-in stages only, Stock's pick too.
+	settings.set_all_stages_for("classic", false)
+	rotation.mode_id = ""
+	var dealt: Dictionary = {}
+	for i in rotation.scenes.size():
+		if rotation._stage_enabled(i):
+			dealt[HostSettings1047.name_of(rotation.scenes[i].resource_path)] = true
+	if dealt.has("Mine") or dealt.is_empty():
+		failures.append("all off, the rotation would deal %s" % [dealt.keys()])
+	settings.set_all_stages_for("stock", false)
+	for n in 20:
+		var pick: int = rotation.resolve_stock_pin()
+		if HostSettings1047.name_of(rotation.scenes[pick].resource_path) == "Mine":
+			failures.append("all off, Stock's pick landed on the custom stage")
+			break
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
+## RoundManager's rotation is its built-in stages in their order, then the saved
+## custom stages; a refresh never duplicates or moves them. Off unless opted in.
+func _scenario_round_manager_loads_custom_stages_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stages_dir_1047()
+	CustomStages1047.save(_stage_def_1049("Alpha"), PackedStringArray())
+	var rig: Dictionary = _koth_stage_rig(STAGE_PATHS[0])
+	var rm: Node = rig["rm"]
+	await _await_ticks(2)
+	var builtins: Array[PackedScene] = [load(STAGE_PATHS[2]) as PackedScene, load(STAGE_PATHS[0]) as PackedScene]
+	rm.stage_scenes = builtins
+	rm.refresh_custom_stages()
+	if rm.stage_scenes.size() != 2:
+		failures.append("a -s run loaded custom stages without opting in")
+	rm.load_custom_stages = true
+	rm.refresh_custom_stages()
+	rm.refresh_custom_stages()
+	CustomStages1047.save(_stage_def_1049("Beta"), PackedStringArray())
+	rm.refresh_custom_stages()
+	var names: Array = rm.stage_scenes.map(func(s: PackedScene) -> String: return HostSettings1047.name_of(s.resource_path))
+	var want: Array = [HostSettings1047.name_of(STAGE_PATHS[2]), HostSettings1047.name_of(STAGE_PATHS[0]), "Alpha", "Beta"]
+	if names != want:
+		failures.append("the rotation is %s, wanted %s" % [names, want])
+	if StageBuilder1049.def_of(rm.stage_scenes[2].instantiate()).get("name") != "Alpha":
+		failures.append("the custom scene does not carry its definition")
+	await _teardown(rig["stage"], false)
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
+## A custom stage's preview is drawn from its definition at the baked size.
+func _scenario_custom_stage_preview_drawn_1047() -> Array[String]:
+	var failures: Array[String] = []
+	var texture: Texture2D = StagePreviews1047.draw_preview(_stage_def_1049())
+	if texture == null or texture.get_size() != Vector2(StagePreviews1047.SIZE):
+		failures.append("no %s preview was drawn" % StagePreviews1047.SIZE)
+	else:
+		var image: Image = texture.get_image()
+		var colours: Dictionary = {}
+		for y in range(0, image.get_height(), 3):
+			for x in range(0, image.get_width(), 3):
+				colours[image.get_pixel(x, y).to_html(false)] = true
+		for want: Color in [StagePreviews1047.PLATFORM, StagePreviews1047.ONE_WAY, StagePreviews1047.KILL, StagePreviews1047.SPAWN]:
+			if not colours.has(want.to_html(false)):
+				failures.append("the preview has no %s pixels" % want.to_html(false))
+	if StagePreviews1047.draw_preview({}) != null:
+		failures.append("a non-definition drew a preview")
+	_scenario_completed = true
+	return failures
+
+const StageTestPlay1047 := preload("res://scripts/StageTestPlay.gd")
+
+## The scene changes StageTestPlay asked for, recorded instead of made.
+var _scene_changes_1047: Array[String] = []
+func _record_scene_1047(path: String) -> void:
+	_scene_changes_1047.append(path)
+
+func _test_play_reset_1047() -> void:
+	StageTestPlay1047.active = false
+	StageTestPlay1047.def = {}
+	StageTestPlay1047.editor_state = {}
+	StageTestPlay1047.change_scene = Callable()
+	_scene_changes_1047.clear()
+
+## A test play: the rotation is the edited stage alone, the round is Classic
+## whatever the host picked, and the round's end, the podium or Esc each go
+## back to the editor with its state kept. A stage that fails StageDef never starts.
+func _scenario_stage_test_play_round_trip_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_test_play_reset_1047()
+	StageTestPlay1047.change_scene = _record_scene_1047
+	var bad: Dictionary = _stage_def_1049("Bad")
+	bad["spawns"] = []
+	if StageTestPlay1047.start(get_root().get_tree(), bad, {}) == "" or StageTestPlay1047.active or not _scene_changes_1047.is_empty():
+		failures.append("an invalid stage started a test play")
+	var state: Dictionary = {"note": "kept"}
+	if StageTestPlay1047.start(get_root().get_tree(), _stage_def_1049("Trial"), state) != "" or _scene_changes_1047 != [StageTestPlay1047.MAIN_SCENE]:
+		failures.append("a valid stage did not start the game: %s" % [_scene_changes_1047])
+	_scene_changes_1047.clear()
+	for ending: String in ["round", "victory", "esc"]:
+		StageTestPlay1047.active = true
+		StageTestPlay1047.def = StageDef1049.to_json_data(StageDef1049.validate(_stage_def_1049("Trial"))["def"])
+		StageTestPlay1047.editor_state = state
+		var rig: Dictionary = _koth_stage_rig(STAGE_PATHS[0])
+		var rm: Node = rig["rm"]
+		await _await_ticks(2)
+		if not rm.is_test_play() or rm.stage_scenes.size() != 1 or StageBuilder1049.def_of(rm.stage_scenes[0].instantiate()).get("name") != "Trial":
+			failures.append("%s: the rotation is not the test stage alone" % ending)
+		rm._latch_game_mode()
+		if rm.game_mode != GameModesType.CLASSIC:
+			failures.append("%s: a test play runs mode '%s', wanted Classic" % [ending, rm.game_mode])
+		_scene_changes_1047.clear()
+		match ending:
+			"round":
+				rm._ko_round_ended(-1)
+				rm._try_start_round()
+			"victory":
+				rm._enter_victory()
+			"esc":
+				var esc := InputEventKey.new()
+				esc.pressed = true
+				esc.physical_keycode = KEY_ESCAPE
+				rm._input(esc)
+		if _scene_changes_1047 != [StageTestPlay1047.EDITOR_SCENE] or StageTestPlay1047.active or StageTestPlay1047.editor_state != state:
+			failures.append("%s: went to %s (active %s), wanted the editor with its state" % [ending, _scene_changes_1047, StageTestPlay1047.active])
+		await _teardown(rig["stage"], false)
+	_test_play_reset_1047()
+	_scenario_completed = true
+	return failures
+
+## The title screen's bottom row has Stage editor (E) beside Credits, which opens
+## the editor (the button and the E key); the demo build leaves it out.
+func _scenario_title_stage_editor_card_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_test_play_reset_1047()
+	StageTestPlay1047.change_scene = _record_scene_1047
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	var card: Button = screen.title_button("editor")
+	if card == null or not card.is_visible_in_tree():
+		failures.append("no visible Stage editor button on the title screen")
+	else:
+		card.pressed.emit()
+		if _scene_changes_1047 != [StageTestPlay1047.EDITOR_SCENE]:
+			failures.append("the Stage editor card went to %s" % [_scene_changes_1047])
+		if rig["server"].match_kind() != "":
+			failures.append("the Stage editor card picked a match kind '%s'" % rig["server"].match_kind())
+	_scene_changes_1047.clear()
+	var e_key := InputEventKey.new()
+	e_key.pressed = true
+	e_key.physical_keycode = KEY_E
+	Input.parse_input_event(e_key)
+	await _await_ticks(2)
+	if _scene_changes_1047 != [StageTestPlay1047.EDITOR_SCENE]:
+		failures.append("the E key on the title screen went to %s" % [_scene_changes_1047])
+	var credits: Button = screen.title_button("credits")
+	if card != null and (credits.get_node_or_null(credits.focus_neighbor_right) != card or card.get_node_or_null(card.focus_neighbor_left) != credits):
+		failures.append("Stage editor is not one D-pad step right of Credits")
+	if card != null and screen.title_button("local").get_parent() == card.get_parent():
+		failures.append("Stage editor sits among the play cards, not in the bottom row")
+	await _kind_close_435(rig)
+	_scene_changes_1047.clear()
+	DemoBuildType1047.forced = 1
+	var demo_rig: Dictionary = await _kind_rig_435(failures)
+	if not demo_rig.is_empty():
+		demo_rig["screen"].show_title(true)
+		var demo_card: Button = demo_rig["screen"].title_button("editor")
+		if demo_card != null and demo_card.is_visible_in_tree():
+			failures.append("the demo build shows the Stage editor card")
+		demo_rig["screen"].press_title("editor")
+		if not _scene_changes_1047.is_empty():
+			failures.append("the demo build opened the editor")
+		await _kind_close_435(demo_rig)
+	DemoBuildType1047.forced = -1
+	_test_play_reset_1047()
+	_scenario_completed = true
+	return failures
+
+const DemoBuildType1047 := preload("res://scripts/DemoBuild.gd")
+# Scenarios for the stage editor (#1047). Register these names:
+#   "stage_editor_new_stage_is_valid_1047"
+#   "stage_editor_draw_move_resize_delete_1047"
+#   "stage_editor_save_open_import_export_1047"
+#   "stage_editor_test_play_round_trip_1047"
+# Uses the runner's existing CustomStages1047, StageDef1049, _stages_dir_1047()
+# and _stage_def_1049(); adds the two consts below.
+
+# --- Issue #1047: the stage editor --------------------------------------------
+
+const StageEditorScene1047: String = "res://scenes/StageEditor.tscn"
+const StageTestPlayEd1047 := preload("res://scripts/StageTestPlay.gd")
+
+## A fresh editor under the root, its first frame run.
+func _stage_editor_1047() -> Node:
+	var editor: Node = (load(StageEditorScene1047) as PackedScene).instantiate()
+	get_root().add_child(editor)
+	await process_frame
+	return editor
+
+## A definition as StageDef normalises it, back in JSON shape, for comparing.
+func _stage_editor_norm_1047(data: Dictionary) -> Dictionary:
+	var checked: Dictionary = StageDef1049.validate(data)
+	return StageDef1049.to_json_data(checked["def"]) if bool(checked["ok"]) else {}
+
+## Puts StageTestPlay's statics back as a fresh start has them.
+func _stage_editor_reset_1047() -> void:
+	StageTestPlayEd1047.change_scene = Callable()
+	StageTestPlayEd1047.editor_state = {}
+	StageTestPlayEd1047.def = {}
+	StageTestPlayEd1047.active = false
+
+## A fresh editor holds a new stage that passes StageDef at once: one platform,
+## the kill floor and eight spawns, and the status line says it is ready.
+func _scenario_stage_editor_new_stage_is_valid_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stage_editor_reset_1047()
+	var editor: Node = await _stage_editor_1047()
+	var def: Dictionary = editor.working_def()
+	var checked: Dictionary = StageDef1049.validate(def)
+	if not bool(checked["ok"]):
+		failures.append("a new stage fails StageDef: %s" % checked["reason"])
+	if def.get("name") != "New stage" or (def["parts"] as Array).size() != 2 or (def["spawns"] as Array).size() != 8:
+		failures.append("a new stage is not 'New stage' with a platform, the kill floor and 8 spawns: %s" % [def])
+	if not String(editor.status_text()).begins_with(TranslationServer.translate("STAGE_EDITOR_READY")):
+		failures.append("the status of a new stage is not ready: %s" % editor.status_text())
+	if editor.is_dirty() or editor.saved_key() != "":
+		failures.append("a new stage starts dirty or with a saved key")
+	editor.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## Drawing (snapped, then Shift-free, then a plain click), moving, resizing,
+## one-way and deleting a platform, each one undo step that undo and redo walk;
+## the kill floor stays; spawns stop at 16 and too few is reported.
+func _scenario_stage_editor_draw_move_resize_delete_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stage_editor_reset_1047()
+	var editor: Node = await _stage_editor_1047()
+	var steps: Array[Dictionary] = [editor.working_def()]
+	editor.set_tool("platform")
+	editor.world_press(Vector2(3, -301))
+	editor.world_drag(Vector2(203, -261))
+	editor.world_release(Vector2(203, -261))
+	var parts: Array = editor.working_def()["parts"]
+	var drawn: Dictionary = parts[parts.size() - 1]
+	if drawn.get("pos") != [100.0, -284.0] or drawn.get("size") != [200.0, 40.0]:
+		failures.append("a snapped drag drew %s, wanted pos [100, -284] size [200, 40]" % [drawn])
+	steps.append(editor.working_def())
+	editor.world_press(Vector2(3, -501), MOUSE_BUTTON_LEFT, true)
+	editor.world_drag(Vector2(203, -461), true)
+	editor.world_release(Vector2(203, -461), true)
+	parts = editor.working_def()["parts"]
+	var free_box: Dictionary = parts[parts.size() - 1]
+	if free_box.get("pos") != [103.0, -481.0] or free_box.get("size") != [200.0, 40.0]:
+		failures.append("a Shift drag drew %s, wanted pos [103, -481] size [200, 40] (unsnapped)" % [free_box])
+	steps.append(editor.working_def())
+	editor.world_press(Vector2(1000, -600))
+	editor.world_release(Vector2(1000, -600))
+	parts = editor.working_def()["parts"]
+	if parts.size() != 5 or (parts[4] as Dictionary).get("size") != [240.0, 24.0]:
+		failures.append("a plain click did not make a 240x24 platform: %s" % [parts])
+	steps.append(editor.working_def())
+	# Move the first drawn platform by (37, 24): its corner snaps to (40, -280).
+	editor.set_tool("select")
+	editor.world_press(Vector2(100, -284))
+	editor.world_drag(Vector2(137, -260))
+	editor.world_release(Vector2(137, -260))
+	var moved: Dictionary = editor.working_def()["parts"][2]
+	if moved.get("pos") != [140.0, -260.0] or moved.get("size") != [200.0, 40.0]:
+		failures.append("the moved platform is %s, wanted pos [140, -260]" % [moved])
+	steps.append(editor.working_def())
+	# Resize by its right-edge handle, out to x 304; then try to crush it below MIN_PART_SIDE.
+	var handle: Vector2 = editor.handle_point(3)
+	editor.world_press(handle)
+	editor.world_drag(Vector2(304, handle.y))
+	editor.world_release(Vector2(304, handle.y))
+	var resized: Dictionary = editor.working_def()["parts"][2]
+	if resized.get("pos") != [172.0, -260.0] or resized.get("size") != [264.0, 40.0]:
+		failures.append("the resized platform is %s, wanted pos [172, -260] size [264, 40]" % [resized])
+	steps.append(editor.working_def())
+	editor.world_press(editor.handle_point(3))
+	editor.world_drag(Vector2(-500, handle.y))
+	editor.world_release(Vector2(-500, handle.y))
+	if float(editor.working_def()["parts"][2]["size"][0]) != 8.0:
+		failures.append("a resize past the left edge left width %s, wanted the 8 px minimum" % editor.working_def()["parts"][2]["size"][0])
+	steps.append(editor.working_def())
+	if not editor.toggle_one_way() or editor.working_def()["parts"][2]["params"].get("one_way") != true:
+		failures.append("O did not make the selected platform one-way")
+	steps.append(editor.working_def())
+	if not editor.delete_selected() or (editor.working_def()["parts"] as Array).size() != 4:
+		failures.append("deleting the selected platform did not remove it")
+	steps.append(editor.working_def())
+	for i in range(steps.size() - 2, -1, -1):
+		editor.undo()
+		if editor.working_def() != steps[i]:
+			failures.append("undo to step %d gave %s, wanted %s" % [i, editor.working_def(), steps[i]])
+			break
+	if editor.undo():
+		failures.append("undo went past the new stage")
+	for i in range(1, steps.size()):
+		editor.redo()
+		if editor.working_def() != steps[i]:
+			failures.append("redo to step %d gave %s, wanted %s" % [i, editor.working_def(), steps[i]])
+			break
+	# The kill floor (y 900) cannot be deleted, by key or right-click.
+	var before: Dictionary = editor.working_def()
+	editor.select_at(Vector2(0, 900))
+	if editor.selection().get("kind") != "part" or editor.delete_selected() or editor.delete_at(Vector2(0, 900)) or editor.working_def() != before:
+		failures.append("the kill floor was not selectable or was deleted")
+	if editor.message_text() != TranslationServer.translate("STAGE_EDITOR_KILL_FLOOR_STAYS"):
+		failures.append("deleting the kill floor did not say why not: '%s'" % editor.message_text())
+	# Spawns: eight more make 16, the 17th is refused.
+	editor.set_tool("spawn")
+	for i in 9:
+		editor.world_press(Vector2(-1600 + i * 200, -1200))
+	if (editor.working_def()["spawns"] as Array).size() != 16:
+		failures.append("spawns are %d after adding 9 to 8, wanted the cap of 16" % (editor.working_def()["spawns"] as Array).size())
+	if not editor.message_text().contains("16"):
+		failures.append("the 17th spawn was refused without saying so: '%s'" % editor.message_text())
+	# Right-click nine away: 7 left, and the status says too few.
+	for i in 9:
+		var spawns: Array = editor.working_def()["spawns"]
+		var last: Array = spawns[spawns.size() - 1]
+		editor.world_press(Vector2(last[0], last[1]), MOUSE_BUTTON_RIGHT)
+	if (editor.working_def()["spawns"] as Array).size() != 7:
+		failures.append("right-clicking 9 spawns left %d, wanted 7" % (editor.working_def()["spawns"] as Array).size())
+	if not String(editor.status_text()).contains("too few spawns"):
+		failures.append("with 7 spawns the status is '%s', wanted too few spawns" % editor.status_text())
+	editor.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## Save to the store, open it back in a fresh editor from the Open list (an
+## invalid file greyed), export to a file and import it again under a new
+## name, delete from the list; a built-in stage's name is refused, with why.
+func _scenario_stage_editor_save_open_import_export_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stage_editor_reset_1047()
+	_stages_dir_1047()
+	var export_path: String = OS.get_temp_dir().path_join("pf_editor_export_1047_%d.json" % OS.get_process_id())
+	var editor: Node = await _stage_editor_1047()
+	editor.set_stage_name("Cliffs")
+	var saved: Dictionary = editor.save_stage()
+	if not bool(saved["ok"]) or saved["key"] != "Cliffs" or editor.is_dirty() or editor.saved_key() != "Cliffs":
+		failures.append("saving 'Cliffs' gave %s (dirty %s)" % [saved, editor.is_dirty()])
+	var builtins: PackedStringArray = editor.builtin_names()
+	if builtins.is_empty():
+		failures.append("the editor found no built-in stage names")
+	else:
+		editor.set_stage_name(builtins[0])
+		var refused: Dictionary = editor.save_stage()
+		if bool(refused["ok"]) or not String(editor.message_text()).contains(String(refused["reason"])) or String(refused["reason"]) == "":
+			failures.append("saving as built-in '%s' gave %s, message '%s'" % [builtins[0], refused, editor.message_text()])
+		if not String(editor.status_text()).contains(builtins[0]):
+			failures.append("the status does not warn of the built-in name: '%s'" % editor.status_text())
+	editor.queue_free()
+	await process_frame
+	var broken := FileAccess.open(CustomStages1047.path_of("Broken"), FileAccess.WRITE)
+	broken.store_string("{\"schema\": 1}")
+	broken.close()
+	editor = await _stage_editor_1047()
+	editor.show_open_list()
+	var list: Control = editor.popup()
+	var cliffs: Node = list.find_child("Row_Cliffs", true, false) if list != null else null
+	var bad: Node = list.find_child("Row_Broken", true, false) if list != null else null
+	if cliffs == null or bad == null:
+		failures.append("the Open list does not show both saved stages")
+	elif (cliffs.get_node("Open") as Button).disabled or not (bad.get_node("Open") as Button).disabled or bad.get_node_or_null("Reason") == null:
+		failures.append("the Open list does not grey the invalid stage with its reason")
+	editor.request_open("Cliffs")
+	if editor.popup() != null or editor.saved_key() != "Cliffs" or editor.is_dirty():
+		failures.append("opening Cliffs from the list left popup %s, key '%s'" % [editor.popup(), editor.saved_key()])
+	if _stage_editor_norm_1047(editor.working_def()) != _stage_editor_norm_1047(CustomStages1047.load_stage("Cliffs")["def"]):
+		failures.append("the opened stage is not the saved one: %s" % [editor.working_def()])
+	var exported: Dictionary = editor.export_path(export_path)
+	var read: Dictionary = CustomStages1047.read_file(export_path)
+	if not bool(exported["ok"]) or not bool(read["ok"]) or read["def"]["name"] != "Cliffs":
+		failures.append("exporting gave %s, the file reads %s" % [exported, read])
+	var renamed: Dictionary = read["def"].duplicate(true) if bool(read["ok"]) else {}
+	renamed["name"] = "Imported Cliffs"
+	var file := FileAccess.open(export_path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(renamed))
+	file.close()
+	var imported: Dictionary = editor.import_path(export_path)
+	if not bool(imported["ok"]) or editor.saved_key() != "Imported Cliffs" or editor.working_def()["name"] != "Imported Cliffs":
+		failures.append("importing gave %s, the editor holds '%s'" % [imported, editor.saved_key()])
+	if not FileAccess.file_exists(CustomStages1047.path_of("Imported Cliffs")):
+		failures.append("the import was not saved into the store")
+	editor.request_delete("Broken")
+	if not editor.is_confirm_open():
+		failures.append("Delete did not ask first")
+	editor.confirm_yes()
+	if FileAccess.file_exists(CustomStages1047.path_of("Broken")) or editor.popup() == null:
+		failures.append("confirming Delete did not remove Broken and show the list again")
+	editor.close_popup()
+	editor.queue_free()
+	await process_frame
+	DirAccess.remove_absolute(export_path)
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
+## Test hands the working definition to StageTestPlay and Main; an editor built
+## on the way back restores the definition, view, history and dirty flag;
+## Back to title asks while dirty and, when clean, goes and clears the state.
+func _scenario_stage_editor_test_play_round_trip_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stage_editor_reset_1047()
+	var scenes: Array = []
+	StageTestPlayEd1047.change_scene = func(path: String) -> void: scenes.append(path)
+	var editor: Node = await _stage_editor_1047()
+	editor.set_tool("platform")
+	editor.world_press(Vector2(-400, -200))
+	editor.world_release(Vector2(-400, -200))
+	editor.set_view(Vector2(123, -45), 0.7)
+	var def: Dictionary = editor.working_def()
+	var state: Dictionary = editor.editor_state()
+	if editor.test_play() != "" or scenes != [StageTestPlayEd1047.MAIN_SCENE]:
+		failures.append("Test did not go to Main: %s" % [scenes])
+	if not StageTestPlayEd1047.active or StageTestPlayEd1047.def != _stage_editor_norm_1047(def):
+		failures.append("StageTestPlay is not test-playing the working definition: %s" % [StageTestPlayEd1047.def])
+	editor.queue_free()
+	await process_frame
+	StageTestPlayEd1047.return_to_editor(null)
+	editor = await _stage_editor_1047()
+	if editor.working_def() != def:
+		failures.append("the editor came back with %s, wanted %s" % [editor.working_def(), def])
+	if editor.view()["center"] != Vector2(123, -45) or not is_equal_approx(float(editor.view()["zoom"]), 0.7):
+		failures.append("the view came back as %s" % [editor.view()])
+	if not editor.is_dirty() or editor.undo_depth() != (state["undo"] as Array).size() or editor.current_tool() != "platform":
+		failures.append("dirty %s, undo %d, tool %s did not come back" % [editor.is_dirty(), editor.undo_depth(), editor.current_tool()])
+	if not StageTestPlayEd1047.editor_state.is_empty():
+		failures.append("the editor did not clear the hand-off state")
+	scenes.clear()
+	editor.request_back()
+	if not editor.is_confirm_open() or not scenes.is_empty():
+		failures.append("Back with unsaved changes did not ask first: %s" % [scenes])
+	editor.close_popup()
+	# A definition StageDef refuses is not test-played; the reason is shown.
+	var spawns: Array = editor.working_def()["spawns"]
+	editor.delete_at(Vector2(spawns[0][0], spawns[0][1]))
+	var reason: String = editor.test_play()
+	if reason == "" or not scenes.is_empty() or not String(editor.message_text()).contains(reason):
+		failures.append("a 7-spawn stage was test-played or gave no reason: '%s', %s" % [reason, scenes])
+	editor.new_stage()
+	editor.request_back()
+	if scenes != [StageTestPlayEd1047.MAIN_SCENE] or not StageTestPlayEd1047.editor_state.is_empty() or StageTestPlayEd1047.active:
+		failures.append("Back with no changes gave %s, state %s" % [scenes, StageTestPlayEd1047.editor_state])
+	editor.queue_free()
+	await process_frame
+	_stage_editor_reset_1047()
+	_scenario_completed = true
+	return failures
+
+## Review of #1252: the editor asks before saving over another saved stage of
+## the same name (the default "New stage" makes that the usual case), and saves
+## over its own file without asking.
+func _scenario_stage_editor_asks_before_replacing_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stages_dir_1047()
+	var first: Node = load(StageEditorScene1047).instantiate()
+	get_root().add_child(first)
+	await process_frame
+	if not bool(first.save_stage()["ok"]):
+		failures.append("the first New stage was not saved")
+	first.save_stage()
+	if first.is_confirm_open():
+		failures.append("saving the open stage over its own file asked to replace it")
+	first.queue_free()
+	await process_frame
+	var second: Node = load(StageEditorScene1047).instantiate()
+	get_root().add_child(second)
+	await process_frame
+	second.set_tool("platform")
+	second.world_press(Vector2(-600, -400))
+	second.world_release(Vector2(-600, -400))
+	var res: Dictionary = second.save_stage()
+	if res["ok"] or not second.is_confirm_open():
+		failures.append("saving a second New stage did not ask before replacing: %s" % [res])
+	if (CustomStages1047.load_stage("New stage")["def"]["parts"] as Array).size() != 2:
+		failures.append("the stored stage changed before the replace was confirmed")
+	second.confirm_yes()
+	await process_frame
+	if (CustomStages1047.load_stage("New stage")["def"]["parts"] as Array).size() != 3 or second.is_dirty():
+		failures.append("confirming did not replace the stored stage")
+	second.queue_free()
+	await process_frame
+	CustomStages1047.dir_override = ""
 	_scenario_completed = true
 	return failures

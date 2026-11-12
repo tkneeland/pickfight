@@ -664,6 +664,9 @@ func unhandled_key_input(event: InputEvent) -> void:
 			if key.physical_keycode == TitleScreenScript.TITLE_KEYS[kind]:
 				_screen.press_title(kind)
 				_screen.get_viewport().set_input_as_handled()
+		if key.physical_keycode == TitleScreenScript.TITLE_EDITOR_KEY:
+			_screen.press_title("editor") # the stage editor (#1047)
+			_screen.get_viewport().set_input_as_handled()
 		if key.physical_keycode == TitleScreenScript.TITLE_QUIT_KEY:
 			_screen.press_title("quit")
 			_screen.get_viewport().set_input_as_handled()

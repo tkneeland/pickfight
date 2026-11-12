@@ -58,6 +58,8 @@ TITLE_ONLINE_HINT,Everyone plays on their own computer,Alle spielen am eigenen C
 TITLE_PICK,How are you playing?,Wie spielt ihr?,Comment on joue ?,¿Cómo van a jugar?,Como vocês vão jogar?,怎么玩?,どうやって遊ぶ?,어떻게 할래요?,Как играем?
 TITLE_SOLO,Solo (S),Solo (S),Solo (S),Solo (S),Solo (S),单人 (S),ソロ (S),솔로 (S),Один (S)
 TITLE_SOLO_HINT,You against 3 bots,Du gegen 3 Bots,Toi contre 3 bots,Tú contra 3 bots,Você contra 3 bots,你对战 3 个电脑,あなた対ボット3体,나 혼자 봇 3명과,Вы против 3 ботов
+TITLE_EDITOR,Stage editor (E),Stage-Editor (E),Éditeur de stage (E),Editor de escenarios (E),Editor de fases (E),关卡编辑器 (E),ステージエディター (E),스테이지 편집기 (E),Редактор арен (E)
+TITLE_EDITOR_HINT,Build your own stage,Baue deine eigene Stage,Crée ton propre stage,Crea tu propio escenario,Crie sua própria fase,打造你自己的关卡,自分のステージを作ろう,나만의 스테이지 만들기,Постройте свою арену
 DETAIL_AIRBORNE,%.1fs airborne,%.1fs in der Luft,%.1f s en l'air,%.1f s en el aire,%.1f s no ar,腾空 %.1f 秒,滞空 %.1f秒,체공 %.1f초,%.1f с в воздухе
 DETAIL_ALIVE,%s alive,%s am Leben,%s en vie,%s con vida,%s vivos,存活 %s,生存 %s,생존 %s,Жив: %s
 DETAIL_HAYMAKER,%d damage in one hit,%d Schaden in einem Treffer,%d de dégâts en un coup,%d de daño de un golpe,%d de dano em um golpe,一击造成 %d 伤害,一撃で %d ダメージ,한 방에 피해 %d,%d урона одним ударом
@@ -580,3 +582,43 @@ INVITE_STAY,Stay (Esc / N),Bleiben (Esc / N),Rester (Esc / N),Quedarme (Esc / N)
 BANNER_LAST_LIFE,%s is on their last life!,%s ist auf dem letzten Leben!,%s est sur sa dernière vie !,¡%s está en su última vida!,%s está na última vida!,%s 只剩最后一条命了!,%s は最後のライフ!,%s 마지막 목숨!,У %s последняя жизнь!
 BANNER_STOLE_LIFE,%s stole a life!,%s hat ein Leben gestohlen!,%s a volé une vie !,¡%s robó una vida!,%s roubou uma vida!,%s 夺得一条命!,%s がライフを奪った!,%s 목숨 +1!,%s украл жизнь!
 BANNER_TAKES_THE_HILL,%s takes the hill!,%s übernimmt den Hügel!,%s prend la colline !,¡%s toma la colina!,%s toma a colina!,%s 夺下了山丘!,%s がヒルを奪った!,%s 언덕을 차지했어요!,%s захватывает гору!
+STAGE_EDITOR_TITLE,Stage editor,Stage-Editor,Éditeur de stage,Editor de escenarios,Editor de fases,关卡编辑器,ステージエディター,스테이지 편집기,Редактор арен
+STAGE_EDITOR_NAME,Name,Name,Nom,Nombre,Nome,名称,名前,이름,Название
+STAGE_EDITOR_TOOL_SELECT,Select (V),Auswählen (V),Sélection (V),Seleccionar (V),Selecionar (V),选择 (V),選択 (V),선택 (V),Выбор (V)
+STAGE_EDITOR_TOOL_PLATFORM,Platform (P),Plattform (P),Plateforme (P),Plataforma (P),Plataforma (P),平台 (P),足場 (P),발판 (P),Платформа (P)
+STAGE_EDITOR_TOOL_SPAWN,Spawn (S),Startpunkt (S),Apparition (S),Aparición (S),Surgimento (S),出生点 (S),スポーン (S),스폰 (S),Точка появления (S)
+STAGE_EDITOR_NEW,New,Neu,Nouveau,Nuevo,Novo,新建,新規,새로 만들기,Новая
+STAGE_EDITOR_OPEN,Open,Öffnen,Ouvrir,Abrir,Abrir,打开,開く,열기,Открыть
+STAGE_EDITOR_SAVE,Save,Speichern,Enregistrer,Guardar,Salvar,保存,保存,저장,Сохранить
+STAGE_EDITOR_TEST,Test,Testen,Tester,Probar,Testar,试玩,テスト,테스트,Тест
+STAGE_EDITOR_IMPORT,Import,Importieren,Importer,Importar,Importar,导入,インポート,가져오기,Импорт
+STAGE_EDITOR_EXPORT,Export,Exportieren,Exporter,Exportar,Exportar,导出,エクスポート,내보내기,Экспорт
+STAGE_EDITOR_BACK,Back to title,Zum Titel,Retour au titre,Volver al título,Voltar ao título,返回标题,タイトルへ戻る,타이틀로,В главное меню
+STAGE_EDITOR_READY,Ready to save,Bereit zum Speichern,Prêt à enregistrer,Listo para guardar,Pronto para salvar,可以保存,保存できます,저장할 수 있어요,Можно сохранять
+STAGE_EDITOR_COUNTS,Parts: %d/%d · Spawns: %d (%d–%d),Teile: %d/%d · Startpunkte: %d (%d–%d),Éléments : %d/%d · Apparitions : %d (%d–%d),Piezas: %d/%d · Apariciones: %d (%d–%d),Peças: %d/%d · Surgimentos: %d (%d–%d),部件:%d/%d · 出生点:%d(%d–%d),パーツ: %d/%d · スポーン: %d (%d–%d),부품: %d/%d · 스폰: %d (%d–%d),Детали: %d/%d · Точки появления: %d (%d–%d)
+STAGE_EDITOR_SCREEN_LABEL,Normal screen (1600×900),Normaler Bildschirm (1600×900),Écran normal (1600×900),Pantalla normal (1600×900),Tela normal (1600×900),标准屏幕(1600×900),通常の画面 (1600×900),기본 화면 (1600×900),Обычный экран (1600×900)
+STAGE_EDITOR_KILL_FLOOR,Kill floor,Todeszone,Zone mortelle,Zona mortal,Zona mortal,死亡线,落下ライン,낙사 라인,Смертельная граница
+STAGE_EDITOR_HELP,Wheel: zoom · Middle-drag or WASD / arrows: pan · Home: frame the stage · Shift: place freely · Right-click or Del: delete · O: one-way · Ctrl+Z / Ctrl+Y: undo / redo · Ctrl+S: save,Mausrad: Zoom · Mittlere Maustaste ziehen oder WASD / Pfeile: verschieben · Pos1: Stage einpassen · Umschalt: frei platzieren · Rechtsklick oder Entf: löschen · O: nur von unten · Strg+Z / Strg+Y: rückgängig / wiederholen · Strg+S: speichern,Molette : zoom · Glisser clic milieu ou WASD / flèches : déplacer · Origine : cadrer le stage · Maj : placer librement · Clic droit ou Suppr : supprimer · O : traversable · Ctrl+Z / Ctrl+Y : annuler / rétablir · Ctrl+S : enregistrer,Rueda: zoom · Arrastrar con clic central o WASD / flechas: mover · Inicio: encuadrar el escenario · Mayús: colocar libre · Clic derecho o Supr: borrar · O: atravesable · Ctrl+Z / Ctrl+Y: deshacer / rehacer · Ctrl+S: guardar,Roda: zoom · Arrastar com botão do meio ou WASD / setas: mover · Home: enquadrar a fase · Shift: posicionar livre · Clique direito ou Del: apagar · O: atravessável · Ctrl+Z / Ctrl+Y: desfazer / refazer · Ctrl+S: salvar,滚轮:缩放 · 中键拖动或 WASD / 方向键:平移 · Home:显示整个关卡 · Shift:自由放置 · 右键或 Del:删除 · O:单向平台 · Ctrl+Z / Ctrl+Y:撤销 / 重做 · Ctrl+S:保存,ホイール: ズーム · 中ボタンドラッグか WASD / 矢印: 移動 · Home: ステージ全体を表示 · Shift: 自由配置 · 右クリックか Del: 削除 · O: すり抜け足場 · Ctrl+Z / Ctrl+Y: 元に戻す / やり直す · Ctrl+S: 保存,휠: 확대/축소 · 가운데 버튼 드래그 또는 WASD / 화살표: 이동 · Home: 스테이지 전체 보기 · Shift: 자유 배치 · 우클릭 또는 Del: 삭제 · O: 통과 발판 · Ctrl+Z / Ctrl+Y: 실행 취소 / 다시 실행 · Ctrl+S: 저장,Колесо: масштаб · Средняя кнопка или WASD / стрелки: сдвиг · Home: показать всю арену · Shift: без сетки · ПКМ или Del: удалить · O: проходимая · Ctrl+Z / Ctrl+Y: отменить / вернуть · Ctrl+S: сохранить
+STAGE_EDITOR_SAVED,Saved as %s,Gespeichert als %s,Enregistré sous %s,Guardado como %s,Salvo como %s,已保存为 %s,%s として保存しました,%s(으)로 저장했어요,Сохранено как %s
+STAGE_EDITOR_NOT_SAVED,Not saved: %s,Nicht gespeichert: %s,Non enregistré : %s,No se guardó: %s,Não salvo: %s,未保存:%s,保存できません: %s,저장 안 됨: %s,Не сохранено: %s
+STAGE_EDITOR_OPENED,Opened %s,%s geöffnet,%s ouvert,Se abrió %s,%s aberta,已打开 %s,%s を開きました,%s 열었어요,Открыто: %s
+STAGE_EDITOR_NOT_OPENED,Can't open: %s,Öffnen nicht möglich: %s,Impossible d'ouvrir : %s,No se puede abrir: %s,Não foi possível abrir: %s,无法打开:%s,開けません: %s,열 수 없어요: %s,Не удалось открыть: %s
+STAGE_EDITOR_IMPORTED,Imported %s,%s importiert,%s importé,Se importó %s,%s importada,已导入 %s,%s をインポートしました,%s 가져왔어요,Импортировано: %s
+STAGE_EDITOR_NOT_IMPORTED,Not imported: %s,Nicht importiert: %s,Non importé : %s,No se importó: %s,Não importado: %s,未导入:%s,インポートできません: %s,가져오지 못했어요: %s,Не импортировано: %s
+STAGE_EDITOR_EXPORTED,Exported to %s,Exportiert nach %s,Exporté vers %s,Exportado a %s,Exportado para %s,已导出到 %s,%s にエクスポートしました,%s(으)로 내보냈어요,Экспортировано в %s
+STAGE_EDITOR_NOT_EXPORTED,Not exported: %s,Nicht exportiert: %s,Non exporté : %s,No se exportó: %s,Não exportado: %s,未导出:%s,エクスポートできません: %s,내보내지 못했어요: %s,Не экспортировано: %s
+STAGE_EDITOR_CANT_TEST,Can't test: %s,Testen nicht möglich: %s,Impossible de tester : %s,No se puede probar: %s,Não dá para testar: %s,无法试玩:%s,テストできません: %s,테스트할 수 없어요: %s,Нельзя протестировать: %s
+STAGE_EDITOR_KILL_FLOOR_STAYS,The kill floor can't be deleted: every stage needs one,Die Todeszone lässt sich nicht löschen: Jede Stage braucht eine,La zone mortelle ne peut pas être supprimée : chaque stage en a besoin d'une,La zona mortal no se puede borrar: todo escenario necesita una,A zona mortal não pode ser apagada: toda fase precisa de uma,死亡线不能删除:每个关卡都需要一条,落下ラインは削除できません: どのステージにも1本必要です,낙사 라인은 삭제할 수 없어요: 모든 스테이지에 하나가 필요해요,Смертельную границу нельзя удалить: она нужна каждой арене
+STAGE_EDITOR_TOO_MANY_SPAWNS,No more spawns: the cap is %d,Keine weiteren Startpunkte: Maximum ist %d,Plus d'apparitions possibles : le maximum est %d,No caben más apariciones: el máximo es %d,Sem mais surgimentos: o máximo é %d,不能再加出生点:上限为 %d,これ以上スポーンを置けません: 上限は %d,스폰을 더 놓을 수 없어요: 최대 %d개,Больше точек появления нельзя: максимум %d
+STAGE_EDITOR_TOO_MANY_PARTS,No more parts: the cap is %d,Keine weiteren Teile: Maximum ist %d,Plus d'éléments possibles : le maximum est %d,No caben más piezas: el máximo es %d,Sem mais peças: o máximo é %d,不能再加部件:上限为 %d,これ以上パーツを置けません: 上限は %d,부품을 더 놓을 수 없어요: 최대 %d개,Больше деталей нельзя: максимум %d
+STAGE_EDITOR_DISCARD,Discard unsaved changes?,Ungespeicherte Änderungen verwerfen?,Abandonner les modifications non enregistrées ?,¿Descartar los cambios sin guardar?,Descartar as alterações não salvas?,放弃未保存的修改?,保存していない変更を破棄しますか?,저장하지 않은 변경 사항을 버릴까요?,Отменить несохранённые изменения?
+STAGE_EDITOR_YES,Yes,Ja,Oui,Sí,Sim,是,はい,예,Да
+STAGE_EDITOR_NO,No,Nein,Non,No,Não,否,いいえ,아니요,Нет
+STAGE_EDITOR_OPEN_TITLE,Saved stages,Gespeicherte Stages,Stages enregistrés,Escenarios guardados,Fases salvas,已保存的关卡,保存したステージ,저장한 스테이지,Сохранённые арены
+STAGE_EDITOR_OPEN_EMPTY,No saved stages yet,Noch keine gespeicherten Stages,Aucun stage enregistré pour l'instant,Aún no hay escenarios guardados,Nenhuma fase salva ainda,还没有已保存的关卡,保存したステージはまだありません,아직 저장한 스테이지가 없어요,Сохранённых арен пока нет
+STAGE_EDITOR_DELETE,Delete,Löschen,Supprimer,Borrar,Apagar,删除,削除,삭제,Удалить
+STAGE_EDITOR_DELETE_CONFIRM,Delete %s for good?,%s endgültig löschen?,Supprimer %s définitivement ?,¿Borrar %s para siempre?,Apagar %s de vez?,永久删除 %s?,%s を完全に削除しますか?,%s을(를) 완전히 삭제할까요?,Удалить %s навсегда?
+STAGE_EDITOR_DELETED,Deleted %s,%s gelöscht,%s supprimé,Se borró %s,%s apagada,已删除 %s,%s を削除しました,%s 삭제했어요,Удалено: %s
+STAGE_EDITOR_IMPORT_TITLE,Import a stage,Stage importieren,Importer un stage,Importar un escenario,Importar uma fase,导入关卡,ステージをインポート,스테이지 가져오기,Импорт арены
+STAGE_EDITOR_EXPORT_TITLE,Export this stage,Diese Stage exportieren,Exporter ce stage,Exportar este escenario,Exportar esta fase,导出此关卡,このステージをエクスポート,이 스테이지 내보내기,Экспорт этой арены
+STAGE_EDITOR_REPLACE_CONFIRM,"A stage called %s is already saved. Replace it?","Eine Stage namens %s ist schon gespeichert. Ersetzen?","Un stage nommé %s est déjà enregistré. Le remplacer ?","Ya hay un escenario guardado llamado %s. ¿Reemplazarlo?","Já existe uma fase salva chamada %s. Substituir?","已保存名为 %s 的关卡。要替换吗?","%s という名前のステージは保存済みです。置き換えますか?","%s(이)라는 스테이지가 이미 저장되어 있습니다. 바꿀까요?","Арена %s уже сохранена. Заменить?"

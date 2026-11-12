@@ -53,13 +53,23 @@ static func def_of(stage: Node) -> Dictionary:
 	return def if def is Dictionary else {}
 
 ## A built stage (not yet in the tree) as a PackedScene the rotation can hold
-## like a built-in one; its definition rides along as metadata (#1049).
+## like a built-in one; its definition rides along as metadata (#1049). Null
+## (and an error) if packing fails.
 static func pack(stage: Node2D) -> PackedScene:
 	for child in stage.get_children():
 		child.owner = stage
 	var scene := PackedScene.new()
-	scene.pack(stage)
+	var err: Error = scene.pack(stage)
+	if err != OK:
+		push_error("StageBuilder: packing '%s' failed (%s)" % [stage.name, error_string(err)])
+		return null
 	return scene
+
+## Builds from a definition `StageDef.validate()` already accepted (its "def",
+## vectors and all), without checking it a second time (#1049: the Online
+## client validates once on receipt).
+static func build_valid(def: Dictionary) -> Node2D:
+	return _build_valid(def)
 
 static func _wrap(checked: Dictionary) -> Dictionary:
 	if not bool(checked["ok"]):

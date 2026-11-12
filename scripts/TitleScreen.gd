@@ -29,6 +29,8 @@ const TITLE_QUIT_KEY: Key = KEY_Q
 
 const TITLE_KINDS: Array[String] = ["local", "online", "solo"]
 const TITLE_KEYS: Dictionary = {"local": KEY_C, "online": KEY_O, "solo": KEY_S}
+## The key that opens the stage editor from the title screen (#1047).
+const TITLE_EDITOR_KEY: Key = KEY_E
 const TITLE_BUTTON_FONT_SIZE: int = 40
 ## The logo as the mockup frames it (#546), and each card's colour variation.
 const TITLE_LOGO_SIZE: Vector2 = Vector2(1360, 300)
@@ -38,6 +40,7 @@ const TITLE_CARD_HEIGHT: float = 210.0
 const FORK_KINDS: Array[String] = ["host", "join"]
 const FORK_KEYS: Dictionary = {"host": KEY_H, "join": KEY_J}
 const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
+const StageTestPlayScript := preload("res://scripts/StageTestPlay.gd")
 
 var _screen # the LobbyScreen
 var _title_panel: Control
@@ -112,6 +115,10 @@ func press_title(kind: String) -> void:
 		return
 	if kind == "quit":
 		QuitGameScript.quit_game(_screen.get_tree(), _screen._server) # nobody is seated yet: no confirm (#718)
+		return
+	if kind == "editor":
+		if not DemoBuildScript.is_active(): # the demo plays only its slice of stages (#361): no editor
+			StageTestPlayScript.open_editor(_screen.get_tree()) # the stage editor (#1047)
 		return
 	var server: Object = _screen._server
 	if server == null:
@@ -242,10 +249,21 @@ func build() -> void:
 	_title_buttons["credits"] = credits_button
 	quit_button.focus_neighbor_right = quit_button.get_path_to(credits_button)
 	credits_button.focus_neighbor_left = credits_button.get_path_to(quit_button)
+	# Stage editor (#1047): beside Credits, one D-pad step right of it; not in the demo build.
+	if not DemoBuildScript.is_active():
+		var editor_button := ScreenKitScript.themed_button(_screen.tr("TITLE_EDITOR"), UiThemeScript.ACTION_BUTTON, "Title_editor", true)
+		editor_button.tooltip_text = _screen.tr("TITLE_EDITOR_HINT")
+		editor_button.pressed.connect(press_title.bind("editor"))
+		bottom_row.add_child(editor_button)
+		_title_buttons["editor"] = editor_button
+		credits_button.focus_neighbor_right = credits_button.get_path_to(editor_button)
+		editor_button.focus_neighbor_left = editor_button.get_path_to(credits_button)
 	var last_card: Button = _title_buttons[TITLE_KINDS[TITLE_KINDS.size() - 1]]
 	last_card.focus_neighbor_bottom = last_card.get_path_to(quit_button)
 	quit_button.focus_neighbor_top = quit_button.get_path_to(last_card)
 	credits_button.focus_neighbor_top = credits_button.get_path_to(last_card)
+	if _title_buttons.has("editor"):
+		(_title_buttons["editor"] as Button).focus_neighbor_top = (_title_buttons["editor"] as Button).get_path_to(last_card)
 	# The Online fork (#1075): Host a room or Join a friend, in place of the three cards.
 	_main_nodes.assign([pick, cards, footer, bottom_row])
 	_fork_box = VBoxContainer.new()

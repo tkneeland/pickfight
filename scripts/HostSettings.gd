@@ -130,6 +130,11 @@ var host_name: String = ""
 ## Every stage in the rotation, set by `StageRotation`. The last-one rule
 ## counts against it.
 var known_stages: PackedStringArray = []
+## The host's custom stages in the rotation (#1047), a subset of
+## `known_stages`, set by `StageRotation`. Unlike built-in stages they are off
+## until switched on: `custom_stages_on` is a whitelist per mode key.
+var custom_stages: PackedStringArray = []
+var custom_stages_on: Dictionary = {}
 
 ## The one store the game uses. A `-s` run (scenarios) gets defaults, saving
 ## off, as `Sfx` does (#195).
@@ -236,6 +241,8 @@ func _is_enabled(mode_id: String, stage_name: String, stock_list: PackedStringAr
 	if not DemoBuildScript.stage_in_slice(stage_name) or not _mode_has_stage(mode_id, stage_name):
 		return false
 	var key: String = mode_key(mode_id)
+	if custom_stages.has(stage_name):
+		return (custom_stages_on.get(key, PackedStringArray()) as PackedStringArray).has(stage_name)
 	if key == "stock":
 		return stock_list.has(stage_name)
 	return not (disabled_stages_by_mode.get(key, PackedStringArray()) as PackedStringArray).has(stage_name)
@@ -244,7 +251,54 @@ func _is_enabled(mode_id: String, stage_name: String, stock_list: PackedStringAr
 ## a stage: with all of them off, every stage of that mode.
 func enabled_stages_for(mode_id: String) -> PackedStringArray:
 	var out := on_stages_for(mode_id)
-	return out if not out.is_empty() else stages_for_mode(mode_id)
+	return out if not out.is_empty() else fallback_stages_for(mode_id)
+
+## What `mode_id` deals with every stage switched off (#647): its built-in
+## stages, never a custom one the host did not switch on (#1047). The rotation
+## (`StageRotation`) and this file both fall back to it.
+func fallback_stages_for(mode_id: String) -> PackedStringArray:
+	var builtin := PackedStringArray()
+	for stage_name: String in stages_for_mode(mode_id):
+		if not custom_stages.has(stage_name):
+			builtin.append(stage_name)
+	return builtin if not builtin.is_empty() else stages_for_mode(mode_id)
+
+## Renames the custom stage `old_key` to `new_key` in every mode's on-list
+## (#1047: a save that only changed the name's letter case keeps its switches).
+func rename_custom_stage(old_key: String, new_key: String) -> void:
+	var changed: bool = false
+	for mode_key_id: Variant in custom_stages_on.keys():
+		var on_list := PackedStringArray(custom_stages_on[mode_key_id])
+		var at: int = on_list.find(old_key)
+		if at != -1:
+			on_list[at] = new_key
+			custom_stages_on[mode_key_id] = on_list
+			changed = true
+	if changed:
+		save_settings()
+
+## Forgets the deleted custom stage `key` in every mode's on-list (#1047), so
+## a new stage saved under the same name starts off like any other.
+func forget_custom_stage(key: String) -> void:
+	var changed: bool = false
+	for mode_key_id: Variant in custom_stages_on.keys():
+		var on_list := PackedStringArray(custom_stages_on[mode_key_id])
+		var at: int = on_list.find(key)
+		if at != -1:
+			on_list.remove_at(at)
+			custom_stages_on[mode_key_id] = on_list
+			changed = true
+	if changed:
+		save_settings()
+
+## The built-in stages in the rotation, without the host's custom ones (#1047):
+## what World Tour counts.
+func builtin_stages() -> PackedStringArray:
+	var out := PackedStringArray()
+	for stage_name: String in known_stages:
+		if not custom_stages.has(stage_name):
+			out.append(stage_name)
+	return out
 
 ## The stages `mode_id` has switched on, with no fallback: empty when the host
 ## switched them all off (#647). The rotation draws from `enabled_stages_for`.
@@ -264,6 +318,21 @@ func set_stage_enabled_for(mode_id: String, stage_name: String, on: bool) -> boo
 	if not pool.has(stage_name) or (on and not DemoBuildScript.stage_in_slice(stage_name)):
 		return false
 	var key: String = mode_key(mode_id)
+	if custom_stages.has(stage_name):
+		var on_list := PackedStringArray(custom_stages_on.get(key, PackedStringArray()))
+		var at: int = on_list.find(stage_name)
+		if on and at == -1:
+			on_list.append(stage_name)
+		elif not on and at != -1:
+			if on_stages_for(mode_id) == PackedStringArray([stage_name]):
+				return false
+			on_list.remove_at(at)
+		custom_stages_on[key] = on_list
+		save_settings()
+		return true
+	# The last stage on stays on (#647): an off custom stage does not count as one left (#1047).
+	if not on and on_stages_for(mode_id) == PackedStringArray([stage_name]):
+		return false
 	if key == "stock":
 		var list := _stock_on_list()
 		var index: int = list.find(stage_name)
@@ -288,6 +357,12 @@ func set_stage_enabled_for(mode_id: String, stage_name: String, on: bool) -> boo
 func set_all_stages_for(mode_id: String, on: bool) -> void:
 	var pool := stages_for_mode(mode_id)
 	var key: String = mode_key(mode_id)
+	var customs := PackedStringArray()  # #1047: custom stages follow All on / All off too
+	if on:
+		for stage_name: String in pool:
+			if custom_stages.has(stage_name):
+				customs.append(stage_name)
+	custom_stages_on[key] = customs
 	if key == "stock":
 		var list := PackedStringArray()
 		for stage_name: String in pool:
@@ -480,6 +555,7 @@ func restore_defaults() -> void:
 	resolution = Vector2i.ZERO
 	disabled_stages_by_mode = {}
 	stock_stages_on = PackedStringArray()
+	custom_stages_on = {}  # custom stages are off by default (#1047)
 	disabled_weapons = PackedStringArray()
 	disabled_modifiers = {}
 	game_mode = ""
@@ -569,6 +645,12 @@ func load_settings() -> void:
 		var size: Variant = config.get_value(SECTION, "resolution", Vector2i.ZERO)
 		resolution = size if size is Vector2i and size.x > 0 and size.y > 0 else Vector2i.ZERO
 		_load_stage_lists(config)
+		custom_stages_on = {}
+		var stored_custom: Variant = config.get_value(SECTION, "custom_stages_on", {})
+		if stored_custom is Dictionary:
+			for mode_id: Variant in stored_custom:
+				if is_known_mode(str(mode_id)):
+					custom_stages_on[mode_key(str(mode_id))] = _strings(stored_custom[mode_id])
 		disabled_weapons = _strings(config.get_value(SECTION, "disabled_weapons", PackedStringArray()))
 		game_mode = str(config.get_value(SECTION, "game_mode", ""))
 		var chosen: String = str(config.get_value(SECTION, "language", LanguagesScript.AUTO))
@@ -632,6 +714,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "resolution", resolution)
 	config.set_value(SECTION, "stage_lists", disabled_stages_by_mode)
 	config.set_value(SECTION, "stock_stages_on", stock_stages_on)
+	config.set_value(SECTION, "custom_stages_on", custom_stages_on)
 	config.set_value(SECTION, "disabled_weapons", disabled_weapons)
 	config.set_value(SECTION, "game_mode", game_mode)
 	config.set_value(SECTION, "language", language)

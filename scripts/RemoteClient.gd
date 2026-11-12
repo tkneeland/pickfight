@@ -140,8 +140,12 @@ var _world: Dictionary = {}
 var _samples: Array[Dictionary] = []
 var _stage_id: int = -1
 var _stage: Node = null
-## Issue #1049: the host's latest custom stage definition, checked: {"id", "def"}.
-var _custom_stage: Dictionary = {}
+## Issue #1049: the host's custom stage definitions, checked and normalised
+## (`StageDef.validate()`'s "def"), by stage id: the few latest, so a mid-round
+## stage change can arrive while the old stage is still on screen.
+var _custom_stages: Dictionary = {}
+## How many custom stage definitions the client keeps (#1049).
+const CUSTOM_STAGES_KEPT: int = 4
 var _puppets: Dictionary = {} # key (String) -> RemotePuppet
 ## Issue #976: stage part id -> node, and the state each was last given;
 ## the part ids the host named that the last walk of the stage did not find,
@@ -1117,10 +1121,10 @@ func _round_shown() -> bool:
 
 ## Loads the host's stage by id (and as its night variant when the host's is)
 ## when a round is on screen and frees it when not.
-func _sync_stage() -> void:
+func _sync_stage(rebuild: bool = false) -> void:
 	var want: int = int(_world.get("stage_id", 0)) if _round_shown() else -1
 	var night: bool = want >= 0 and _night_in(_world)
-	if want == _stage_id and night == _stage_night:
+	if want == _stage_id and night == _stage_night and not rebuild:
 		return
 	_stage_night = night
 	if _stage != null:
@@ -1159,31 +1163,37 @@ func _sync_stage() -> void:
 ## Issue #1049: the host's `stage_def` message. The definition is checked with
 ## the host's own limits (StageDef) before it is kept, so a hostile host cannot
 ## make this client build a bad stage; a rejected one is dropped and its id draws
-## no stage. A built-in id never takes one. Only the latest is kept: the host
-## sends one before every round on a custom stage. When the id is already on
-## screen (the definition came late, or changed), the stage is rebuilt.
+## no stage. The id must be a whole number past the built-in list and within the
+## snapshot's u16. Only the checked, normalised definition is kept (unknown keys
+## gone), for the last `CUSTOM_STAGES_KEPT` ids. When the id is already on screen
+## (the definition came late, or changed), the stage is rebuilt at once.
 func _on_stage_def(msg: Dictionary) -> void:
-	var id: Variant = msg.get("id")
-	if not id is float or int(id) < stage_paths().size():
+	var raw_id: Variant = msg.get("id")
+	if not raw_id is float or float(raw_id) != floorf(float(raw_id)):
+		return
+	var id: int = int(raw_id)
+	if id < stage_paths().size() or id > 0xFFFF:
 		return
 	var checked: Dictionary = StageDefScript.validate(msg.get("def"))
 	if not bool(checked["ok"]):
 		push_warning("RemoteClient: the host's custom stage was rejected: %s" % checked["reason"])
 		return
-	if _custom_stage.get("id") == int(id) and _custom_stage.get("def") == msg["def"]:
+	var def: Dictionary = checked["def"]
+	if _custom_stages.get(id) == def:
 		return
-	_custom_stage = {"id": int(id), "def": msg["def"]}
-	if _stage_id == int(id):
-		_stage_id = -2 # forces `_sync_stage()` to build it afresh, now
-		_sync_stage()
+	_custom_stages.erase(id) # re-inserted last: the newest
+	_custom_stages[id] = def
+	while _custom_stages.size() > CUSTOM_STAGES_KEPT:
+		_custom_stages.erase(_custom_stages.keys()[0])
+	if _stage_id == id:
+		_sync_stage(true)
 
 ## The custom stage `id`, built from the host's definition with the host's own
 ## builder, or null when the host has sent none for it (#1049).
 func _build_custom_stage(id: int) -> Node:
-	if _custom_stage.get("id") != id:
+	if not _custom_stages.has(id):
 		return null
-	var built: Dictionary = StageBuilderScript.build(_custom_stage["def"])
-	return built["stage"] if bool(built["ok"]) else null
+	return StageBuilderScript.build_valid(_custom_stages[id])
 
 ## Issue #976: every stage part whose look the host sends, by the id both
 ## sides give it, with its own logic stopped where the host's state drives it.
