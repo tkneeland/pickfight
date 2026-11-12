@@ -1181,13 +1181,12 @@ func show_open_list() -> void:
 	var notes: PackedStringArray = PackedStringArray()
 	if not CustomStagesScript.recovery_problems.is_empty():
 		notes.append(_trf("STAGE_EDITOR_RECOVERY_FAILED", ", ".join(CustomStagesScript.recovery_problems)))
-	if not CustomStagesScript.recovery_notes.is_empty():
-		notes.append(_trf("STAGE_EDITOR_RECOVERED_COPY", ", ".join(CustomStagesScript.recovery_notes)))
+	var copies: PackedStringArray = CustomStagesScript.take_recovery_notes()
+	if not copies.is_empty():
+		notes.append(_trf("STAGE_EDITOR_RECOVERED_COPY", ", ".join(copies)))
 	if not notes.is_empty():
 		var note: Label = ScreenKitScript.themed_label("\n".join(notes), 18, UiThemeScript.HINT_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "RecoveryNote", TextServer.AUTOWRAP_WORD_SMART)
 		rows.add_child(note)
-		_message = "\n".join(notes)
-		_refresh()
 	if entries.is_empty():
 		rows.add_child(ScreenKitScript.themed_label(tr("STAGE_EDITOR_OPEN_EMPTY"), 20, UiThemeScript.HINT_LABEL))
 	for entry: Dictionary in entries:

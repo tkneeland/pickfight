@@ -31,15 +31,21 @@ static var dir_override: String = ""
 static var fail_writes_for_test: bool = false
 ## A scenario seam: true makes recovery's rename back fail, as a locked file would.
 static var fail_renames_for_test: bool = false
-## What the last recovery could not put back (#1253): one line per stranded
-## file kept in place because its rename failed. Empty when all went well.
+## A scenario seam: true makes recovery's removal of a stray fail.
+static var fail_removes_for_test: bool = false
+## What the last recovery left in place (#1253): one line per stray file it
+## could not move or remove. Reflects the folder now; empty when all went well.
 static var recovery_problems: PackedStringArray = PackedStringArray()
-## The stages the last recovery kept as recovered copies (#1255), by key.
+## The recovered copies made (#1255), by key, kept until `take_recovery_notes()`.
 static var recovery_notes: PackedStringArray = PackedStringArray()
 static var _stray_re: RegEx = null
+## Lower-case keys with a stray left in place: saving over them is refused.
+static var _pending: Dictionary = {}
+static var _warned: Dictionary = {}
 ## A stranded save's file name: `<key>.json.bak` / `.tmp` (numbered `-2`, `-3`
-## when taken), or the older `<key>.bak` / `.tmp`. Group 1 is the key, 2 the kind.
-const STRAY_PATTERN: String = "(?i)^(.+?)(?:\\.json)?\\.(bak|tmp)(?:-\\d+)?$"
+## when taken), or the older `<key>.bak` / `.tmp`. Group 1 is the key, 2 the
+## kind, 3 the number ("" for the first).
+const STRAY_PATTERN: String = "(?i)^(.+?)(?:\\.json)?\\.(bak|tmp)(?:-(\\d+))?$"
 
 ## The folder stages are kept in: the owner's `user://stages`, or a per-process
 ## temp folder in a `-s` run.
@@ -105,13 +111,13 @@ static func name_problem(stage_name: String, builtin_names: PackedStringArray) -
 
 ## Every saved stage, sorted by key: `{"key", "path", "ok", "reason", "def"}`,
 ## where "def" is the accepted definition in its JSON shape ({} when rejected).
-## At most `MAX_STAGES`.
+## At most `MAX_STAGES`. Recovers unfinished saves first (`_recover_stranded()`).
 static func list() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	recovery_problems = PackedStringArray()
-	recovery_notes = PackedStringArray()
 	var dir := DirAccess.open(stages_dir())
 	if dir == null:
+		recovery_problems = PackedStringArray()
+		_pending = {}
 		return out
 	_recover_stranded()
 	var files: PackedStringArray = dir.get_files()
@@ -128,83 +134,189 @@ static func list() -> Array[Dictionary]:
 			break
 	return out
 
-## A save cut short (a crash between `_write_safely()`'s steps) can leave a
-## stage as a `.bak` (the old file set aside) or a `.tmp` (the new one not yet
-## moved in), named as `STRAY_PATTERN` reads. Strays are taken in sorted order,
-## `.bak` before `.tmp` (an old file set aside beats an unfinished new one):
+## The recovered copies made since the last call, then forgotten (#1256): the
+## editor's Open list shows them once, whichever `list()` call did the recovery
+## (the lobby's refresh, a save's checks, ...).
+static func take_recovery_notes() -> PackedStringArray:
+	var notes: PackedStringArray = recovery_notes
+	recovery_notes = PackedStringArray()
+	return notes
+
+## Recovers saves cut short (a crash, or a failure between `_write_safely()`'s
+## steps), from the strays they leave beside the store, named as `STRAY_PATTERN`
+## reads: `.tmp` (the new text, written and read back, not yet moved in) and
+## `.bak` (the old file set aside). Strays are grouped by key, each group taken
+## in order (key, then number, so `-2` before `-10`). For one key:
 ## - a `.tmp` that is not a valid stage is an unfinished write: removed;
-## - with no `<key>.json` in place (any letter case), the stray is put back as
-##   it. A `.bak` is put back unchecked on purpose: it is the only copy, and an
-##   invalid one is then listed with its reason rather than lost;
-## - with one in place, a stray holding the same text is a leftover: removed;
-## - one holding anything else is never deleted (#1255): it is kept as its own
-##   stage, `<name> (recovered)` (numbered when taken), named in `recovery_notes`.
-## A stray that cannot be moved is kept where it is and named in
-## `recovery_problems` (#1253), so no copy of a stage is ever lost.
+## - a valid `.tmp` means the new text was complete, so the save is finished:
+##   it replaces the stage (or becomes it), and the group's `.bak` files, older
+##   copies being replaced, are removed. Of several valid `.tmp`s the newest
+##   (highest number) wins; an older one holding other text is kept as a copy;
+## - with no valid `.tmp` and the stage in place, its `.bak` files are what the
+##   finished save replaced: removed;
+## - with no valid `.tmp` and no stage, the first `.bak` is put back unchecked (it
+##   is the only copy; an invalid one is then listed with its reason, not lost),
+##   and any further `.bak` holding other text is kept as a copy.
+## A copy becomes its own stage, `<name> (recovered)` (numbered when taken), named
+## in `recovery_notes`, unless one with the same stage already exists (a retry
+## after a failed removal) or the store is full. Anything that cannot be moved or
+## removed is left in place, named in `recovery_problems` and blocks saving over
+## that key (`save()`), so no copy of a stage is ever lost.
 static func _recover_stranded() -> void:
+	recovery_problems = PackedStringArray()
+	_pending = {}
 	var dir_path: String = stages_dir()
 	var files: PackedStringArray = DirAccess.get_files_at(dir_path)
-	files.sort()
 	var present: Dictionary = {} # lower-case key -> key as saved
 	for file: String in files:
 		if file.get_extension().to_lower() == EXTENSION:
 			present[file.get_basename().to_lower()] = file.get_basename()
 	if _stray_re == null:
 		_stray_re = RegEx.create_from_string(STRAY_PATTERN)
-	for kind: String in ["bak", "tmp"]:
-		for file: String in files:
-			var m: RegExMatch = _stray_re.search(file)
-			if m == null or m.get_string(2).to_lower() != kind:
-				continue
-			var key: String = m.get_string(1)
-			var stray: String = ProjectSettings.globalize_path(dir_path.path_join(file))
-			var text: String = FileAccess.get_file_as_string(stray)
-			var checked: Dictionary = StageDefScript.validate_text(text)
-			if kind == "tmp" and not bool(checked["ok"]):
-				DirAccess.remove_absolute(stray) # an unfinished write that is not a stage
-				continue
-			if not present.has(key.to_lower()):
-				var err: Error = _rename(stray, ProjectSettings.globalize_path(path_of(key)))
-				if err == OK:
-					present[key.to_lower()] = key
-				else:
-					_keep_problem(file, err)
-				continue
-			if text == FileAccess.get_file_as_string(path_of(present[key.to_lower()])):
-				DirAccess.remove_absolute(stray) # the same stage is in place: a leftover
-				continue
-			var recovered: String = _recovered_key(key, present)
-			var moved: Error
-			if bool(checked["ok"]):
-				# Renamed inside too, so opening and saving it never lands back on `key`.
-				var def: Dictionary = StageDefScript.to_json_data(checked["def"])
-				def["name"] = recovered
-				moved = OK if _write_safely(path_of(recovered), JSON.stringify(def, "\t"), "") == "" else ERR_CANT_CREATE
-				if moved == OK:
-					DirAccess.remove_absolute(stray)
+	var groups: Dictionary = {} # lower-case key -> {"key", "bak": [[n, file]], "tmp": [[n, file]]}
+	for file: String in files:
+		var m: RegExMatch = _stray_re.search(file)
+		if m == null:
+			continue
+		var key: String = m.get_string(1)
+		var number: int = int(m.get_string(3)) if m.get_string(3) != "" else 1
+		var group: Dictionary = groups.get(key.to_lower(), {"key": key, "bak": [], "tmp": []})
+		(group[m.get_string(2).to_lower()] as Array).append([number, file])
+		groups[key.to_lower()] = group
+	var keys: Array = groups.keys()
+	keys.sort()
+	for lower: String in keys:
+		var group: Dictionary = groups[lower]
+		for kind: String in ["bak", "tmp"]:
+			(group[kind] as Array).sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+		_recover_group(dir_path, group, present)
+
+static func _recover_group(dir_path: String, group: Dictionary, present: Dictionary) -> void:
+	var key: String = group["key"]
+	var lower: String = key.to_lower()
+	# The newest valid .tmp finishes the save; invalid ones are unfinished writes.
+	var valid_tmps: Array = []
+	for entry: Array in group["tmp"]:
+		var text: String = FileAccess.get_file_as_string(dir_path.path_join(entry[1]))
+		if bool(StageDefScript.validate_text(text)["ok"]):
+			valid_tmps.append([entry[1], text])
+		else:
+			_remove(dir_path, entry[1], lower)
+	if not valid_tmps.is_empty():
+		var winner: Array = valid_tmps.pop_back()
+		var target: String = path_of(present.get(lower, key))
+		if FileAccess.get_file_as_string(target) != winner[1]:
+			var written: String = _write_safely(target, winner[1], target if present.has(lower) else "")
+			if written != "":
+				_problem(winner[0], written, lower)
+				return # nothing else for this key is touched until the save can finish
+		present[lower] = present.get(lower, key)
+		_remove(dir_path, winner[0], lower)
+		for older: Array in valid_tmps:
+			if older[1] == winner[1]:
+				_remove(dir_path, older[0], lower)
 			else:
-				moved = _rename(stray, ProjectSettings.globalize_path(path_of(recovered)))
-			if moved == OK:
-				present[recovered.to_lower()] = recovered
-				recovery_notes.append(recovered)
-			else:
-				_keep_problem(file, moved)
+				_keep_as_copy(dir_path, older[0], older[1], key, present)
+		for entry: Array in group["bak"]:
+			_remove(dir_path, entry[1], lower) # older copies the finished save replaced
+		return
+	var baks: Array = group["bak"]
+	if present.has(lower):
+		for entry: Array in baks:
+			_remove(dir_path, entry[1], lower) # what the finished save replaced
+		return
+	if baks.is_empty():
+		return
+	var first: String = baks[0][1]
+	var err: Error = _rename(ProjectSettings.globalize_path(dir_path.path_join(first)), ProjectSettings.globalize_path(path_of(key)))
+	if err != OK:
+		_problem(first, error_string(err), lower)
+		return # the rest wait until the first can be put back
+	present[lower] = key
+	var restored: String = FileAccess.get_file_as_string(path_of(key))
+	for i in range(1, baks.size()):
+		var text: String = FileAccess.get_file_as_string(dir_path.path_join(baks[i][1]))
+		if text == restored:
+			_remove(dir_path, baks[i][1], lower)
+		else:
+			_keep_as_copy(dir_path, baks[i][1], text, key, present)
+
+## Keeps the stray `file` (holding `text`, a copy of `key` that differs from the
+## stage now saved) as its own stage, then removes the stray. Idempotent: when a
+## stage holding the same stage already exists (an earlier pass made it but
+## could not remove the stray), only the removal is retried.
+static func _keep_as_copy(dir_path: String, file: String, text: String, key: String, present: Dictionary) -> void:
+	var checked: Dictionary = StageDefScript.validate_text(text)
+	var lower: String = key.to_lower()
+	if bool(checked["ok"]) and _copy_exists(checked["def"], present):
+		_remove(dir_path, file, lower)
+		return
+	if present.size() >= MAX_STAGES:
+		_problem(file, "the store holds %d stages, the most it keeps" % MAX_STAGES, lower)
+		return
+	var recovered: String = _recovered_key(key, present)
+	var err: Error = OK
+	if bool(checked["ok"]):
+		# Renamed inside too, so opening and saving it never lands back on `key`.
+		var def: Dictionary = StageDefScript.to_json_data(checked["def"])
+		def["name"] = recovered
+		var written: String = _write_safely(path_of(recovered), JSON.stringify(def, "\t"), "")
+		if written != "":
+			_problem(file, written, lower)
+			return
+		present[recovered.to_lower()] = recovered
+		if not recovery_notes.has(recovered):
+			recovery_notes.append(recovered)
+		_remove(dir_path, file, lower)
+		return
+	err = _rename(ProjectSettings.globalize_path(dir_path.path_join(file)), ProjectSettings.globalize_path(path_of(recovered)))
+	if err != OK:
+		_problem(file, error_string(err), lower)
+		return
+	present[recovered.to_lower()] = recovered
+	if not recovery_notes.has(recovered):
+		recovery_notes.append(recovered)
+
+## Whether a saved stage already holds `def` (ignoring its name).
+static func _copy_exists(def: Dictionary, present: Dictionary) -> bool:
+	var want: Dictionary = StageDefScript.to_json_data(def)
+	want.erase("name")
+	for saved: String in present.values():
+		var checked: Dictionary = StageDefScript.validate_text(FileAccess.get_file_as_string(path_of(saved)))
+		if bool(checked["ok"]):
+			var have: Dictionary = StageDefScript.to_json_data(checked["def"])
+			have.erase("name")
+			if have == want:
+				return true
+	return false
 
 static func _rename(from: String, to: String) -> Error:
 	return ERR_CANT_CREATE if fail_renames_for_test else DirAccess.rename_absolute(from, to)
 
-static func _keep_problem(file: String, err: Error) -> void:
-	recovery_problems.append("%s (%s)" % [file, error_string(err)])
-	push_warning("CustomStages: could not restore %s: %s; it is kept" % [file, error_string(err)])
+## Removes the stray `file`; one that will not go is a problem, kept in place.
+static func _remove(dir_path: String, file: String, lower_key: String) -> void:
+	var err: Error = ERR_CANT_CREATE if fail_removes_for_test else DirAccess.remove_absolute(ProjectSettings.globalize_path(dir_path.path_join(file)))
+	if err != OK:
+		_problem(file, error_string(err), lower_key)
+
+## Records that `file` is kept in place (`reason`), blocking saves over `lower_key`;
+## warned once per file in a session.
+static func _problem(file: String, reason: String, lower_key: String) -> void:
+	recovery_problems.append("%s (%s)" % [file, reason])
+	_pending[lower_key] = file
+	if not _warned.has(file):
+		_warned[file] = true
+		push_warning("CustomStages: could not recover %s: %s; it is kept" % [file, reason])
 
 ## A free key for a recovered copy of `key`: "<key> (recovered)", then
-## "(recovered 2)", ..., the base cut so the name fits `MAX_NAME_LENGTH`.
+## "(recovered 2)", ..., cut so the name fits `MAX_NAME_LENGTH`, and in its
+## file-key form so the name inside and the file name agree.
 static func _recovered_key(key: String, present: Dictionary) -> String:
 	var n: int = 1
 	while true:
 		var suffix: String = " (recovered)" if n == 1 else " (recovered %d)" % n
-		var base: String = key.left(StageDefScript.MAX_NAME_LENGTH - suffix.length()).strip_edges()
-		var candidate: String = base + suffix
+		var base: String = file_key(key).left(StageDefScript.MAX_NAME_LENGTH - suffix.length()).strip_edges()
+		var candidate: String = file_key(base + suffix)
 		if not present.has(candidate.to_lower()):
 			return candidate
 		n += 1
@@ -278,6 +390,8 @@ static func save(data: Dictionary, builtin_names: PackedStringArray, overwrite: 
 		refused["exists"] = true
 		refused["key"] = existing
 		return refused
+	if _pending.has(file_key(stage_name).to_lower()):
+		return _fail("an unfinished save of %s is kept in the stages folder and could not be recovered; move it out first" % file_key(stage_name))
 	if existing == "" and list().size() >= MAX_STAGES:
 		return _fail("the store holds %d stages, the most it keeps" % MAX_STAGES)
 	var err: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(stages_dir()))
