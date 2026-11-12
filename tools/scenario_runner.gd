@@ -1350,6 +1350,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_editor_test_play_round_trip_1047",
 	"stage_editor_asks_before_replacing_1047",
 	"stage_editor_reports_failed_recovery_1253",
+	"custom_stage_recovery_keeps_differing_copies_1255",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4475,6 +4476,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_editor_asks_before_replacing_1047()
 		"stage_editor_reports_failed_recovery_1253":
 			return await _scenario_stage_editor_reports_failed_recovery_1253()
+		"custom_stage_recovery_keeps_differing_copies_1255":
+			return await _scenario_custom_stage_recovery_keeps_differing_copies_1255()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -64051,8 +64054,9 @@ func _scenario_stage_editor_reports_failed_recovery_1253() -> Array[String]:
 	CustomStages1047.fail_renames_for_test = true
 	editor.show_open_list()
 	CustomStages1047.fail_renames_for_test = false
-	if not editor.message_text().contains("Kept.json.bak"):
-		failures.append("the editor did not report the failed recovery: '%s'" % editor.message_text())
+	var kept_note: Label = editor.find_child("RecoveryNote", true, false) as Label
+	if kept_note == null or not kept_note.text.contains("Kept.json.bak"):
+		failures.append("the Open list did not report the failed recovery")
 	if not FileAccess.file_exists(dir.path_join("Kept.json.bak")):
 		failures.append("the stranded copy was deleted")
 	editor.close_popup()
@@ -64062,3 +64066,122 @@ func _scenario_stage_editor_reports_failed_recovery_1253() -> Array[String]:
 	CustomStages1047.dir_override = ""
 	_scenario_completed = true
 	return failures
+
+## #1255, #1256: recovering unfinished saves. An interrupted overwrite is finished
+## or rolled back, never turned into a spurious copy; only a genuinely different
+## second copy becomes "<name> (recovered)", made once even when removing its
+## stray keeps failing, and never past the store's cap; strays are taken in
+## number order; a stray left in place blocks saving over its stage; the Open
+## popup shows recovered copies even when another list() did the recovery.
+func _plant_1256(dir: String, file: String, text: String) -> void:
+	var f := FileAccess.open(dir.path_join(file), FileAccess.WRITE)
+	f.store_string(text)
+	f.close()
+
+func _lone_1256(width: float) -> String:
+	return JSON.stringify(_stage_def_1049("Lone", width))
+
+func _width_1256(key: String) -> float:
+	var loaded: Dictionary = CustomStages1047.load_stage(key)
+	return float(loaded["def"]["parts"][0]["size"][0]) if bool(loaded["ok"]) else -1.0
+
+func _keys_1256() -> Array:
+	var keys: Array = CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"])
+	keys.sort()
+	return keys
+
+func _only_json_1256(dir: String, label: String, failures: Array[String]) -> void:
+	for f in DirAccess.get_files_at(dir):
+		if f.get_extension() != "json":
+			failures.append("%s: %s was left in the store" % [label, f])
+
+func _scenario_custom_stage_recovery_keeps_differing_copies_1255() -> Array[String]:
+	var failures: Array[String] = []
+	# Each crash point of one overwrite (Lone 800 -> 600) ends as Lone 600, no copy.
+	var crash_points: Array = [
+		["before the old file was set aside", [["Lone.json", _lone_1256(800.0)], ["Lone.json.tmp", _lone_1256(600.0)]]],
+		["between the two renames", [["Lone.json.bak", _lone_1256(800.0)], ["Lone.json.tmp", _lone_1256(600.0)]]],
+		["before the old copy was removed", [["Lone.json", _lone_1256(600.0)], ["Lone.json.bak", _lone_1256(800.0)]]],
+	]
+	for point: Array in crash_points:
+		var dir: String = _stages_dir_1047()
+		for planted: Array in point[1]:
+			_plant_1256(dir, planted[0], planted[1])
+		var keys: Array = _keys_1256()
+		if keys != ["Lone"] or _width_1256("Lone") != 600.0 or not CustomStages1047.take_recovery_notes().is_empty():
+			failures.append("crash %s: stages %s, Lone at width %s" % [point[0], keys, _width_1256("Lone")])
+		_only_json_1256(dir, "crash %s" % point[0], failures)
+	# Several older copies and no stage: the first (by number, -2 before -10) is
+	# put back; each other that differs is kept once as a recovered copy.
+	var dir: String = _stages_dir_1047()
+	_plant_1256(dir, "Lone.json.bak", _lone_1256(600.0))
+	_plant_1256(dir, "Lone.json.bak-10", _lone_1256(400.0))
+	_plant_1256(dir, "Lone.json.bak-2", _lone_1256(500.0))
+	_plant_1256(dir, "Lone.json.bak-3", _lone_1256(600.0))
+	var keys: Array = _keys_1256()
+	if keys != ["Lone", "Lone (recovered 2)", "Lone (recovered)"] or _width_1256("Lone") != 600.0 \
+			or _width_1256("Lone (recovered)") != 500.0 or _width_1256("Lone (recovered 2)") != 400.0:
+		failures.append("several copies gave %s (widths %s, %s, %s)" % [keys, _width_1256("Lone"), _width_1256("Lone (recovered)"), _width_1256("Lone (recovered 2)")])
+	if CustomStages1047.load_stage("Lone (recovered)")["def"].get("name") != "Lone (recovered)":
+		failures.append("a recovered copy kept its old name inside")
+	_only_json_1256(dir, "several copies", failures)
+	# Messages survive an intervening list() (the lobby's refresh) until the Open popup shows them.
+	CustomStages1047.scenes(PackedStringArray())
+	var editor: Node = load(StageEditorScene1047).instantiate()
+	get_root().add_child(editor)
+	await process_frame
+	editor.show_open_list()
+	var note: Label = editor.find_child("RecoveryNote", true, false) as Label
+	if note == null or not note.text.contains("Lone (recovered)") or not note.text.contains("Lone (recovered 2)"):
+		failures.append("the Open popup lost the recovered copies to an earlier list(): %s" % [note.text if note != null else "no note"])
+	editor.close_popup()
+	await process_frame
+	editor.show_open_list()
+	if editor.find_child("RecoveryNote", true, false) != null:
+		failures.append("the recovered-copy note showed twice")
+	editor.close_popup()
+	editor.queue_free()
+	await process_frame
+	# A copy whose stray will not go is made once, however many passes retry.
+	dir = _stages_dir_1047()
+	_plant_1256(dir, "Lone.json.bak", _lone_1256(600.0))
+	_plant_1256(dir, "Lone.json.bak-2", _lone_1256(500.0))
+	CustomStages1047.fail_removes_for_test = true
+	CustomStages1047.list()
+	CustomStages1047.list()
+	var stuck: PackedStringArray = CustomStages1047.recovery_problems
+	CustomStages1047.fail_removes_for_test = false
+	keys = _keys_1256()
+	if keys != ["Lone", "Lone (recovered)"] or stuck.is_empty():
+		failures.append("retries after a failed removal gave %s (problems %s)" % [keys, stuck])
+	_only_json_1256(dir, "failed removal", failures)
+	CustomStages1047.take_recovery_notes()
+	# A stray left in place blocks saving over its stage until it is recovered.
+	dir = _stages_dir_1047()
+	_plant_1256(dir, "Lone.json.bak", _lone_1256(600.0))
+	CustomStages1047.fail_renames_for_test = true
+	var blocked: Dictionary = CustomStages1047.save(_stage_def_1049("Lone", 300.0), PackedStringArray())
+	CustomStages1047.fail_renames_for_test = false
+	if blocked["ok"] or not String(blocked["reason"]).contains("unfinished save") or not FileAccess.file_exists(dir.path_join("Lone.json.bak")):
+		failures.append("saving over a stage with a kept stray was not refused: %s" % [blocked])
+	if _keys_1256() != ["Lone"] or _width_1256("Lone") != 600.0:
+		failures.append("the kept stray was not put back once it could be")
+	# A full store keeps a second copy in place instead of going past the cap.
+	dir = _stages_dir_1047()
+	for i in CustomStages1047.MAX_STAGES - 1:
+		_plant_1256(dir, "Filler %02d.json" % i, JSON.stringify(_stage_def_1049("Filler %02d" % i)))
+	_plant_1256(dir, "Lone.json.bak", _lone_1256(600.0))
+	_plant_1256(dir, "Lone.json.bak-2", _lone_1256(500.0))
+	var full: Array = _keys_1256()
+	if full.size() != CustomStages1047.MAX_STAGES or full.has("Lone (recovered)") or not FileAccess.file_exists(dir.path_join("Lone.json.bak-2")):
+		failures.append("a full store made a copy past the cap (%d stages)" % full.size())
+	CustomStages1047.take_recovery_notes()
+	# No folder at all: list() is empty and reports no stale problems.
+	CustomStages1047.recovery_problems = PackedStringArray(["stale"])
+	CustomStages1047.dir_override = dir.path_join("missing")
+	if not CustomStages1047.list().is_empty() or not CustomStages1047.recovery_problems.is_empty():
+		failures.append("list() of a missing folder kept stale problems")
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
