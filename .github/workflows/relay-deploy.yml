@@ -1,0 +1,26 @@
+# Redeploys the room-code relay to Fly.io when relay code changes on main, so no one
+# has to run `fly deploy` by hand (docs/deploy.md). Needs the FLY_API_TOKEN repo
+# secret (a Fly deploy token for pickfight-relay); without it the job is skipped.
+name: relay-deploy
+on:
+  push:
+    branches: [main]
+    paths: [relay/**]
+  workflow_dispatch:
+concurrency: relay-deploy
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.FLY_API_TOKEN != ''
+      - uses: superfly/flyctl-actions/setup-flyctl@1.5
+        if: env.FLY_API_TOKEN != ''
+      - name: Deploy
+        if: env.FLY_API_TOKEN != ''
+        run: flyctl deploy --remote-only --config relay/fly.toml --dockerfile relay/Dockerfile
+      - name: Skipped
+        if: env.FLY_API_TOKEN == ''
+        run: echo "FLY_API_TOKEN is not set; relay not deployed."
