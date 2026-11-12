@@ -1321,6 +1321,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_reports_felt_delay_1195",
 	"online_ping_readout_mirrors_to_joiner_1195",
 	"match_end_logs_ping_stats_1195",
+	"round_countdown_holds_fighters_until_go_1197",
 	"online_replayed_pong_one_sample_1195",
 	"remote_client_felt_per_match_and_respawn_1195",
 	"online_rebound_slot_merges_ping_stats_1195",
@@ -1331,6 +1332,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"remote_client_interp_slews_not_jumps_1195",
 	"snapshot_capture_cost_8_players_1195",
 	"online_game_added_delay_budget_1195",
+	"round_countdown_unlock_clears_held_release_1197",
+	"round_countdown_round_over_before_go_1197",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4398,6 +4401,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_online_ping_readout_mirrors_to_joiner_1195()
 		"match_end_logs_ping_stats_1195":
 			return await _scenario_match_end_logs_ping_stats_1195()
+		"round_countdown_holds_fighters_until_go_1197":
+			return await _scenario_round_countdown_holds_fighters_until_go_1197()
 		"online_replayed_pong_one_sample_1195":
 			return await _scenario_online_replayed_pong_one_sample_1195()
 		"remote_client_felt_per_match_and_respawn_1195":
@@ -4418,6 +4423,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_snapshot_capture_cost_8_players_1195()
 		"online_game_added_delay_budget_1195":
 			return await _scenario_online_game_added_delay_budget_1195()
+		"round_countdown_unlock_clears_held_release_1197":
+			return await _scenario_round_countdown_unlock_clears_held_release_1197()
+		"round_countdown_round_over_before_go_1197":
+			return await _scenario_round_countdown_round_over_before_go_1197()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -62443,6 +62452,133 @@ func _scenario_match_end_logs_ping_stats_1195() -> Array[String]:
 		failures.append("the relay kept a max of 1e9")
 	_scenario_completed = true
 	return failures
+## #1197: a round opens with "3, 2, 1, GO" after the stage title card. Until GO
+## the fighters are held (a held drag moves nothing), protected, and the round
+## has not started (no `round_started`, so no "FIGHT!", modifier, mode, pickups
+## or lava); 3, 2 and 1 each tick, the steps show on the round countdown card,
+## and at GO the fighters are let go and the protection's own time starts.
+## With Settings > "Round countdown" off, the round starts at once, and so
+## does round 1 of a match, which follows the lobby's own 3-2-1.
+func _scenario_round_countdown_holds_fighters_until_go_1197() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = get_root().get_node_or_null("Sfx")
+	var loop: Dictionary = _new_round_loop(ABANDON_GRACE_SEC * 100.0)
+	var roster: _LiveRoster = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	rm.round_countdown_step_sec = 0.3
+	rm.stage_title_sec = 0.4
+	# Spawn protection off: the held fighters are still protected until GO.
+	rm.spawn_protection_sec = 0.0
+	var steps: Array[int] = []
+	var step_msec: Array[int] = []
+	rm.round_countdown_ticked.connect(func(step: int) -> void:
+		steps.append(step)
+		step_msec.append(_game_msec()))
+	var started: Array[int] = []
+	rm.round_started.connect(func() -> void: started.append(_game_msec()))
+	var ticks_heard: Array[int] = [0]
+	if sfx != null:
+		sfx.played.connect(func(sound: StringName, _p: Variant, _s: float) -> void:
+			if sound == &"countdown":
+				ticks_heard[0] += 1)
+	players[0].bind_controller()
+	roster.slots = [0, 1]
+	roster.live = [0, 1]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the round never spawned its fighters")
+		await _teardown(loop["stage"])
+		return failures
+	var spawned_msec: int = _game_msec()
+	if not rm.round_countdown_active():
+		failures.append("no countdown ran at the round start")
+	if not players[0].round_locked or not players[1].round_locked:
+		failures.append("fighters were not held for the countdown")
+	if not players[0].spawn_protected:
+		failures.append("a fighter was not protected through the countdown (spawn protection 0)")
+	# The pickup timer waits for GO: one due now must not fire before it.
+	rm._pickup_director._next_pickup_msec = 0
+	# A drag held through the countdown moves nothing until GO.
+	while started.is_empty() and _game_msec() - spawned_msec < 5000:
+		players[0].set_input_vector(Vector2(0.0, -1.0))
+		if not steps.is_empty() and steps[-1] > 0 and players[0]._effective_input != Vector2.ZERO:
+			failures.append("a held drag reached the fighter at countdown step %d" % steps[-1])
+			break
+		if started.is_empty() and rm._pickup_director._next_pickup_msec != 0:
+			failures.append("the pickup timer ran during the countdown")
+			break
+		await physics_frame
+	if started.is_empty():
+		failures.append("the round never started (steps %s)" % [steps])
+	if steps.slice(0, 4) != [3, 2, 1, 0]:
+		failures.append("countdown steps %s, want [3, 2, 1, 0]" % [steps])
+	elif not started.is_empty():
+		var lead: int = step_msec[0] - spawned_msec
+		var to_go: int = step_msec[3] - step_msec[0]
+		print("      title lead %d ms, 3 to GO %d ms, round_started at GO+%d ms" % [lead, to_go, started[0] - step_msec[3]])
+		if lead < 300:
+			failures.append("the countdown began %d ms after the spawn, before the title card's 400 ms" % lead)
+		if absi(to_go - 900) > 150:
+			failures.append("3 to GO took %d ms, want 900" % to_go)
+		if started[0] < step_msec[3]:
+			failures.append("round_started went out before GO")
+		var protect_left: int = rm._protected_until_msec - step_msec[3]
+		if absi(protect_left) > 150:
+			failures.append("protection ran %d ms past GO, want 0 (spawn protection 0)" % protect_left)
+	if sfx != null and ticks_heard[0] != 3:
+		failures.append("heard %d countdown ticks, want 3 (3, 2, 1)" % ticks_heard[0])
+	await _await_ticks(2)
+	if players[0].round_locked or players[1].round_locked:
+		failures.append("fighters still held after GO")
+	if players[0]._effective_input == Vector2.ZERO:
+		failures.append("the held drag did not reach the fighter after GO")
+	if not await _await_condition(func() -> bool: return not players[0].spawn_protected, 1000):
+		failures.append("the countdown's protection outlasted GO with spawn protection 0")
+	var label: Label = rm._screen()._cards.round_countdown_label()
+	if label == null:
+		failures.append("the countdown card was never drawn")
+	await _await_condition(func() -> bool: return not rm.round_countdown_active(), 2000)
+	if label != null and label.visible:
+		failures.append("the GO card stayed up")
+	players[0].set_input_vector(Vector2.ZERO)
+	await _teardown(loop["stage"], false)
+	# Switched off: the next round starts at once, nobody held.
+	if sfx != null:
+		var was: bool = sfx.round_countdown
+		sfx.round_countdown = false
+		var loop2: Dictionary = _new_round_loop(ABANDON_GRACE_SEC * 100.0)
+		var rm2: Node = loop2["round_manager"]
+		var players2: Array[RigidBody2D] = loop2["players"]
+		rm2.round_countdown_step_sec = 0.3
+		var started2: Array[bool] = [false]
+		rm2.round_started.connect(func() -> void: started2[0] = true)
+		var roster2: _LiveRoster = loop2["roster"]
+		roster2.slots = [0, 1]
+		roster2.live = [0, 1]
+		if not await _await_condition(func() -> bool: return _all_alive(players2), ROUND_LOOP_TIMEOUT_MSEC):
+			failures.append("switched off: the round never spawned")
+		elif not started2[0] or rm2.round_countdown_active() or players2[0].round_locked:
+			failures.append("switched off: the round still counted down (started %s, locked %s)" % [started2[0], players2[0].round_locked])
+		sfx.round_countdown = was
+		await _teardown(loop2["stage"], false)
+	# Round 1 of a match: begun from the lobby, it goes straight in.
+	var loop3: Dictionary = _new_round_loop(ABANDON_GRACE_SEC * 100.0)
+	var rm3: Node = loop3["round_manager"]
+	var players3: Array[RigidBody2D] = loop3["players"]
+	rm3.round_countdown_step_sec = 0.3
+	await _await_ticks(2)
+	rm3._begin_match()  # roster still empty: round 1 waits for it
+	var roster3: _LiveRoster = loop3["roster"]
+	roster3.slots = [0, 1]
+	roster3.live = [0, 1]
+	if not await _await_condition(func() -> bool: return _all_alive(players3), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round 1: never spawned")
+	elif rm3.round_countdown_active() or players3[0].round_locked:
+		failures.append("round 1 of a match counted down after the lobby's 3-2-1")
+	await _teardown(loop3["stage"], false)
+	_scenario_completed = true
+	return failures
+
 # --- Issue #1195 review follow-ups -------------------------------------------------
 ## A replayed pong (the same n twice) adds one round-trip sample, not two.
 func _scenario_online_replayed_pong_one_sample_1195() -> Array[String]:
@@ -62767,4 +62903,111 @@ func _scenario_online_game_added_delay_budget_1195() -> Array[String]:
 	if before - after < 50.0:
 		failures.append("the game-added delay dropped %.1f ms, expected >= 50" % (before - after))
 	await _rc_close_241(rig)
+	return failures
+
+## #1197 review: a bumper or Space held through the countdown does not count as
+## released at GO. Each held source must come up and go down again after GO,
+## like the toggle and the remote flag.
+func _scenario_round_countdown_unlock_clears_held_release_1197() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _release_rig_463(Vector2(0, 0), NEW_WEAPON_FLOOR_STAND, "Unlock1197")
+	var server: Node = rig["server"]
+	var players: Array[RigidBody2D] = rig["players"]
+	server.apply_host_command("pc_seat", true)  # slot 0 bound, so the server steps it
+	server.set_lobby_state({"phase": "playing", "players": []})
+	await _await_ticks(3)
+	# A bumper, then Space (long past a tap), each held through the lock.
+	for source: String in ["bumper", "Space"]:
+		players[0].round_locked = true
+		await _await_ticks(3)
+		if source == "bumper":
+			server._slot_release_held[0] = 1
+			server._slot_bumper_down[0] = _game_msec()
+		else:
+			server._slot_action_down[0] = _game_msec() - 1000
+		await _await_ticks(3)
+		if not server.slot_released(0):
+			failures.append("setup: the held %s did not count as released" % source)
+		players[0].round_locked = false
+		await _await_ticks(3)
+		if server.slot_released(0) or players[0].input_released:
+			failures.append("%s held through the countdown still counted as released after GO" % source)
+	server.set_lobby_state({"phase": "lobby", "players": []})
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+
+## #1197 review: a round that ends during the hold (here the other fighter
+## leaves) still opens before it closes: the countdown comes down,
+## `round_started` fires ahead of `round_won`, and the survival clock never
+## ran through the hold. A round that reaches GO starts its survival clock at GO.
+func _scenario_round_countdown_round_over_before_go_1197() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = _new_round_loop(ABANDON_GRACE_SEC * 100.0)
+	var roster: _LiveRoster = loop["roster"]
+	var rm: Node = loop["round_manager"]
+	var players: Array[RigidBody2D] = loop["players"]
+	rm.round_countdown_step_sec = 0.3
+	rm.stage_title_sec = 0.4
+	rm.round_end_pause_sec = 1.5  # the next round must not be counting down when we look
+	var order: Array[String] = []
+	rm.round_started.connect(func() -> void: order.append("started"))
+	rm.round_won.connect(func(_slot: int) -> void: order.append("won"))
+	var go_msec: Array[int] = [-1]
+	rm.round_countdown_ticked.connect(func(step: int) -> void:
+		if step == 0:
+			go_msec[0] = _game_msec())
+	roster.slots = [0, 1]
+	roster.live = [0, 1]
+	if not await _await_condition(func() -> bool: return _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("the round never spawned its fighters")
+		await _teardown(loop["stage"])
+		return failures
+	# Round 1 (a match's first) has no countdown when begun from the lobby; this
+	# loop has no lobby, so it counts down. Let it reach GO and check the clock.
+	if not await _await_condition(func() -> bool: return go_msec[0] >= 0, 5000):
+		failures.append("round 1 never reached GO")
+	else:
+		var since: int = int(rm._stats._alive_since.get(0, -1))
+		print("      survival clock started %d ms from GO" % (since - go_msec[0]))
+		if since < 0 or absi(since - go_msec[0]) > 150:
+			failures.append("the survival clock started %d ms from GO, want at GO" % (since - go_msec[0]))
+	# Finish round 1: slot 1 leaves, slot 0 wins.
+	players[1].leave_round()
+	if not await _await_condition(func() -> bool: return order.has("won"), 3000):
+		failures.append("round 1 never ended")
+		await _teardown(loop["stage"])
+		return failures
+	# Round 2 counts down; slot 1 leaves during the hold.
+	var round1_survival: Array[int] = [int(rm._stats.survival_msec.get(0, 0))]
+	order.clear()
+	go_msec[0] = -1
+	if not await _await_condition(func() -> bool: return rm.round_countdown_active() and _all_alive(players), ROUND_LOOP_TIMEOUT_MSEC):
+		failures.append("round 2 never started counting down")
+		await _teardown(loop["stage"])
+		return failures
+	# Half a second into the hold (title 0.4 s + 3 x 0.3 s before GO), so a
+	# clock started at the spawn would show.
+	await _await_ticks(30)
+	players[1].leave_round()
+	if not await _await_condition(func() -> bool: return order.has("won"), 3000):
+		failures.append("a round left during the hold never ended (order %s)" % [order])
+	elif order.slice(0, 2) != ["started", "won"]:
+		failures.append("round_started did not come before round_won: %s" % [order])
+	if go_msec[0] >= 0:
+		failures.append("the countdown went on to GO after the round ended")
+	if rm.round_countdown_active():
+		failures.append("the countdown was still running after the round ended")
+	var label: Label = rm._screen()._cards.round_countdown_label()
+	if label != null and label.visible:
+		failures.append("the countdown card stayed up after the round ended")
+	if players[0].round_locked:
+		failures.append("the winner was still held after the round ended")
+	var survived: int = int(rm._stats.survival_msec.get(0, 0)) - round1_survival[0]
+	print("      slot 0 survival in the round left during the hold %d ms" % survived)
+	if survived > 150:
+		failures.append("the winner of a round left during the hold was credited %d ms survival, want ~0" % survived)
+	await _teardown(loop["stage"], false)
+	_scenario_completed = true
 	return failures

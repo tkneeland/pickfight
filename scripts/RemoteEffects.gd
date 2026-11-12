@@ -243,6 +243,10 @@ func play(ev: Dictionary) -> void:
 			cards.show_stage_title(str(ev.get("t", "")), float(ev.get("d", 1.0)), str(ev.get("r", "")))
 		"pause":
 			cards.show_pause_banner(bool(ev.get("on", false)))
+		"countdown":
+			# #1197: the host's countdown holds this joiner's fighter too, so the
+			# joiner sees it whenever the host runs one (the host's switch decides).
+			cards.show_round_countdown(int(ev.get("n", -1)))
 		"match_point":
 			var found: Array = []
 			for line: Variant in ev.get("lines", []):
@@ -301,6 +305,12 @@ func end_play_of_round() -> void:
 func round_left() -> void:
 	final_ko.end()
 	end_play_of_round()
+	hide_round_countdown()
+
+## Takes the round countdown down without the host's "countdown -1" event,
+## which a full queue can drop (#1197): the round left or ended.
+func hide_round_countdown() -> void:
+	cards.show_round_countdown(-1)
 
 # --- Head trails ---------------------------------------------------------------
 

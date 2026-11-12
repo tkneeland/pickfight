@@ -133,6 +133,11 @@ extends Node
 ## How long the stage name takes to sweep across. 0 turns it off.
 @export var stage_title_sec: float = 1.1
 
+## Issue #1197: each step of the "3, 2, 1, GO" a round opens with, after the
+## stage title card. scenes/Main.tscn has 0.6 s (3, 2, 1 and GO in 2.4 s); 0,
+## a round loop built in code, turns it off, as does Settings > "Round countdown".
+@export var round_countdown_step_sec: float = 0.0
+
 ## The HUD's KillFeed node (scenes/Main.tscn). Empty: KOs are still counted,
 ## just not shown.
 @export var kill_feed_path: NodePath
@@ -146,6 +151,8 @@ signal modifier_announced(title: String)
 ## Announcer hooks (#152): each whole second of the lobby countdown (3, 2,
 ## 1), and the round win that wins the match.
 signal countdown_ticked(seconds_left: int)
+## #1197: each step of the round countdown: 3, 2, 1, then 0 for GO.
+signal round_countdown_ticked(step: int)
 signal match_won(slot: int)
 ## Teams mode (issue #236): a team took a round, and a team won the match.
 ## A Teams match emits these instead of `match_won` (`round_won` still goes
@@ -296,6 +303,7 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_tick_final_ko()
+	_tick_round_countdown()
 	_tick_spawn_protection()
 	_tick_ghosts()
 	_tick_name_tags()
@@ -312,8 +320,9 @@ func _process(_delta: float) -> void:
 		State.ROUND_ACTIVE:
 			_check_round_end()
 			if _state == State.ROUND_ACTIVE:
-				_tick_airtime()
-				_pickup_director.tick()
+				if _round_play_begun:  # no airtime or pickups while the countdown holds (#1197)
+					_tick_airtime()
+					_pickup_director.tick()
 				if lobby_enabled and _lobby_publish_due():
 					_publish_lobby_state()
 		State.ROUND_END:
@@ -405,13 +414,134 @@ func _try_start_round() -> void:
 	_tie_slots.clear()
 	_kill_zone_home_y = NAN
 	_state = State.ROUND_ACTIVE
+	_round_play_begun = false
+	var counts_down: bool = _round_countdown_on() and not _skip_round_countdown
+	_skip_round_countdown = false
+	if counts_down:
+		_begin_round_countdown(_show_stage_title())
+	else:
+		_start_spawn_protection()
+		_begin_round_play(true)
+
+## Everything a round runs once its fighters are let go: at once, or at the
+## countdown's GO (#1197).
+## `show_title`: the round has no countdown, so its stage title goes up here,
+## after the modifier and mode banners, as it did before #1197.
+func _begin_round_play(show_title: bool = false) -> void:
+	_round_play_begun = true
+	# The survival clocks start here, not at the spawn, so the hold before GO
+	# counts toward nobody's survival time (#1197).
+	var standing: Array[int] = []
+	for slot: int in _in_round:
+		if slot >= 0 and slot < _players.size() and is_instance_valid(_players[slot]) and _players[slot].alive:
+			standing.append(slot)
+	_stats.begin_round(standing, GameClockScript.now_msec())
 	_start_round_modifier()
 	_start_game_mode()
 	_pickup_director.start()
 	_start_kill_zone_rise()
-	_start_spawn_protection()
-	_show_stage_title()
+	if show_title:
+		_show_stage_title()
 	round_started.emit()
+
+# --- Round countdown (issue #1197) --------------------------------------------
+#
+# Round 1 of a match skips it: the lobby's own 3-2-1 has just run.
+# After the stage title card, "3, 2, 1, GO" steps by `round_countdown_step_sec`
+# on game time (a pause holds it). The fighters stand spawned but held
+# (`Player.round_locked`) and spawn protected; at GO they are let go, the
+# round's systems start (`_begin_round_play()`: modifier, mode, pickups, lava,
+# `round_started` and its "FIGHT!") and the protection's own time starts.
+# Each step is drawn by `RoundCards` and streamed to Online joiners.
+
+## When "3" shows, on game time; -1 with no countdown running.
+var _countdown_start_msec: int = -1
+## The step last shown: 3, 2, 1, 0 for GO; 4 before "3".
+var _countdown_step: int = 4
+## The round the running countdown belongs to.
+var _countdown_round: int = 0
+## Whether this round's play has begun (`_begin_round_play()`): false through
+## the countdown, so the pickup director's tick waits for GO with its start.
+var _round_play_begun: bool = false
+## Set as a match begins: its round 1 follows the lobby countdown, so it does
+## not count down again. Consumed by the next round that starts.
+var _skip_round_countdown: bool = false
+
+func _round_countdown_on() -> bool:
+	if round_countdown_step_sec <= 0.0:
+		return false
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	return sfx == null or bool(sfx.get("round_countdown"))
+
+## Whether a round countdown is running (before GO, or GO still showing).
+func round_countdown_active() -> bool:
+	return _countdown_start_msec >= 0
+
+## `title_shown`: this round's stage title card is on screen, so "3" waits for it.
+func _begin_round_countdown(title_shown: bool) -> void:
+	var lead_msec: int = int(stage_title_sec * 1000.0) if title_shown else 0
+	var step_msec: int = int(round_countdown_step_sec * 1000.0)
+	_countdown_start_msec = GameClockScript.now_msec() + lead_msec
+	_countdown_step = 4
+	_countdown_round = _round_number
+	_set_round_locked(true)
+	# Protected from the spawn on (a held fighter can't dodge, so even with
+	# spawn protection set to 0); the protection's own seconds run from GO.
+	_start_spawn_protection(lead_msec + 3 * step_msec)
+
+func _tick_round_countdown() -> void:
+	if _countdown_start_msec < 0:
+		return
+	if _state != State.ROUND_ACTIVE or _round_number != _countdown_round:
+		_cancel_round_countdown()
+		return
+	var since: int = GameClockScript.now_msec() - _countdown_start_msec
+	if since < 0:
+		return
+	var step_msec: int = maxi(1, int(round_countdown_step_sec * 1000.0))
+	var index: int = since / step_msec
+	if index >= 4 and _countdown_step == 0:
+		_show_round_countdown(-1)
+		_countdown_start_msec = -1
+		return
+	# A long frame never skips GO.
+	var step: int = maxi(0, 3 - index)
+	if step == _countdown_step:
+		return
+	_countdown_step = step
+	_show_round_countdown(step)
+	round_countdown_ticked.emit(step)
+	if step == 0:
+		_set_round_locked(false)
+		_begin_round_play()
+
+## A round that ends before GO (a disconnect, a leave or a kick left one
+## fighter or one team, or nobody with a controller) still opens before it
+## closes: the countdown comes down and `round_started` fires ahead of the
+## result, so music, Juice and the Announcer see a whole round. The round's
+## systems are not started; the wind-down that follows has nothing to stop.
+func _release_held_round() -> void:
+	if _round_play_begun:
+		return
+	_cancel_round_countdown()
+	_round_play_begun = true
+	round_started.emit()
+
+## Lets the fighters go and takes the countdown down.
+func _cancel_round_countdown() -> void:
+	_set_round_locked(false)
+	_show_round_countdown(-1)
+	_countdown_start_msec = -1
+	_countdown_step = 4
+
+func _set_round_locked(on: bool) -> void:
+	for slot: int in _in_round:
+		if slot >= 0 and slot < _players.size() and is_instance_valid(_players[slot]):
+			_players[slot].set("round_locked", on and bool(_players[slot].get("alive")))
+
+func _show_round_countdown(step: int) -> void:
+	EffectStreamScript.record("countdown", {"n": step}) # the joiner's countdown
+	_screen().show_round_countdown(step)
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
 ## the next index into `stage_scenes` via `StageRotation.next_stage_index()`, and
@@ -592,6 +722,7 @@ func _check_round_end() -> void:
 	# A draw is played off, not thrown away (#554).
 	if alive_slots.is_empty() and not abandoned and not after_kick and _start_tiebreaker(_tie_slots):
 		return
+	_release_held_round()
 	if alive_slots.size() == 1:
 		var winner_slot: int = alive_slots[0]
 		_scores[winner_slot] += 1
@@ -890,15 +1021,17 @@ const SPAWN_BLINK_ALPHA: float = RespawnBlinkScript.BLINK_ALPHA
 var _protected: Array[Node2D] = []
 var _protected_until_msec: int = 0
 
-func _start_spawn_protection() -> void:
+## `extra_msec`: held fighters' countdown time, protected on top (#1197).
+func _start_spawn_protection(extra_msec: int = 0) -> void:
 	_end_spawn_protection()
-	if spawn_protection_sec <= 0.0:
+	var total_msec: int = int(maxf(spawn_protection_sec, 0.0) * 1000.0) + extra_msec
+	if total_msec <= 0:
 		return
 	for player: Variant in _players:
 		if player is Node2D and is_instance_valid(player) and bool(player.get("alive")):
 			player.set("spawn_protected", true)
 			_protected.append(player)
-	_protected_until_msec = GameClockScript.now_msec() + int(spawn_protection_sec * 1000.0)
+	_protected_until_msec = GameClockScript.now_msec() + total_msec
 
 func _tick_spawn_protection() -> void:
 	if _protected.is_empty():
@@ -1424,6 +1557,8 @@ func _begin_match() -> void:
 	var party: Node = _achievements()
 	if party != null:
 		party.on_match_started(_roster())
+	# The lobby's own 3-2-1 just ran: round 1 goes straight in (#1197, Sam).
+	_skip_round_countdown = true
 	_try_start_round()
 
 func _tick_lobby() -> void:
@@ -1630,13 +1765,17 @@ func _stage_display_name(stage_name: String) -> String:
 	var shown: String = tr(key)
 	return stage_name.to_upper() if shown == key else shown.to_upper()
 
-func _show_stage_title() -> void:
+## Whether the host's title card is now on screen (the round countdown waits
+## for it, #1197): not with no stage, no title time, or the card switched off.
+func _show_stage_title() -> bool:
 	if _current_stage == null or stage_title_sec <= 0.0:
-		return
+		return false
 	var title: String = _stage_display_name(str(_current_stage.name))
 	var rule: String = "%s: %s" % [GameModesScript.display_name(game_mode), GameModesScript.status_line(game_mode)]
 	EffectStreamScript.record("title", {"t": title, "d": stage_title_sec, "r": rule}) # the joiner's card (#976)
 	_screen().show_stage_title(title, stage_title_sec, rule)
+	var sfx: Node = get_node_or_null(^"/root/Sfx")
+	return sfx == null or bool(sfx.get("stage_title_card"))
 
 # --- Nicknames in play (issue #121, always on since #151) --------------------
 #
@@ -2012,6 +2151,7 @@ func _check_team_round_end(after_kick: bool) -> void:
 		winner_team = _survivor_team
 	elif not after_kick and _start_tiebreaker(_tie_slots):
 		return  # a draw is played off (#554)
+	_release_held_round()
 	_survivor_team = -1
 	if after_kick:
 		winner_team = -1
@@ -2475,7 +2615,9 @@ func _ko_round_started() -> void:
 	var stale_feed: Control = kill_feed()
 	if stale_feed != null and stale_feed.has_method("clear_banners"):
 		stale_feed.clear_banners() # a late banner must not land in this round (#613)
-	_stats.begin_round(_in_round, GameClockScript.now_msec())
+	# No survival clock starts at the spawn: `_begin_round_play()` starts them at
+	# GO, so a round that ends during the hold credits nobody with it (#1197).
+	_stats.begin_round([], GameClockScript.now_msec())
 	_career_kos.clear()
 	_career_self_kos.clear()
 
@@ -2606,7 +2748,14 @@ func _start_game_mode() -> void:
 	if _game_mode_node.has_signal("flag_captured"):
 		_game_mode_node.flag_captured.connect(_on_mode_flag_captured)
 	_game_mode_node.setup(self)
-	_game_mode_node.start_round(_in_round.duplicate())
+	# #1197: at the countdown's GO, a fighter who left during 3-2-1 is not in
+	# it (Stock would hand them lives no `cancel_respawn` ever takes back).
+	var slots: Array[int] = []
+	for slot: int in _in_round:
+		if not round_countdown_active() or (slot >= 0 and slot < _players.size()
+				and is_instance_valid(_players[slot]) and bool(_players[slot].get("alive"))):
+			slots.append(slot)
+	_game_mode_node.start_round(slots)
 
 ## A Stock match plays one stage (#375): the host's pick, or a random enabled
 ## one, resolved on the match's first round and held for the rest. Any other

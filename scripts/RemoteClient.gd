@@ -2224,6 +2224,8 @@ func _refresh_hud() -> void:
 			_attention_on_round_start()
 		elif phase != PHASE_ROUND_END:
 			effects.round_left()
+		else:
+			effects.hide_round_countdown() # a round over before GO (#1197)
 	_last_round_phase = phase
 	_refresh_extras()
 

@@ -376,6 +376,7 @@ const DISPLAY_FLAGS: Dictionary = {
 	&"edge_arrows": true,
 	&"match_point_plate": true,
 	&"stage_title_card": true,
+	&"round_countdown": true,
 	&"hit_pause": true,
 	&"pickup_callouts": true,
 	&"reduce_flash": false,
@@ -416,6 +417,10 @@ var match_point_plate: bool = true
 ## Whether `RoundCards` sweeps the stage title card (#120) at round start (#942). On by
 ## default; the countdown, banners and plates are unaffected. Set through `set_stage_title_card()`.
 var stage_title_card: bool = true
+## Whether a round opens with the "3, 2, 1, GO" countdown (#1197), fighters held until
+## GO. On by default; the host's choice runs the match, so Online joiners see the host's.
+## Set through `set_round_countdown()`.
+var round_countdown: bool = true
 ## Whether `Juice` freezes the game for 3 ticks on a heavy strike (#916). On by
 ## default; shake and slow-motion are unaffected. Set through `set_hit_pause()`.
 var hit_pause: bool = true
@@ -789,6 +794,10 @@ func set_match_point_plate(value: bool) -> void:
 ## Turn the stage title card (#942) on or off, and remember the choice.
 func set_stage_title_card(value: bool) -> void:
 	set_flag(&"stage_title_card", value)
+
+## Turn the round countdown (#1197) on or off, and remember the choice.
+func set_round_countdown(value: bool) -> void:
+	set_flag(&"round_countdown", value)
 
 ## Turn the hit-stop freeze (#916) on or off, and remember the choice.
 func set_hit_pause(value: bool) -> void:
