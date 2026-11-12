@@ -1,6 +1,6 @@
 # PickFight: Steam events and announcements drafts (#757)
 
-**DRAFT: needs owner approval.** Nothing here is published. Paste-ready copy for the Steam Events and Announcements tool in Steamworks. Feature claims come only from `docs/FEATURES.md`; tone and facts follow `store-page.md`; dates, price and plan follow `owner-decisions.md` (price $6.99, 20% launch-week discount, Coming Soon page mid-Dec 2026, Couch Co-Op Fest Feb 8-15 2027, Next Fest Jun 14-21 2027, launch Thu Jul 22 2027). Recount any number against FEATURES.md before posting.
+**DRAFT: needs owner approval.** Nothing here is published. Paste-ready copy for the Steam Events and Announcements tool in Steamworks. Feature claims come only from `docs/FEATURES.md`; tone and facts follow `store-page.md`; dates, price and plan follow `owner-decisions.md` (price $6.99, $4.99 for the first 14 days, Coming Soon page mid-Dec 2026, Couch Co-Op Fest Feb 8-15 2027, Next Fest Jun 14-21 2027, launch Thu Jul 22 2027). Recount any number against FEATURES.md before posting.
 
 Rules for every post:
 

@@ -1,6 +1,6 @@
 # Steam store page copy (draft)
 
-Draft for owner approval (#362). Store page target: public by about December 2026; demo in Steam Next Fest Feb 22 - Mar 1 2027; Early Access about March 2027 (see `docs/steam-readiness.md`). Source of truth for features is `docs/FEATURES.md`.
+**Superseded 2026-11-11 (#685, #1246): no Early Access, price $6.99 with a $4.99 14-day launch discount. Sections 2 and 3 below describe the older Early Access plan and need a rewrite before this page is published; see `docs/launch/store-page.md` for the current plan.** Draft for owner approval (#362). Store page target: public by about December 2026; demo in Steam Next Fest Feb 22 - Mar 1 2027; Early Access about March 2027 (see `docs/steam-readiness.md`). Source of truth for features is `docs/FEATURES.md`.
 
 Honesty rules for this copy:
 
@@ -90,7 +90,7 @@ Plans can change based on what players tell us.
 Up to 8 players, 12 weapons, 27 stages, several modes, bots, and local and online play. Art and audio are still being polished toward a cleaner flat-shape look.
 
 [b]Will the price change?[/b]
-PickFight launches at $6.99, with a $4.99 launch discount for the first 14 days. Wishlist now to get the launch email.
+PickFight launches at $6.99, with a $4.99 launch discount for the first 14 days.
 
 [b]Will the full version differ from Early Access?[/b]
 It will have more content and more polish. Everyone who bought in Early Access gets the 1.0 game.

@@ -23,7 +23,7 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 | Item | Placeholder | Who |
 |---|---|---|
 | Release date | **Superseded 2026-10-18:** full **1.0 on Thu Jul 22 2027** (no Early Access). Store page "Coming Soon" mid-December 2026; Steam Playtest during Couch Co-Op Fest (Feb 2027); demo in **Steam Next Fest, June 2027** (demo content still to decide with Austin, #448). Old 2026-10-01 plan (Feb Next Fest, March EA) is void. | owner |
-| Launch price per region | **Superseded 2026-11-11 (was $9.99 USD, 20% launch week, DLC $4.99; now $6.99, $4.99 for 14 days, DLC $2.99, #1246).** Earlier: **$9.99 USD** at 1.0, **20% launch-week discount**, Steam recommended regional prices as-is. Soundtrack DLC $2.99 on launch day; no other paid DLC. | owner |
+| Launch price per region | **Superseded 2026-11-11 (was $9.99 USD, 20% launch week, DLC $4.99; now $6.99, $4.99 for 14 days, DLC $2.99, #1246).** Earlier: **$9.99 USD** at 1.0, **20% launch-week discount**, Steam recommended regional prices as-is. Soundtrack DLC $4.99 on launch day; no other paid DLC. | owner |
 | Final name / trademark check | "PickFight"; trademark: run a clearance search only, do not file (owner, 2026-10-18) | owner |
 | Early Access vs 1.0 | **Superseded 2026-10-18:** full **1.0**, no Early Access | owner |
 | Publisher entity (individual vs company) | **Reopened 2026-10-18:** to decide with Austin (individual, Austin, or an LLC) before the Nov 2026 signup, with the revenue split (#685). The 10-01 answer was the owner as an individual; drives tax/bank forms and macOS/Windows signing identity | owner |
