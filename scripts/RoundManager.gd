@@ -527,6 +527,14 @@ func _release_held_round() -> void:
 	_round_play_begun = true
 	round_started.emit()
 
+## How much longer the running countdown holds the fighters, in msec: until
+## GO, 0 once play has begun or with no countdown running.
+func _hold_remaining_msec() -> int:
+	if _round_play_begun or _countdown_start_msec < 0:
+		return 0
+	var step_msec: int = int(round_countdown_step_sec * 1000.0)
+	return maxi(0, _countdown_start_msec + 3 * step_msec - GameClockScript.now_msec())
+
 ## Lets the fighters go and takes the countdown down.
 func _cancel_round_countdown() -> void:
 	_set_round_locked(false)
@@ -540,7 +548,8 @@ func _set_round_locked(on: bool) -> void:
 			_players[slot].set("round_locked", on and bool(_players[slot].get("alive")))
 
 func _show_round_countdown(step: int) -> void:
-	EffectStreamScript.record("countdown", {"n": step}) # the joiner's countdown
+	# The joiner's countdown; `s` lets it take "GO!" down itself if the -1 is lost.
+	EffectStreamScript.record("countdown", {"n": step, "s": round_countdown_step_sec})
 	_screen().show_round_countdown(step)
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
@@ -3050,7 +3059,12 @@ func _start_tiebreaker(tied: Array[int]) -> bool:
 		_game_mode_node.begin_tiebreak(back)
 	var first: bool = _tiebreaker == null
 	_ensure_tiebreaker().start_round(back)
-	_start_spawn_protection()
+	# #1197: a draw before GO plays off from the hold: the tied stand held
+	# again until GO, protected through it and for the usual time after.
+	var hold_msec: int = _hold_remaining_msec()
+	if hold_msec > 0:
+		_set_round_locked(true)
+	_start_spawn_protection(hold_msec)
 	# The banner and the announcer's "Sudden Death!" both come from here.
 	if first:
 		_announce_modifier("Sudden Death")

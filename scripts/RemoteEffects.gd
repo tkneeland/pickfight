@@ -246,7 +246,13 @@ func play(ev: Dictionary) -> void:
 		"countdown":
 			# #1197: the host's countdown holds this joiner's fighter too, so the
 			# joiner sees it whenever the host runs one (the host's switch decides).
-			cards.show_round_countdown(int(ev.get("n", -1)))
+			var step: int = int(ev.get("n", -1))
+			cards.show_round_countdown(step)
+			_countdown_shown += 1
+			if step == 0 and is_inside_tree():
+				# "GO!" comes down on its own a step and a half on, in case the
+				# host's "countdown -1" is dropped; a pause holds it, as on the host.
+				get_tree().create_timer(maxf(float(ev.get("s", 1.0)), 0.1) * 1.5, false).timeout 					.connect(_on_go_shown_long_enough.bind(_countdown_shown))
 		"match_point":
 			var found: Array = []
 			for line: Variant in ev.get("lines", []):
@@ -306,6 +312,13 @@ func round_left() -> void:
 	final_ko.end()
 	end_play_of_round()
 	hide_round_countdown()
+
+## Counts countdown steps shown, so a "GO!" timeout only hides its own "GO!".
+var _countdown_shown: int = 0
+
+func _on_go_shown_long_enough(shown: int) -> void:
+	if shown == _countdown_shown:
+		hide_round_countdown()
 
 ## Takes the round countdown down without the host's "countdown -1" event,
 ## which a full queue can drop (#1197): the round left or ended.

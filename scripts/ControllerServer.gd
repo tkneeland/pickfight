@@ -843,20 +843,29 @@ func _reset_release_on_respawn(slot: int) -> void:
 		var peer: Variant = _slot_peers[slot]
 		if _is_pc_remote(peer):
 			peer.send_text(JSON.stringify({"t": "release", "v": false}))
-		# Only a drag actually held out waits: recentring a controller already at
-		# rest would race (and eat) the first drag of the round.
-		if _slot_virtual[slot] == 0 and _smoothers[slot].target.length() > RESPAWN_NEUTRAL_EPSILON:
-			_slot_await_neutral[slot] = 1
-			if slot == _host_pc_slot:
-				_host_mouse.reset()
-				_smoothers[slot].push(Vector2.ZERO)
-			if (peer is WebSocketPeer or peer is RemoteSeat) and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
-				peer.send_text(JSON.stringify({"t": "recentre"}))
+		_await_neutral_if_held(slot)
 	_slot_was_alive[slot] = now_alive
+
+## Issue #1185: a drag held out across a round boundary waits until the
+## controller comes back to neutral (`_respawn_gated_input`). Only a drag
+## actually held out waits: recentring a controller already at rest would race
+## (and eat) the first drag of the round. Bots are never held back.
+func _await_neutral_if_held(slot: int) -> void:
+	if _slot_virtual[slot] != 0 or _smoothers[slot].target.length() <= RESPAWN_NEUTRAL_EPSILON:
+		return
+	_slot_await_neutral[slot] = 1
+	if slot == _host_pc_slot:
+		_host_mouse.reset()
+		_smoothers[slot].push(Vector2.ZERO)
+	var peer: Variant = _slot_peers[slot]
+	if (peer is WebSocketPeer or peer is RemoteSeat) and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		peer.send_text(JSON.stringify({"t": "recentre"}))
 
 ## Issue #1197: at GO a fighter starts held, not released, whatever was pressed
 ## through the countdown (an Online client toggles its own release, so it is
-## told to clear it, as at a respawn).
+## told to clear it, as at a respawn), and with its weapon at rest: a drag held
+## through the countdown waits for neutral, as at a respawn, so it does not
+## snap the weapon out at GO.
 func _reset_release_on_unlock(slot: int) -> void:
 	var locked: int = 1 if bool(_players[slot].get("round_locked")) else 0
 	if locked == 0 and _slot_was_locked[slot] == 1:
@@ -866,6 +875,7 @@ func _reset_release_on_unlock(slot: int) -> void:
 		var peer: Variant = _slot_peers[slot]
 		if _is_pc_remote(peer):
 			peer.send_text(JSON.stringify({"t": "release", "v": false}))
+		_await_neutral_if_held(slot)
 	_slot_was_locked[slot] = locked
 
 ## Issue #1185: the vector to hand `slot`'s player this tick, `smoothed` unless
@@ -886,8 +896,13 @@ func _apply_smoothed_input(delta: float) -> void:
 			continue
 		_reset_release_on_respawn(slot)
 		_reset_release_on_unlock(slot)
-		_players[slot].set_input_vector(_respawn_gated_input(slot, _smoothers[slot].step(delta)))
-		_players[slot].set_input_released(slot_released(slot))
+		var smoothed: Vector2 = _respawn_gated_input(slot, _smoothers[slot].step(delta))
+		# #1197: a fighter held by the countdown is handed nothing, neither the
+		# drag nor a held button, so the tick it is let go at GO never acts on
+		# what was held through the countdown.
+		var locked: bool = bool(_players[slot].get("round_locked"))
+		_players[slot].set_input_vector(Vector2.ZERO if locked else smoothed)
+		_players[slot].set_input_released(slot_released(slot) and not locked)
 
 ## Weapon diagnostics run on the physics tick because that is the rate the weapon is
 ## actually integrated at, which makes "held steady for N frames" meaningful.
