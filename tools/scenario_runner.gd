@@ -1342,6 +1342,8 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"custom_stages_off_by_default_1047",
 	"round_manager_loads_custom_stages_1047",
 	"custom_stage_preview_drawn_1047",
+	"stage_test_play_round_trip_1047",
+	"title_stage_editor_card_1047",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4451,6 +4453,10 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_round_manager_loads_custom_stages_1047()
 		"custom_stage_preview_drawn_1047":
 			return await _scenario_custom_stage_preview_drawn_1047()
+		"stage_test_play_round_trip_1047":
+			return await _scenario_stage_test_play_round_trip_1047()
+		"title_stage_editor_card_1047":
+			return await _scenario_title_stage_editor_card_1047()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -63446,3 +63452,103 @@ func _scenario_custom_stage_preview_drawn_1047() -> Array[String]:
 		failures.append("a non-definition drew a preview")
 	_scenario_completed = true
 	return failures
+
+const StageTestPlay1047 := preload("res://scripts/StageTestPlay.gd")
+
+## The scene changes StageTestPlay asked for, recorded instead of made.
+var _scene_changes_1047: Array[String] = []
+func _record_scene_1047(path: String) -> void:
+	_scene_changes_1047.append(path)
+
+func _test_play_reset_1047() -> void:
+	StageTestPlay1047.active = false
+	StageTestPlay1047.def = {}
+	StageTestPlay1047.editor_state = {}
+	StageTestPlay1047.change_scene = Callable()
+	_scene_changes_1047.clear()
+
+## A test play: the rotation is the edited stage alone, the round is Classic
+## whatever the host picked, and the round's end, the podium or Esc each go
+## back to the editor with its state kept. A stage that fails StageDef never starts.
+func _scenario_stage_test_play_round_trip_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_test_play_reset_1047()
+	StageTestPlay1047.change_scene = _record_scene_1047
+	var bad: Dictionary = _stage_def_1049("Bad")
+	bad["spawns"] = []
+	if StageTestPlay1047.start(get_root().get_tree(), bad, {}) == "" or StageTestPlay1047.active or not _scene_changes_1047.is_empty():
+		failures.append("an invalid stage started a test play")
+	var state: Dictionary = {"note": "kept"}
+	if StageTestPlay1047.start(get_root().get_tree(), _stage_def_1049("Trial"), state) != "" or _scene_changes_1047 != [StageTestPlay1047.MAIN_SCENE]:
+		failures.append("a valid stage did not start the game: %s" % [_scene_changes_1047])
+	_scene_changes_1047.clear()
+	for ending: String in ["round", "victory", "esc"]:
+		StageTestPlay1047.active = true
+		StageTestPlay1047.def = StageDef1049.to_json_data(StageDef1049.validate(_stage_def_1049("Trial"))["def"])
+		StageTestPlay1047.editor_state = state
+		var rig: Dictionary = _koth_stage_rig(STAGE_PATHS[0])
+		var rm: Node = rig["rm"]
+		await _await_ticks(2)
+		if not rm.is_test_play() or rm.stage_scenes.size() != 1 or StageBuilder1049.def_of(rm.stage_scenes[0].instantiate()).get("name") != "Trial":
+			failures.append("%s: the rotation is not the test stage alone" % ending)
+		rm._latch_game_mode()
+		if rm.game_mode != GameModesType.CLASSIC:
+			failures.append("%s: a test play runs mode '%s', wanted Classic" % [ending, rm.game_mode])
+		_scene_changes_1047.clear()
+		match ending:
+			"round":
+				rm._ko_round_ended(-1)
+				rm._try_start_round()
+			"victory":
+				rm._enter_victory()
+			"esc":
+				var esc := InputEventKey.new()
+				esc.pressed = true
+				esc.physical_keycode = KEY_ESCAPE
+				rm._input(esc)
+		if _scene_changes_1047 != [StageTestPlay1047.EDITOR_SCENE] or StageTestPlay1047.active or StageTestPlay1047.editor_state != state:
+			failures.append("%s: went to %s (active %s), wanted the editor with its state" % [ending, _scene_changes_1047, StageTestPlay1047.active])
+		await _teardown(rig["stage"], false)
+	_test_play_reset_1047()
+	_scenario_completed = true
+	return failures
+
+## The title screen has a fourth card, Stage editor (E), which opens the editor;
+## the demo build leaves it out.
+func _scenario_title_stage_editor_card_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_test_play_reset_1047()
+	StageTestPlay1047.change_scene = _record_scene_1047
+	var rig: Dictionary = await _kind_rig_435(failures)
+	if rig.is_empty():
+		return failures
+	var screen: CanvasLayer = rig["screen"]
+	screen.show_title(true)
+	var card: Button = screen.title_button("editor")
+	if card == null or not card.is_visible_in_tree():
+		failures.append("no visible Stage editor card on the title screen")
+	else:
+		card.pressed.emit()
+		if _scene_changes_1047 != [StageTestPlay1047.EDITOR_SCENE]:
+			failures.append("the Stage editor card went to %s" % [_scene_changes_1047])
+		if rig["server"].match_kind() != "":
+			failures.append("the Stage editor card picked a match kind '%s'" % rig["server"].match_kind())
+	await _kind_close_435(rig)
+	_scene_changes_1047.clear()
+	DemoBuildType1047.forced = 1
+	var demo_rig: Dictionary = await _kind_rig_435(failures)
+	if not demo_rig.is_empty():
+		demo_rig["screen"].show_title(true)
+		var demo_card: Button = demo_rig["screen"].title_button("editor")
+		if demo_card != null and demo_card.is_visible_in_tree():
+			failures.append("the demo build shows the Stage editor card")
+		demo_rig["screen"].press_title("editor")
+		if not _scene_changes_1047.is_empty():
+			failures.append("the demo build opened the editor")
+		await _kind_close_435(demo_rig)
+	DemoBuildType1047.forced = -1
+	_test_play_reset_1047()
+	_scenario_completed = true
+	return failures
+
+const DemoBuildType1047 := preload("res://scripts/DemoBuild.gd")

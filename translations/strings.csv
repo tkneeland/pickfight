@@ -58,6 +58,8 @@ TITLE_ONLINE_HINT,Everyone plays on their own computer,Alle spielen am eigenen C
 TITLE_PICK,How are you playing?,Wie spielt ihr?,Comment on joue ?,¿Cómo van a jugar?,Como vocês vão jogar?,怎么玩?,どうやって遊ぶ?,어떻게 할래요?,Как играем?
 TITLE_SOLO,Solo (S),Solo (S),Solo (S),Solo (S),Solo (S),单人 (S),ソロ (S),솔로 (S),Один (S)
 TITLE_SOLO_HINT,You against 3 bots,Du gegen 3 Bots,Toi contre 3 bots,Tú contra 3 bots,Você contra 3 bots,你对战 3 个电脑,あなた対ボット3体,나 혼자 봇 3명과,Вы против 3 ботов
+TITLE_EDITOR,Stage editor (E),Stage-Editor (E),Éditeur de stage (E),Editor de escenarios (E),Editor de fases (E),关卡编辑器 (E),ステージエディター (E),스테이지 편집기 (E),Редактор арен (E)
+TITLE_EDITOR_HINT,Build your own stage,Baue deine eigene Stage,Crée ton propre stage,Crea tu propio escenario,Crie sua própria fase,打造你自己的关卡,自分のステージを作ろう,나만의 스테이지 만들기,Постройте свою арену
 DETAIL_AIRBORNE,%.1fs airborne,%.1fs in der Luft,%.1f s en l'air,%.1f s en el aire,%.1f s no ar,腾空 %.1f 秒,滞空 %.1f秒,체공 %.1f초,%.1f с в воздухе
 DETAIL_ALIVE,%s alive,%s am Leben,%s en vie,%s con vida,%s vivos,存活 %s,生存 %s,생존 %s,Жив: %s
 DETAIL_HAYMAKER,%d damage in one hit,%d Schaden in einem Treffer,%d de dégâts en un coup,%d de daño de un golpe,%d de dano em um golpe,一击造成 %d 伤害,一撃で %d ダメージ,한 방에 피해 %d,%d урона одним ударом

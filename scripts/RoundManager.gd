@@ -278,6 +278,7 @@ func _ready() -> void:
 	if load_custom_stages == null:
 		load_custom_stages = not SfxType.is_script_main_loop(get_tree())
 	refresh_custom_stages()
+	_setup_test_play()
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
 	_watch_for_buzzes()
@@ -359,6 +360,9 @@ func _process(_delta: float) -> void:
 ## forever, is counted as present, and gets spawned as a limp body.
 func _try_start_round() -> void:
 	if _controller_server == null:
+		return
+	if _test_play and _test_round_over:
+		StageTestPlayType.return_to_editor(get_tree()) # the test round is done (#1047)
 		return
 	_controller_server.expire_disconnected_claims()
 	var roster: Array[int] = _controller_server.claimed_slots()
@@ -554,6 +558,54 @@ const SfxType := preload("res://scripts/Sfx.gd")
 ## built-in ones. Null until `_ready()` decides: on in the game, off in a `-s`
 ## run, so a scenario's own `stage_scenes` stay as it set them unless it opts in.
 var load_custom_stages: Variant = null
+
+# --- Test play from the stage editor (#1047) ----------------------------------
+
+const StageTestPlayType := preload("res://scripts/StageTestPlay.gd")
+
+## True while this game is the editor's test play: one stage, an offline Solo
+## Classic round, then back to the editor.
+var _test_play: bool = false
+var _test_round_over: bool = false
+
+## When the editor handed over a stage (`StageTestPlay.active`), the rotation
+## is that stage alone and an offline Solo match starts at once; a stage that
+## will not build goes straight back to the editor.
+func _setup_test_play() -> void:
+	if not StageTestPlayType.active:
+		return
+	load_custom_stages = false
+	var built: Dictionary = StageBuilderScript.build(StageTestPlayType.def)
+	var scene: PackedScene = StageBuilderScript.pack(built["stage"]) if bool(built["ok"]) else null
+	if built["stage"] != null:
+		built["stage"].free()
+	if scene == null:
+		StageTestPlayType.return_to_editor(get_tree())
+		return
+	var only: Array[PackedScene] = [scene]
+	stage_scenes = only
+	_test_play = true
+	_start_test_play.call_deferred()
+
+func _start_test_play() -> void:
+	if _controller_server == null or not _controller_server.has_method("apply_host_command"):
+		return
+	_controller_server.apply_host_command("kind", "solo")
+	if _lobby_screen != null:
+		_lobby_screen.show_title(false)
+	_controller_server.apply_host_command("start")
+
+## Esc during a test play goes straight back to the editor (#1047).
+func _input(event: InputEvent) -> void:
+	if not _test_play:
+		return
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_ESCAPE:
+		get_viewport().set_input_as_handled()
+		StageTestPlayType.return_to_editor(get_tree())
+
+func is_test_play() -> bool:
+	return _test_play
 
 ## #1047: `stage_scenes` becomes its built-in stages (in their current order,
 ## so `--demo`'s reorder holds, and their ids, which Online clients index, never
@@ -1516,6 +1568,9 @@ func _tick_airtime() -> void:
 		_stats.note_air(slot, not touching, now)
 
 func _enter_victory() -> void:
+	if _test_play:
+		StageTestPlayType.return_to_editor(get_tree()) # a test play has no podium (#1047)
+		return
 	_end_card_up = false
 	_victory_until_msec = GameClockScript.now_msec() + int(victory_continue_sec * 1000.0)
 	_end_final_ko()
@@ -2665,6 +2720,7 @@ func _ko_round_started() -> void:
 ## winning speaks for itself on the scoreboard.
 func _ko_round_ended(winner_slot: int) -> void:
 	_rounds_finished += 1
+	_test_round_over = _test_play
 	_stats.end_round(GameClockScript.now_msec())
 	var feed: Control = kill_feed()
 	if _team_mode:
@@ -2862,6 +2918,9 @@ func _rules_state() -> Dictionary:
 ## countdown runs out and held for all of it. Only a lobby match takes it, so a
 ## `game_mode` set directly (the scenario seam) is left alone.
 func _latch_game_mode() -> void:
+	if _test_play:
+		game_mode = GameModesScript.CLASSIC # a test plays the plain round, whatever the host picked (#1047)
+		return
 	if not lobby_enabled or _controller_server == null or not _controller_server.has_method("game_mode"):
 		return
 	var picked: String = str(_controller_server.game_mode())

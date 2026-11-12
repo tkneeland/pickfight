@@ -27,17 +27,18 @@ const TITLE_WISHLIST_KEY: Key = KEY_W
 ## The key that quits from the title screen (#718).
 const TITLE_QUIT_KEY: Key = KEY_Q
 
-const TITLE_KINDS: Array[String] = ["local", "online", "solo"]
-const TITLE_KEYS: Dictionary = {"local": KEY_C, "online": KEY_O, "solo": KEY_S}
+const TITLE_KINDS: Array[String] = ["local", "online", "solo", "editor"]
+const TITLE_KEYS: Dictionary = {"local": KEY_C, "online": KEY_O, "solo": KEY_S, "editor": KEY_E}
 const TITLE_BUTTON_FONT_SIZE: int = 40
 ## The logo as the mockup frames it (#546), and each card's colour variation.
 const TITLE_LOGO_SIZE: Vector2 = Vector2(1360, 300)
-const TITLE_CARD_VARIATIONS: Dictionary = {"local": &"TitleCardOrange", "online": &"TitleCardSky", "solo": &"TitleCardGreen", "host": &"TitleCardSky", "join": &"TitleCardOrange"}
+const TITLE_CARD_VARIATIONS: Dictionary = {"local": &"TitleCardOrange", "online": &"TitleCardSky", "solo": &"TitleCardGreen", "editor": &"TitleCardOrange", "host": &"TitleCardSky", "join": &"TitleCardOrange"}
 const TITLE_CARD_HEIGHT: float = 210.0
 ## The fork after Online (#1075): Host a room or Join a friend, with a Back path.
 const FORK_KINDS: Array[String] = ["host", "join"]
 const FORK_KEYS: Dictionary = {"host": KEY_H, "join": KEY_J}
 const REMOTE_CLIENT_SCENE: String = "res://scenes/RemoteClient.tscn"
+const StageTestPlayScript := preload("res://scripts/StageTestPlay.gd")
 
 var _screen # the LobbyScreen
 var _title_panel: Control
@@ -112,6 +113,10 @@ func press_title(kind: String) -> void:
 		return
 	if kind == "quit":
 		QuitGameScript.quit_game(_screen.get_tree(), _screen._server) # nobody is seated yet: no confirm (#718)
+		return
+	if kind == "editor":
+		if not DemoBuildScript.is_active(): # the demo plays only its slice of stages (#361): no editor
+			StageTestPlayScript.open_editor(_screen.get_tree()) # the stage editor (#1047)
 		return
 	var server: Object = _screen._server
 	if server == null:
@@ -207,9 +212,11 @@ func build() -> void:
 	cards.add_theme_constant_override("separation", 40)
 	box.add_child(cards)
 	var labels: Dictionary = {"local": ["TITLE_COUCH", "TITLE_COUCH_HINT"], "online": ["TITLE_ONLINE", "TITLE_ONLINE_HINT"],
-		"solo": ["TITLE_SOLO", "TITLE_SOLO_HINT"]}
+		"solo": ["TITLE_SOLO", "TITLE_SOLO_HINT"], "editor": ["TITLE_EDITOR", "TITLE_EDITOR_HINT"]}
 	var previous: Button = null
 	for kind: String in TITLE_KINDS:
+		if kind == "editor" and DemoBuildScript.is_active():
+			continue # the demo has no stage editor (#1047)
 		var button := _build_card(kind, labels[kind][0], labels[kind][1])
 		cards.add_child(button)
 		_title_buttons[kind] = button
@@ -242,7 +249,7 @@ func build() -> void:
 	_title_buttons["credits"] = credits_button
 	quit_button.focus_neighbor_right = quit_button.get_path_to(credits_button)
 	credits_button.focus_neighbor_left = credits_button.get_path_to(quit_button)
-	var last_card: Button = _title_buttons[TITLE_KINDS[TITLE_KINDS.size() - 1]]
+	var last_card: Button = previous # the last card built (the demo leaves out the editor, #1047)
 	last_card.focus_neighbor_bottom = last_card.get_path_to(quit_button)
 	quit_button.focus_neighbor_top = quit_button.get_path_to(last_card)
 	credits_button.focus_neighbor_top = credits_button.get_path_to(last_card)
