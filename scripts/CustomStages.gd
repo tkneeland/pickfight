@@ -29,6 +29,14 @@ const MAX_STAGES: int = 64
 static var dir_override: String = ""
 ## A scenario seam: true makes every write report a failure, as a full disk would.
 static var fail_writes_for_test: bool = false
+## A scenario seam: true makes recovery's rename back fail, as a locked file would.
+static var fail_renames_for_test: bool = false
+## What the last recovery could not put back (#1253): one line per stranded
+## file kept in place because its rename failed. Empty when all went well.
+static var recovery_problems: PackedStringArray = PackedStringArray()
+## A stranded save's file name: `<key>.json.bak` / `.tmp` (numbered `-2`, `-3`
+## when taken), or the older `<key>.bak` / `.tmp`. Group 1 is the key, 2 the kind.
+const STRAY_PATTERN: String = "(?i)^(.+?)(?:\\.json)?\\.(bak|tmp)(?:-\\d+)?$"
 
 ## The folder stages are kept in: the owner's `user://stages`, or a per-process
 ## temp folder in a `-s` run.
@@ -116,40 +124,66 @@ static func list() -> Array[Dictionary]:
 	return out
 
 ## A save cut short (a crash between `_write_safely()`'s steps) can leave a
-## stage as `<key>.bak` (the old file set aside) or `<key>.tmp` (the new one not
-## yet moved in). When no `<key>.json` exists, in any letter case, the `.bak` is
-## put back, or else a `.tmp` that reads as a valid stage is moved in. The
-## leftovers are then removed, so the store holds only `.json` files.
+## stage as a `.bak` (the old file set aside) or a `.tmp` (the new one not yet
+## moved in), named as `STRAY_PATTERN` reads. When no `<key>.json` exists, in
+## any letter case, a `.bak` is put back, or else a `.tmp` that reads as a valid
+## stage is moved in. A stray is removed only once its stage is safely in place
+## (or it is a `.tmp` that is not a stage): when the rename back fails, it is
+## kept and the failure is listed in `recovery_problems` (#1253), so the only
+## copy of a stage is never deleted.
 static func _recover_stranded() -> void:
+	recovery_problems = PackedStringArray()
 	var dir_path: String = stages_dir()
 	var files: PackedStringArray = DirAccess.get_files_at(dir_path)
 	var present: Dictionary = {}
 	for file: String in files:
 		if file.get_extension().to_lower() == EXTENSION:
 			present[file.get_basename().to_lower()] = true
-	for ext: String in ["bak", "tmp"]: # an old file set aside beats an unfinished new one
+	var stray_re := RegEx.create_from_string(STRAY_PATTERN)
+	for kind: String in ["bak", "tmp"]: # an old file set aside beats an unfinished new one
 		for file: String in files:
-			if file.get_extension().to_lower() != ext:
+			var m: RegExMatch = stray_re.search(file)
+			if m == null or m.get_string(2).to_lower() != kind:
 				continue
-			var key: String = file.get_basename()
+			var key: String = m.get_string(1)
 			var stray: String = ProjectSettings.globalize_path(dir_path.path_join(file))
-			if not present.has(key.to_lower()):
-				var usable: bool = ext == "bak" or bool(StageDefScript.validate_text(FileAccess.get_file_as_string(stray))["ok"])
-				if usable and DirAccess.rename_absolute(stray, ProjectSettings.globalize_path(path_of(key))) == OK:
-					present[key.to_lower()] = true
-					continue
-			DirAccess.remove_absolute(stray)
+			if present.has(key.to_lower()):
+				DirAccess.remove_absolute(stray) # the stage is in place: a leftover
+				continue
+			var usable: bool = kind == "bak" or bool(StageDefScript.validate_text(FileAccess.get_file_as_string(stray))["ok"])
+			if not usable:
+				DirAccess.remove_absolute(stray) # an unfinished write that is not a stage
+				continue
+			var err: Error = ERR_CANT_CREATE if fail_renames_for_test else DirAccess.rename_absolute(stray, ProjectSettings.globalize_path(path_of(key)))
+			if err == OK:
+				present[key.to_lower()] = true
+			else:
+				recovery_problems.append("%s (%s)" % [file, error_string(err)])
+				push_warning("CustomStages: could not restore %s: %s; it is kept" % [file, error_string(err)])
+
+## The name of a file beside `g_path` for `kind` ("tmp" or "bak"):
+## `<g_path>.<kind>`, or numbered `-2`, `-3`, ... while that name is taken, so a
+## safe write never touches a file it did not create (#1253).
+static func _free_sibling(g_path: String, kind: String) -> String:
+	var candidate: String = "%s.%s" % [g_path, kind]
+	var n: int = 2
+	while FileAccess.file_exists(candidate):
+		candidate = "%s.%s-%d" % [g_path, kind, n]
+		n += 1
+	return candidate
 
 ## Writes `text` to `path` so that a failure never costs what was there: it goes
-## to `<path>.tmp` beside it first and is read back after closing (which also
-## catches errors that only show at close), then the old file at `old` (`path`
-## itself, the same file in another letter case, or "" for none) is set aside as
-## `.bak`, the temp file is moved in, and only then is the `.bak` removed. On any
-## failure the old file is put back and the temp file removed. "" when done,
-## else the reason. Paths are `user://` or absolute.
+## to a free `<path>.tmp` beside it first and is read back after closing (which
+## also catches errors that only show at close), then the old file at `old`
+## (`path` itself, the same file in another letter case, or "" for none) is set
+## aside as a free `<old>.bak`, the temp file is moved in, and only then is the
+## `.bak` removed. Both names are new files (`_free_sibling()`), so siblings it did
+## not create are never touched, and a target itself named `.bak` or `.tmp` works.
+## On any failure the old file is put back and the temp file removed. "" when
+## done, else the reason. Paths are `user://` or absolute.
 static func _write_safely(path: String, text: String, old: String) -> String:
 	var g_path: String = ProjectSettings.globalize_path(path)
-	var g_tmp: String = "%s.tmp" % g_path.get_basename()
+	var g_tmp: String = _free_sibling(g_path, "tmp")
 	var file := FileAccess.open(g_tmp, FileAccess.WRITE)
 	if file == null:
 		return "cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())]
@@ -161,7 +195,7 @@ static func _write_safely(path: String, text: String, old: String) -> String:
 	var aside: String = ""
 	if old != "" and FileAccess.file_exists(old):
 		var g_old: String = ProjectSettings.globalize_path(old)
-		aside = "%s.bak" % g_old.get_basename()
+		aside = _free_sibling(g_old, "bak")
 		if DirAccess.rename_absolute(g_old, aside) != OK:
 			DirAccess.remove_absolute(g_tmp)
 			return "cannot replace %s" % old

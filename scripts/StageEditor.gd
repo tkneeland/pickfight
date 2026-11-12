@@ -1177,6 +1177,10 @@ func show_open_list() -> void:
 	rows.add_theme_constant_override("separation", 8)
 	scroll.add_child(rows)
 	var entries: Array[Dictionary] = CustomStagesScript.list()
+	# #1253: a stranded save that could not be put back is kept, and said so.
+	if not CustomStagesScript.recovery_problems.is_empty():
+		_message = _trf("STAGE_EDITOR_RECOVERY_FAILED", ", ".join(CustomStagesScript.recovery_problems))
+		_refresh()
 	if entries.is_empty():
 		rows.add_child(ScreenKitScript.themed_label(tr("STAGE_EDITOR_OPEN_EMPTY"), 20, UiThemeScript.HINT_LABEL))
 	for entry: Dictionary in entries:

@@ -1349,6 +1349,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_editor_save_open_import_export_1047",
 	"stage_editor_test_play_round_trip_1047",
 	"stage_editor_asks_before_replacing_1047",
+	"stage_editor_reports_failed_recovery_1253",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4472,6 +4473,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_editor_test_play_round_trip_1047()
 		"stage_editor_asks_before_replacing_1047":
 			return await _scenario_stage_editor_asks_before_replacing_1047()
+		"stage_editor_reports_failed_recovery_1253":
+			return await _scenario_stage_editor_reports_failed_recovery_1253()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -63424,6 +63427,47 @@ func _scenario_custom_stages_store_1047() -> Array[String]:
 	for f5 in DirAccess.get_files_at(dir):
 		if f5.get_extension() != "json":
 			failures.append("recovery left %s in the store" % f5)
+	# #1253: when recovery's rename back fails, the stranded copy is kept and the
+	# failure is reported; the next recovery that can rename puts it back.
+	var lone_text: String = JSON.stringify(_stage_def_1049("Lone"))
+	var lone := FileAccess.open(dir.path_join("Lone.json.bak"), FileAccess.WRITE)
+	lone.store_string(lone_text)
+	lone.close()
+	CustomStages1047.fail_renames_for_test = true
+	var lone_keys: Array = CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"])
+	CustomStages1047.fail_renames_for_test = false
+	if not FileAccess.file_exists(dir.path_join("Lone.json.bak")) or lone_keys.has("Lone"):
+		failures.append("a failed recovery rename lost or misplaced the only copy (keys %s)" % [lone_keys])
+	if CustomStages1047.recovery_problems.size() != 1 or not CustomStages1047.recovery_problems[0].begins_with("Lone.json.bak"):
+		failures.append("a failed recovery rename was not reported: %s" % [CustomStages1047.recovery_problems])
+	if not CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"]).has("Lone") or FileAccess.file_exists(dir.path_join("Lone.json.bak")) or not CustomStages1047.recovery_problems.is_empty():
+		failures.append("the kept copy was not restored once the rename could succeed")
+	# #1253: an export never touches .bak/.tmp siblings it did not create, and a
+	# target named *.bak still gets the export.
+	var ext_dir: String = OS.get_temp_dir().path_join("pf_export_1253_%d" % OS.get_process_id())
+	DirAccess.make_dir_recursive_absolute(ext_dir)
+	var target: String = ext_dir.path_join("share.json")
+	for sib: String in [target + ".tmp", target + ".bak"]:
+		var sf := FileAccess.open(sib, FileAccess.WRITE)
+		sf.store_string("mine")
+		sf.close()
+	CustomStages1047.export_file(_stage_def_1049("First"), target)
+	if not CustomStages1047.export_file(_stage_def_1049("Second"), target)["ok"] or CustomStages1047.read_file(target)["def"].get("name") != "Second":
+		failures.append("an export over an existing file beside .bak/.tmp siblings failed")
+	for sib: String in [target + ".tmp", target + ".bak"]:
+		if FileAccess.get_file_as_string(sib) != "mine":
+			failures.append("an export changed or removed %s" % sib.get_file())
+	var bak_target: String = ext_dir.path_join("x.bak")
+	CustomStages1047.export_file(_stage_def_1049("Old"), bak_target)
+	if not CustomStages1047.export_file(_stage_def_1049("NewBak"), bak_target)["ok"] or CustomStages1047.read_file(bak_target)["def"].get("name") != "NewBak":
+		failures.append("an export to x.bak was lost")
+	var left: PackedStringArray = DirAccess.get_files_at(ext_dir)
+	left.sort()
+	if left != PackedStringArray(["share.json", "share.json.bak", "share.json.tmp", "x.bak"]):
+		failures.append("exports left %s in the folder" % [left])
+	for f6 in DirAccess.get_files_at(ext_dir):
+		DirAccess.remove_absolute(ext_dir.path_join(f6))
+	DirAccess.remove_absolute(ext_dir)
 	# Invisible characters are stripped from the name and the key.
 	var sneaky: Dictionary = CustomStages1047.save(_stage_def_1049("Zero\u200bWidth\u202e"), builtins)
 	if not sneaky["ok"] or sneaky["key"] != "ZeroWidth" or CustomStages1047.load_stage("ZeroWidth")["def"]["name"] != "ZeroWidth":
@@ -63989,6 +64033,32 @@ func _scenario_stage_editor_asks_before_replacing_1047() -> Array[String]:
 		failures.append("confirming did not replace the stored stage")
 	second.queue_free()
 	await process_frame
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
+## #1253: a stranded save the store cannot put back is kept, and the editor's
+## Open list says so.
+func _scenario_stage_editor_reports_failed_recovery_1253() -> Array[String]:
+	var failures: Array[String] = []
+	var dir: String = _stages_dir_1047()
+	var stray := FileAccess.open(dir.path_join("Kept.json.bak"), FileAccess.WRITE)
+	stray.store_string(JSON.stringify(_stage_def_1049("Kept")))
+	stray.close()
+	var editor: Node = load(StageEditorScene1047).instantiate()
+	get_root().add_child(editor)
+	await process_frame
+	CustomStages1047.fail_renames_for_test = true
+	editor.show_open_list()
+	CustomStages1047.fail_renames_for_test = false
+	if not editor.message_text().contains("Kept.json.bak"):
+		failures.append("the editor did not report the failed recovery: '%s'" % editor.message_text())
+	if not FileAccess.file_exists(dir.path_join("Kept.json.bak")):
+		failures.append("the stranded copy was deleted")
+	editor.close_popup()
+	editor.queue_free()
+	await process_frame
+	CustomStages1047.list() # put it back for the next run's empty folder
 	CustomStages1047.dir_override = ""
 	_scenario_completed = true
 	return failures
