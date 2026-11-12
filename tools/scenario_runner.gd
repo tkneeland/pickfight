@@ -63392,6 +63392,15 @@ func _scenario_custom_stages_store_1047() -> Array[String]:
 		if f2.get_extension() != "json":
 			failures.append("a save left %s in the store" % f2)
 	HostSettings1047.shared().custom_stages_on = hs_before
+	# A failed write (a full disk) leaves the saved stage and nothing else behind.
+	CustomStages1047.fail_writes_for_test = true
+	var failed: Dictionary = CustomStages1047.save(_stage_def_1049("MY LEDGES", 300.0), builtins, true)
+	CustomStages1047.fail_writes_for_test = false
+	if failed["ok"] or CustomStages1047.load_stage("MY LEDGES")["def"]["parts"][0]["size"][0] != 700.0:
+		failures.append("a failed write replaced the saved stage: %s" % [failed])
+	for f3 in DirAccess.get_files_at(dir):
+		if f3.get_extension() != "json":
+			failures.append("a failed write left %s in the store" % f3)
 	# Invisible characters are stripped from the name and the key.
 	var sneaky: Dictionary = CustomStages1047.save(_stage_def_1049("Zero\u200bWidth\u202e"), builtins)
 	if not sneaky["ok"] or sneaky["key"] != "ZeroWidth" or CustomStages1047.load_stage("ZeroWidth")["def"]["name"] != "ZeroWidth":

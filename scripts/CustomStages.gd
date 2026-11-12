@@ -27,6 +27,8 @@ const MAX_STAGES: int = 64
 
 ## Overrides the folder (a scenario's own temp folder); "" uses the default.
 static var dir_override: String = ""
+## A scenario seam: true makes every write report a failure, as a full disk would.
+static var fail_writes_for_test: bool = false
 
 ## The folder stages are kept in: the owner's `user://stages`, or a per-process
 ## temp folder in a `-s` run.
@@ -145,8 +147,15 @@ static func save(data: Dictionary, builtin_names: PackedStringArray, overwrite: 
 	var file := FileAccess.open(tmp, FileAccess.WRITE)
 	if file == null:
 		return _fail("cannot write %s (%s)" % [tmp, error_string(FileAccess.get_open_error())])
-	file.store_string(JSON.stringify(StageDefScript.to_json_data(checked["def"]), "\t"))
+	var text: String = JSON.stringify(StageDefScript.to_json_data(checked["def"]), "\t")
+	file.store_string(text)
+	var write_err: Error = ERR_FILE_CANT_WRITE if fail_writes_for_test else file.get_error()
 	file.close()
+	# Only a temp file that was written whole and reads back as the same stage
+	# replaces anything: a short or failed write leaves the saved stage as it was.
+	if write_err != OK or FileAccess.get_file_as_string(tmp) != text:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
+		return _fail("cannot write %s (%s)" % [tmp, error_string(write_err if write_err != OK else ERR_FILE_CORRUPT)])
 	var moved: String = _move_into_place(tmp, path, existing)
 	if moved != "":
 		return _fail(moved)
@@ -210,8 +219,12 @@ static func export_file(data: Dictionary, path: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return {"ok": false, "reason": "cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())]}
-	file.store_string(JSON.stringify(StageDefScript.to_json_data(checked["def"]), "\t"))
+	var text: String = JSON.stringify(StageDefScript.to_json_data(checked["def"]), "\t")
+	file.store_string(text)
+	var write_err: Error = ERR_FILE_CANT_WRITE if fail_writes_for_test else file.get_error()
 	file.close()
+	if write_err != OK or FileAccess.get_file_as_string(path) != text:
+		return {"ok": false, "reason": "cannot write %s (%s)" % [path, error_string(write_err if write_err != OK else ERR_FILE_CORRUPT)]}
 	return {"ok": true, "reason": ""}
 
 ## Deletes the saved stage `key`, and forgets it in the host's per-mode
