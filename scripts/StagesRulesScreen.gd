@@ -18,6 +18,7 @@ const GameModesScript := preload("res://scripts/GameModes.gd")
 const HostSettingsScript := preload("res://scripts/HostSettings.gd")
 const RoundModifiersScript := preload("res://scripts/RoundModifiers.gd")
 const StagePreviewsScript := preload("res://scripts/StagePreviews.gd")
+const CustomStagesScript := preload("res://scripts/CustomStages.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
 
@@ -371,7 +372,13 @@ func _make_tile(stage_name: String) -> Button:
 
 func _texture(stage_name: String) -> Texture2D:
 	if not _textures.has(stage_name):
-		_textures[stage_name] = StagePreviewsScript.load_preview(stage_name)
+		var texture: Texture2D = StagePreviewsScript.load_preview(stage_name)
+		if texture == null and settings().custom_stages.has(stage_name):
+			# #1047: a custom stage has no baked art; draw it from its definition.
+			var saved: Dictionary = CustomStagesScript.load_stage(stage_name)
+			if bool(saved["ok"]):
+				texture = StagePreviewsScript.draw_preview(saved["def"])
+		_textures[stage_name] = texture
 	return _textures[stage_name] as Texture2D
 
 func _show_stage(stage_name: String) -> void:

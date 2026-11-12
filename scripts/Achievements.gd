@@ -184,7 +184,7 @@ func on_round_started(in_round: Array, stage_name: String, weapons: Dictionary) 
 	if not _stages_played.has(stage_name):
 		_stages_played[stage_name] = true
 		_save()
-	var rotation: PackedStringArray = HostSettingsScript.shared().known_stages
+	var rotation: PackedStringArray = HostSettingsScript.shared().builtin_stages()  # custom stages don't count (#1047)
 	if rotation.is_empty():
 		return
 	for stage: String in rotation:

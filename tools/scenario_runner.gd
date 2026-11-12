@@ -1338,6 +1338,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"custom_stage_def_sent_to_pc_joiners_1049",
 	"custom_stage_round_shares_def_1049",
 	"remote_client_builds_custom_stage_1049",
+	"custom_stages_store_1047",
+	"custom_stages_off_by_default_1047",
+	"round_manager_loads_custom_stages_1047",
+	"custom_stage_preview_drawn_1047",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4439,6 +4443,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_custom_stage_round_shares_def_1049()
 		"remote_client_builds_custom_stage_1049":
 			return await _scenario_remote_client_builds_custom_stage_1049()
+		"custom_stages_store_1047":
+			return await _scenario_custom_stages_store_1047()
+		"custom_stages_off_by_default_1047":
+			return await _scenario_custom_stages_off_by_default_1047()
+		"round_manager_loads_custom_stages_1047":
+			return await _scenario_round_manager_loads_custom_stages_1047()
+		"custom_stage_preview_drawn_1047":
+			return await _scenario_custom_stage_preview_drawn_1047()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -63268,5 +63280,169 @@ func _scenario_remote_client_builds_custom_stage_1049() -> Array[String]:
 	if client._stage == null or client._stage.scene_file_path != RemoteClientScript241.stage_paths()[0]:
 		failures.append("a built-in id no longer loads its scene after a custom stage")
 	await _rc_close_241(rig)
+	_scenario_completed = true
+	return failures
+# --- Issue #1047: stage editor (store, rotation, toggles) -----------------------
+
+const CustomStages1047 := preload("res://scripts/CustomStages.gd")
+const StageRotation1047 := preload("res://scripts/StageRotation.gd")
+const HostSettings1047 := preload("res://scripts/HostSettings.gd")
+const StagePreviews1047 := preload("res://scripts/StagePreviews.gd")
+
+## A fresh temp folder for the store, emptied; CustomStages uses it until reset.
+func _stages_dir_1047() -> String:
+	var dir: String = OS.get_temp_dir().path_join("pf_stages_1047_%d" % OS.get_process_id())
+	DirAccess.make_dir_recursive_absolute(dir)
+	var d := DirAccess.open(dir)
+	if d != null:
+		for f in d.get_files():
+			d.remove(f)
+	CustomStages1047.dir_override = dir
+	return dir
+
+## Saving, listing, loading, import, export and delete, each checked by StageDef;
+## names that are empty or a built-in stage's are refused.
+func _scenario_custom_stages_store_1047() -> Array[String]:
+	var failures: Array[String] = []
+	var dir: String = _stages_dir_1047()
+	var builtins := PackedStringArray(["Flatlands", "Pitch"])
+	var saved: Dictionary = CustomStages1047.save(_stage_def_1049("My Ledges!"), builtins)
+	if not saved["ok"] or saved["key"] != "My Ledges" or not FileAccess.file_exists(saved["path"]):
+		failures.append("a good stage was not saved as 'My Ledges': %s" % [saved])
+	for bad: Array in [[_stage_def_1049("flatlands"), "built-in"], [_stage_def_1049("!!!"), "letter or digit"]]:
+		var res: Dictionary = CustomStages1047.save(bad[0], builtins)
+		if res["ok"] or not String(res["reason"]).contains(bad[1]):
+			failures.append("saving '%s' gave %s, wanted a refusal about '%s'" % [bad[0]["name"], res, bad[1]])
+	var invalid: Dictionary = _stage_def_1049("Short")
+	invalid["spawns"] = [[0, 0]]
+	if CustomStages1047.save(invalid, builtins)["ok"]:
+		failures.append("a definition with one spawn was saved")
+	# A broken file dropped in by hand is listed with its reason and never built.
+	var f := FileAccess.open(dir.path_join("Broken.json"), FileAccess.WRITE)
+	f.store_string("{\"schema\": 1,")
+	f.close()
+	var listed: Array[Dictionary] = CustomStages1047.list()
+	var keys: Array = listed.map(func(e: Dictionary) -> String: return e["key"])
+	if keys != ["Broken", "My Ledges"] or listed[0]["ok"] or not listed[1]["ok"]:
+		failures.append("list() gave %s" % [listed.map(func(e: Dictionary) -> String: return "%s ok=%s" % [e["key"], e["ok"]])])
+	var loaded: Dictionary = CustomStages1047.load_stage("My Ledges")
+	if not loaded["ok"] or loaded["def"]["name"] != "My Ledges!" or loaded["def"]["parts"].size() != 3:
+		failures.append("load_stage() gave %s" % [loaded])
+	var scenes: Array[PackedScene] = CustomStages1047.scenes(builtins)
+	if scenes.size() != 1 or HostSettings1047.name_of(scenes[0].resource_path) != "My Ledges":
+		failures.append("scenes() gave %d scenes, the first keyed '%s'" % [scenes.size(), HostSettings1047.name_of(scenes[0].resource_path) if not scenes.is_empty() else ""])
+	# Building the scenes again (a lobby refresh) works the same.
+	if CustomStages1047.scenes(builtins).size() != 1:
+		failures.append("a second scenes() call did not give the stage again")
+	# Export to an outside file, then import it under a new name.
+	var outside: String = OS.get_temp_dir().path_join("pf_export_1047_%d.json" % OS.get_process_id())
+	var exp: Dictionary = CustomStages1047.export_file(_stage_def_1049("Shared"), outside)
+	if not exp["ok"] or not CustomStages1047.read_file(outside)["ok"]:
+		failures.append("export_file() did not write a readable stage: %s" % [exp])
+	var imp: Dictionary = CustomStages1047.import_file(outside, builtins)
+	if not imp["ok"] or imp["key"] != "Shared" or not CustomStages1047.load_stage("Shared")["ok"]:
+		failures.append("import_file() did not store 'Shared': %s" % [imp])
+	if CustomStages1047.import_file(dir.path_join("Broken.json"), builtins)["ok"]:
+		failures.append("a broken file was imported")
+	if not CustomStages1047.delete("Shared") or CustomStages1047.load_stage("Shared")["ok"] or CustomStages1047.delete("Shared"):
+		failures.append("delete() did not remove 'Shared' exactly once")
+	DirAccess.remove_absolute(outside)
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
+## Custom stages join the rotation's known stages but are off by default in
+## every mode, are offered in the general modes only, are switched on per
+## mode, never fill the all-off fallback and do not count for World Tour.
+func _scenario_custom_stages_off_by_default_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stages_dir_1047()
+	CustomStages1047.save(_stage_def_1049("Mine"), PackedStringArray())
+	var settings: RefCounted = HostSettings1047.new()
+	settings.persist = false
+	var rotation: RefCounted = StageRotation1047.new()
+	rotation.settings = settings
+	var scenes: Array[PackedScene] = [load(STAGE_PATHS[0]) as PackedScene, load(STAGE_PATHS[1]) as PackedScene]
+	scenes.append_array(CustomStages1047.scenes(PackedStringArray()))
+	rotation.scenes = scenes
+	var first: String = HostSettings1047.name_of(STAGE_PATHS[0])
+	if not settings.known_stages.has("Mine") or settings.custom_stages != PackedStringArray(["Mine"]):
+		failures.append("known %s, custom %s: the custom stage is not known as custom" % [settings.known_stages, settings.custom_stages])
+	if settings.builtin_stages().has("Mine") or not settings.builtin_stages().has(first):
+		failures.append("builtin_stages() gave %s" % [settings.builtin_stages()])
+	for mode_id: String in ["classic", "stock", "king_of_the_hill"]:
+		if settings.on_stages_for(mode_id).has("Mine"):
+			failures.append("the custom stage is on by default in %s" % mode_id)
+		if not settings.stages_for_mode(mode_id).has("Mine"):
+			failures.append("the custom stage is not offered in %s" % mode_id)
+	if settings.stages_for_mode("soccer").has("Mine"):
+		failures.append("the custom stage is offered in Soccer")
+	if not settings.set_stage_enabled_for("classic", "Mine", true) or not settings.on_stages_for("classic").has("Mine") or settings.on_stages_for("king_of_the_hill").has("Mine"):
+		failures.append("switching it on in Classic did not take, or leaked into another mode")
+	if not settings.set_stage_enabled_for("stock", "Mine", true) or not settings.on_stages_for("stock").has("Mine"):
+		failures.append("switching it on in Stock did not take")
+	# All off: the fallback deals built-in stages only.
+	settings.set_all_stages_for("classic", false)
+	if settings.enabled_stages_for("classic").has("Mine") or settings.enabled_stages_for("classic").is_empty():
+		failures.append("the all-off fallback gave %s" % [settings.enabled_stages_for("classic")])
+	settings.set_all_stages_for("classic", true)
+	if not settings.on_stages_for("classic").has("Mine"):
+		failures.append("All on did not switch the custom stage on")
+	# The last stage switched on cannot be switched off.
+	settings.set_all_stages_for("king_of_the_hill", false)
+	settings.set_stage_enabled_for("king_of_the_hill", "Mine", true)
+	if settings.set_stage_enabled_for("king_of_the_hill", "Mine", false):
+		failures.append("the last stage on in a mode could be switched off")
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
+## RoundManager's rotation is its built-in stages in their order, then the saved
+## custom stages; a refresh never duplicates or moves them. Off unless opted in.
+func _scenario_round_manager_loads_custom_stages_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stages_dir_1047()
+	CustomStages1047.save(_stage_def_1049("Alpha"), PackedStringArray())
+	var rig: Dictionary = _koth_stage_rig(STAGE_PATHS[0])
+	var rm: Node = rig["rm"]
+	await _await_ticks(2)
+	var builtins: Array[PackedScene] = [load(STAGE_PATHS[2]) as PackedScene, load(STAGE_PATHS[0]) as PackedScene]
+	rm.stage_scenes = builtins
+	rm.refresh_custom_stages()
+	if rm.stage_scenes.size() != 2:
+		failures.append("a -s run loaded custom stages without opting in")
+	rm.load_custom_stages = true
+	rm.refresh_custom_stages()
+	rm.refresh_custom_stages()
+	CustomStages1047.save(_stage_def_1049("Beta"), PackedStringArray())
+	rm.refresh_custom_stages()
+	var names: Array = rm.stage_scenes.map(func(s: PackedScene) -> String: return HostSettings1047.name_of(s.resource_path))
+	var want: Array = [HostSettings1047.name_of(STAGE_PATHS[2]), HostSettings1047.name_of(STAGE_PATHS[0]), "Alpha", "Beta"]
+	if names != want:
+		failures.append("the rotation is %s, wanted %s" % [names, want])
+	if StageBuilder1049.def_of(rm.stage_scenes[2].instantiate()).get("name") != "Alpha":
+		failures.append("the custom scene does not carry its definition")
+	await _teardown(rig["stage"], false)
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
+## A custom stage's preview is drawn from its definition at the baked size.
+func _scenario_custom_stage_preview_drawn_1047() -> Array[String]:
+	var failures: Array[String] = []
+	var texture: Texture2D = StagePreviews1047.draw_preview(_stage_def_1049())
+	if texture == null or texture.get_size() != Vector2(StagePreviews1047.SIZE):
+		failures.append("no %s preview was drawn" % StagePreviews1047.SIZE)
+	else:
+		var image: Image = texture.get_image()
+		var colours: Dictionary = {}
+		for y in range(0, image.get_height(), 3):
+			for x in range(0, image.get_width(), 3):
+				colours[image.get_pixel(x, y).to_html(false)] = true
+		for want: Color in [StagePreviews1047.PLATFORM, StagePreviews1047.ONE_WAY, StagePreviews1047.KILL, StagePreviews1047.SPAWN]:
+			if not colours.has(want.to_html(false)):
+				failures.append("the preview has no %s pixels" % want.to_html(false))
+	if StagePreviews1047.draw_preview({}) != null:
+		failures.append("a non-definition drew a preview")
 	_scenario_completed = true
 	return failures

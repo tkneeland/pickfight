@@ -275,6 +275,9 @@ func _ready() -> void:
 	if _random_weapons:
 		print("RoundManager: --random-weapons on; non-winners start each round with a random weapon")
 	_stage_rotation.demo = _demo
+	if load_custom_stages == null:
+		load_custom_stages = not SfxType.is_script_main_loop(get_tree())
+	refresh_custom_stages()
 	for path in player_paths:
 		_players.append(get_node_or_null(path))
 	_watch_for_buzzes()
@@ -544,6 +547,30 @@ func _show_round_countdown(step: int) -> void:
 	_screen().show_round_countdown(step)
 
 const StageBuilderScript := preload("res://scripts/StageBuilder.gd")
+const CustomStagesScript := preload("res://scripts/CustomStages.gd")
+const SfxType := preload("res://scripts/Sfx.gd")
+
+## #1047: whether `stage_scenes` takes the host's saved custom stages after the
+## built-in ones. Null until `_ready()` decides: on in the game, off in a `-s`
+## run, so a scenario's own `stage_scenes` stay as it set them unless it opts in.
+var load_custom_stages: Variant = null
+
+## #1047: `stage_scenes` becomes its built-in stages (in their current order,
+## so `--demo`'s reorder holds, and their ids, which Online clients index, never
+## move) followed by every valid saved custom stage. Called at start-up, on
+## entering the lobby and at a match's start; never mid-match.
+func refresh_custom_stages() -> void:
+	if load_custom_stages != true:
+		return
+	var builtin: Array[PackedScene] = []
+	var names := PackedStringArray()
+	for scene: PackedScene in stage_scenes:
+		if scene != null and scene.resource_path.begins_with("res://"):
+			builtin.append(scene)
+			names.append(HostSettingsScript.name_of(scene.resource_path))
+	var all: Array[PackedScene] = builtin.duplicate()
+	all.append_array(CustomStagesScript.scenes(names))
+	stage_scenes = all
 
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
 ## the next index into `stage_scenes` via `StageRotation.next_stage_index()`, and
@@ -1404,6 +1431,7 @@ func _enter_lobby() -> void:
 	_match_winner_slot = -1
 	_match_winner_team = -1
 	_clear_stage()
+	refresh_custom_stages() # #1047: the Stages & Rules lists show what is saved now
 	# The last round's teams do not carry into the lobby sandbox (#521).
 	for player: Variant in _players:
 		if player != null and "team" in player:
@@ -1554,6 +1582,7 @@ func _begin_match() -> void:
 	# from a rotation back at its start (#200): the bag it deals avoids the
 	# stage just played, so a rematch that kept that would deal its seed a
 	# different sequence than the same seed dealt at launch.
+	refresh_custom_stages() # #1047: before the bag, so the match deals from the saved set
 	_stage_rotation.new_bag()
 	_stage_rotation.stage_index = -1
 	_stage_rotation.pinned = -1

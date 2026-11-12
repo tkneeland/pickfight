@@ -36,6 +36,11 @@ var scenes: Array[PackedScene] = []:
 			if DemoBuildScript.stage_in_slice(stage_name):  # the demo's slice (#361)
 				names.append(stage_name)
 		settings.known_stages = names
+		var customs := PackedStringArray()  # #1047: the host's saved stages, from user://
+		for scene: PackedScene in value:
+			if not scene.resource_path.begins_with("res://") and names.has(HostSettingsScript.name_of(scene.resource_path)):
+				customs.append(HostSettingsScript.name_of(scene.resource_path))
+		settings.custom_stages = customs
 		var comp := PackedStringArray()
 		for scene: PackedScene in value:
 			if StageScript.competitive_of(scene) and names.has(HostSettingsScript.name_of(scene.resource_path)):
