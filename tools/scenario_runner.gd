@@ -1344,6 +1344,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"custom_stage_preview_drawn_1047",
 	"stage_test_play_round_trip_1047",
 	"title_stage_editor_card_1047",
+	"stage_editor_new_stage_is_valid_1047",
+	"stage_editor_draw_move_resize_delete_1047",
+	"stage_editor_save_open_import_export_1047",
+	"stage_editor_test_play_round_trip_1047",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4457,6 +4461,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_test_play_round_trip_1047()
 		"title_stage_editor_card_1047":
 			return await _scenario_title_stage_editor_card_1047()
+		"stage_editor_new_stage_is_valid_1047":
+			return await _scenario_stage_editor_new_stage_is_valid_1047()
+		"stage_editor_draw_move_resize_delete_1047":
+			return await _scenario_stage_editor_draw_move_resize_delete_1047()
+		"stage_editor_save_open_import_export_1047":
+			return await _scenario_stage_editor_save_open_import_export_1047()
+		"stage_editor_test_play_round_trip_1047":
+			return await _scenario_stage_editor_test_play_round_trip_1047()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -63552,3 +63564,279 @@ func _scenario_title_stage_editor_card_1047() -> Array[String]:
 	return failures
 
 const DemoBuildType1047 := preload("res://scripts/DemoBuild.gd")
+# Scenarios for the stage editor (#1047). Register these names:
+#   "stage_editor_new_stage_is_valid_1047"
+#   "stage_editor_draw_move_resize_delete_1047"
+#   "stage_editor_save_open_import_export_1047"
+#   "stage_editor_test_play_round_trip_1047"
+# Uses the runner's existing CustomStages1047, StageDef1049, _stages_dir_1047()
+# and _stage_def_1049(); adds the two consts below.
+
+# --- Issue #1047: the stage editor --------------------------------------------
+
+const StageEditorScene1047: String = "res://scenes/StageEditor.tscn"
+const StageTestPlayEd1047 := preload("res://scripts/StageTestPlay.gd")
+
+## A fresh editor under the root, its first frame run.
+func _stage_editor_1047() -> Node:
+	var editor: Node = (load(StageEditorScene1047) as PackedScene).instantiate()
+	get_root().add_child(editor)
+	await process_frame
+	return editor
+
+## A definition as StageDef normalises it, back in JSON shape, for comparing.
+func _stage_editor_norm_1047(data: Dictionary) -> Dictionary:
+	var checked: Dictionary = StageDef1049.validate(data)
+	return StageDef1049.to_json_data(checked["def"]) if bool(checked["ok"]) else {}
+
+## Puts StageTestPlay's statics back as a fresh start has them.
+func _stage_editor_reset_1047() -> void:
+	StageTestPlayEd1047.change_scene = Callable()
+	StageTestPlayEd1047.editor_state = {}
+	StageTestPlayEd1047.def = {}
+	StageTestPlayEd1047.active = false
+
+## A fresh editor holds a new stage that passes StageDef at once: one platform,
+## the kill floor and eight spawns, and the status line says it is ready.
+func _scenario_stage_editor_new_stage_is_valid_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stage_editor_reset_1047()
+	var editor: Node = await _stage_editor_1047()
+	var def: Dictionary = editor.working_def()
+	var checked: Dictionary = StageDef1049.validate(def)
+	if not bool(checked["ok"]):
+		failures.append("a new stage fails StageDef: %s" % checked["reason"])
+	if def.get("name") != "New stage" or (def["parts"] as Array).size() != 2 or (def["spawns"] as Array).size() != 8:
+		failures.append("a new stage is not 'New stage' with a platform, the kill floor and 8 spawns: %s" % [def])
+	if not String(editor.status_text()).begins_with(TranslationServer.translate("STAGE_EDITOR_READY")):
+		failures.append("the status of a new stage is not ready: %s" % editor.status_text())
+	if editor.is_dirty() or editor.saved_key() != "":
+		failures.append("a new stage starts dirty or with a saved key")
+	editor.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## Drawing (snapped, then Shift-free, then a plain click), moving, resizing,
+## one-way and deleting a platform, each one undo step that undo and redo walk;
+## the kill floor stays; spawns stop at 16 and too few is reported.
+func _scenario_stage_editor_draw_move_resize_delete_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stage_editor_reset_1047()
+	var editor: Node = await _stage_editor_1047()
+	var steps: Array[Dictionary] = [editor.working_def()]
+	editor.set_tool("platform")
+	editor.world_press(Vector2(3, -301))
+	editor.world_drag(Vector2(203, -261))
+	editor.world_release(Vector2(203, -261))
+	var parts: Array = editor.working_def()["parts"]
+	var drawn: Dictionary = parts[parts.size() - 1]
+	if drawn.get("pos") != [100.0, -284.0] or drawn.get("size") != [200.0, 40.0]:
+		failures.append("a snapped drag drew %s, wanted pos [100, -284] size [200, 40]" % [drawn])
+	steps.append(editor.working_def())
+	editor.world_press(Vector2(3, -501), MOUSE_BUTTON_LEFT, true)
+	editor.world_drag(Vector2(203, -461), true)
+	editor.world_release(Vector2(203, -461), true)
+	parts = editor.working_def()["parts"]
+	var free_box: Dictionary = parts[parts.size() - 1]
+	if free_box.get("pos") != [103.0, -481.0] or free_box.get("size") != [200.0, 40.0]:
+		failures.append("a Shift drag drew %s, wanted pos [103, -481] size [200, 40] (unsnapped)" % [free_box])
+	steps.append(editor.working_def())
+	editor.world_press(Vector2(1000, -600))
+	editor.world_release(Vector2(1000, -600))
+	parts = editor.working_def()["parts"]
+	if parts.size() != 5 or (parts[4] as Dictionary).get("size") != [240.0, 24.0]:
+		failures.append("a plain click did not make a 240x24 platform: %s" % [parts])
+	steps.append(editor.working_def())
+	# Move the first drawn platform by (37, 24): its corner snaps to (40, -280).
+	editor.set_tool("select")
+	editor.world_press(Vector2(100, -284))
+	editor.world_drag(Vector2(137, -260))
+	editor.world_release(Vector2(137, -260))
+	var moved: Dictionary = editor.working_def()["parts"][2]
+	if moved.get("pos") != [140.0, -260.0] or moved.get("size") != [200.0, 40.0]:
+		failures.append("the moved platform is %s, wanted pos [140, -260]" % [moved])
+	steps.append(editor.working_def())
+	# Resize by its right-edge handle, out to x 304; then try to crush it below MIN_PART_SIDE.
+	var handle: Vector2 = editor.handle_point(3)
+	editor.world_press(handle)
+	editor.world_drag(Vector2(304, handle.y))
+	editor.world_release(Vector2(304, handle.y))
+	var resized: Dictionary = editor.working_def()["parts"][2]
+	if resized.get("pos") != [172.0, -260.0] or resized.get("size") != [264.0, 40.0]:
+		failures.append("the resized platform is %s, wanted pos [172, -260] size [264, 40]" % [resized])
+	steps.append(editor.working_def())
+	editor.world_press(editor.handle_point(3))
+	editor.world_drag(Vector2(-500, handle.y))
+	editor.world_release(Vector2(-500, handle.y))
+	if float(editor.working_def()["parts"][2]["size"][0]) != 8.0:
+		failures.append("a resize past the left edge left width %s, wanted the 8 px minimum" % editor.working_def()["parts"][2]["size"][0])
+	steps.append(editor.working_def())
+	if not editor.toggle_one_way() or editor.working_def()["parts"][2]["params"].get("one_way") != true:
+		failures.append("O did not make the selected platform one-way")
+	steps.append(editor.working_def())
+	if not editor.delete_selected() or (editor.working_def()["parts"] as Array).size() != 4:
+		failures.append("deleting the selected platform did not remove it")
+	steps.append(editor.working_def())
+	for i in range(steps.size() - 2, -1, -1):
+		editor.undo()
+		if editor.working_def() != steps[i]:
+			failures.append("undo to step %d gave %s, wanted %s" % [i, editor.working_def(), steps[i]])
+			break
+	if editor.undo():
+		failures.append("undo went past the new stage")
+	for i in range(1, steps.size()):
+		editor.redo()
+		if editor.working_def() != steps[i]:
+			failures.append("redo to step %d gave %s, wanted %s" % [i, editor.working_def(), steps[i]])
+			break
+	# The kill floor (y 900) cannot be deleted, by key or right-click.
+	var before: Dictionary = editor.working_def()
+	editor.select_at(Vector2(0, 900))
+	if editor.selection().get("kind") != "part" or editor.delete_selected() or editor.delete_at(Vector2(0, 900)) or editor.working_def() != before:
+		failures.append("the kill floor was not selectable or was deleted")
+	if editor.message_text() != TranslationServer.translate("STAGE_EDITOR_KILL_FLOOR_STAYS"):
+		failures.append("deleting the kill floor did not say why not: '%s'" % editor.message_text())
+	# Spawns: eight more make 16, the 17th is refused.
+	editor.set_tool("spawn")
+	for i in 9:
+		editor.world_press(Vector2(-1600 + i * 200, -1200))
+	if (editor.working_def()["spawns"] as Array).size() != 16:
+		failures.append("spawns are %d after adding 9 to 8, wanted the cap of 16" % (editor.working_def()["spawns"] as Array).size())
+	if not editor.message_text().contains("16"):
+		failures.append("the 17th spawn was refused without saying so: '%s'" % editor.message_text())
+	# Right-click nine away: 7 left, and the status says too few.
+	for i in 9:
+		var spawns: Array = editor.working_def()["spawns"]
+		var last: Array = spawns[spawns.size() - 1]
+		editor.world_press(Vector2(last[0], last[1]), MOUSE_BUTTON_RIGHT)
+	if (editor.working_def()["spawns"] as Array).size() != 7:
+		failures.append("right-clicking 9 spawns left %d, wanted 7" % (editor.working_def()["spawns"] as Array).size())
+	if not String(editor.status_text()).contains("too few spawns"):
+		failures.append("with 7 spawns the status is '%s', wanted too few spawns" % editor.status_text())
+	editor.queue_free()
+	await process_frame
+	_scenario_completed = true
+	return failures
+
+## Save to the store, open it back in a fresh editor from the Open list (an
+## invalid file greyed), export to a file and import it again under a new
+## name, delete from the list; a built-in stage's name is refused, with why.
+func _scenario_stage_editor_save_open_import_export_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stage_editor_reset_1047()
+	_stages_dir_1047()
+	var export_path: String = OS.get_temp_dir().path_join("pf_editor_export_1047_%d.json" % OS.get_process_id())
+	var editor: Node = await _stage_editor_1047()
+	editor.set_stage_name("Cliffs")
+	var saved: Dictionary = editor.save_stage()
+	if not bool(saved["ok"]) or saved["key"] != "Cliffs" or editor.is_dirty() or editor.saved_key() != "Cliffs":
+		failures.append("saving 'Cliffs' gave %s (dirty %s)" % [saved, editor.is_dirty()])
+	var builtins: PackedStringArray = editor.builtin_names()
+	if builtins.is_empty():
+		failures.append("the editor found no built-in stage names")
+	else:
+		editor.set_stage_name(builtins[0])
+		var refused: Dictionary = editor.save_stage()
+		if bool(refused["ok"]) or not String(editor.message_text()).contains(String(refused["reason"])) or String(refused["reason"]) == "":
+			failures.append("saving as built-in '%s' gave %s, message '%s'" % [builtins[0], refused, editor.message_text()])
+		if not String(editor.status_text()).contains(builtins[0]):
+			failures.append("the status does not warn of the built-in name: '%s'" % editor.status_text())
+	editor.queue_free()
+	await process_frame
+	var broken := FileAccess.open(CustomStages1047.path_of("Broken"), FileAccess.WRITE)
+	broken.store_string("{\"schema\": 1}")
+	broken.close()
+	editor = await _stage_editor_1047()
+	editor.show_open_list()
+	var list: Control = editor.popup()
+	var cliffs: Node = list.find_child("Row_Cliffs", true, false) if list != null else null
+	var bad: Node = list.find_child("Row_Broken", true, false) if list != null else null
+	if cliffs == null or bad == null:
+		failures.append("the Open list does not show both saved stages")
+	elif (cliffs.get_node("Open") as Button).disabled or not (bad.get_node("Open") as Button).disabled or bad.get_node_or_null("Reason") == null:
+		failures.append("the Open list does not grey the invalid stage with its reason")
+	editor.request_open("Cliffs")
+	if editor.popup() != null or editor.saved_key() != "Cliffs" or editor.is_dirty():
+		failures.append("opening Cliffs from the list left popup %s, key '%s'" % [editor.popup(), editor.saved_key()])
+	if _stage_editor_norm_1047(editor.working_def()) != _stage_editor_norm_1047(CustomStages1047.load_stage("Cliffs")["def"]):
+		failures.append("the opened stage is not the saved one: %s" % [editor.working_def()])
+	var exported: Dictionary = editor.export_path(export_path)
+	var read: Dictionary = CustomStages1047.read_file(export_path)
+	if not bool(exported["ok"]) or not bool(read["ok"]) or read["def"]["name"] != "Cliffs":
+		failures.append("exporting gave %s, the file reads %s" % [exported, read])
+	var renamed: Dictionary = read["def"].duplicate(true) if bool(read["ok"]) else {}
+	renamed["name"] = "Imported Cliffs"
+	var file := FileAccess.open(export_path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(renamed))
+	file.close()
+	var imported: Dictionary = editor.import_path(export_path)
+	if not bool(imported["ok"]) or editor.saved_key() != "Imported Cliffs" or editor.working_def()["name"] != "Imported Cliffs":
+		failures.append("importing gave %s, the editor holds '%s'" % [imported, editor.saved_key()])
+	if not FileAccess.file_exists(CustomStages1047.path_of("Imported Cliffs")):
+		failures.append("the import was not saved into the store")
+	editor.request_delete("Broken")
+	if not editor.is_confirm_open():
+		failures.append("Delete did not ask first")
+	editor.confirm_yes()
+	if FileAccess.file_exists(CustomStages1047.path_of("Broken")) or editor.popup() == null:
+		failures.append("confirming Delete did not remove Broken and show the list again")
+	editor.close_popup()
+	editor.queue_free()
+	await process_frame
+	DirAccess.remove_absolute(export_path)
+	CustomStages1047.dir_override = ""
+	_scenario_completed = true
+	return failures
+
+## Test hands the working definition to StageTestPlay and Main; an editor built
+## on the way back restores the definition, view, history and dirty flag;
+## Back to title asks while dirty and, when clean, goes and clears the state.
+func _scenario_stage_editor_test_play_round_trip_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stage_editor_reset_1047()
+	var scenes: Array = []
+	StageTestPlayEd1047.change_scene = func(path: String) -> void: scenes.append(path)
+	var editor: Node = await _stage_editor_1047()
+	editor.set_tool("platform")
+	editor.world_press(Vector2(-400, -200))
+	editor.world_release(Vector2(-400, -200))
+	editor.set_view(Vector2(123, -45), 0.7)
+	var def: Dictionary = editor.working_def()
+	var state: Dictionary = editor.editor_state()
+	if editor.test_play() != "" or scenes != [StageTestPlayEd1047.MAIN_SCENE]:
+		failures.append("Test did not go to Main: %s" % [scenes])
+	if not StageTestPlayEd1047.active or StageTestPlayEd1047.def != _stage_editor_norm_1047(def):
+		failures.append("StageTestPlay is not test-playing the working definition: %s" % [StageTestPlayEd1047.def])
+	editor.queue_free()
+	await process_frame
+	StageTestPlayEd1047.return_to_editor(null)
+	editor = await _stage_editor_1047()
+	if editor.working_def() != def:
+		failures.append("the editor came back with %s, wanted %s" % [editor.working_def(), def])
+	if editor.view()["center"] != Vector2(123, -45) or not is_equal_approx(float(editor.view()["zoom"]), 0.7):
+		failures.append("the view came back as %s" % [editor.view()])
+	if not editor.is_dirty() or editor.undo_depth() != (state["undo"] as Array).size() or editor.current_tool() != "platform":
+		failures.append("dirty %s, undo %d, tool %s did not come back" % [editor.is_dirty(), editor.undo_depth(), editor.current_tool()])
+	if not StageTestPlayEd1047.editor_state.is_empty():
+		failures.append("the editor did not clear the hand-off state")
+	scenes.clear()
+	editor.request_back()
+	if not editor.is_confirm_open() or not scenes.is_empty():
+		failures.append("Back with unsaved changes did not ask first: %s" % [scenes])
+	editor.close_popup()
+	# A definition StageDef refuses is not test-played; the reason is shown.
+	var spawns: Array = editor.working_def()["spawns"]
+	editor.delete_at(Vector2(spawns[0][0], spawns[0][1]))
+	var reason: String = editor.test_play()
+	if reason == "" or not scenes.is_empty() or not String(editor.message_text()).contains(reason):
+		failures.append("a 7-spawn stage was test-played or gave no reason: '%s', %s" % [reason, scenes])
+	editor.new_stage()
+	editor.request_back()
+	if scenes != [StageTestPlayEd1047.MAIN_SCENE] or not StageTestPlayEd1047.editor_state.is_empty() or StageTestPlayEd1047.active:
+		failures.append("Back with no changes gave %s, state %s" % [scenes, StageTestPlayEd1047.editor_state])
+	editor.queue_free()
+	await process_frame
+	_stage_editor_reset_1047()
+	_scenario_completed = true
+	return failures

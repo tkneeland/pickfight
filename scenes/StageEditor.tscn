@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/StageEditor.gd" id="1"]
+
+; The stage editor (#1047): one stage definition at a time, on the host PC with
+; mouse and keyboard. Everything is built in code by StageEditor.gd.
+[node name="StageEditor" type="Node2D"]
+script = ExtResource("1")

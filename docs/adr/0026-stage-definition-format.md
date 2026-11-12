@@ -66,3 +66,23 @@ a frame stays small: the largest definition the limits allow is about 7.5 KB,
 well inside a client's 256 KB inbound buffer. The relay's 4 KB cap applies only
 to client-to-host frames. The host stops sharing when the stage is cleared (back
 to the lobby), so a joiner arriving then is sent nothing stale.
+
+## Amendment: custom stages in the rotation (#1047, 2026-11-12)
+
+The host's custom stages live in `user://stages/<key>.json` (`CustomStages.gd`).
+Each file is checked by `StageDef` on every read and write. A stage's key is its
+file name, the same as `HostSettings.name_of()` gives a built-in stage, so a
+name that would match a built-in stage's key is refused. RoundManager's rotation
+is the built-in stages, in their order with their ids unchanged (Online clients
+index them), followed by each valid custom stage packed into a PackedScene whose
+`resource_path` is its file. It is rebuilt at start-up, on entering the lobby
+and at match start, never mid-match.
+
+Unlike built-in stages, custom stages are off until switched on: a per-mode
+whitelist (`HostSettings.custom_stages_on`) rather than the built-in
+"disabled" lists. They are offered in the general modes only, never fill the
+all-off fallback, and are left out of World Tour (`builtin_stages()`).
+
+The editor and the game are separate scenes. `StageTestPlay.gd` carries the
+stage under test and the editor's state across the swap; Main plays an offline
+Solo Classic round on that stage alone and swaps back to the editor afterwards.
