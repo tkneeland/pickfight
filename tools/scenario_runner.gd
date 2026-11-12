@@ -1348,6 +1348,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_editor_draw_move_resize_delete_1047",
 	"stage_editor_save_open_import_export_1047",
 	"stage_editor_test_play_round_trip_1047",
+	"stage_editor_asks_before_replacing_1047",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4469,6 +4470,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_editor_save_open_import_export_1047()
 		"stage_editor_test_play_round_trip_1047":
 			return await _scenario_stage_editor_test_play_round_trip_1047()
+		"stage_editor_asks_before_replacing_1047":
+			return await _scenario_stage_editor_asks_before_replacing_1047()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -63324,10 +63327,10 @@ func _scenario_custom_stages_store_1047() -> Array[String]:
 	var failures: Array[String] = []
 	var dir: String = _stages_dir_1047()
 	var builtins := PackedStringArray(["Flatlands", "Pitch"])
-	var saved: Dictionary = CustomStages1047.save(_stage_def_1049("My Ledges!"), builtins)
+	var saved: Dictionary = CustomStages1047.save(_stage_def_1049("My Ledges?"), builtins)
 	if not saved["ok"] or saved["key"] != "My Ledges" or not FileAccess.file_exists(saved["path"]):
 		failures.append("a good stage was not saved as 'My Ledges': %s" % [saved])
-	for bad: Array in [[_stage_def_1049("flatlands"), "built-in"], [_stage_def_1049("!!!"), "letter or digit"]]:
+	for bad: Array in [[_stage_def_1049("flatlands"), "built-in"], [_stage_def_1049("???"), "letter or digit"], [_stage_def_1049("- -"), "letter or digit"]]:
 		var res: Dictionary = CustomStages1047.save(bad[0], builtins)
 		if res["ok"] or not String(res["reason"]).contains(bad[1]):
 			failures.append("saving '%s' gave %s, wanted a refusal about '%s'" % [bad[0]["name"], res, bad[1]])
@@ -63344,7 +63347,7 @@ func _scenario_custom_stages_store_1047() -> Array[String]:
 	if keys != ["Broken", "My Ledges"] or listed[0]["ok"] or not listed[1]["ok"]:
 		failures.append("list() gave %s" % [listed.map(func(e: Dictionary) -> String: return "%s ok=%s" % [e["key"], e["ok"]])])
 	var loaded: Dictionary = CustomStages1047.load_stage("My Ledges")
-	if not loaded["ok"] or loaded["def"]["name"] != "My Ledges!" or loaded["def"]["parts"].size() != 3:
+	if not loaded["ok"] or loaded["def"]["name"] != "My Ledges?" or loaded["def"]["parts"].size() != 3:
 		failures.append("load_stage() gave %s" % [loaded])
 	var scenes: Array[PackedScene] = CustomStages1047.scenes(builtins)
 	if scenes.size() != 1 or HostSettings1047.name_of(scenes[0].resource_path) != "My Ledges":
@@ -63364,6 +63367,32 @@ func _scenario_custom_stages_store_1047() -> Array[String]:
 		failures.append("a broken file was imported")
 	if not CustomStages1047.delete("Shared") or CustomStages1047.load_stage("Shared")["ok"] or CustomStages1047.delete("Shared"):
 		failures.append("delete() did not remove 'Shared' exactly once")
+	# Review of #1252: a save or import over an existing stage (any case) is refused
+	# with "exists" until the caller says to overwrite.
+	var again: Dictionary = CustomStages1047.save(_stage_def_1049("my ledges", 600.0), builtins)
+	if again["ok"] or not again["exists"] or again["key"] != "My Ledges":
+		failures.append("saving over 'My Ledges' (another case) was not refused as existing: %s" % [again])
+	if CustomStages1047.load_stage("My Ledges")["def"]["parts"][0]["size"][0] != 800.0:
+		failures.append("a refused save changed the stored stage")
+	var replaced: Dictionary = CustomStages1047.save(_stage_def_1049("my ledges", 600.0), builtins, true)
+	var keys_now: Array = CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"])
+	if not replaced["ok"] or keys_now.count("my ledges") + keys_now.count("My Ledges") != 1 or CustomStages1047.load_stage("my ledges")["def"]["parts"][0]["size"][0] != 600.0:
+		failures.append("overwrite did not replace the stage in one file: %s, keys %s" % [replaced, keys_now])
+	CustomStages1047.export_file(_stage_def_1049("my ledges"), outside)
+	if not CustomStages1047.import_file(outside, builtins)["exists"]:
+		failures.append("importing over an existing stage was not refused as existing")
+	# A name in another script keeps its letters.
+	var ja: Dictionary = CustomStages1047.save(_stage_def_1049("空の足場"), builtins)
+	if not ja["ok"] or ja["key"] != "空の足場":
+		failures.append("a Japanese name was saved as %s" % [ja])
+	# Deleting forgets the stage's switches, so a new one of that name starts off.
+	var hs: RefCounted = HostSettings1047.shared()
+	var before: Dictionary = hs.custom_stages_on.duplicate(true)
+	hs.custom_stages_on = {"classic": PackedStringArray(["空の足場", "Other"])}
+	CustomStages1047.delete("空の足場")
+	if hs.custom_stages_on["classic"] != PackedStringArray(["Other"]):
+		failures.append("deleting a stage left its switch on: %s" % [hs.custom_stages_on])
+	hs.custom_stages_on = before
 	DirAccess.remove_absolute(outside)
 	CustomStages1047.dir_override = ""
 	_scenario_completed = true
@@ -63411,6 +63440,32 @@ func _scenario_custom_stages_off_by_default_1047() -> Array[String]:
 	settings.set_stage_enabled_for("king_of_the_hill", "Mine", true)
 	if settings.set_stage_enabled_for("king_of_the_hill", "Mine", false):
 		failures.append("the last stage on in a mode could be switched off")
+	# Review of #1252: an off custom stage is not "one left on" for a built-in one.
+	settings.set_all_stages_for("sudden_death", true)
+	settings.set_stage_enabled_for("sudden_death", "Mine", false)
+	var second: String = HostSettings1047.name_of(STAGE_PATHS[1])
+	settings.set_stage_enabled_for("sudden_death", second, false)
+	if settings.set_stage_enabled_for("sudden_death", first, false) or not settings.on_stages_for("sudden_death").has(first):
+		failures.append("the last built-in stage on could be switched off while the custom stage was off")
+	# Restore defaults switches custom stages off again.
+	settings.restore_defaults()
+	if settings.on_stages_for("classic").has("Mine") or not settings.custom_stages_on.is_empty():
+		failures.append("Restore defaults left the custom stage on")
+	# With every stage off the rotation deals built-in stages only, Stock's pick too.
+	settings.set_all_stages_for("classic", false)
+	rotation.mode_id = ""
+	var dealt: Dictionary = {}
+	for i in rotation.scenes.size():
+		if rotation._stage_enabled(i):
+			dealt[HostSettings1047.name_of(rotation.scenes[i].resource_path)] = true
+	if dealt.has("Mine") or dealt.is_empty():
+		failures.append("all off, the rotation would deal %s" % [dealt.keys()])
+	settings.set_all_stages_for("stock", false)
+	for n in 20:
+		var pick: int = rotation.resolve_stock_pin()
+		if HostSettings1047.name_of(rotation.scenes[pick].resource_path) == "Mine":
+			failures.append("all off, Stock's pick landed on the custom stage")
+			break
 	CustomStages1047.dir_override = ""
 	_scenario_completed = true
 	return failures
@@ -63851,5 +63906,42 @@ func _scenario_stage_editor_test_play_round_trip_1047() -> Array[String]:
 	editor.queue_free()
 	await process_frame
 	_stage_editor_reset_1047()
+	_scenario_completed = true
+	return failures
+
+## Review of #1252: the editor asks before saving over another saved stage of
+## the same name (the default "New stage" makes that the usual case), and saves
+## over its own file without asking.
+func _scenario_stage_editor_asks_before_replacing_1047() -> Array[String]:
+	var failures: Array[String] = []
+	_stages_dir_1047()
+	var first: Node = load(StageEditorScene1047).instantiate()
+	get_root().add_child(first)
+	await process_frame
+	if not bool(first.save_stage()["ok"]):
+		failures.append("the first New stage was not saved")
+	first.save_stage()
+	if first.is_confirm_open():
+		failures.append("saving the open stage over its own file asked to replace it")
+	first.queue_free()
+	await process_frame
+	var second: Node = load(StageEditorScene1047).instantiate()
+	get_root().add_child(second)
+	await process_frame
+	second.set_tool("platform")
+	second.world_press(Vector2(-600, -400))
+	second.world_release(Vector2(-600, -400))
+	var res: Dictionary = second.save_stage()
+	if res["ok"] or not second.is_confirm_open():
+		failures.append("saving a second New stage did not ask before replacing: %s" % [res])
+	if (CustomStages1047.load_stage("New stage")["def"]["parts"] as Array).size() != 2:
+		failures.append("the stored stage changed before the replace was confirmed")
+	second.confirm_yes()
+	await process_frame
+	if (CustomStages1047.load_stage("New stage")["def"]["parts"] as Array).size() != 3 or second.is_dirty():
+		failures.append("confirming did not replace the stored stage")
+	second.queue_free()
+	await process_frame
+	CustomStages1047.dir_override = ""
 	_scenario_completed = true
 	return failures

@@ -16,6 +16,9 @@ extends RefCounted
 const StageDefScript := preload("res://scripts/StageDef.gd")
 const StageBuilderScript := preload("res://scripts/StageBuilder.gd")
 const SfxScript := preload("res://scripts/Sfx.gd")
+const HostSettingsScript := preload("res://scripts/HostSettings.gd")
+## Characters a file name cannot hold on some OS, dropped from a stage's key.
+const UNSAFE_CHARS: String = "<>:\"/\\|?*."
 
 const STAGES_DIR: String = "user://stages"
 const EXTENSION: String = "json"
@@ -35,15 +38,28 @@ static func stages_dir() -> String:
 		return OS.get_temp_dir().path_join("pickfight_headless_stages_%d" % OS.get_process_id())
 	return STAGES_DIR
 
-## The file base name a stage called `stage_name` is saved under: letters,
-## digits, spaces, '-' and '_' kept, the rest dropped, trimmed. "" when nothing
-## is left.
+## The file base name a stage called `stage_name` is saved under: the name
+## with the characters a file name cannot hold (and control characters and
+## '.') dropped, trimmed, so a Japanese or Russian name keeps its letters.
+## "" when nothing is left.
 static func file_key(stage_name: String) -> String:
 	var out: String = ""
 	for c in stage_name.strip_edges():
-		if (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") or c == " " or c == "-" or c == "_":
+		if c.unicode_at(0) >= 32 and not UNSAFE_CHARS.contains(c):
 			out += c
 	return out.strip_edges()
+
+## Whether a stage is already saved under `key` (case-insensitively, as on
+## Windows and macOS file systems).
+static func exists(key: String) -> bool:
+	return not saved_key_like(key).is_empty()
+
+## The saved key that names the same file as `key` ignoring case, or "".
+static func saved_key_like(key: String) -> String:
+	for entry: Dictionary in list():
+		if String(entry["key"]).to_lower() == key.to_lower():
+			return entry["key"]
+	return ""
 
 static func path_of(key: String) -> String:
 	return stages_dir().path_join("%s.%s" % [key, EXTENSION])
@@ -52,7 +68,8 @@ static func path_of(key: String) -> String:
 ## nothing usable in the name, or it would share a built-in stage's key.
 static func name_problem(stage_name: String, builtin_names: PackedStringArray) -> String:
 	var key: String = file_key(stage_name)
-	if key == "":
+	var letters := RegEx.create_from_string("[\\p{L}\\p{N}]")
+	if key == "" or letters.search(key) == null:
 		return "the name needs a letter or digit"
 	for builtin: String in builtin_names:
 		if builtin.to_lower() == key.to_lower():
@@ -81,11 +98,12 @@ static func list() -> Array[Dictionary]:
 			break
 	return out
 
-## Saves `data` (a definition in JSON shape). `{"ok", "reason", "key", "path"}`:
-## refused, writing nothing, when it fails `StageDef`, its name is unusable or
-## a built-in's, or the folder cannot be written. Saving under an existing key
-## replaces that file.
-static func save(data: Dictionary, builtin_names: PackedStringArray) -> Dictionary:
+## Saves `data` (a definition in JSON shape). `{"ok", "reason", "key", "path",
+## "exists"}`: refused, writing nothing, when it fails `StageDef`, its name is
+## unusable or a built-in's, the store is full (`MAX_STAGES`), the folder cannot
+## be written, or a stage is already saved under its key and `overwrite` is
+## false ("exists" is then true, so the caller can ask before replacing it).
+static func save(data: Dictionary, builtin_names: PackedStringArray, overwrite: bool = false) -> Dictionary:
 	var checked: Dictionary = StageDefScript.validate(data)
 	if not bool(checked["ok"]):
 		return _fail(checked["reason"])
@@ -93,6 +111,16 @@ static func save(data: Dictionary, builtin_names: PackedStringArray) -> Dictiona
 	var problem: String = name_problem(stage_name, builtin_names)
 	if problem != "":
 		return _fail(problem)
+	var existing: String = saved_key_like(file_key(stage_name))
+	if existing != "" and not overwrite:
+		var refused: Dictionary = _fail("a stage called %s is already saved" % existing)
+		refused["exists"] = true
+		refused["key"] = existing
+		return refused
+	if existing == "" and list().size() >= MAX_STAGES:
+		return _fail("the store holds %d stages, the most it keeps" % MAX_STAGES)
+	if existing != "" and existing != file_key(stage_name):
+		delete_file_only(existing) # the same file in another case: replace it cleanly
 	var err: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(stages_dir()))
 	if err != OK and err != ERR_ALREADY_EXISTS:
 		return _fail("cannot create the stages folder (%s)" % error_string(err))
@@ -103,7 +131,7 @@ static func save(data: Dictionary, builtin_names: PackedStringArray) -> Dictiona
 		return _fail("cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())])
 	file.store_string(JSON.stringify(StageDefScript.to_json_data(checked["def"]), "\t"))
 	file.close()
-	return {"ok": true, "reason": "", "key": key, "path": path}
+	return {"ok": true, "reason": "", "key": key, "path": path, "exists": false}
 
 ## Loads the saved stage `key`: `{"ok", "reason", "def"}`, "def" in JSON shape.
 static func load_stage(key: String) -> Dictionary:
@@ -122,12 +150,12 @@ static func read_file(path: String) -> Dictionary:
 	return {"ok": true, "reason": "", "def": StageDefScript.to_json_data(checked["def"])}
 
 ## Imports the file at `path` into the store (checked, then saved under its
-## own name). Same result as `save()`.
-static func import_file(path: String, builtin_names: PackedStringArray) -> Dictionary:
+## own name). Same result as `save()`, `overwrite` included.
+static func import_file(path: String, builtin_names: PackedStringArray, overwrite: bool = false) -> Dictionary:
 	var read: Dictionary = read_file(path)
 	if not bool(read["ok"]):
 		return _fail(read["reason"])
-	return save(read["def"], builtin_names)
+	return save(read["def"], builtin_names, overwrite)
 
 ## Writes `data` (checked first) to the outside file `path`, for sharing by
 ## hand. `{"ok", "reason"}`.
@@ -142,8 +170,16 @@ static func export_file(data: Dictionary, path: String) -> Dictionary:
 	file.close()
 	return {"ok": true, "reason": ""}
 
-## Deletes the saved stage `key`. True when a file was removed.
+## Deletes the saved stage `key`, and forgets it in the host's per-mode
+## on-lists (so a new stage of the same name starts off). True when a file was removed.
 static func delete(key: String) -> bool:
+	if not delete_file_only(key):
+		return false
+	HostSettingsScript.shared().forget_custom_stage(key)
+	return true
+
+## Removes the file for `key` alone, leaving the host's settings as they are.
+static func delete_file_only(key: String) -> bool:
 	var path: String = path_of(key)
 	if not FileAccess.file_exists(path):
 		return false
@@ -169,4 +205,4 @@ static func scenes(builtin_names: PackedStringArray) -> Array[PackedScene]:
 	return out
 
 static func _fail(reason: String) -> Dictionary:
-	return {"ok": false, "reason": reason, "key": "", "path": ""}
+	return {"ok": false, "reason": reason, "key": "", "path": "", "exists": false}

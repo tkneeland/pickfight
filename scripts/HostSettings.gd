@@ -251,13 +251,31 @@ func _is_enabled(mode_id: String, stage_name: String, stock_list: PackedStringAr
 ## a stage: with all of them off, every stage of that mode.
 func enabled_stages_for(mode_id: String) -> PackedStringArray:
 	var out := on_stages_for(mode_id)
-	if not out.is_empty():
-		return out
-	var builtin := PackedStringArray()  # a custom stage is never dealt unless switched on (#1047)
+	return out if not out.is_empty() else fallback_stages_for(mode_id)
+
+## What `mode_id` deals with every stage switched off (#647): its built-in
+## stages, never a custom one the host did not switch on (#1047). The rotation
+## (`StageRotation`) and this file both fall back to it.
+func fallback_stages_for(mode_id: String) -> PackedStringArray:
+	var builtin := PackedStringArray()
 	for stage_name: String in stages_for_mode(mode_id):
 		if not custom_stages.has(stage_name):
 			builtin.append(stage_name)
 	return builtin if not builtin.is_empty() else stages_for_mode(mode_id)
+
+## Forgets the deleted custom stage `key` in every mode's on-list (#1047), so
+## a new stage saved under the same name starts off like any other.
+func forget_custom_stage(key: String) -> void:
+	var changed: bool = false
+	for mode_key_id: Variant in custom_stages_on.keys():
+		var on_list := PackedStringArray(custom_stages_on[mode_key_id])
+		var at: int = on_list.find(key)
+		if at != -1:
+			on_list.remove_at(at)
+			custom_stages_on[mode_key_id] = on_list
+			changed = true
+	if changed:
+		save_settings()
 
 ## The built-in stages in the rotation, without the host's custom ones (#1047):
 ## what World Tour counts.
@@ -298,6 +316,9 @@ func set_stage_enabled_for(mode_id: String, stage_name: String, on: bool) -> boo
 		custom_stages_on[key] = on_list
 		save_settings()
 		return true
+	# The last stage on stays on (#647): an off custom stage does not count as one left (#1047).
+	if not on and on_stages_for(mode_id) == PackedStringArray([stage_name]):
+		return false
 	if key == "stock":
 		var list := _stock_on_list()
 		var index: int = list.find(stage_name)
@@ -520,6 +541,7 @@ func restore_defaults() -> void:
 	resolution = Vector2i.ZERO
 	disabled_stages_by_mode = {}
 	stock_stages_on = PackedStringArray()
+	custom_stages_on = {}  # custom stages are off by default (#1047)
 	disabled_weapons = PackedStringArray()
 	disabled_modifiers = {}
 	game_mode = ""

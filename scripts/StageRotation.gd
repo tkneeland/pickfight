@@ -98,11 +98,15 @@ func resolve_stock_pin() -> int:
 			all.append(i)
 			if settings.is_stage_enabled_for(GameModesScript.STOCK, stage_name):
 				options.append(i)
+	# Nothing on: the built-in stages only, never a custom one left off (#1047).
+	var fallback: PackedStringArray = settings.fallback_stages_for(GameModesScript.STOCK)
 	if options.is_empty():
-		options = all
+		for i: int in all:
+			if fallback.has(HostSettingsScript.name_of(scenes[i].resource_path)):
+				options.append(i)
 	if options.is_empty():
 		for i in scenes.size():
-			if stock_pool.has(HostSettingsScript.name_of(scenes[i].resource_path)):
+			if fallback.has(HostSettingsScript.name_of(scenes[i].resource_path)):
 				options.append(i)
 	if options.is_empty():
 		return 0
@@ -203,9 +207,10 @@ func _stage_enabled(index: int) -> bool:
 	for i in scenes.size():
 		if _fits_mode(i) and settings.is_stage_enabled_for(mode_id, HostSettingsScript.name_of(scenes[i].resource_path)):
 			return false
-	# Nothing is on: fall back to the mode's own pool (`stages_for_mode`), so
-	# Classic never lands on a Soccer or Capture the Flag stage.
-	var pool: PackedStringArray = settings.stages_for_mode(mode_id)
+	# Nothing is on: fall back to the mode's own pool, so Classic never lands on
+	# a Soccer or Capture the Flag stage, and never on a custom stage the host
+	# did not switch on (#1047).
+	var pool: PackedStringArray = settings.fallback_stages_for(mode_id)
 	for i in scenes.size():
 		if pool.has(HostSettingsScript.name_of(scenes[i].resource_path)):
 			return pool.has(HostSettingsScript.name_of(scenes[index].resource_path))

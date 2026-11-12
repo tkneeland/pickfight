@@ -598,8 +598,13 @@ func toggle_one_way() -> bool:
 
 ## Saves to the store (`CustomStages.save()`), the result as it gives it; on a
 ## refusal its reason is shown.
-func save_stage() -> Dictionary:
-	var res: Dictionary = CustomStagesScript.save(_def, builtin_names())
+func save_stage(overwrite: bool = false) -> Dictionary:
+	# Saving the stage that is open over its own file needs no asking (#1047 review).
+	var own: bool = _key != "" and CustomStagesScript.file_key(String(_def.get("name", ""))).to_lower() == _key.to_lower()
+	var res: Dictionary = CustomStagesScript.save(_def, builtin_names(), overwrite or own)
+	if bool(res.get("exists", false)):
+		show_confirm(_trf("STAGE_EDITOR_REPLACE_CONFIRM", res["key"]), save_stage.bind(true))
+		return res
 	if bool(res["ok"]):
 		_key = res["key"]
 		_dirty = false
@@ -624,8 +629,11 @@ func open_key(key: String) -> Dictionary:
 	return res
 
 ## Imports the file at `path` into the store and opens it.
-func import_path(path: String) -> Dictionary:
-	var res: Dictionary = CustomStagesScript.import_file(path, builtin_names())
+func import_path(path: String, overwrite: bool = false) -> Dictionary:
+	var res: Dictionary = CustomStagesScript.import_file(path, builtin_names(), overwrite)
+	if bool(res.get("exists", false)):
+		show_confirm(_trf("STAGE_EDITOR_REPLACE_CONFIRM", res["key"]), import_path.bind(path, true))
+		return res
 	if bool(res["ok"]):
 		open_key(res["key"])
 		_message = _trf("STAGE_EDITOR_IMPORTED", res["key"])
@@ -837,7 +845,7 @@ func _key_pressed(key: InputEventKey) -> bool:
 		return true
 	if _overlay != null:
 		return false
-	if key.ctrl_pressed:
+	if key.is_command_or_control_pressed(): # Cmd on macOS (#1047 review)
 		match key.keycode:
 			KEY_Z:
 				if key.shift_pressed:
@@ -863,7 +871,9 @@ func _key_pressed(key: InputEventKey) -> bool:
 		KEY_HOME:
 			frame_stage()
 		KEY_DELETE, KEY_BACKSPACE:
-			if _hover_valid and not item_at(_hover).is_empty():
+			# The hovered item only while the mouse is over the canvas, not the side panel.
+			var over_canvas: bool = get_viewport().gui_get_hovered_control() == null
+			if over_canvas and _hover_valid and not item_at(_hover).is_empty():
 				delete_at(_hover)
 			else:
 				delete_selected()
@@ -1049,7 +1059,7 @@ func _build_panel() -> void:
 	var actions: Array = [
 		["New", "STAGE_EDITOR_NEW", UiThemeScript.ACTION_BUTTON, request_new],
 		["Open", "STAGE_EDITOR_OPEN", UiThemeScript.ACTION_BUTTON, show_open_list],
-		["Save", "STAGE_EDITOR_SAVE", UiThemeScript.ACTION_BUTTON, save_stage],
+		["Save", "STAGE_EDITOR_SAVE", UiThemeScript.ACTION_BUTTON, save_stage.bind(false)],
 		["Test", "STAGE_EDITOR_TEST", UiThemeScript.YELLOW_BUTTON, test_play],
 		["Import", "STAGE_EDITOR_IMPORT", UiThemeScript.ACTION_BUTTON, func() -> void: _guard_unsaved(_show_file_dialog.bind(true))],
 		["Export", "STAGE_EDITOR_EXPORT", UiThemeScript.ACTION_BUTTON, _show_file_dialog.bind(false)],
