@@ -11,6 +11,10 @@ extends RefCounted
 ## the normal view) is only dealt to a round of `large_stage_min_players` or
 ## more, and a bag is re-dealt the moment the player count crosses that line.
 ##
+## Issue #1201: the same, mirrored, for a small stage (`Stage.is_small_scene()`,
+## the smallest third by spawn footprint): only dealt, and only offered by the
+## Stock picker, to a round of `small_stage_max_players` or fewer.
+##
 ## RoundManager keeps `scenes` and `large_stage_min_players` in step with its
 ## own exports of the same meaning.
 
@@ -40,6 +44,8 @@ var scenes: Array[PackedScene] = []:
 		_mode_fit_id = ""
 ## Fewest players a round needs before a large stage may be dealt to it.
 var large_stage_min_players: int = 5
+## Most players a round may have before a small stage (#1201) is left out.
+var small_stage_max_players: int = 4
 ## `--demo`: play the rotation straight through in order, no bags.
 var demo: bool = false
 ## Seeded by RoundManager from `rotation_seed`; never the global RNG, so two
@@ -62,6 +68,10 @@ var bag: Array[int] = []
 var round_player_count: int = 0
 ## What `_large_stages_eligible()` said when `bag` was dealt (#163).
 var _bag_large_eligible: bool = false
+## What `_small_stages_eligible()` said when `bag` was dealt (#1201).
+var _bag_small_eligible: bool = true
+## `Stage.is_small_scene()` per stage scene.
+var _small_stage_cache: Dictionary = {}
 ## `Stage.view_size_of()` per stage scene, so a scene's state is read once.
 var _large_stage_cache: Dictionary = {}
 
@@ -78,25 +88,31 @@ func resolve_stock_pin() -> int:
 	for i in scenes.size():
 		var stage_name: String = HostSettingsScript.name_of(scenes[i].resource_path)
 		if stock_pool.has(stage_name):
+			if not _count_ok(i):  # a small stage never hosts a 5+ player Stock match (#1201)
+				continue
 			all.append(i)
 			if settings.is_stage_enabled_for(GameModesScript.STOCK, stage_name):
 				options.append(i)
 	if options.is_empty():
 		options = all
 	if options.is_empty():
+		for i in scenes.size():
+			if stock_pool.has(HostSettingsScript.name_of(scenes[i].resource_path)):
+				options.append(i)
+	if options.is_empty():
 		return 0
 	var pick: int = rng.randi() if rng != null else randi()
 	return options[pick % options.size()]
 
 ## The host phone's Stock stage grid (#375): every stage Stock can use as
-## {name, competitive, on}, competitive ones first, the rest in rotation order.
+## {name, competitive, on} for the current player count, competitive ones first, the rest in rotation order.
 func picker_rows() -> Array:
 	var comp: Array = []
 	var rest: Array = []
 	var stock_pool: PackedStringArray = settings.stages_for_mode(GameModesScript.STOCK)
 	for i in scenes.size():
 		var stage_name: String = HostSettingsScript.name_of(scenes[i].resource_path)
-		if not stock_pool.has(stage_name):
+		if not stock_pool.has(stage_name) or not _count_ok(i):  # #1201: never offer a stage this many players can't play
 			continue
 		var is_comp: bool = StageScript.competitive_of(scenes[i])
 		var on: bool = settings.is_stage_enabled_for(GameModesScript.STOCK, stage_name)
@@ -114,6 +130,27 @@ func stage_is_large(index: int) -> bool:
 	if not _large_stage_cache.has(scene):
 		_large_stage_cache[scene] = StageScript.is_large_view(StageScript.view_size_of(scene))
 	return _large_stage_cache[scene]
+
+## Whether `scenes[index]` is a small stage (#1201).
+func stage_is_small(index: int) -> bool:
+	var scene: PackedScene = scenes[index]
+	if not _small_stage_cache.has(scene):
+		_small_stage_cache[scene] = StageScript.is_small_scene(scene)
+	return _small_stage_cache[scene]
+
+## The most players `scenes[index]` takes: `small_stage_max_players` for a small
+## stage, else 0 for no limit.
+func stage_max_players(index: int) -> int:
+	return small_stage_max_players if stage_is_small(index) else 0
+
+## Whether `scenes[index]` suits `round_player_count`: a large stage needs
+## `large_stage_min_players`, a small one takes at most `small_stage_max_players`.
+func _count_ok(index: int) -> bool:
+	if stage_is_large(index):
+		return round_player_count >= large_stage_min_players
+	if stage_is_small(index):
+		return round_player_count <= small_stage_max_players
+	return true
 
 ## `_fits_mode()` per index for `_mode_fit_id`, worked out once per mode.
 var _mode_fit_id: String = ""
@@ -145,10 +182,10 @@ func _fits_mode(index: int) -> bool:
 func stage_allowed(index: int) -> bool:
 	if not _fits_mode(index) or not _stage_enabled(index):
 		return false
-	if round_player_count >= large_stage_min_players or not stage_is_large(index):
+	if _count_ok(index):
 		return true
 	for i in scenes.size():
-		if _fits_mode(i) and not stage_is_large(i):
+		if _fits_mode(i) and _count_ok(i):
 			return false
 	return true
 
@@ -196,7 +233,8 @@ func next_stage_index() -> int:
 			if stage_allowed(i):
 				return i
 		return 0
-	if _bag_large_eligible != _large_stages_eligible() and _rotation_has_large_stage():
+	if (_bag_large_eligible != _large_stages_eligible() and _rotation_has_large_stage()) \
+			or (_bag_small_eligible != _small_stages_eligible() and _rotation_has_small_stage()):
 		bag.clear()
 	if _bag_mode != mode_id:
 		bag.clear()
@@ -242,6 +280,7 @@ func _refill_bag(avoid: int) -> void:
 	# draws exactly the order it drew before issue #144.
 	bag = []
 	_bag_large_eligible = _large_stages_eligible()
+	_bag_small_eligible = _small_stages_eligible()
 	_bag_mode = mode_id
 	var rare_dropped: Array[int] = []
 	for index: int in _shuffled_indices():
@@ -295,6 +334,17 @@ func _add_weighted_copies() -> void:
 ## Whether this round's player count may play large stages (issue #144).
 func _large_stages_eligible() -> bool:
 	return round_player_count >= large_stage_min_players
+
+## Whether this round's player count may play small stages (#1201).
+func _small_stages_eligible() -> bool:
+	return round_player_count <= small_stage_max_players
+
+## Whether any stage in the rotation is small.
+func _rotation_has_small_stage() -> bool:
+	for i in scenes.size():
+		if stage_is_small(i):
+			return true
+	return false
 
 ## Whether any stage in the rotation is large. Without one the player count
 ## never changes a bag, so it is never re-dealt for it.

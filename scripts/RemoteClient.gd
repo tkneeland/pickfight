@@ -740,6 +740,8 @@ func _on_host_text(text: String) -> void:
 	match str(msg.get("t", "")):
 		"lobby":
 			_attention_on_lobby(str(lobby.get("phase", "")), str(msg.get("phase", "")))
+			if msg.get("match") is float:
+				_felt_on_match(int(msg["match"])) # #1195
 			lobby = msg
 			_refresh_lobby()
 		"hud":
@@ -759,6 +761,7 @@ func _on_host_text(text: String) -> void:
 		"recentre":
 			# #1185: a respawn starts the weapon at rest; the mouse drag starts
 			# again from the centre. A held stick is the host's to wait out.
+			_felt_probe_msec = -1 # #1195: the arm resetting is not the input's doing
 			if not _pad_driving:
 				_mouse.reset()
 				input_vector = Vector2.ZERO
@@ -852,6 +855,12 @@ var _felt_rest_since_msec: int = -1
 var _felt_probe_msec: int = -1
 var _felt_rest_angle: float = NAN
 var _felt_drawn_angle: float = NAN
+## The puppet state last drawn: a change (death, respawn) drops a probe in flight,
+## as does the host's recentre message. No distance rule: a lag spike moves the
+## body far too, and dropping those would bias the felt delay low.
+var _felt_drawn_state: int = -1
+## The host's match serial last seen; a new one starts the felt delay afresh.
+var _felt_match_serial: int = -1
 var _felt_sum: int = 0
 var _felt_n: int = 0
 ## The last single measurement, ms (-1 none yet).
@@ -869,8 +878,11 @@ func _felt_note_sent(v: Vector2) -> void:
 	_felt_rest_since_msec = now
 
 ## Called by `_render` with this joiner's own drawn body and weapon head.
-func _felt_note_drawn(body_position: Vector2, head_position: Vector2) -> void:
+func _felt_note_drawn(body_position: Vector2, head_position: Vector2, state: int = 1) -> void:
 	_felt_drawn_angle = (head_position - body_position).angle()
+	if state != _felt_drawn_state:
+		_felt_drawn_state = state
+		_felt_probe_msec = -1 # a death or respawn turned the arm, not the input
 	if _felt_probe_msec < 0:
 		return
 	var now: int = Time.get_ticks_msec()
@@ -882,7 +894,20 @@ func _felt_note_drawn(body_position: Vector2, head_position: Vector2) -> void:
 	elif now - _felt_probe_msec > FELT_TIMEOUT_MSEC:
 		_felt_probe_msec = -1
 
-## The mean felt input-to-screen delay this session, ms; -1 before the first.
+## Starts the felt delay afresh (a new match), so each match's mean covers only it.
+func _felt_reset() -> void:
+	_felt_sum = 0
+	_felt_n = 0
+	felt_last_msec = -1
+	_felt_probe_msec = -1
+
+## The lobby message's "match" serial (ControllerServer, #164): a new one is a new match.
+func _felt_on_match(serial: int) -> void:
+	if serial != _felt_match_serial:
+		_felt_match_serial = serial
+		_felt_reset()
+
+## The mean felt input-to-screen delay this match, ms; -1 before the first.
 func felt_msec() -> int:
 	return int(round(float(_felt_sum) / _felt_n)) if _felt_n > 0 else -1
 
@@ -1390,7 +1415,7 @@ func _render() -> void:
 			drawn_head,
 			lerp_angle(from_pose[3] if from_pose.size() > 3 else 0.0, to_pose[3] if to_pose.size() > 3 else 0.0, alpha))
 		if id == slot:
-			_felt_note_drawn(drawn_body, drawn_head) # #1195: the felt delay watches what is drawn
+			_felt_note_drawn(drawn_body, drawn_head, puppet.phase) # #1195: the felt delay watches what is drawn
 	for p: Variant in _world.get("projectiles", []):
 		if not p is Dictionary:
 			continue

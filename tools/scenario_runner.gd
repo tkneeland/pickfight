@@ -281,6 +281,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"round_modifier_double_damage_applies_and_undoes",
 	"round_modifier_rate_about_one_in_three",
 	"large_stages_only_with_five_or_more_players",
+	"small_stages_only_with_four_or_fewer_players",
 	"large_stage_camera_fits_view_with_eight_players",
 	"gap_roster_spawns_in_roster_order",
 	"stage_bag_redeals_when_player_count_crosses_large",
@@ -1321,6 +1322,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"online_ping_readout_mirrors_to_joiner_1195",
 	"match_end_logs_ping_stats_1195",
 	"round_countdown_holds_fighters_until_go_1197",
+	"online_replayed_pong_one_sample_1195",
+	"remote_client_felt_per_match_and_respawn_1195",
+	"online_rebound_slot_merges_ping_stats_1195",
+	"online_relay_leg_goes_stale_1195",
+	"online_slot_taken_by_other_joiner_keeps_share_1195",
+	"online_returning_joiner_keeps_felt_1195",
 	"remote_client_interp_adapts_to_snapshot_rate_1195",
 	"remote_client_interp_slews_not_jumps_1195",
 	"snapshot_capture_cost_8_players_1195",
@@ -2352,6 +2359,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_round_modifier_rate_about_one_in_three()
 		"large_stages_only_with_five_or_more_players":
 			return await _scenario_large_stages_only_with_five_or_more_players()
+		"small_stages_only_with_four_or_fewer_players":
+			return await _scenario_small_stages_only_with_four_or_fewer_players()
 		"large_stage_camera_fits_view_with_eight_players":
 			return await _scenario_large_stage_camera_fits_view_with_eight_players()
 		"gap_roster_spawns_in_roster_order":
@@ -4394,6 +4403,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_match_end_logs_ping_stats_1195()
 		"round_countdown_holds_fighters_until_go_1197":
 			return await _scenario_round_countdown_holds_fighters_until_go_1197()
+		"online_replayed_pong_one_sample_1195":
+			return await _scenario_online_replayed_pong_one_sample_1195()
+		"remote_client_felt_per_match_and_respawn_1195":
+			return await _scenario_remote_client_felt_per_match_and_respawn_1195()
+		"online_rebound_slot_merges_ping_stats_1195":
+			return await _scenario_online_rebound_slot_merges_ping_stats_1195()
+		"online_relay_leg_goes_stale_1195":
+			return await _scenario_online_relay_leg_goes_stale_1195()
+		"online_slot_taken_by_other_joiner_keeps_share_1195":
+			return await _scenario_online_slot_taken_by_other_joiner_keeps_share_1195()
+		"online_returning_joiner_keeps_felt_1195":
+			return await _scenario_online_returning_joiner_keeps_felt_1195()
 		"remote_client_interp_adapts_to_snapshot_rate_1195":
 			return await _scenario_remote_client_interp_adapts_to_snapshot_rate_1195()
 		"remote_client_interp_slews_not_jumps_1195":
@@ -6211,6 +6232,9 @@ const STAGE_PATHS: PackedStringArray = [
 	"res://scenes/stages/Bastion.tscn",
 	"res://scenes/stages/Stronghold.tscn",
 	"res://scenes/stages/Treadmill.tscn",
+	"res://scenes/stages/Cellar.tscn",
+	"res://scenes/stages/Tank.tscn",
+	"res://scenes/stages/Vat.tscn",
 ]
 func _scenario_every_stage_has_a_preview_647() -> Array[String]:
 	var previews: GDScript = load("res://scripts/StagePreviews.gd")
@@ -7866,13 +7890,15 @@ const RINGOUT_SHOVE_TICKS: int = 300
 ## amount of open floor would be a balance opinion rather than a correctness
 ## check. What it catches is the real mistake -- a stage whose walls, floor or
 ## kill zone were drawn or placed so that nobody can leave it.
+## Bowl and Tank (#1202) are closed by design: their drains are floored (Bowl keeps a 30 px slot narrower than a fighter), since a drain a fighter can fall through was fallen through by bots within seconds. Neither can ring out.
+const RINGOUT_EXEMPT_1202: PackedStringArray = ["res://scenes/stages/Bowl.tscn", "res://scenes/stages/Tank.tscn"]
 func _scenario_every_stage_can_ring_out() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
 	# and well apart from the rest (#168). Per stage nothing changed: one copy,
 	# spawn by spawn, left then right, until the first shove gets out.
 	var jobs: Array[Callable] = []
 	for s in STAGE_PATHS.size():
-		if RINGOUT_EXEMPT_402.has(STAGE_PATHS[s]) or RINGOUT_EXEMPT_403.has(STAGE_PATHS[s]):
+		if RINGOUT_EXEMPT_402.has(STAGE_PATHS[s]) or RINGOUT_EXEMPT_403.has(STAGE_PATHS[s]) or RINGOUT_EXEMPT_1202.has(STAGE_PATHS[s]):
 			continue  # closed pitches: the ball may only leave through a goal
 		jobs.append(_stage_ringout_sweep.bind(STAGE_PATHS[s], _stage_world_offset(s)))
 	var failures: Array[String] = await _run_concurrently(jobs, "stage ring-out sweep")
@@ -12274,44 +12300,51 @@ func _scenario_ice_patch_summit_spawns_clear() -> Array[String]:
 				failures.append("%s at x=%.0f is over the ice" % [child.name, marker.position.x])
 	await _teardown(stage)
 	return failures
-## Stage safety pass (#1202): the catch ledges added to Islands, Footbridge,
-## Summit and Treadmill sit fully inside the 1600x900 view (tops a body height above
-## the view's bottom edge, edges and end posts within its x range, read from
-## Stage.get_view_rect())
-## and the kill zones stay no deeper than they were (Islands and Footbridge
-## y=480, Summit and Treadmill y=700), so a fall is a visible KO.
+## Stage safety pass (#1202): the catch ledges added to the stages sit fully
+## inside the view (read from Stage.get_view_rect()): every ledge top at least
+## a body radius above the view's bottom edge, every ledge and end post inside
+## its x range, so a caught fighter is seen and no wall is invisible. The
+## EdgeCatch parts' boxes are read off the part itself. The kill zones stay no
+## deeper than they were (Islands, Footbridge, Quarry y=480; Summit, Treadmill
+## y=700; Bowl y=560), so a fall is a visible KO.
 func _scenario_stage_safety_ledges_on_screen_1202() -> Array[String]:
 	var failures: Array[String] = []
 	var wanted: Dictionary = {
-		"Islands": [["ReefLeft", "ReefRight"], 480.0],
-		"Footbridge": [["ChasmShelf", "EndShelfLeft", "EndShelfRight"], 480.0],
-		"Summit": [["EdgeShelfLeft", "EdgeShelfRight"], 700.0],
-		"Treadmill": [["EdgeShelfLeft", "EdgeShelfRight"], 700.0],
+		"Islands": [["ReefLeft", "ReefRight"], 480.0, false],
+		"Footbridge": [["ChasmShelf"], 480.0, true],
+		"Summit": [[], 700.0, true],
+		"Treadmill": [[], 700.0, true],
+		"Quarry": [["PitShelf"], 480.0, true],
+		"Bowl": [["DrainShelf"], 560.0, false],
 	}
 	for stage_name: String in wanted:
 		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
 		get_root().add_child(stage)
 		var view: Rect2 = stage.get_view_rect()
+		var rects: Dictionary = {}
 		for ledge_name: String in wanted[stage_name][0]:
 			var ledge: StaticBody2D = stage.get_node_or_null(ledge_name) as StaticBody2D
 			if ledge == null:
 				failures.append("%s lost its %s" % [stage_name, ledge_name])
 				continue
-			var top: float = ledge.position.y - ledge.size.y / 2.0
-			# A fighter standing on it must be seen: the top sits at least a body radius above
-			# the view bottom edge (the feet are visible and the head clears).
-			if top > view.end.y - PLAYER_RADIUS:
-				failures.append("%s %s top y=%.0f is too near or below the view bottom (%.0f)" % [stage_name, ledge_name, top, view.end.y])
-			if ledge.position.x - ledge.size.x / 2.0 < view.position.x or ledge.position.x + ledge.size.x / 2.0 > view.end.x:
-				failures.append("%s %s runs outside the view x range" % [stage_name, ledge_name])
-		for post_name: String in ["EndPostLeft", "EndPostRight"]:
-			var post: StaticBody2D = stage.get_node_or_null(post_name) as StaticBody2D
-			if post == null:
-				if stage_name != "Islands":
-					failures.append("%s lost its %s" % [stage_name, post_name])
-				continue
-			if post.position.x - post.size.x / 2.0 < view.position.x or post.position.x + post.size.x / 2.0 > view.end.x:
-				failures.append("%s %s is outside the view (an invisible wall)" % [stage_name, post_name])
+			rects[ledge_name] = Rect2(ledge.position - ledge.size / 2.0, ledge.size)
+		if wanted[stage_name][2]:
+			for edge_name: String in ["EdgeLeft", "EdgeRight"]:
+				var edge: StaticBody2D = stage.get_node_or_null(edge_name) as StaticBody2D
+				if edge == null:
+					failures.append("%s lost its %s" % [stage_name, edge_name])
+					continue
+				var boxes: Array = edge.call("boxes")
+				for b in 2:
+					var r: Rect2 = boxes[b]
+					r.position += edge.position
+					rects["%s %s" % [edge_name, ["ledge", "post"][b]]] = r
+		for key: String in rects:
+			var r: Rect2 = rects[key]
+			if not key.ends_with("post") and r.position.y > view.end.y - PLAYER_RADIUS:
+				failures.append("%s %s top y=%.0f is too near or below the view bottom (%.0f)" % [stage_name, key, r.position.y, view.end.y])
+			if r.position.x < view.position.x - 0.01 or r.end.x > view.end.x + 0.01:
+				failures.append("%s %s (x %.0f..%.0f) is outside the view (an invisible wall or off-screen ledge)" % [stage_name, key, r.position.x, r.end.x])
 		var kill: Node2D = stage.get_node_or_null("KillZone") as Node2D
 		if kill == null or kill.position.y > float(wanted[stage_name][1]):
 			failures.append("%s kill zone is missing or deeper than y=%.0f" % [stage_name, wanted[stage_name][1]])
@@ -19114,6 +19147,8 @@ func _scenario_round_modifier_rate_about_one_in_three() -> Array[String]:
 const LARGE_STAGE_MIN_PLAYERS: int = 5
 ## How many large stages the issue asks for.
 const LARGE_STAGE_MIN_COUNT: int = 3
+## Issue #1201: the most players a round may have and still get a small stage.
+const SMALL_STAGE_MAX_PLAYERS: int = 4
 ## Stages dealt per player count in the selection check: many bags' worth.
 const LARGE_STAGE_DRAWS: int = 300
 ## How far a camera's zoom or framing may be from the stage's view.
@@ -19121,7 +19156,7 @@ const LARGE_VIEW_TOLERANCE: float = 0.5
 const LARGE_ZOOM_TOLERANCE: float = 0.001
 ## A stub stage with two spawns and no geometry that declares `view` as its
 ## `view_size` -- left at the default, it is a normal stage.
-func _make_view_stub_stage(stage_name: String, view: Vector2) -> PackedScene:
+func _make_view_stub_stage(stage_name: String, view: Vector2, spawn_span: float = 1400.0) -> PackedScene:
 	var root := Node2D.new()
 	root.name = stage_name
 	root.set_script(StageType)
@@ -19130,7 +19165,7 @@ func _make_view_stub_stage(stage_name: String, view: Vector2) -> PackedScene:
 	for i in 2:
 		var marker := Marker2D.new()
 		marker.name = "Spawn%d" % i
-		marker.position = Vector2(-100.0 + 200.0 * i, -2000.0)
+		marker.position = Vector2(-spawn_span * 0.5 + spawn_span * i, -2000.0)
 		root.add_child(marker)
 		marker.owner = root
 	var packed := PackedScene.new()
@@ -19254,6 +19289,96 @@ func _scenario_large_stages_only_with_five_or_more_players() -> Array[String]:
 	eight.free()
 	if dealt_two != dealt_eight:
 		failures.append("with no large stage, two players were dealt %s but eight %s" % [dealt_two, dealt_eight])
+	_scenario_completed = true
+	return failures
+## Issue #1201: a small stage (the smallest third of the shipped set by spawn
+## footprint, no hand-made list) is only dealt, and only offered by the Stock
+## picker, to a round of four or fewer. The shipped rotation's small share is
+## 25-40% and holds no large stage; then over stub stages: 5 to 8 players are
+## never dealt a small stage (even from a bag dealt for four), 2 to 4 are dealt
+## every stage including the small ones, a rotation of only small stages still
+## plays with eight, and Stock's pin and picker rows leave small stages out at
+## five players but keep them at four.
+func _scenario_small_stages_only_with_four_or_fewer_players() -> Array[String]:
+	var failures: Array[String] = []
+	var rotation: PackedStringArray = _main_rotation_paths()
+	var small_names: PackedStringArray = []
+	for path: String in rotation:
+		var scene: PackedScene = load(path)
+		if StageType.is_small_scene(scene):
+			small_names.append(path.get_file().get_basename())
+			if StageType.is_large_view(StageType.view_size_of(scene)):
+				failures.append("%s is both small and large" % path.get_file())
+	var share: float = float(small_names.size()) / maxf(1.0, float(rotation.size()))
+	print("      Main rotation: %d stages, %d small (%s)" % [rotation.size(), small_names.size(), ", ".join(small_names)])
+	if share < 0.25 or share > 0.40:
+		failures.append("small stages are %d%% of the rotation, expected 25-40%% (retune Stage.SMALL_STAGE_MAX_FOOTPRINT)" % roundi(share * 100.0))
+	var defaults: Node = RoundManagerType.new()
+	if defaults._stage_rotation.small_stage_max_players != SMALL_STAGE_MAX_PLAYERS:
+		failures.append("small_stage_max_players is %d, expected %d" % [defaults._stage_rotation.small_stage_max_players, SMALL_STAGE_MAX_PLAYERS])
+	defaults.free()
+	var scenes: Array[PackedScene] = [
+		_make_view_stub_stage("NormalA", StageType.DEFAULT_VIEW_SIZE),
+		_make_view_stub_stage("NormalB", StageType.DEFAULT_VIEW_SIZE),
+		_make_view_stub_stage("SmallA", StageType.DEFAULT_VIEW_SIZE, 400.0),
+		_make_view_stub_stage("SmallB", StageType.DEFAULT_VIEW_SIZE, 900.0),
+		_make_view_stub_stage("LargeA", Vector2(2400.0, 1350.0), 400.0),
+	]
+	var small_indices: Array[int] = [2, 3]
+	if StageType.is_small_scene(scenes[0]) or not StageType.is_small_scene(scenes[2]) or StageType.is_small_scene(scenes[4]):
+		failures.append("stub stages are not classed normal, small and large as built")
+	for count: int in [2, 3, 4, 5, 6, 8]:
+		var rm: Node = _new_stage_dealer(scenes, count, 1201 + count)
+		var dealt: Array[int] = _deal_stages(rm, LARGE_STAGE_DRAWS)
+		rm.free()
+		var small_plays: int = 0
+		var seen: Dictionary = {}
+		for index: int in dealt:
+			seen[index] = true
+			if small_indices.has(index):
+				small_plays += 1
+		print("      %d players: %d plays on small stages" % [count, small_plays])
+		if count > SMALL_STAGE_MAX_PLAYERS and small_plays > 0:
+			failures.append("%d players: a small stage was dealt %d time(s)" % [count, small_plays])
+		if count <= SMALL_STAGE_MAX_PLAYERS:
+			for index: int in small_indices:
+				if not seen.has(index):
+					failures.append("%d players: small stage %d was never dealt" % [count, index])
+	var shrinking: Node = _new_stage_dealer(scenes, 4, 12)
+	_deal_stages(shrinking, 2)
+	shrinking._stage_rotation.set("round_player_count", 6)
+	for index: int in _deal_stages(shrinking, 30):
+		if small_indices.has(index):
+			failures.append("a bag dealt for four still dealt small stage %d once six were in" % index)
+			break
+	shrinking.free()
+	var only_small: Array[PackedScene] = [scenes[2], scenes[3]]
+	var fallback: Node = _new_stage_dealer(only_small, 8, 5)
+	var fallback_dealt: Array[int] = _deal_stages(fallback, 6)
+	fallback.free()
+	if not (fallback_dealt.has(0) and fallback_dealt.has(1)):
+		failures.append("a rotation of only small stages dealt %s to eight players, expected both" % [fallback_dealt])
+	# Stock's picker rows and pin, over real stages (a stub has no file name).
+	var real: Array[PackedScene] = [load("res://scenes/stages/Flatlands.tscn"), load("res://scenes/stages/Pocket.tscn")]
+	var stock_rm: Node = _new_stage_dealer(real, 5, 3)
+	var rows_for := func(count: int) -> Array:
+		stock_rm._stage_rotation.set("round_player_count", count)
+		var names: Array = []
+		for row: Dictionary in stock_rm._stage_rotation.picker_rows():
+			names.append(row["name"])
+		return names
+	var five_rows: Array = rows_for.call(5)
+	var four_rows: Array = rows_for.call(4)
+	if five_rows.has("Pocket") or not five_rows.has("Flatlands"):
+		failures.append("Stock's picker rows for five players are %s, expected Flatlands only" % [five_rows])
+	if not (four_rows.has("Pocket") and four_rows.has("Flatlands")):
+		failures.append("Stock's picker rows for four players are %s, expected both" % [four_rows])
+	stock_rm._stage_rotation.set("round_player_count", 5)
+	for _i in 10:
+		if stock_rm._stage_rotation.resolve_stock_pin() == 1:
+			failures.append("Stock pinned the small stage Pocket for five players")
+			break
+	stock_rm.free()
 	_scenario_completed = true
 	return failures
 ## Issue #144: a large stage played by eight players, under a real
@@ -35569,6 +35694,7 @@ func _scenario_demo_build_rotation_only_slice_stages() -> Array[String]:
 	var scenes: Array[PackedScene] = _real_stage_scenes_361()
 	rotation.scenes = scenes
 	rotation.round_player_count = 8
+	rotation.small_stage_max_players = 8  # these test the deal itself, not the small-stage cap (#1201)
 	rotation.rng = RandomNumberGenerator.new()
 	rotation.rng.seed = 11
 	var seen: Dictionary = {}
@@ -35701,6 +35827,7 @@ func _scenario_demo_build_off_leaves_full_game_unchanged() -> Array[String]:
 	var scenes: Array[PackedScene] = _real_stage_scenes_361()
 	rotation.scenes = scenes
 	rotation.round_player_count = 8
+	rotation.small_stage_max_players = 8  # these test the deal itself, not the small-stage cap (#1201)
 	rotation.rng = RandomNumberGenerator.new()
 	rotation.rng.seed = 11
 	var seen: Dictionary = {}
@@ -36360,6 +36487,7 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		var rotation: RefCounted = rotation_script.new()
 		rotation.scenes = scenes
 		rotation.round_player_count = 8
+		rotation.small_stage_max_players = 8  # these test the deal itself, not the small-stage cap (#1201)
 		rotation.mode_id = mode_id
 		var rng := RandomNumberGenerator.new()
 		rng.seed = 373
@@ -36383,9 +36511,9 @@ func _scenario_hot_potato_draws_its_stages_more_often() -> Array[String]:
 		counts[mode_id] = hits
 		sequences[mode_id] = seq
 	print("      Hot Potato stages dealt %d of 900 in hot_potato, %d of 900 in classic" % [counts["hot_potato"], counts[""]])
-	# Expected: 12 of 36 bag slots (about 300); in classic each is in a bag 30% of the time.
-	if counts["hot_potato"] < 225:
-		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 225" % counts["hot_potato"])
+	# Expected: 12 of 47 bag slots-worth of weight (about 225-280 of 900 at 47 stages; 223 seen); in classic each is in a bag 30% of the time.
+	if counts["hot_potato"] < 200:
+		failures.append("Hot Potato dealt its stages only %d of 900 times, wants at least 200" % counts["hot_potato"])
 	var others: int = 0
 	for i in scenes.size():
 		if not favoured.has(i):
@@ -62064,7 +62192,7 @@ func _scenario_online_ping_stats_avg_p95_max_1195() -> Array[String]:
 		failures.append("felt 123 / share true gave %s" % server.slot_ping_stats(slot))
 	for key: String in ["avg", "p95", "max", "n", "felt"]:
 		var v: int = int(server.slot_ping_stats(slot).get(key, -2))
-		if v < -1 or v > ControllerServerScript.PING_STAT_MAX_MSEC:
+		if v < -1 or v > MatchStatsScript.PING_MAX_MSEC:
 			failures.append("%s = %d is out of -1..60000" % [key, v])
 	# Bots, the host PC's seat and an empty slot have no statistics.
 	for bot: int in server.virtual_slots():
@@ -62449,6 +62577,217 @@ func _scenario_round_countdown_holds_fighters_until_go_1197() -> Array[String]:
 		failures.append("round 1 of a match counted down after the lobby's 3-2-1")
 	await _teardown(loop3["stage"], false)
 	_scenario_completed = true
+	return failures
+
+# --- Issue #1195 review follow-ups -------------------------------------------------
+## A replayed pong (the same n twice) adds one round-trip sample, not two.
+func _scenario_online_replayed_pong_one_sample_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "replay-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	var ping: Dictionary = await _online_wait_239(rig, remote, "n")
+	while not ping.is_empty() and ping.get("t") != "ping":
+		ping = await _online_wait_239(rig, remote, "n")
+	if ping.is_empty():
+		failures.append("no ping reached the remote")
+		await _rc_close_241(rig)
+		return failures
+	var pong: PackedByteArray = JSON.stringify({"t": "pong", "n": ping["n"]}).to_utf8_buffer()
+	for i in 3:
+		_online_send_239(remote, 1, pong)
+		await _online_frames_239(5)
+	var n: int = int(server.slot_ping_stats(slot).get("n", 0))
+	if n != 1:
+		failures.append("the same pong sent three times left n = %d, expected 1" % n)
+	await _rc_close_241(rig)
+	return failures
+
+## The felt delay restarts each match, and a probe spanning a respawn or recentre is dropped.
+func _scenario_remote_client_felt_per_match_and_respawn_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var client: Node = RemoteClientScript241.new()
+	# mode: "respawn" (the puppet's state changes), "recentre" (the host's message),
+	# "far" (a lag spike: the body jumps but nothing respawned), "turn" (plain).
+	var measure: Callable = func(mode: String) -> void:
+		client._felt_rest_since_msec = Time.get_ticks_msec() - 1000
+		client._felt_last_sent = Vector2.ZERO
+		client._felt_note_drawn(Vector2(100, 100), Vector2(120, 100))
+		client._felt_note_sent(Vector2(1, 0)) # changed after a rest: a probe starts
+		if mode == "recentre":
+			client._felt_probe_msec = -1 # what the host's recentre message does
+		if mode == "respawn":
+			client._felt_note_drawn(Vector2(900, 100), Vector2(900, 80), 2) # state changed, arm turned
+		elif mode == "far":
+			client._felt_note_drawn(Vector2(900, 100), Vector2(900, 80)) # far away, same state
+		else:
+			client._felt_note_drawn(Vector2(101, 100), Vector2(101, 80)) # the arm turned in place
+	measure.call("respawn")
+	if client.felt_msec() != -1:
+		failures.append("a probe across a respawn was measured (felt %d)" % client.felt_msec())
+	measure.call("recentre")
+	if client.felt_msec() != -1:
+		failures.append("a probe dropped by a recentre was measured (felt %d)" % client.felt_msec())
+	measure.call("far")
+	if client.felt_msec() < 0:
+		failures.append("a lag-spike probe (body far, same state) was discarded")
+	client._felt_reset()
+	measure.call("turn")
+	if client.felt_msec() < 0:
+		failures.append("an ordinary turn in place was not measured")
+	# A new match (the host's match serial) starts from nothing; the same serial does not.
+	client._felt_on_match(5)
+	client._felt_on_match(5)
+	if client.felt_msec() != -1:
+		failures.append("the first serial seen did not start the felt delay afresh")
+	measure.call("turn")
+	client._felt_on_match(5)
+	if client.felt_msec() < 0:
+		failures.append("an unchanged match serial reset the felt delay")
+	client._felt_on_match(6)
+	if client.felt_msec() != -1 or client.felt_last_msec != -1:
+		failures.append("a new match kept the last match's felt delay (%d)" % client.felt_msec())
+	client.free()
+	_scenario_completed = true
+	return failures
+
+## A joiner whose seat leaves and comes back to the same slot is one entry, with both runs' samples.
+func _scenario_online_rebound_slot_merges_ping_stats_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "rebind-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	for i in 2:
+		await _ping_answer_1195(rig, remote, 0)
+	server._keep_departed_ping_stats(slot) # what _unbind does as the seat leaves
+	if not server.slot_ping_stats(slot).is_empty():
+		failures.append("the live seat kept its samples after being filed as departed")
+	await _ping_answer_1195(rig, remote, 0) # the slot's next occupant answers
+	var listed: Array = server.match_ping_stats()
+	if listed.size() != 1 or int(listed[0].get("n", 0)) != 3:
+		failures.append("a rebound slot gives %s, expected one entry with n = 3" % [listed])
+	server._keep_departed_ping_stats(slot)
+	server._keep_departed_ping_stats(slot)
+	listed = server.match_ping_stats()
+	if listed.size() != 1 or int(listed[0].get("n", 0)) != 3:
+		failures.append("filing a departed slot twice gives %s, expected one entry with n = 3" % [listed])
+	await _rc_close_241(rig)
+	return failures
+
+## The host leg never outlives its link: no echo answered for a while, or the link leaving "online".
+func _scenario_online_relay_leg_goes_stale_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.relay_echo_interval_msec = 100
+	if not await _wait_for_239(func() -> bool: return server.relay_rtt_msec >= 0, 5000):
+		failures.append("the relay never answered an echo")
+		await _rc_close_241(rig)
+		return failures
+	server._relay_echo_answered_msec = Time.get_ticks_msec() - 10000
+	server._relay_echo_tick()
+	if server.relay_rtt_msec != -1:
+		failures.append("a host leg with no echo answered for 10 s is still %d" % server.relay_rtt_msec)
+	if not await _wait_for_239(func() -> bool: return server.relay_rtt_msec >= 0, 5000):
+		failures.append("the host leg never came back after a fresh echo")
+	server._on_link_state_changed("reconnecting")
+	if server.relay_rtt_msec != -1:
+		failures.append("the host leg survived the link leaving online: %d" % server.relay_rtt_msec)
+	await _rc_close_241(rig)
+	return failures
+
+## A non-sharing player leaves and a sharing one takes the slot: two entries, and the telemetry record
+## carries only the sharer's.
+func _scenario_online_slot_taken_by_other_joiner_keeps_share_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "other-joiner-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	for i in 2:
+		await _ping_answer_1195(rig, remote, 0, {"felt": 80, "share": false}) # player A, not sharing
+	server._keep_departed_ping_stats(slot) # A leaves
+	server._slot_client_id[slot] = "another-joiner-id" # B takes the slot
+	await _ping_answer_1195(rig, remote, 0, {"felt": 30, "share": true})
+	var listed: Array = server.match_ping_stats()
+	if listed.size() != 2:
+		failures.append("two joiners in one slot gave %s, expected two entries" % [listed])
+	else:
+		var shares: Array = [listed[0].get("share"), listed[1].get("share")]
+		if shares != [false, true] or int(listed[0].get("n", 0)) != 2 or int(listed[1].get("n", 0)) != 1:
+			failures.append("entries %s: expected A (n=2, not sharing) then B (n=1, sharing)" % [listed])
+		var stats: RefCounted = MatchStatsScript.new()
+		stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+		for entry: Dictionary in listed:
+			var e: Dictionary = entry.duplicate()
+			e["host_leg"] = 10
+			stats.ping.append(e)
+		var record: Dictionary = StatsSenderScript372.build_record(stats, "classic", ["Flatlands"], "ffa", 60, [], true, 1)
+		var sent: Variant = record.get("ping")
+		if not sent is Array or (sent as Array).size() != 1 or int(sent[0].get("n", 0)) != 1 or int(sent[0].get("felt", 0)) != 30:
+			failures.append("the telemetry ping list is %s, expected only the sharing joiner (n=1, felt 30)" % [sent])
+	await _rc_close_241(rig)
+	return failures
+
+## A returning joiner's seat reads felt -1 until it measures again: the entry keeps the felt delay it
+## left with. A new match clears the live seat's felt and share too.
+func _scenario_online_returning_joiner_keeps_felt_1195() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _rc_rig_241(1, failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	server.ping_interval_msec = 200
+	var remote: WebSocketPeer = await _online_remote_239(rig, "returning-1195")
+	var seat: Dictionary = await _online_wait_239(rig, remote, "slot")
+	var slot: int = int(seat.get("slot", -1))
+	if slot < 0:
+		failures.append("the remote never got a slot")
+		await _rc_close_241(rig)
+		return failures
+	server.reset_ping_stats()
+	await _ping_answer_1195(rig, remote, 0, {"felt": 80, "share": true})
+	server._keep_departed_ping_stats(slot) # leaves with felt 80
+	server._slot_peers[slot].felt_msec = -1 # the same joiner's new seat: nothing measured yet
+	await _ping_answer_1195(rig, remote, 0) # an old-style pong: felt -1
+	var listed: Array = server.match_ping_stats()
+	if listed.size() != 1 or int(listed[0].get("n", 0)) != 2 or int(listed[0].get("felt", 0)) != 80:
+		failures.append("a returning joiner gives %s, expected one entry with n = 2 and felt 80" % [listed])
+	server.reset_ping_stats()
+	if server.slot_felt_msec(slot) != -1 or server._slot_peers[slot].share:
+		failures.append("reset_ping_stats left felt %d / share %s on the live seat" % [server.slot_felt_msec(slot), server._slot_peers[slot].share])
+	await _rc_close_241(rig)
 	return failures
 
 # --- Issue #1195 PR B: adaptive interpolation delay and the 60 Hz stream -------------

@@ -114,5 +114,34 @@ reset_state; hello 120; beacon 10 90 "$(iso $((now + 12 * 3600)))" 3000
 check "T8 control: weekly 90% reset 12h away" "$(run "$ISS_READY")" "DEV_IDLE agage-JG 50"
 reset_state; echo "$((now - 300))|tkneeland|USAGE|10% 20% $far r5=$r5 agents=1 at=$(iso $((now - 300))) claude_at=$(iso $((now - 3000)))" >> "$INBOX"
 check "T8 this account itself" "$(run '[{"number":900,"labels":[{"name":"ready-for-agent"}],"assignees":[{"login":"tkneeland"}],"pull_request":null}]')" ""
+# --- T10: the #hive alert text (pf-dev-idle-alert.sh): <@id> from the local conf only, name otherwise; 120 min offers reassignment
+AL=$AG/pf-dev-idle-alert.sh
+a=$(bash "$AL" schans2 50 "#900")
+check "T10 no id: name only" "${a%%:*}" "Sam (schans2)"
+printf 'PF_DISCORD_TOKEN=x\nPF_DISCORD_ID_schans2=123456789\nPF_DISCORD_ID_agage_JG=987654321\n' > "$T/state/pf-discord.conf"
+a=$(bash "$AL" schans2 50 "#900, PR #901")
+check "T10 id known" "${a%%:*}" "<@123456789> Sam (schans2)"
+check "T10 no reassign offer under 2h" "$(echo "$a" | grep -c reassign)" 0
+a=$(bash "$AL" agage-JG 125 "#900")
+check "T10 account with a dash" "${a%%:*}" "<@987654321> Austin (agage-JG)"
+check "T10 2h: idle time and reassign offer" "$(echo "$a" | grep -c '2h05m.*reassign your unclaimed')" 1
+printf 'PF_DISCORD_TOKEN=x\nPF_DISCORD_ID_schans2=12ab\n' > "$T/state/pf-discord.conf"
+check "T10 bad id ignored" "$(bash "$AL" schans2 50 "#900" | cut -c1-13)" "Sam (schans2)"
+printf '#!/bin/bash\necho "post $*" >> "$PF_TEST_LOG"\n' > "$T/bin/pfd"; chmod +x "$T/bin/pfd"; : > "$PF_TEST_LOG"
+PF_DISCORD_SH=$T/bin/pfd bash "$AL" schans2 50 "#900" --post >/dev/null
+check "T10 --post goes to #hive" "$(grep -c "^post post 1569919897591611552 " "$PF_TEST_LOG")" 1
+# failed post: non-zero exit and the throttle stamp is cleared so the next poll wakes again
+printf '#!/bin/bash\nexit 2\n' > "$T/bin/pfd-fail"; chmod +x "$T/bin/pfd-fail"; echo "$now 1" > "$T/state/.dev-idle-schans2"
+PF_DISCORD_SH=$T/bin/pfd-fail bash "$AL" schans2 50 "#900" --post >/dev/null 2>&1; rc=$?
+check "T10 failed post exits non-zero" "$rc" 1
+check "T10 failed post clears the throttle" "$([ -e "$T/state/.dev-idle-schans2" ] && echo kept || echo cleared)" cleared
+# 2h+ with a very long list: the reassignment offer is still in the first 1990 characters
+long=$(printf 'x%.0s' $(seq 1 3000))
+a=$(bash "$AL" schans2 130 "$long"); check "T10 long list keeps the offer" "$(echo "${a:0:1990}" | grep -c reassign)" 1
+check "T10 reserve account name" "$(bash "$AL" tommykneeland 50 "#1" | cut -c1-30)" "Tommy (reserve) (tommykneeland"
+# the real pf-discord.sh post: allowed_mentions.users carries the opted-in id (PF_DISCORD_ID_<account>), no one else
+printf 'PF_DISCORD_TOKEN=x\nPF_DISCORD_ID_schans2=123456789\n' > "$T/state/pf-discord.conf"; : > "$PF_TEST_LOG"
+bash "$AG/pf-discord.sh" post 1569919897591611552 "hi <@123456789> and <@555>" >/dev/null 2>&1
+check "T10 real post JSON: users" "$(tr -d ' \n' < "$PF_TEST_LOG" | grep -o '"users":\[[^]]*\]' | head -n 1)" '"users":["123456789"]'
 echo "dev-idle: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -1,0 +1,95 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
+[ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
+[ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
+[ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
+[ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
+
+; Vat (#1202, a no-ledge stage): a walled vat. Two floors (x=+-130..+-760, top y=320) split by
+; a 260 px drain that a ferry (MovingPlatform, 140 px, x=-170..+170 over 3 s a leg) crosses,
+; and a bounce pad on each floor throwing a fighter up to a deck (top y=158). Walls to the
+; view edge leave no outer end; the ring-out is the drain when the ferry is away.
+[node name="Vat" type="Node2D"]
+script = ExtResource("script")
+background_sky_top = Color(0.12, 0.1, 0.14, 1)
+background_sky_bottom = Color(0.26, 0.2, 0.24, 1)
+background_silhouette = Color(0.09, 0.08, 0.1, 1)
+background_layers = PackedStringArray("mountains", "hills")
+
+[node name="FloorLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-445, 340)
+size = Vector2(630, 40)
+
+[node name="FloorRight" parent="." instance=ExtResource("platform")]
+position = Vector2(445, 340)
+size = Vector2(630, 40)
+
+; Ferry: authored at x=-100 (its left edge at -170 overlaps FloorLeft, which ends at x=-130), patrolling 200 px right to x=+100 (its right edge at +170 overlaps FloorRight).
+[node name="Ferry" parent="." instance=ExtResource("mp")]
+position = Vector2(-100, 332)
+size = Vector2(140, 24)
+travel = Vector2(200, 0)
+one_way_sec = 3.0
+
+[node name="DeckLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-520, 170)
+size = Vector2(220, 24)
+
+[node name="DeckRight" parent="." instance=ExtResource("platform")]
+position = Vector2(520, 170)
+size = Vector2(220, 24)
+
+[node name="PadLeft" parent="." instance=ExtResource("pad")]
+position = Vector2(-330, 328)
+size = Vector2(100, 16)
+
+[node name="PadRight" parent="." instance=ExtResource("pad")]
+position = Vector2(330, 328)
+size = Vector2(100, 16)
+
+; Walls (no ledge): a 40 px wall each side (x=+-760..780) from above head height down past the floor, inside the 1600 px view, so there is no open end to walk or be shoved off; the only ring-outs are the open drains.
+[node name="WallLeft" parent="." instance=ExtResource("platform")]
+position = Vector2(-780, 20)
+size = Vector2(40, 760)
+
+[node name="WallRight" parent="." instance=ExtResource("platform")]
+position = Vector2(780, 20)
+size = Vector2(40, 760)
+
+[node name="Spawn0" type="Marker2D" parent="."]
+position = Vector2(-640, 270)
+
+[node name="Spawn1" type="Marker2D" parent="."]
+position = Vector2(640, 270)
+
+[node name="Spawn2" type="Marker2D" parent="."]
+position = Vector2(-560, 270)
+
+[node name="Spawn3" type="Marker2D" parent="."]
+position = Vector2(560, 270)
+
+[node name="Spawn4" type="Marker2D" parent="."]
+position = Vector2(-480, 270)
+
+[node name="Spawn5" type="Marker2D" parent="."]
+position = Vector2(480, 270)
+
+[node name="Spawn6" type="Marker2D" parent="."]
+position = Vector2(-400, 270)
+
+[node name="Spawn7" type="Marker2D" parent="."]
+position = Vector2(400, 270)
+
+[node name="KillZone" parent="." instance=ExtResource("killfloor")]
+position = Vector2(0, 480)
+
+[node name="PickupSpawn0" type="Marker2D" parent="."]
+position = Vector2(-520, 130)
+
+[node name="PickupSpawn1" type="Marker2D" parent="."]
+position = Vector2(520, 130)
+
+[node name="PickupSpawn2" type="Marker2D" parent="."]
+position = Vector2(250, 270)
+

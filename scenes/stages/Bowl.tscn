@@ -7,9 +7,9 @@
 ; A stepped bowl with high walls on both sides: each half is a staircase
 ; descending toward the middle, and the walls run from well above head height
 ; down past the lowest step, so there is no way out sideways at any height a
-; fight happens at. The only ring-out is the 120 px drain at the bottom centre
-; -- two and a half player widths, so it is a gap you are driven into rather
-; than one you wander over.
+; fight happens at. The drain at the bottom centre (120 px) is floored by the
+; DrainShelf (#1202) except a 30 px slot too narrow to fall through, so there
+; is no ring-out: the Bowl is closed and damage decides the round.
 ;
 ; This is the one stage in the rotation where damage, not geometry, usually
 ; decides the round -- every other stage rewards putting someone over an edge,
@@ -85,6 +85,15 @@ position = Vector2(-580, 140)
 
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(580, 140)
+
+; DrainShelf (#1202): the drain is floored at y=400 except a 30 px slot in the middle (x=-15..15), so a fighter dropped or shoved in is caught on screen and climbs out. The slot is too narrow for a fighter (48 px) to fall through: ring-outs are gone from the Bowl on purpose, because any slot a fighter can fall through was fallen through by bots within ~10 s (first stage death 8-10 s). This is the one stage where damage decides the round, as its description above says; `every_stage_can_ring_out` exempts it (`RINGOUT_EXEMPT_1202`).
+[node name="DrainShelf" parent="." instance=ExtResource("platform")]
+position = Vector2(-37.5, 408)
+size = Vector2(45, 16)
+
+[node name="DrainShelfRight" parent="." instance=ExtResource("platform")]
+position = Vector2(37.5, 408)
+size = Vector2(45, 16)
 
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 560)
