@@ -63381,6 +63381,21 @@ func _scenario_custom_stages_store_1047() -> Array[String]:
 	CustomStages1047.export_file(_stage_def_1049("my ledges"), outside)
 	if not CustomStages1047.import_file(outside, builtins)["exists"]:
 		failures.append("importing over an existing stage was not refused as existing")
+	# A case-only rename moves the file safely and keeps the stage's switches.
+	var hs_before: Dictionary = HostSettings1047.shared().custom_stages_on.duplicate(true)
+	HostSettings1047.shared().custom_stages_on = {"classic": PackedStringArray(["my ledges"])}
+	var renamed: Dictionary = CustomStages1047.save(_stage_def_1049("MY LEDGES", 700.0), builtins, true)
+	var keys_after: Array = CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"])
+	if not renamed["ok"] or not keys_after.has("MY LEDGES") or keys_after.has("my ledges") or HostSettings1047.shared().custom_stages_on["classic"] != PackedStringArray(["MY LEDGES"]):
+		failures.append("a case-only rename gave %s, keys %s, switches %s" % [renamed, keys_after, HostSettings1047.shared().custom_stages_on])
+	for f2 in DirAccess.get_files_at(dir):
+		if f2.get_extension() != "json":
+			failures.append("a save left %s in the store" % f2)
+	HostSettings1047.shared().custom_stages_on = hs_before
+	# Invisible characters are stripped from the name and the key.
+	var sneaky: Dictionary = CustomStages1047.save(_stage_def_1049("Zero\u200bWidth\u202e"), builtins)
+	if not sneaky["ok"] or sneaky["key"] != "ZeroWidth" or CustomStages1047.load_stage("ZeroWidth")["def"]["name"] != "ZeroWidth":
+		failures.append("invisible characters were kept: %s" % [sneaky])
 	# A name in another script keeps its letters.
 	var ja: Dictionary = CustomStages1047.save(_stage_def_1049("空の足場"), builtins)
 	if not ja["ok"] or ja["key"] != "空の足場":

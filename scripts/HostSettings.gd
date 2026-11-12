@@ -263,6 +263,20 @@ func fallback_stages_for(mode_id: String) -> PackedStringArray:
 			builtin.append(stage_name)
 	return builtin if not builtin.is_empty() else stages_for_mode(mode_id)
 
+## Renames the custom stage `old_key` to `new_key` in every mode's on-list
+## (#1047: a save that only changed the name's letter case keeps its switches).
+func rename_custom_stage(old_key: String, new_key: String) -> void:
+	var changed: bool = false
+	for mode_key_id: Variant in custom_stages_on.keys():
+		var on_list := PackedStringArray(custom_stages_on[mode_key_id])
+		var at: int = on_list.find(old_key)
+		if at != -1:
+			on_list[at] = new_key
+			custom_stages_on[mode_key_id] = on_list
+			changed = true
+	if changed:
+		save_settings()
+
 ## Forgets the deleted custom stage `key` in every mode's on-list (#1047), so
 ## a new stage saved under the same name starts off like any other.
 func forget_custom_stage(key: String) -> void:

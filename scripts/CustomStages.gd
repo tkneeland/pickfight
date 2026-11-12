@@ -44,9 +44,23 @@ static func stages_dir() -> String:
 ## "" when nothing is left.
 static func file_key(stage_name: String) -> String:
 	var out: String = ""
-	for c in stage_name.strip_edges():
-		if c.unicode_at(0) >= 32 and not UNSAFE_CHARS.contains(c):
+	for c in clean_name(stage_name):
+		if not UNSAFE_CHARS.contains(c):
 			out += c
+	return out.strip_edges()
+
+## `stage_name` without invisible characters: control characters, zero-width
+## ones (U+200B..U+200F, U+2060..U+206F, U+FEFF) and bidi controls
+## (U+202A..U+202E), which could make two names look alike or reorder text.
+## Trimmed. Saved stages keep their name in this form.
+static func clean_name(stage_name: String) -> String:
+	var out: String = ""
+	for c in stage_name:
+		var u: int = c.unicode_at(0)
+		if u < 32 or u == 0x7F or (u >= 0x200B and u <= 0x200F) or (u >= 0x202A and u <= 0x202E) \
+				or (u >= 0x2060 and u <= 0x206F) or u == 0xFEFF:
+			continue
+		out += c
 	return out.strip_edges()
 
 ## Whether a stage is already saved under `key` (case-insensitively, as on
@@ -107,7 +121,8 @@ static func save(data: Dictionary, builtin_names: PackedStringArray, overwrite: 
 	var checked: Dictionary = StageDefScript.validate(data)
 	if not bool(checked["ok"]):
 		return _fail(checked["reason"])
-	var stage_name: String = checked["def"]["name"]
+	var stage_name: String = clean_name(checked["def"]["name"])
+	checked["def"]["name"] = stage_name
 	var problem: String = name_problem(stage_name, builtin_names)
 	if problem != "":
 		return _fail(problem)
@@ -119,19 +134,48 @@ static func save(data: Dictionary, builtin_names: PackedStringArray, overwrite: 
 		return refused
 	if existing == "" and list().size() >= MAX_STAGES:
 		return _fail("the store holds %d stages, the most it keeps" % MAX_STAGES)
-	if existing != "" and existing != file_key(stage_name):
-		delete_file_only(existing) # the same file in another case: replace it cleanly
 	var err: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(stages_dir()))
 	if err != OK and err != ERR_ALREADY_EXISTS:
 		return _fail("cannot create the stages folder (%s)" % error_string(err))
 	var key: String = file_key(stage_name)
 	var path: String = path_of(key)
-	var file := FileAccess.open(path, FileAccess.WRITE)
+	# Written beside the store first (a ".tmp" that `list()` skips), then moved
+	# into place, so a failed write never costs the stage already saved.
+	var tmp: String = stages_dir().path_join("%s.tmp" % key)
+	var file := FileAccess.open(tmp, FileAccess.WRITE)
 	if file == null:
-		return _fail("cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())])
+		return _fail("cannot write %s (%s)" % [tmp, error_string(FileAccess.get_open_error())])
 	file.store_string(JSON.stringify(StageDefScript.to_json_data(checked["def"]), "\t"))
 	file.close()
+	var moved: String = _move_into_place(tmp, path, existing)
+	if moved != "":
+		return _fail(moved)
+	if existing != "" and existing != key:
+		HostSettingsScript.shared().rename_custom_stage(existing, key) # a case-only rename keeps its switches
 	return {"ok": true, "reason": "", "key": key, "path": path, "exists": false}
+
+## Moves the written `tmp` to `path`, replacing `existing` (the saved key it
+## replaces, maybe in another case, or ""). The old file is set aside first and
+## only removed once the new one is in place; on a failure it is put back and
+## the reason returned. "" when done.
+static func _move_into_place(tmp: String, path: String, existing: String) -> String:
+	var g_tmp: String = ProjectSettings.globalize_path(tmp)
+	var g_path: String = ProjectSettings.globalize_path(path)
+	var aside: String = ""
+	if existing != "":
+		aside = ProjectSettings.globalize_path(stages_dir().path_join("%s.bak" % existing))
+		if DirAccess.rename_absolute(ProjectSettings.globalize_path(path_of(existing)), aside) != OK:
+			DirAccess.remove_absolute(g_tmp)
+			return "cannot replace %s" % existing
+	var err: Error = DirAccess.rename_absolute(g_tmp, g_path)
+	if err != OK:
+		DirAccess.remove_absolute(g_tmp)
+		if aside != "":
+			DirAccess.rename_absolute(aside, ProjectSettings.globalize_path(path_of(existing)))
+		return "cannot write %s (%s)" % [path, error_string(err)]
+	if aside != "":
+		DirAccess.remove_absolute(aside)
+	return ""
 
 ## Loads the saved stage `key`: `{"ok", "reason", "def"}`, "def" in JSON shape.
 static func load_stage(key: String) -> Dictionary:

@@ -845,7 +845,7 @@ func _key_pressed(key: InputEventKey) -> bool:
 		return true
 	if _overlay != null:
 		return false
-	if key.is_command_or_control_pressed(): # Cmd on macOS (#1047 review)
+	if key.ctrl_pressed or key.meta_pressed: # Ctrl everywhere, and Cmd on macOS too (#1047 review)
 		match key.keycode:
 			KEY_Z:
 				if key.shift_pressed:
