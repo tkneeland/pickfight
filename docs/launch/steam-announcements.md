@@ -1,6 +1,6 @@
 # PickFight: Steam events and announcements drafts (#757)
 
-**DRAFT: needs owner approval.** Nothing here is published. Paste-ready copy for the Steam Events and Announcements tool in Steamworks. Feature claims come only from `docs/FEATURES.md`; tone and facts follow `store-page.md`; dates, price and plan follow `owner-decisions.md` (price $9.99, 20% launch-week discount, Coming Soon page mid-Dec 2026, Couch Co-Op Fest Feb 8-15 2027, Next Fest Jun 14-21 2027, launch Thu Jul 22 2027). Recount any number against FEATURES.md before posting.
+**DRAFT: needs owner approval.** Nothing here is published. Paste-ready copy for the Steam Events and Announcements tool in Steamworks. Feature claims come only from `docs/FEATURES.md`; tone and facts follow `store-page.md`; dates, price and plan follow `owner-decisions.md` (price $6.99, $4.99 for the first 14 days, Coming Soon page mid-Dec 2026, Couch Co-Op Fest Feb 8-15 2027, Next Fest Jun 14-21 2027, launch Thu Jul 22 2027). Recount any number against FEATURES.md before posting.
 
 Rules for every post:
 
@@ -45,7 +45,7 @@ PickFight is a same-room platform fighter for up to eight players. One computer 
 - 6 modes, from Classic to Soccer and Capture the Flag, in Free-for-all or Red vs Blue.
 - Play on the couch, online by room code, or solo against bots.
 
-Release is planned for July 22, 2027, at $9.99. If you want to watch it grow, wishlist now and join the Discord: TODO (Discord invite).
+Release is planned for July 22, 2027, at $6.99. If you want to watch it grow, wishlist now and join the Discord: TODO (Discord invite).
 
 ---
 
@@ -130,7 +130,7 @@ Play it your way:
 
 TODO (#448, demo content is still open): this line describes the demo build as it ships today. The demo has 6 stages, the pickaxe plus four pickup weapons, and two modes: Classic and King of the Hill. At the end of each match, a card asks you to wishlist the full game.
 
-Release is July 22, 2027, at $9.99. Wishlist: TODO (store page URL). Talk to us in the Discord: TODO (Discord invite).
+Release is July 22, 2027, at $6.99. Wishlist: TODO (store page URL). Talk to us in the Discord: TODO (Discord invite).
 
 ---
 
@@ -138,7 +138,7 @@ Release is July 22, 2027, at $9.99. Wishlist: TODO (store page URL). Talk to us 
 
 - **Event type:** game release or launch event if offered, else general announcement
 - **Title:** PickFight is out now
-- **Subtitle:** $9.99, 20% off this week. Up to 8 players, no controllers.
+- **Subtitle:** $6.99, $4.99 for the first 14 days. Up to 8 players, no controllers.
 - **Image:** `screenshots/02-brawl.png` as the header, `weapons` clip cut to 8 seconds as the second asset
 
 **Body:**
@@ -150,7 +150,7 @@ PickFight is out now on Steam for Windows, macOS and Linux: TODO (store page URL
 - Couch, Online by room code, or Solo against bots on Easy, Normal or Hard.
 - 18 Steam achievements, interface in nine languages, and a Steam Deck-friendly host menu.
 
-Launch week price: $9.99, 20% off. The soundtrack DLC is $4.99 and is out today too. Free updates follow for at least six months.
+Launch price: $4.99 for the first 14 days, then $6.99. The soundtrack DLC is $2.99 and is out today too. Free updates follow for at least six months.
 
 Thank you to everyone who playtested, wishlisted and shouted at their friends. Leave a review if you have fun, and join the Discord: TODO (Discord invite).
 

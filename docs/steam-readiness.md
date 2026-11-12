@@ -10,7 +10,7 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 
 | Decision | Value |
 |---|---|
-| Price | $9.99 (owner, 2026-10-18) |
+| Price | $6.99, launch discount $4.99 for 14 days (partner meeting, 2026-11-11, #685; was $9.99, 2026-10-18) |
 | Name | Title text "PickFight" (owner, 2026-10-18; all-caps logo, `docs/launch/owner-decisions.md`); the 2026-10-01 note said "Pickfight", the rest of this repo still writes "Pickfight" (a spelling cleanup, not an open decision). 2026-10-01 search found no Steam title named Pickfight or Pick Fight; nearest is "Pickup n' Fight" on itch (free, small). Re-check at name lock. |
 | Language | **Superseded 2026-10-18:** English plus 8 languages (zh-Hans, ru, es-419, pt-BR, de, fr, ja, ko), shipped in #688; Claude translates, volunteers proofread, no paid agency (`docs/launch/owner-decisions.md`). The 2026-10-01 "English only" answer is void. |
 | Playing without a phone | Gamepad (right stick = arm, relative vector) in either match kind; in an Online or Solo match the host-PC mouse seat is claimed by itself (#435: no "Play on this PC" toggle); no shared keyboard |
@@ -23,7 +23,7 @@ Ordered checklist to ship Pickfight on Steam. Itch stays the private-friends cha
 | Item | Placeholder | Who |
 |---|---|---|
 | Release date | **Superseded 2026-10-18:** full **1.0 on Thu Jul 22 2027** (no Early Access). Store page "Coming Soon" mid-December 2026; Steam Playtest during Couch Co-Op Fest (Feb 2027); demo in **Steam Next Fest, June 2027** (demo content still to decide with Austin, #448). Old 2026-10-01 plan (Feb Next Fest, March EA) is void. | owner |
-| Launch price per region | **Superseded 2026-10-18:** **$9.99 USD** at 1.0, **20% launch-week discount**, Steam recommended regional prices as-is. Soundtrack DLC $4.99 on launch day; no other paid DLC. | owner |
+| Launch price per region | **Superseded 2026-11-11 (was $9.99 USD, 20% launch week, DLC $4.99; now $6.99, $4.99 for 14 days, DLC $2.99, #1246).** Earlier: **$9.99 USD** at 1.0, **20% launch-week discount**, Steam recommended regional prices as-is. Soundtrack DLC $4.99 on launch day; no other paid DLC. | owner |
 | Final name / trademark check | "PickFight"; trademark: run a clearance search only, do not file (owner, 2026-10-18) | owner |
 | Early Access vs 1.0 | **Superseded 2026-10-18:** full **1.0**, no Early Access | owner |
 | Publisher entity (individual vs company) | **Reopened 2026-10-18:** to decide with Austin (individual, Austin, or an LLC) before the Nov 2026 signup, with the revenue split (#685). The 10-01 answer was the owner as an individual; drives tax/bank forms and macOS/Windows signing identity | owner |
@@ -172,7 +172,7 @@ All in-game text is translatable (#367) and ships in English plus the 8 language
 |---|---|---|---|
 | 9.1 | Playtest-ready build passes the fresh-clone script check from `CLAUDE.md` (no `class_name` references) | agent | automated: `release.yml` deletes the class cache and fails the release before export on any `SCRIPT ERROR`/`Failed to load script` boot output (#1113); first tag run will confirm |
 | 9.2 | Final build uploaded, Valve review passed | owner | todo |
-| 9.3 | Set price ($9.99), release date, press "Release" | owner | todo |
+| 9.3 | Set price ($6.99), release date, press "Release" | owner | todo |
 | 9.4 | Post-launch: monitor the in-game Feedback button (#262) and Steam discussions | owner | todo |
 
 ## Top owner actions, in order

@@ -1,13 +1,13 @@
 # Steam store page copy (draft)
 
-Draft for owner approval (#362). Store page target: public by about December 2026; demo in Steam Next Fest Feb 22 - Mar 1 2027; Early Access about March 2027 (see `docs/steam-readiness.md`). Source of truth for features is `docs/FEATURES.md`.
+**Superseded 2026-11-11 (#685, #1246): no Early Access, price $6.99 with a $4.99 14-day launch discount. Sections 2 and 3 below describe the older Early Access plan and need a rewrite before this page is published; see `docs/launch/store-page.md` for the current plan.** Draft for owner approval (#362). Store page target: public by about December 2026; demo in Steam Next Fest Feb 22 - Mar 1 2027; Early Access about March 2027 (see `docs/steam-readiness.md`). Source of truth for features is `docs/FEATURES.md`.
 
 Honesty rules for this copy:
 
 - Mention only shipped features, plus the four modes (King of the Hill, Hot Potato, Sudden Death, Stock) that are landing now. Re-check them against `docs/FEATURES.md` before the page goes public; cut any mode that has not shipped.
 - Remote Play Together is **to be tested** (steam-readiness 6.2). It stays out of the copy and the checkbox until the test passes. Steam friend invites are **planned**, not shipped (#298); online play today is a room code.
 - Art is placeholder today; the target look is polished flat shapes (CONTEXT.md Design intent). Do not capture final screenshots until that pass is done.
-- Verify the $7.99 price and dates against `docs/steam-readiness.md` before publishing.
+- Verify the $6.99 price and dates against `docs/steam-readiness.md` before publishing.
 
 ## 1. Short description
 
@@ -90,7 +90,7 @@ Plans can change based on what players tell us.
 Up to 8 players, 12 weapons, 27 stages, several modes, bots, and local and online play. Art and audio are still being polished toward a cleaner flat-shape look.
 
 [b]Will the price change?[/b]
-Early Access launches at $7.99. The price rises to $9.99 at 1.0, so buying now is the cheapest way in. We will announce any change ahead of time.
+PickFight launches at $6.99, with a $4.99 launch discount for the first 14 days.
 
 [b]Will the full version differ from Early Access?[/b]
 It will have more content and more polish. Everyone who bought in Early Access gets the 1.0 game.
@@ -140,7 +140,7 @@ Steamworks category checkboxes. Verify exact names in Steamworks (**verify**).
 - [ ] Achievements, Trading Cards, Workshop: not planned for launch
 - [ ] Family Sharing: only if left enabled; the host buys, so it is a natural fit
 
-Other store settings: Early Access, $7.99 USD ($9.99 at 1.0). Languages: English interface and audio (narrator). Content survey: cartoon violence, no blood, no gambling, no in-app purchases.
+Other store settings: no Early Access, $6.99 USD. Languages: English interface and audio (narrator). Content survey: cartoon violence, no blood, no gambling, no in-app purchases.
 
 ## 6. Screenshot ideas
 

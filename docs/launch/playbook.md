@@ -2,6 +2,8 @@
 
 Oct 16, 2026 · @Tommy
 
+> **Prices superseded Nov 11 2026 (#685, #1246):** our price is now $6.99, with a $4.99 14-day launch discount and a $2.99 soundtrack DLC, about $4.89 net per copy. Every "$9.99", "$10", "10-15% launch discount" or "20% launch week" below that describes our own plan is the old Oct 18 plan; prices of other games are unchanged.
+
 What first-time indie developers need to do to launch well on Steam, distilled from YouTube talks, articles and Reddit launch reports, applied to Pickfight.
 
 ## Core playbook: the ten rules
@@ -519,7 +521,7 @@ Hi [Name], I liked your [specific article]. Pickfight is a physics platform figh
 
 Sources: presskit.gg ([what journalists use](https://presskit.gg/field-guides/do-journalists-use-press-kits)), [dopresskit.com](https://dopresskit.com/) and the Steam appdetails API for seven games (short descriptions as of Oct 17 2026). The checklist from [presskit.gg](https://presskit.gg/blog/indie-game-press-kit-guide) and [Game Developer](https://www.gamedeveloper.com/business/presskits-the-what-and-the-why) comes from search summaries, not opened pages (unverified).
 
-- Minimum: one-line hook ("1-8 players, join by scanning a QR code"), one-page fact sheet (title, genre, platforms, Jul 2027 date, about $9.99 (earlier estimate: $10), player count, modes, Steam link, contact), short, medium and long descriptions, feature list, 6-8 screenshots at 1080p or higher with no watermarks, trailer link, transparent logo, key art, a real contact email and a permanent public URL.
+- Minimum: one-line hook ("1-8 players, join by scanning a QR code"), one-page fact sheet (title, genre, platforms, Jul 2027 date, $6.99 ($4.99 launch discount for 14 days; earlier estimates: $9.99, $10), player count, modes, Steam link, contact), short, medium and long descriptions, feature list, 6-8 screenshots at 1080p or higher with no watermarks, trailer link, transparent logo, key art, a real contact email and a permanent public URL.
 - For launch add: 8-12 screenshots including two showing 8 players; logos for light and dark backgrounds; key art in 3 shapes; a trailer whose first 5 seconds show pole-vaulting; GIF loops of the climb, a knockoff and phones joining by QR (screenshots are 60-70% of what press downloads); gameplay footage with no on-screen interface, for creators; a statement that streamers may monetize videos; a "download all" ZIP and no login wall.
 - Hosting: presskit() is effectively unmaintained, though free and a 30-60 minute setup. Use presskit.gg (free for one game), Press Kitty or a plain web page.
 
@@ -3984,7 +3986,7 @@ All three are suggestions; we can set any price per currency. Turkey and Argenti
 
 **For Pickfight:**
 
-- **$9.99**, the same as our two closest peers.
+- **$9.99**, the same as our two closest peers. (Superseded Nov 11: our price is $6.99, #1246.)
 - Start from Valve's multi-variable suggestions, then line them up with the table above. Poland's peer price (45.99 zł) looks high; check it.
 - **Very cheap regions invite key resellers** (unverified, general knowledge). Peers stay around 40–60% of the US price, so don't go lower, and don't hand out free keys in those regions.
 - **No 4-pack.** None of the peers sells one, and one copy already covers a whole room of phone players.
@@ -4609,7 +4611,7 @@ These items build on what already ships. They are grouped by owner area, with th
 
 **Business**
 
-- [ ] Set the price ($9.99–14.99) and the launch discount.
+- [ ] Set the price ($6.99, decided Nov 11) and the $4.99 14-day launch discount.
 - [ ] Steamworks paperwork: the $100 app fee and tax forms.
 - [ ] Decide whether to self-fund the art or pitch Outersloth once there's traction.
 - [ ] Check the trademark for the name "Pickfight".

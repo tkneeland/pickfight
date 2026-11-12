@@ -11,7 +11,7 @@ Oct 17, 2026 · @Tommy
 5. **The first match must just work.** First-session bugs cause most bad reviews in party games. The biggest risk is phones failing to join on guest Wi-Fi, so route them through the relay.
 6. **Build for clips:** hit-stop, flailing ragdolls, a slow-motion final KO, and a clip that saves automatically.
 7. **Creators beat press.** Pitch 200–400 small creators (10–100k followers). Expect about 1 in 4 to make a video.
-8. **Price at $9.99 (decided Oct 18).** $19.99 from an unknown studio reviews worst.
+8. **Price at $6.99, $4.99 launch discount (decided Nov 11; was $9.99 on Oct 18).** $19.99 from an unknown studio reviews worst.
 9. **Party games grow slowly.** The big spikes come months or years later, from sales, free weekends and updates. Plan for 12+ months of updates.
 10. **PC first.** Port to Switch 6–12 months later, and only if the game is selling.
 
