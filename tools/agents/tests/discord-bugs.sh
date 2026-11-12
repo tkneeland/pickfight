@@ -88,6 +88,17 @@ echo "[$(msg 1569919897591611700 austin false "dev: lobby crash"),$(rep 15699198
 check "promotion: it is the unanswered one" "$(bash "$D" --dev read | grep -c 'build broken')" 1
 check "promotion: notice-only still pending" "$(bash "$D" --dev check)" 1
 check "promotion: marker stops before it" "$(cat "$PF_STATE_DIR/.discord-dev-last")" 1569919897591611701
+# #1239: an ack reacts ☑️ on Discord, so a promoted triagemaster skips acked messages too; anyone else's ☑️ is not the bot's
+ack_out=$(bash "$D" --dev ack 1569919897591611704 "chat, no ticket" 2>&1)
+check "ack: handled" "$ack_out" "handled 1569919897591611704"
+check "ack: bot reacts ☑️" "$(grep -c 'messages/1569919897591611704/reactions/%E2%98%91%EF%B8%8F/@me | .*-XPUT' "$T/curl.log")" 1
+rx() { echo "{\"id\":\"$1\",\"timestamp\":\"2026-11-10T20:00:00\",\"author\":{\"username\":\"$2\",\"bot\":false},\"content\":\"$3\",\"reactions\":[{\"emoji\":{\"name\":\"☑️\"},\"count\":1,\"me\":$4}],\"attachments\":[],\"embeds\":[]}"; }
+rm -f "$PF_STATE_DIR/.discord-dev-last" "$PF_STATE_DIR/.discord-dev-handled"
+echo "[$(rx 1569919897591611710 sam "lol" true),$(rx 1569919897591611711 austin "is it up?" false)]" > "$T/r/$DV"
+check "promotion: acked one skipped, other ☑️ pending" "$(bash "$D" --dev read | grep -c '^--- ')" 1
+check "promotion: the pending one is not the acked" "$(bash "$D" --dev read | grep -c 'is it up')" 1
+check "promotion: ack count" "$(bash "$D" --dev check)" 1
+check "promotion: marker past the acked one" "$(cat "$PF_STATE_DIR/.discord-dev-last")" 1569919897591611710
 rm "$T/r/$DV"
 check "token on stdin only" "$(grep -c 'Bot tok123"$' "$T/headers.log")" "$(grep -c . "$T/headers.log")"
 check "token never in argv" "$(grep -c tok123 "$T/curl.log")" 0
