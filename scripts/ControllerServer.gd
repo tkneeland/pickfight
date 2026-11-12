@@ -1385,6 +1385,8 @@ func _attach(slot: int, peer: Variant) -> void:
 	if not _lobby_state.is_empty():
 		peer.send_text(_lobby_text())
 	peer.send_text(JSON.stringify(looks_message()))
+	if _is_pc_remote(peer) and not _shared_stage.is_empty():
+		peer.send_text(JSON.stringify(_shared_stage)) # #1049: the custom stage in play
 
 ## Free the slot and park its player: zeroing the vector first means the weapon
 ## eases back to rest over several frames instead of holding the controller's
@@ -2305,6 +2307,32 @@ func looks_update_message() -> Dictionary:
 ## full looks frame on binding) who wears what.
 func _broadcast_looks(except: Variant = null) -> void:
 	_send_text_to_all(JSON.stringify(looks_update_message()), except)
+
+# --- Custom stages Online (issue #1049) --------------------------------------
+
+## The `stage_def` message for the custom stage in play, or {} while a
+## built-in stage (or none) is.
+var _shared_stage: Dictionary = {}
+
+## Issue #1049: round play is about to move to stage `id`. When it is a custom
+## stage (`def`, its definition in JSON shape, is not empty), every Online PC
+## joiner is sent `{"t": "stage_def", "id", "def"}` before any snapshot names
+## the id, and rebuilds the same stage with the host's own StageBuilder after
+## checking it with the same limits. One who joins later is sent it on binding.
+## A built-in stage sends nothing: every client already has those. Phones draw
+## no stage, so they are never sent one.
+func share_stage_def(id: int, def: Dictionary) -> void:
+	_shared_stage = {} if def.is_empty() else {"t": "stage_def", "id": id, "def": def}
+	if _shared_stage.is_empty():
+		return
+	var text: String = JSON.stringify(_shared_stage)
+	for peer: Variant in _slot_peers:
+		if _is_pc_remote(peer) and peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			peer.send_text(text)
+
+## The `stage_def` message a PC joiner binding now is sent, or {} (#1049).
+func shared_stage_message() -> Dictionary:
+	return _shared_stage
 
 # --- Virtual controllers (issue #152) ----------------------------------------
 

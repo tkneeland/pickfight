@@ -37,6 +37,8 @@ const UiThemeScript: GDScript = preload("res://scripts/UiTheme.gd")
 const CopyCodeScript: GDScript = preload("res://scripts/CopyCode.gd")
 const RemoteLobbyScript: GDScript = preload("res://scripts/RemoteLobby.gd")
 const DemoBuildScript := preload("res://scripts/DemoBuild.gd")
+const StageDefScript := preload("res://scripts/StageDef.gd")
+const StageBuilderScript := preload("res://scripts/StageBuilder.gd")
 const NetSyncScript: GDScript = preload("res://scripts/NetSync.gd")
 ## Issue #976: the host's effects, screens and HUD, drawn by the host's scripts.
 const RemoteEffectsScript: GDScript = preload("res://scripts/RemoteEffects.gd")
@@ -138,6 +140,8 @@ var _world: Dictionary = {}
 var _samples: Array[Dictionary] = []
 var _stage_id: int = -1
 var _stage: Node = null
+## Issue #1049: the host's latest custom stage definition, checked: {"id", "def"}.
+var _custom_stage: Dictionary = {}
 var _puppets: Dictionary = {} # key (String) -> RemotePuppet
 ## Issue #976: stage part id -> node, and the state each was last given;
 ## the part ids the host named that the last walk of the stage did not find,
@@ -749,6 +753,8 @@ func _on_host_text(text: String) -> void:
 			_refresh_extras()
 		"career":
 			_on_career(msg)
+		"stage_def":
+			_on_stage_def(msg) # #1049
 		"achievement":
 			_on_achievement(msg)
 		"looks":
@@ -1130,11 +1136,16 @@ func _sync_stage() -> void:
 		return
 	var paths: PackedStringArray = stage_paths()
 	if want >= paths.size():
-		return
-	var scene: PackedScene = load(paths[want]) as PackedScene
-	if scene == null:
-		return
-	_stage = scene.instantiate()
+		# #1049: past the built-in list is a custom stage, built from the
+		# definition the host sent; none yet, and it is built when one arrives.
+		_stage = _build_custom_stage(want)
+		if _stage == null:
+			return
+	else:
+		var scene: PackedScene = load(paths[want]) as PackedScene
+		if scene == null:
+			return
+		_stage = scene.instantiate()
 	_stage.set("stage_index", want)
 	# Issue #976: the host's night variant (#332), lighting the puppets.
 	_stage.set("night", night)
@@ -1144,6 +1155,35 @@ func _sync_stage() -> void:
 		get_tree().node_added.connect(_on_node_added)
 	_map_parts()
 	_fit_camera()
+
+## Issue #1049: the host's `stage_def` message. The definition is checked with
+## the host's own limits (StageDef) before it is kept, so a hostile host cannot
+## make this client build a bad stage; a rejected one is dropped and its id draws
+## no stage. A built-in id never takes one. Only the latest is kept: the host
+## sends one before every round on a custom stage. When the id is already on
+## screen (the definition came late, or changed), the stage is rebuilt.
+func _on_stage_def(msg: Dictionary) -> void:
+	var id: Variant = msg.get("id")
+	if not id is float or int(id) < stage_paths().size():
+		return
+	var checked: Dictionary = StageDefScript.validate(msg.get("def"))
+	if not bool(checked["ok"]):
+		push_warning("RemoteClient: the host's custom stage was rejected: %s" % checked["reason"])
+		return
+	if _custom_stage.get("id") == int(id) and _custom_stage.get("def") == msg["def"]:
+		return
+	_custom_stage = {"id": int(id), "def": msg["def"]}
+	if _stage_id == int(id):
+		_stage_id = -2 # forces `_sync_stage()` to build it afresh, now
+		_sync_stage()
+
+## The custom stage `id`, built from the host's definition with the host's own
+## builder, or null when the host has sent none for it (#1049).
+func _build_custom_stage(id: int) -> Node:
+	if _custom_stage.get("id") != id:
+		return null
+	var built: Dictionary = StageBuilderScript.build(_custom_stage["def"])
+	return built["stage"] if bool(built["ok"]) else null
 
 ## Issue #976: every stage part whose look the host sends, by the id both
 ## sides give it, with its own logic stopped where the host's state drives it.

@@ -543,6 +543,8 @@ func _show_round_countdown(step: int) -> void:
 	EffectStreamScript.record("countdown", {"n": step}) # the joiner's countdown
 	_screen().show_round_countdown(step)
 
+const StageBuilderScript := preload("res://scripts/StageBuilder.gd")
+
 ## Rotates to the next stage (ADR-0011): frees the outgoing instance, picks
 ## the next index into `stage_scenes` via `StageRotation.next_stage_index()`, and
 ## caches the new stage's spawn points so `_try_start_round()`'s loop above
@@ -570,6 +572,10 @@ func _swap_stage(changing: bool = false) -> void:
 		_current_stage.queue_free()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
+	# #1049: a custom stage's definition reaches every Online joiner before a
+	# snapshot names its id; a built-in one clears what was shared.
+	if _controller_server != null and _controller_server.has_method("share_stage_def"):
+		_controller_server.share_stage_def(_stage_rotation.stage_index, StageBuilderScript.def_of(_current_stage))
 	_match_stages.append(_stage_file_name(_stage_rotation.stage_index))
 	var night: bool = _roll_night()
 	_current_stage.set("night", night)

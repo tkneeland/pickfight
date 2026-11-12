@@ -44,3 +44,21 @@ few (or too many) spawns, missing (or duplicate) kill floor, unknown mode tag.
   until one is written.
 - The numeric limits are first guesses (the ticket named none) and are cheap to
   change in one place.
+
+## Amendment: Online sync (#1049, 2026-11-12)
+
+The definition is also the Online wire format. A built stage carries its
+definition in JSON shape (`StageDef.to_json_data()`) as metadata, which survives
+`StageBuilder.pack()` into the PackedScene the rotation holds. Custom stages take
+stage ids after the built-in list. When a round moves to one, the host sends
+`{"t": "stage_def", "id", "def"}` to every Online PC joiner before any snapshot
+names the id, and again to a PC joiner who binds while it is in play. Phones
+draw no stage and are never sent one; a built-in stage sends nothing.
+
+The client validates the definition with the same `StageDef` limits before
+keeping it, so a hostile host cannot push a bad stage, and builds it with the
+host's own `StageBuilder`, so it sees exactly what the host sees. It keeps only
+the latest definition, which bounds its memory. Only the stage in play is sent,
+never the whole set, so a frame stays small: the largest definition the limits
+allow is about 6.3 KB, well inside a client's 256 KB inbound buffer. The
+relay's 4 KB cap applies only to client-to-host frames.
