@@ -12,7 +12,7 @@
 | **Release date** | Thursday, July 22, 2027 |
 | **Platforms** | Windows, macOS, Linux (aiming for Steam Deck Verified) |
 | **Store** | Steam: [Steam page URL] |
-| **Price** | $9.99 USD (20% off in launch week) |
+| **Price** | $6.99 USD ($4.99 for the first 14 days) |
 | **Players** | 1 to 8 (Couch, Online, or Solo with bots) |
 | **Genre** | Party brawler, physics platform fighter |
 | **Languages** | English, Simplified Chinese, Russian, Spanish (Latin America), Portuguese (Brazil), German, French, Japanese, Korean (interface and subtitles) |
@@ -56,7 +56,7 @@ Your thumb drags the weapon, and the weapon is your arm. Swing it, plant it in a
 - Steam Playtest: February 2027, during the Couch Co-Op Fest.
 - Steam Next Fest demo: June 14 to 21, 2027.
 - Full 1.0 release, no Early Access: July 22, 2027.
-- Free updates for at least six months after launch. A soundtrack DLC ($4.99) arrives on launch day.
+- Free updates for at least six months after launch. A soundtrack DLC ($2.99) arrives on launch day.
 - The whole soundtrack is composed by the studio's own composer.
 
 ## Screenshots

@@ -9,7 +9,7 @@
 - **One message:** eight friends, one screen, no controllers. Your phone is the pad and your weapon is your arm.
 - **Rules from the playbook:** open on gameplay, not on a logo. Change the picture every 2 to 3 seconds. Show play, not counts. Keep it dialogue-free so captions work in every language.
 - **Title:** the text is "PickFight", in the all-caps logo.
-- **Price and date on the end card:** $9.99, Thu Jul 22 2027, Windows, macOS, Linux.
+- **Price and date on the end card:** $6.99, Thu Jul 22 2027, Windows, macOS, Linux.
 
 ## How to capture
 
@@ -35,7 +35,7 @@ Times add up to about 70 seconds.
 | 7 | 0:48 to 0:57 | Stages and hazards | Lava rising, a saw sweeping, a crumbling ledge, falling rocks, a gust warning then wind. Caption: "43 stages". | Furnace, Footbridge, Gantry, Vent, Carousel, Pillars. Wait for the hazards to fire. |
 | 8 | 0:57 to 1:03 | Online and Solo | Split screen or quick cuts: a Steam friend invite popping up, a room code, then a lone player against bots. Caption: "Couch. Online. Solo." | Record the Online lobby with the Invite button. Record the title screen's three choices (`01-title.png`). |
 | 9 | 1:03 to 1:08 | Payoff | The match-winning KO in slow motion with the camera punched in, then the podium for eight players. | The final KO of a match plays slow motion on its own (#328). Record the victory podium (`09-podium.png`). |
-| 10 | 1:08 to 1:15 | End card | PICKFIGHT logo, "Wishlist on Steam", Steam logo, Thu Jul 22 2027, $9.99, SQL Monkey Studios. Hold the card for at least 3 seconds. | Built in the edit. Logo art is pending (#685). |
+| 10 | 1:08 to 1:15 | End card | PICKFIGHT logo, "Wishlist on Steam", Steam logo, Thu Jul 22 2027, $6.99, SQL Monkey Studios. Hold the card for at least 3 seconds. | Built in the edit. Logo art is pending (#685). |
 
 ## Music cue notes
 

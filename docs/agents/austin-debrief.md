@@ -9,7 +9,7 @@
 Welcome back. Your PC went down around Oct 3. Since then, about 100 PRs have merged, from tkneeland's agent and from tommykneeland (the owner's second Claude account). The owner also spent Oct 16–19 planning the Steam launch. Here's what you need, shortest first.
 
 ### 1. The big picture
-- **We're shipping on Steam as SQL Monkey Studios** (you and the owner, no LLC). Full 1.0 on **Thu Jul 22 2027**, **$9.99**, no Early Access.
+- **We're shipping on Steam as SQL Monkey Studios** (you and the owner, no LLC). Full 1.0 on **Thu Jul 22 2027**, **$6.99** ($4.99 launch discount for 14 days; was $9.99 until the 11-11 partner meeting, #685), no Early Access.
 - Key dates:
   - Coming Soon page mid-Dec 2026
   - Steam Playtest during the Couch Co-Op Fest, Feb 2027
@@ -21,7 +21,7 @@ Welcome back. Your PC went down around Oct 3. Since then, about 100 PRs have mer
 Highest priority first:
 - the Steamworks signup entity (before the Nov 2026 signup)
 - the revenue split
-- confirming the $9.99 price
+- ~~confirming the price~~ decided 11-11: $6.99 (#685)
 - the $1k budget ($500 each)
 - the brand handle
 - capsule art

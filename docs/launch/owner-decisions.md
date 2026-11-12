@@ -29,9 +29,12 @@ Earlier decisions (Sep–early Oct) are in the ADRs (`docs/adr/`), `docs/steam-r
 - **Crash reports:** opt-out (on by default, with a Settings checkbox). Shipped in #681; the owner pastes the Sentry DSN. (Oct 18)
 
 ## Price and money
-- **Price:** $9.99 USD, with Steam's recommended regional prices. On Oct 2 the owner wanted to confirm price with Austin (#685). (Oct 18)
-- **Launch discount:** 20% in launch week. (Oct 18)
-- **DLC:** soundtrack DLC $4.99 on launch day. No other paid DLC; updates are free (at least 6 months of free updates). (Oct 18)
+
+> **Nov 11 update (partner meeting, #685, #1246):** price $6.99, launch discount $4.99 for 14 days, soundtrack DLC $2.99. Per-copy net is about $4.89 ($6.99 x 70%). Entries below marked superseded are history.
+
+- **Price:** $6.99 USD, with Steam's suggested regional prices. Decided at the partner meeting on Nov 11 (owner, Austin, Sam; #685, #1246). **Superseded:** $9.99 (Oct 18). (Nov 11)
+- **Launch discount:** $4.99 (about 29% off), written as a 14-day launch discount because Steam caps launch discounts at 7-14 days. **Superseded:** 20% ($7.99) in launch week (Oct 18). (Nov 11, #685)
+- **DLC:** soundtrack DLC $2.99 on launch day (**superseded:** $4.99, Oct 18; Nov 11, #685). No other paid DLC; updates are free (at least 6 months of free updates). (Oct 18)
 
 ## Content and art
 - **Art:** keep the square characters. Claude polishes hazards and the like (#687 shipped). Capsule art and logo: budget decision with Austin (#685). (Oct 18)

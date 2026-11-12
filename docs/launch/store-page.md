@@ -7,7 +7,7 @@
 | Title | PickFight |
 | Developer | SQL Monkey Studios |
 | Publisher | SQL Monkey Studios |
-| Price | $9.99 USD, 20% launch-week discount (owner decision, Oct 18) |
+| Price | $6.99 USD, $4.99 for a 14-day launch discount (partner meeting, Nov 11, #685; was $9.99 and 20% on Oct 18) |
 | Release | Thu Jul 22 2027 (full 1.0, no Early Access) |
 | Platforms | Windows, macOS, Linux (aiming for Steam Deck Verified) |
 
