@@ -100,6 +100,7 @@ static func list() -> Array[Dictionary]:
 	var dir := DirAccess.open(stages_dir())
 	if dir == null:
 		return out
+	_recover_stranded()
 	var files: PackedStringArray = dir.get_files()
 	files.sort()
 	for file: String in files:
@@ -113,6 +114,66 @@ static func list() -> Array[Dictionary]:
 		if out.size() >= MAX_STAGES:
 			break
 	return out
+
+## A save cut short (a crash between `_write_safely()`'s steps) can leave a
+## stage as `<key>.bak` (the old file set aside) or `<key>.tmp` (the new one not
+## yet moved in). When no `<key>.json` exists, in any letter case, the `.bak` is
+## put back, or else a `.tmp` that reads as a valid stage is moved in. The
+## leftovers are then removed, so the store holds only `.json` files.
+static func _recover_stranded() -> void:
+	var dir_path: String = stages_dir()
+	var files: PackedStringArray = DirAccess.get_files_at(dir_path)
+	var present: Dictionary = {}
+	for file: String in files:
+		if file.get_extension().to_lower() == EXTENSION:
+			present[file.get_basename().to_lower()] = true
+	for ext: String in ["bak", "tmp"]: # an old file set aside beats an unfinished new one
+		for file: String in files:
+			if file.get_extension().to_lower() != ext:
+				continue
+			var key: String = file.get_basename()
+			var stray: String = ProjectSettings.globalize_path(dir_path.path_join(file))
+			if not present.has(key.to_lower()):
+				var usable: bool = ext == "bak" or bool(StageDefScript.validate_text(FileAccess.get_file_as_string(stray))["ok"])
+				if usable and DirAccess.rename_absolute(stray, ProjectSettings.globalize_path(path_of(key))) == OK:
+					present[key.to_lower()] = true
+					continue
+			DirAccess.remove_absolute(stray)
+
+## Writes `text` to `path` so that a failure never costs what was there: it goes
+## to `<path>.tmp` beside it first and is read back after closing (which also
+## catches errors that only show at close), then the old file at `old` (`path`
+## itself, the same file in another letter case, or "" for none) is set aside as
+## `.bak`, the temp file is moved in, and only then is the `.bak` removed. On any
+## failure the old file is put back and the temp file removed. "" when done,
+## else the reason. Paths are `user://` or absolute.
+static func _write_safely(path: String, text: String, old: String) -> String:
+	var g_path: String = ProjectSettings.globalize_path(path)
+	var g_tmp: String = "%s.tmp" % g_path.get_basename()
+	var file := FileAccess.open(g_tmp, FileAccess.WRITE)
+	if file == null:
+		return "cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())]
+	file.store_string(text)
+	file.close()
+	if fail_writes_for_test or FileAccess.get_file_as_string(g_tmp) != text:
+		DirAccess.remove_absolute(g_tmp)
+		return "cannot write %s (%s)" % [path, error_string(ERR_FILE_CANT_WRITE)]
+	var aside: String = ""
+	if old != "" and FileAccess.file_exists(old):
+		var g_old: String = ProjectSettings.globalize_path(old)
+		aside = "%s.bak" % g_old.get_basename()
+		if DirAccess.rename_absolute(g_old, aside) != OK:
+			DirAccess.remove_absolute(g_tmp)
+			return "cannot replace %s" % old
+	var err: Error = DirAccess.rename_absolute(g_tmp, g_path)
+	if err != OK:
+		DirAccess.remove_absolute(g_tmp)
+		if aside != "":
+			DirAccess.rename_absolute(aside, ProjectSettings.globalize_path(old))
+		return "cannot write %s (%s)" % [path, error_string(err)]
+	if aside != "":
+		DirAccess.remove_absolute(aside)
+	return ""
 
 ## Saves `data` (a definition in JSON shape). `{"ok", "reason", "key", "path",
 ## "exists"}`: refused, writing nothing, when it fails `StageDef`, its name is
@@ -141,50 +202,13 @@ static func save(data: Dictionary, builtin_names: PackedStringArray, overwrite: 
 		return _fail("cannot create the stages folder (%s)" % error_string(err))
 	var key: String = file_key(stage_name)
 	var path: String = path_of(key)
-	# Written beside the store first (a ".tmp" that `list()` skips), then moved
-	# into place, so a failed write never costs the stage already saved.
-	var tmp: String = stages_dir().path_join("%s.tmp" % key)
-	var file := FileAccess.open(tmp, FileAccess.WRITE)
-	if file == null:
-		return _fail("cannot write %s (%s)" % [tmp, error_string(FileAccess.get_open_error())])
 	var text: String = JSON.stringify(StageDefScript.to_json_data(checked["def"]), "\t")
-	file.store_string(text)
-	var write_err: Error = ERR_FILE_CANT_WRITE if fail_writes_for_test else file.get_error()
-	file.close()
-	# Only a temp file that was written whole and reads back as the same stage
-	# replaces anything: a short or failed write leaves the saved stage as it was.
-	if write_err != OK or FileAccess.get_file_as_string(tmp) != text:
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
-		return _fail("cannot write %s (%s)" % [tmp, error_string(write_err if write_err != OK else ERR_FILE_CORRUPT)])
-	var moved: String = _move_into_place(tmp, path, existing)
-	if moved != "":
-		return _fail(moved)
+	var written: String = _write_safely(path, text, path_of(existing) if existing != "" else "")
+	if written != "":
+		return _fail(written)
 	if existing != "" and existing != key:
 		HostSettingsScript.shared().rename_custom_stage(existing, key) # a case-only rename keeps its switches
 	return {"ok": true, "reason": "", "key": key, "path": path, "exists": false}
-
-## Moves the written `tmp` to `path`, replacing `existing` (the saved key it
-## replaces, maybe in another case, or ""). The old file is set aside first and
-## only removed once the new one is in place; on a failure it is put back and
-## the reason returned. "" when done.
-static func _move_into_place(tmp: String, path: String, existing: String) -> String:
-	var g_tmp: String = ProjectSettings.globalize_path(tmp)
-	var g_path: String = ProjectSettings.globalize_path(path)
-	var aside: String = ""
-	if existing != "":
-		aside = ProjectSettings.globalize_path(stages_dir().path_join("%s.bak" % existing))
-		if DirAccess.rename_absolute(ProjectSettings.globalize_path(path_of(existing)), aside) != OK:
-			DirAccess.remove_absolute(g_tmp)
-			return "cannot replace %s" % existing
-	var err: Error = DirAccess.rename_absolute(g_tmp, g_path)
-	if err != OK:
-		DirAccess.remove_absolute(g_tmp)
-		if aside != "":
-			DirAccess.rename_absolute(aside, ProjectSettings.globalize_path(path_of(existing)))
-		return "cannot write %s (%s)" % [path, error_string(err)]
-	if aside != "":
-		DirAccess.remove_absolute(aside)
-	return ""
 
 ## Loads the saved stage `key`: `{"ok", "reason", "def"}`, "def" in JSON shape.
 static func load_stage(key: String) -> Dictionary:
@@ -211,21 +235,15 @@ static func import_file(path: String, builtin_names: PackedStringArray, overwrit
 	return save(read["def"], builtin_names, overwrite)
 
 ## Writes `data` (checked first) to the outside file `path`, for sharing by
-## hand. `{"ok", "reason"}`.
+## hand, safely (`_write_safely()`): a failed export keeps any file already
+## there. `{"ok", "reason"}`.
 static func export_file(data: Dictionary, path: String) -> Dictionary:
 	var checked: Dictionary = StageDefScript.validate(data)
 	if not bool(checked["ok"]):
 		return {"ok": false, "reason": checked["reason"]}
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file == null:
-		return {"ok": false, "reason": "cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())]}
 	var text: String = JSON.stringify(StageDefScript.to_json_data(checked["def"]), "\t")
-	file.store_string(text)
-	var write_err: Error = ERR_FILE_CANT_WRITE if fail_writes_for_test else file.get_error()
-	file.close()
-	if write_err != OK or FileAccess.get_file_as_string(path) != text:
-		return {"ok": false, "reason": "cannot write %s (%s)" % [path, error_string(write_err if write_err != OK else ERR_FILE_CORRUPT)]}
-	return {"ok": true, "reason": ""}
+	var written: String = _write_safely(path, text, path)
+	return {"ok": written == "", "reason": written}
 
 ## Deletes the saved stage `key`, and forgets it in the host's per-mode
 ## on-lists (so a new stage of the same name starts off). True when a file was removed.

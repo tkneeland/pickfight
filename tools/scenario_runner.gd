@@ -63401,6 +63401,29 @@ func _scenario_custom_stages_store_1047() -> Array[String]:
 	for f3 in DirAccess.get_files_at(dir):
 		if f3.get_extension() != "json":
 			failures.append("a failed write left %s in the store" % f3)
+	# A failed export keeps the external copy already there.
+	CustomStages1047.export_file(_stage_def_1049("Kept"), outside)
+	CustomStages1047.fail_writes_for_test = true
+	var bad_export: Dictionary = CustomStages1047.export_file(_stage_def_1049("Lost"), outside)
+	CustomStages1047.fail_writes_for_test = false
+	if bad_export["ok"] or CustomStages1047.read_file(outside)["def"].get("name") != "Kept":
+		failures.append("a failed export replaced the file already there: %s" % [bad_export])
+	for f4 in DirAccess.get_files_at(outside.get_base_dir()):
+		if f4.begins_with(outside.get_file().get_basename()) and f4 != outside.get_file():
+			failures.append("an export left %s beside the target" % f4)
+	# A crash mid-save: list() restores a stranded .bak, moves in a valid .tmp,
+	# and drops a broken one, leaving only .json files.
+	var good_text: String = JSON.stringify(_stage_def_1049("Stranded"))
+	for stray: Array in [["Stranded.bak", good_text], ["Orphan.tmp", JSON.stringify(_stage_def_1049("Orphan"))], ["Junk.tmp", "{"]]:
+		var sf := FileAccess.open(dir.path_join(stray[0]), FileAccess.WRITE)
+		sf.store_string(stray[1])
+		sf.close()
+	var listed_keys: Array = CustomStages1047.list().map(func(e: Dictionary) -> String: return e["key"])
+	if not listed_keys.has("Stranded") or not listed_keys.has("Orphan") or listed_keys.has("Junk"):
+		failures.append("stranded files were not recovered: %s" % [listed_keys])
+	for f5 in DirAccess.get_files_at(dir):
+		if f5.get_extension() != "json":
+			failures.append("recovery left %s in the store" % f5)
 	# Invisible characters are stripped from the name and the key.
 	var sneaky: Dictionary = CustomStages1047.save(_stage_def_1049("Zero\u200bWidth\u202e"), builtins)
 	if not sneaky["ok"] or sneaky["key"] != "ZeroWidth" or CustomStages1047.load_stage("ZeroWidth")["def"]["name"] != "ZeroWidth":
