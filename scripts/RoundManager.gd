@@ -572,14 +572,11 @@ func _swap_stage(changing: bool = false) -> void:
 		_current_stage.queue_free()
 	_current_stage = stage_scenes[_stage_rotation.stage_index].instantiate()
 	_current_stage.set("stage_index", _stage_rotation.stage_index)
-	# #1049: a custom stage's definition reaches every Online joiner before a
-	# snapshot names its id; a built-in one clears what was shared.
-	if _controller_server != null and _controller_server.has_method("share_stage_def"):
-		_controller_server.share_stage_def(_stage_rotation.stage_index, StageBuilderScript.def_of(_current_stage))
 	_match_stages.append(_stage_file_name(_stage_rotation.stage_index))
 	var night: bool = _roll_night()
 	_current_stage.set("night", night)
 	container.add_child(_current_stage)
+	_share_stage_def(StageBuilderScript.def_of(_current_stage))
 	var ink: Color = PaletteScript.ink_for(_stage_rotation.stage_index, night)
 	for player in _players:
 		if player != null and player.has_method("set_ink"):
@@ -1525,6 +1522,14 @@ func _clear_stage() -> void:
 		_current_stage.queue_free()
 		_current_stage = null
 	_stage_spawn_points = []
+	_share_stage_def({})
+
+## #1049: tells the server the custom stage now in play (its definition), so
+## every Online joiner gets it before a snapshot names its id; {} (a built-in
+## stage, or none in the lobby) stops sharing one.
+func _share_stage_def(def: Dictionary) -> void:
+	if _controller_server != null and _controller_server.has_method("share_stage_def"):
+		_controller_server.share_stage_def(_stage_rotation.stage_index, def)
 
 ## The countdown ran out: fresh scores, everyone back to not-ready (so the
 ## victory screen's Continue needs tapping afresh), and the first round.

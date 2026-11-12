@@ -63139,7 +63139,9 @@ func _scenario_custom_stage_def_sent_to_pc_joiners_1049() -> Array[String]:
 	var big_ok: Dictionary = StageDef1049.validate(big)
 	if not big_ok["ok"]:
 		failures.append("the biggest fixture definition is invalid: %s" % big_ok["reason"])
-	var big_bytes: int = JSON.stringify({"t": "stage_def", "id": 65535, "def": big}).to_utf8_buffer().size()
+	# Measured as the host sends it: the built stage's normalised definition.
+	var big_wire: Dictionary = StageDef1049.to_json_data(big_ok["def"]) if big_ok["ok"] else big
+	var big_bytes: int = JSON.stringify({"t": "stage_def", "id": 65535, "def": big_wire}).to_utf8_buffer().size()
 	if big_bytes > 16384:
 		failures.append("the biggest stage_def frame is %d bytes, over 16 KB" % big_bytes)
 	print("    stage_def frame: fixture %d bytes, biggest %d bytes" % [size, big_bytes])
@@ -63172,6 +63174,12 @@ func _scenario_custom_stage_round_shares_def_1049() -> Array[String]:
 	rm._swap_stage()
 	if roster.shared_stages.size() != 1 or roster.shared_stages[0][1] != {}:
 		failures.append("a built-in stage's swap shared %s, wanted an empty definition" % [roster.shared_stages])
+	rm.stage_scenes = customs
+	rm._swap_stage()
+	roster.shared_stages.clear()
+	rm._clear_stage()
+	if roster.shared_stages.size() != 1 or roster.shared_stages[0][1] != {}:
+		failures.append("clearing the stage (back to the lobby) shared %s, wanted an empty definition" % [roster.shared_stages])
 	await _teardown(rig["stage"], false)
 	_scenario_completed = true
 	return failures
@@ -63225,8 +63233,27 @@ func _scenario_remote_client_builds_custom_stage_1049() -> Array[String]:
 	client._on_host_text(JSON.stringify({"t": "stage_def", "id": "x", "def": def}))
 	client._render()
 	await process_frame
-	if client._stage != wider or client._custom_stage.get("def", {}).get("name") != "Wider":
-		failures.append("a rejected or misplaced definition replaced the custom stage")
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 0.5, "def": _stage_def_1049("Half")}))
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": 70000, "def": _stage_def_1049("Huge")}))
+	if client._stage != wider or (client._custom_stages.get(custom_id, {}) as Dictionary).get("name") != "Wider" or client._custom_stages.size() != 1:
+		failures.append("a rejected or misplaced definition was kept or replaced the custom stage: %s" % [client._custom_stages.keys()])
+	# Unknown keys are not kept: the stored definition is the checked, normalised one.
+	var extra: Dictionary = _stage_def_1049("Extra")
+	extra["junk"] = "x".repeat(1000)
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 2, "def": extra}))
+	if (client._custom_stages.get(custom_id + 2, {}) as Dictionary).has("junk"):
+		failures.append("an unknown key in the definition was stored")
+	# A mid-round stage change: the next stage's definition arrives while the old
+	# one is on screen; the old one still rebuilds (night variant) until the swap.
+	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 3, "def": _stage_def_1049("Next")}))
+	client._sync_stage(true)
+	await process_frame
+	if client._stage == null or client._stage.get_node_or_null("Part0") == null or client._stage.get_node("Part0").size.x != 1200.0:
+		failures.append("the shown custom stage was lost when the next one's definition arrived")
+	for i in 6:
+		client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 10 + i, "def": _stage_def_1049("Many%d" % i)}))
+	if client._custom_stages.size() != RemoteClientScript241.CUSTOM_STAGES_KEPT:
+		failures.append("the client kept %d custom definitions, wanted %d" % [client._custom_stages.size(), RemoteClientScript241.CUSTOM_STAGES_KEPT])
 	# A rejected definition for an id never shown draws nothing there.
 	client.apply_snapshot(_rc_codec_241(_rc_world_241(custom_id + 1, 1)))
 	client._on_host_text(JSON.stringify({"t": "stage_def", "id": custom_id + 1, "def": hostile}))

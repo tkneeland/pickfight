@@ -57,8 +57,12 @@ draw no stage and are never sent one; a built-in stage sends nothing.
 
 The client validates the definition with the same `StageDef` limits before
 keeping it, so a hostile host cannot push a bad stage, and builds it with the
-host's own `StageBuilder`, so it sees exactly what the host sees. It keeps only
-the latest definition, which bounds its memory. Only the stage in play is sent,
-never the whole set, so a frame stays small: the largest definition the limits
-allow is about 6.3 KB, well inside a client's 256 KB inbound buffer. The
-relay's 4 KB cap applies only to client-to-host frames.
+host's own `StageBuilder`, so it sees exactly what the host sees. The id must
+be a whole number past the built-in list, within the snapshot's u16. It keeps
+the checked, normalised definition (unknown keys dropped) for the last four
+ids, so a mid-round stage change can arrive while the old stage is on screen;
+that bounds its memory. Only the stage in play is sent, never the whole set, so
+a frame stays small: the largest definition the limits allow is about 7.5 KB,
+well inside a client's 256 KB inbound buffer. The relay's 4 KB cap applies only
+to client-to-host frames. The host stops sharing when the stage is cleared (back
+to the lobby), so a joiner arriving then is sent nothing stale.
