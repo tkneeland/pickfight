@@ -20,6 +20,8 @@
 #                      without pf-discord.conf asks the owner on the private channel instead (once per 6h).
 #   DISCORD_APPROVED <issue> <user>  every 5 min: a dev reacted ✅ to the Discord source of a needs-triage issue
 #   TM_CHECK_FAIL <line>  (triagemaster only) every 6h pf-tm-check.sh found a duty not covered; the line says how to fix it
+#   DIGEST_DUE <YYYY-MM-DD>  (triagemaster only) it is DIGEST_HOUR (9) or later in the account's TZ and today's digest
+#                      (autotriage.md rule 8) is not marked sent; repeats until `pf-triage-watch.sh --digest-sent` (#1257)
 # Tickets the open PRs are working on, space-separated: Closes|Fixes|Resolves|Refs #N in a title or body (one PR may
 # close several tickets, #1147), or a head branch named for the ticket. $1 = gh pr list --json number,body,title,headRefName
 pf_pr_tickets() {
@@ -89,8 +91,24 @@ pf_dev_idle_check() {
   done
   return 1
 }
+# pf_digest_due [epoch]: prints today's date in the account's TZ (YYYY-MM-DD) when it is DIGEST_HOUR (default 9)
+# o'clock or later there and $PF_STATE/digest-sent does not hold that date; nothing (exit 1) otherwise (#1257).
+pf_digest_due() {
+  local now=${1:-$(date +%s)} day hour
+  day=$(pf_epoch_fmt "$now" +%Y-%m-%d) || return 1
+  hour=$(pf_epoch_fmt "$now" +%H) || return 1
+  [ "$((10#$hour))" -ge "${DIGEST_HOUR:-9}" ] || return 1
+  [ -f "$PF_STATE/digest-sent" ] && [ "$(tr -d '\r\n ' < "$PF_STATE/digest-sent")" = "$day" ] && return 1
+  echo "$day"
+}
+# pf_digest_mark_sent [epoch]: records today's digest as sent, so DIGEST_DUE stops until the next day.
+pf_digest_mark_sent() {
+  pf_epoch_fmt "${1:-$(date +%s)}" +%Y-%m-%d > "$PF_STATE/digest-sent"
+}
 [ "${1:-}" = --functions ] && { return 0 2>/dev/null || exit 0; }   # tests/triage-watch-in-progress.sh sources the helpers only
 . "$(dirname "$0")/pf-env.sh" || exit 1
+# `pf-triage-watch.sh --digest-sent`: the triagemaster has sent today's 9 AM digest (rule 8); zero tokens, no polling.
+[ "${1:-}" = --digest-sent ] && { pf_digest_mark_sent && echo "digest marked sent for $(cat "$PF_STATE/digest-sent")"; exit 0; }
 SEEN=$PF_STATE/.pf-triage-seen; touch "$SEEN"
 # first run: a wake file older than this watcher counts as handled
 [ -f "$PF_STATE/.msg-wake-handled" ] || pf_mtime "$PF_STATE/msg-wake.txt" > "$PF_STATE/.msg-wake-handled" 2>/dev/null
@@ -105,6 +123,8 @@ while true; do
       f=$(bash "$(dirname "$0")/pf-tm-check.sh" --quiet 2>/dev/null | grep '^FAIL' | head -n 1)
       [ -n "$f" ] && { echo "TM_CHECK_FAIL ${f#FAIL }"; exit 0; }
     fi
+    # the 9 AM digest (rule 8, #1257): wakes until marked sent, so a session that starts late still sends it
+    d=$(pf_digest_due) && { echo "DIGEST_DUE $d"; exit 0; }
   fi
   issues=$(gh api --paginate "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null | jq -s 'add // []' 2>/dev/null)   # every page, one array
   [ "$issues" = "[]" ] && issues=""
