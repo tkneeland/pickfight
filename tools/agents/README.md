@@ -7,7 +7,8 @@ picks the account from env `PF_ACCOUNT` or `gh api user -q .login` and loads `ac
 - `pf-env.sh`: sourced by all; resolves the account, conf, `PF_STATE` dir and helpers (`pf_budget_ok`, `pf_daynight`, `pf_is_triagemaster`).
 - `pf-at-mode.sh`: prints `AT·day`, `AT·night` or `MT`, plus `·TM off` while the ticket-maker is off.
 - `pf-ticketmaker.sh [on|off]`: prints or sets the ticket-maker switch (rule 11).
-- `pf-triage-watch.sh`: zero-token poller; exits with one line (UNTRIAGED, MYTICKET, FEATURES? PR, PEER_BEACON, IDLE_SLOTS, AUSTIN_QUEUE_LOW, DEV_IDLE, MSG, DISCORD_BUG, TM_CHECK_FAIL) when Claude must act.
+- `pf-triage-watch.sh`: zero-token poller; exits with one line (UNTRIAGED, MYTICKET, FEATURES? PR, PEER_BEACON, IDLE_SLOTS, AUSTIN_QUEUE_LOW, DEV_IDLE, MSG, DISCORD_BUG, TM_CHECK_FAIL, DIGEST_DUE) when Claude must act.
+- `DIGEST_DUE <date>` (triagemaster only, #1257): from `DIGEST_HOUR` (9) in the account's TZ until today's digest is marked with `pf-triage-watch.sh --digest-sent` (writes the date to `$PF_STATE/digest-sent`). Test: `tests/digest-due.sh`.
 - `pf-beacon.sh`: sends the USAGE beacon; it ends with `claude_at=<ISO>`, the newest Claude transcript write on the account (`pf_claude_at`; the status line and supervisors do not move it), which the triagemaster's `DEV_IDLE` wake reads (rule 21, #1233). Accounts sharing one machine share a `projects/` dir and report each other's activity; headless `claude -p` accounts send no `claude_at` and are never checked.
 - `pf-dev-idle-alert.sh <account> <minutes> "<what waits>" [--post]`: the #hive text for a `DEV_IDLE` wake (rule 21); `<@id>` when the local conf has `PF_DISCORD_ID_<account>` (account non-alphanumerics become `_`), else name only; 120+ minutes adds the reassignment offer. `pf-hive.sh status` shows `claude idle Nm` (or `claude ?`) per account from `claude_at`.
 - `tests/dev-idle.sh`: offline test for `claude_at` and the `DEV_IDLE` wake (stubbed inbox, `gh`, `curl`).
