@@ -21,7 +21,8 @@
 #   DISCORD_APPROVED <issue> <user>  every 5 min: a dev reacted ✅ to the Discord source of a needs-triage issue
 #   TM_CHECK_FAIL <line>  (triagemaster only) every 6h pf-tm-check.sh found a duty not covered; the line says how to fix it
 #   DIGEST_DUE <YYYY-MM-DD>  (triagemaster only) it is DIGEST_HOUR (9) or later in the account's TZ and today's digest
-#                      (autotriage.md rule 8) is not marked sent; repeats until `pf-triage-watch.sh --digest-sent` (#1257)
+#                      (autotriage.md rule 8) is not marked sent; again every DIGEST_REWAKE_MIN (30) min until
+#                      `pf-triage-watch.sh --digest-sent [YYYY-MM-DD]` marks it (#1257, #1259)
 # Tickets the open PRs are working on, space-separated: Closes|Fixes|Resolves|Refs #N in a title or body (one PR may
 # close several tickets, #1147), or a head branch named for the ticket. $1 = gh pr list --json number,body,title,headRefName
 pf_pr_tickets() {
@@ -91,24 +92,63 @@ pf_dev_idle_check() {
   done
   return 1
 }
-# pf_digest_due [epoch]: prints today's date in the account's TZ (YYYY-MM-DD) when it is DIGEST_HOUR (default 9)
-# o'clock or later there and $PF_STATE/digest-sent does not hold that date; nothing (exit 1) otherwise (#1257).
+# pf_digest_hour: the hour the digest falls due, DIGEST_HOUR (0-23, default 9); anything else warns once on stderr
+# and uses 9 rather than silently never waking (#1259).
+pf_digest_hour() {
+  local h=${DIGEST_HOUR:-9}
+  case "$h" in ''|*[!0-9]*) ;; *) [ "$((10#$h))" -le 23 ] && { echo "$((10#$h))"; return; };; esac
+  echo "pf-triage-watch: DIGEST_HOUR '$h' is not an hour (0-23); using 9" >&2
+  echo 9
+}
+# pf_digest_due [epoch]: prints today's date in the account's TZ (YYYY-MM-DD) when it is pf_digest_hour o'clock or
+# later there and $PF_STATE/digest-sent does not hold that date; nothing (exit 1) otherwise (#1257).
 pf_digest_due() {
   local now=${1:-$(date +%s)} day hour
   day=$(pf_epoch_fmt "$now" +%Y-%m-%d) || return 1
   hour=$(pf_epoch_fmt "$now" +%H) || return 1
-  [ "$((10#$hour))" -ge "${DIGEST_HOUR:-9}" ] || return 1
+  [ "$((10#$hour))" -ge "$(pf_digest_hour)" ] || return 1
   [ -f "$PF_STATE/digest-sent" ] && [ "$(tr -d '\r\n ' < "$PF_STATE/digest-sent")" = "$day" ] && return 1
   echo "$day"
 }
-# pf_digest_mark_sent [epoch]: records today's digest as sent, so DIGEST_DUE stops until the next day.
+# pf_digest_due_date [epoch]: the date of the latest digest that has fallen due: today from the digest hour on,
+# else yesterday, so a digest sent after midnight is marked as the day it belongs to (#1259).
+pf_digest_due_date() {
+  local now=${1:-$(date +%s)} hour
+  hour=$(pf_epoch_fmt "$now" +%H) || return 1
+  [ "$((10#$hour))" -ge "$(pf_digest_hour)" ] || now=$((now - 86400))
+  pf_epoch_fmt "$now" +%Y-%m-%d
+}
+# pf_digest_mark_sent [YYYY-MM-DD] [epoch]: records that day's digest as sent (default pf_digest_due_date), so
+# DIGEST_DUE stops for it. Creates $PF_STATE if missing; refuses (exit 2) a date that is not YYYY-MM-DD.
 pf_digest_mark_sent() {
-  pf_epoch_fmt "${1:-$(date +%s)}" +%Y-%m-%d > "$PF_STATE/digest-sent"
+  local day=${1:-}
+  if [ -z "$day" ]; then
+    day=$(pf_digest_due_date "${2:-$(date +%s)}") || return 1
+  elif ! [[ $day =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo "pf-triage-watch: --digest-sent takes a date as YYYY-MM-DD, not '$day'" >&2; return 2
+  fi
+  mkdir -p "$PF_STATE" && echo "$day" > "$PF_STATE/digest-sent"
+}
+# pf_digest_wake [epoch]: the poll loop's decision (#1259): prints `DIGEST_DUE <date>` when a digest is due and the
+# last such wake ($PF_STATE/.digest-woke) is DIGEST_REWAKE_MIN (30) minutes old or more, and stamps it, so a session
+# restarted without marking the digest still gets the other wakes in between.
+pf_digest_wake() {
+  local now=${1:-$(date +%s)} d last
+  d=$(pf_digest_due "$now") || return 1
+  last=0; [ -f "$PF_STATE/.digest-woke" ] && last=$(tr -d '\r\n ' < "$PF_STATE/.digest-woke")
+  case "$last" in ''|*[!0-9]*) last=0;; esac
+  [ $((now - last)) -ge $(( ${DIGEST_REWAKE_MIN:-30} * 60 )) ] || return 1
+  echo "$now" > "$PF_STATE/.digest-woke"
+  echo "DIGEST_DUE $d"
 }
 [ "${1:-}" = --functions ] && { return 0 2>/dev/null || exit 0; }   # tests/triage-watch-in-progress.sh sources the helpers only
 . "$(dirname "$0")/pf-env.sh" || exit 1
-# `pf-triage-watch.sh --digest-sent`: the triagemaster has sent today's 9 AM digest (rule 8); zero tokens, no polling.
-[ "${1:-}" = --digest-sent ] && { pf_digest_mark_sent && echo "digest marked sent for $(cat "$PF_STATE/digest-sent")"; exit 0; }
+# `pf-triage-watch.sh --digest-sent [YYYY-MM-DD]`: the triagemaster has sent the 9 AM digest (rule 8); zero tokens,
+# no polling. With no date, the digest that last fell due (yesterday's, before the digest hour).
+if [ "${1:-}" = --digest-sent ]; then
+  pf_digest_mark_sent "${2:-}" || exit $?
+  echo "digest marked sent for $(cat "$PF_STATE/digest-sent")"; exit 0
+fi
 SEEN=$PF_STATE/.pf-triage-seen; touch "$SEEN"
 # first run: a wake file older than this watcher counts as handled
 [ -f "$PF_STATE/.msg-wake-handled" ] || pf_mtime "$PF_STATE/msg-wake.txt" > "$PF_STATE/.msg-wake-handled" 2>/dev/null
@@ -124,7 +164,7 @@ while true; do
       [ -n "$f" ] && { echo "TM_CHECK_FAIL ${f#FAIL }"; exit 0; }
     fi
     # the 9 AM digest (rule 8, #1257): wakes until marked sent, so a session that starts late still sends it
-    d=$(pf_digest_due) && { echo "DIGEST_DUE $d"; exit 0; }
+    d=$(pf_digest_wake) && { echo "$d"; exit 0; }
   fi
   issues=$(gh api --paginate "repos/$REPO/issues?state=open&per_page=100" 2>/dev/null | jq -s 'add // []' 2>/dev/null)   # every page, one array
   [ "$issues" = "[]" ] && issues=""
