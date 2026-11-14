@@ -5,9 +5,13 @@
 # claude_at (#1233) = newest Claude transcript write on this account (pf_claude_at), omitted when unknown; the triagemaster
 # wakes DEV_IDLE when it is old while work waits.
 # Errors go to $PF_STATE/beacon.log; exit 1 when nothing was sent.
-# Run by statusline-usage.sh every 15 min, pf-usage.sh, and `windows/pf-supervise.sh beacon`, which outlives the status line.
+# Every successful send touches $PF_STATE/.beacon-stamp. --throttle: exit 3 without sending when that stamp is under 15 min
+# old, so every sender shares one 15-minute clock and the channel stays under ntfy's 250 messages/day (#1263).
+# Run by statusline-usage.sh every 15 min, pf-usage.sh, and `windows/pf-supervise.sh beacon --throttle`, which outlives the status line.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >> "$PF_STATE/beacon.log"; }
+stamp=$PF_STATE/.beacon-stamp
+if [ "${1:-}" = --throttle ] && [ -f "$stamp" ] && [ $(( $(date +%s) - $(pf_mtime "$stamp" || echo 0) )) -lt 900 ]; then exit 3; fi
 snap=$PF_STATE/usage-snapshot.json
 [ -s "$snap" ] || { log "no usage snapshot yet (status line not run?)"; exit 1; }
 # Stamp the beacon with when the snapshot was taken, not now: if the status line stops running, the
@@ -20,4 +24,5 @@ msg=$(jq -r --arg ag "${agents:-0}" --argjson sat "${sat:-0}" '"\(.rate_limits.f
 ca=$(pf_claude_at)
 [ -n "$ca" ] && msg="$msg claude_at=$(TZ=UTC pf_epoch_fmt "$ca" +%Y-%m-%dT%H:%M:%SZ)"
 [ -f "$PF_STATE/pf-msg.conf" ] || { log "no channel configured (pf-msg.sh init); USAGE not sent"; exit 1; }
-bash "$PF_DIR/pf-msg.sh" send USAGE "$msg" >/dev/null 2>>"$PF_STATE/beacon.log" || { log "USAGE send failed"; exit 1; }
+err=$(bash "$PF_DIR/pf-msg.sh" send USAGE "$msg" 2>&1 >/dev/null) || { log "USAGE send failed${err:+: ${err#pf-msg: }}"; exit 1; }
+touch "$stamp"

@@ -5,8 +5,10 @@
 #                              updates triage-status.json, waits 5 min (so an unhandled MYTICKET does not spin), restarts it.
 #   pf-supervise.sh automerge  runs pf-automerge.sh and restarts it if it dies.
 #   pf-supervise.sh beacon     every 5 min: refreshes usage-snapshot.json from the usage endpoint (pf-usage.sh) when the
-#                              status line hasn't written it in that time, then runs pf-beacon.sh (the USAGE message on the
-#                              private channel). On Windows the status line's own refresh can stop, which froze the beacon at 0%.
+#                              status line hasn't written it in that time, then runs pf-beacon.sh --throttle, which sends the
+#                              USAGE message on the private channel at most every 15 min (shared stamp with the status line:
+#                              a 5-min send blew ntfy's 250 messages/day, #1263). On Windows the status line's own refresh can
+#                              stop, which froze the beacon at 0%.
 #   pf-supervise.sh msg        keeps `pf-msg.sh listen` alive (private ntfy channel) and runs `pf-msg.sh heartbeat` every 60 s.
 #                              macOS: screen -dmS pf-msg bash tools/agents/windows/pf-supervise.sh msg
 # Needs PF_ACCOUNT in the environment (windows/pf-start.ps1 sets it). Output goes to $PF_STATE/*.log.
@@ -38,7 +40,8 @@ case $KIND in
     while true; do
       snap=$PF_STATE/usage-snapshot.json
       [ $(( $(date +%s) - $(pf_mtime "$snap" 2>/dev/null || echo 0) )) -ge 300 ] && bash "$PF_DIR/pf-usage.sh" --no-beacon
-      if bash "$PF_DIR/pf-beacon.sh"; then status ok; else status failed "see beacon.log"; fi
+      # status is rewritten every pass (pf-hive-join.sh calls the beacon dead after 15 min without it)
+      bash "$PF_DIR/pf-beacon.sh" --throttle; case $? in 0) status ok;; 3) status ok "sent under 15 min ago";; *) status failed "see beacon.log";; esac
       sleep 300
     done;;
   msg)

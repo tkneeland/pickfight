@@ -26,4 +26,4 @@ echo "$old" | jq --argjson rl "$rl" '.rate_limits = $rl' > "$snap.tmp" && mv "$s
 [ "${1:-}" = --no-beacon ] && exit 0
 stamp=$PF_STATE/.pf-usage-beacon; last=$(cat "$stamp" 2>/dev/null || echo 0)
 [ "$prev" = "$rl" ] && [ $(( $(date +%s) - last )) -lt 3600 ] && exit 0
-bash "$PF_DIR/pf-beacon.sh" && date +%s > "$stamp"
+bash "$PF_DIR/pf-beacon.sh" --throttle && date +%s > "$stamp"   # shared 15-min clock (#1263); exit 3 = sent recently

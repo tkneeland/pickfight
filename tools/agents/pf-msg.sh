@@ -45,7 +45,15 @@ send() {  # send <TYPE> <text...>
   case $type in CLAIM|RELEASE|USAGE|ASK|ANSWER|INFO|FIRE|HELLO|TM) ;; *) echo "pf-msg: bad type '$type'" >&2; return 2;; esac
   load_conf || { echo "pf-msg: no topic configured (run pf-msg.sh init); not sent" >&2; return 0; }
   case "$*" in *"$PF_MSG_TOPIC"*) echo "pf-msg: refusing to send text containing the topic" >&2; return 1;; esac
-  topic_url_conf | curl -sf -m 5 -K - -d "$PF_ACCOUNT $type $*" >/dev/null 2>&1 || return 1
+  local h ra
+  if ! h=$(topic_url_conf | curl -sf -m 5 -K - -D - -o /dev/null -d "$PF_ACCOUNT $type $*" 2>/dev/null); then
+    # ntfy.sh allows 250 messages a day per machine: say so, with its Retry-After, instead of failing silently (#1263)
+    if printf '%s' "$h" | tr -d '\r' | grep -qE '^HTTP/[0-9.]+ 429'; then
+      ra=$(printf '%s' "$h" | tr -d '\r' | awk -F': *' 'tolower($1) == "retry-after" {print $2}' | tail -n 1)
+      echo "pf-msg: rate limited (retry in ${ra:-?}s)" >&2
+    fi
+    return 1
+  fi
   touch "$PF_STATE/.msg-sent-ok"
 }
 cmd=${1:-}; [ $# -gt 0 ] && shift
