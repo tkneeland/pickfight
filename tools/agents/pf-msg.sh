@@ -10,7 +10,7 @@
 #                                   lines already there; pf_usage_backfill runs it when the inbox is missing or 6h+ stale
 #   pf-msg.sh claimed <n>           exit 0 when another account CLAIMed <n> in the last 24h and has not RELEASEd it
 #   pf-msg.sh heartbeat             one pass: send HELLO every 15 min; wake (MSG FIRE peer-silent) when a peer is silent 1h+;
-#                                   ASK a peer whose USAGE has no real numbers to fix its status line (every 6h at most)
+#                                   ASK a peer whose USAGE has no real 7-day numbers to fix its status line (every 6h at most)
 # Conf $PF_STATE/pf-msg.conf: PF_MSG_TOPIC=..., optional PF_MSG_SERVER (default https://ntfy.sh).
 # Env: PF_NOW (epoch override for tests), PF_MSG_NOSEND=1 (heartbeat sends nothing).
 . "$(dirname "$0")/pf-env.sh" || exit 1
@@ -134,11 +134,18 @@ EOT
     ok=$(pf_mtime "$PF_STATE/.msg-sent-ok" || true); ok=${ok:-0}
     for peer in ${WATCH_PEERS:-agage-JG}; do
       [ -f "$INBOX" ] || break
-      # A peer whose USAGE carries no real numbers (reset 1970 or ?%) has a broken status line: ask it to fix, every 6h at most.
-      u=$(awk -F'|' -v p="$peer" '$2==p && $3=="USAGE" {l=$4} END {print l}' "$INBOX")
-      nl=$(pf_mtime "$PF_STATE/.msg-usage-nudge-$peer" || true); nl=${nl:-0}
-      if [ -z "${PF_MSG_NOSEND:-}" ] && { [[ "$u" == *1970-01-01* ]] || [[ "$u" == *"?%"* ]]; } && [ $(( $(date -u +%s) - nl )) -gt 21600 ]; then
-        send ASK "$peer: your USAGE reports no real numbers ($u). Point your Claude statusLine at tools/agents/statusline-usage.sh with PF_ACCOUNT=$peer (Windows: Git Bash command in tools/agents/windows/README.md), restart Claude, then reply ANSWER." \
+      # A peer whose newest USAGE has no real 7-day numbers (pf_beacon leaves b_used or b_reset empty: a 1970 or missing
+      # 7-day reset, or a non-numeric 7-day percent) has a broken status line: ask it to fix, every 6h at most. The 5h
+      # fields don't count: Claude Code leaves the 5h block out while no 5-hour window is active, so r5=1970 is normal
+      # (#1261). pf_beacon reads the newest line by message time; it runs only when the NOSEND and 6h-stamp checks pass.
+      broken=0; nl=$(pf_mtime "$PF_STATE/.msg-usage-nudge-$peer" || true); nl=${nl:-0}
+      if [ -z "${PF_MSG_NOSEND:-}" ] && [ $(( t - nl )) -gt 21600 ]; then
+        pf_beacon "$peer"
+        [ -n "$b_line" ] && { [ -z "$b_used" ] || [ -z "$b_reset" ]; } && broken=1
+      fi
+      if [ "$broken" = 1 ]; then
+        # instructions first: listen/backfill keep the first 300 characters, so a long quoted line is what gets cut
+        send ASK "$peer: your USAGE has no real 7-day numbers. Point your Claude statusLine at tools/agents/statusline-usage.sh with PF_ACCOUNT=$peer (Windows: tools/agents/windows/README.md), restart Claude, reply ANSWER. Last USAGE: $b_line" \
           && touch "$PF_STATE/.msg-usage-nudge-$peer"
       fi
       last=$(awk -F'|' -v p="$peer" '$2==p && $3=="HELLO" && $1>m {m=$1} END {print m+0}' "$INBOX")

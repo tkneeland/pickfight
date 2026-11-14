@@ -88,9 +88,10 @@ pf_daynight() {
 # newest USAGE message in $PF_STATE/msg-inbox.log ("<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> [at=<ISO>]",
 # filled by pf-msg.sh listen/backfill), or from this account's own usage-snapshot.json. Percent values are floored and
 # empty when unknown ("?", or a 1970 reset). The age is from at= (when the snapshot was taken) when present.
+# b_line is the USAGE text itself.
 # Run pf_usage_backfill first so a machine that was off does not decide on an empty or stale inbox.
 pf_beacon() {
-  local line rest ts e w p7 r7; b_age=999999; b_p5=""; b_r5=""; b_used=""; b_reset=""; b_at=""
+  local line rest ts e w p7 r7; b_age=999999; b_p5=""; b_r5=""; b_used=""; b_reset=""; b_at=""; b_line=""
   if [ "$1" = "$PF_ACCOUNT" ]; then
     local snap=$PF_STATE/usage-snapshot.json; [ -s "$snap" ] || return 0
     e=$(pf_mtime "$snap") || return 0
@@ -101,7 +102,7 @@ pf_beacon() {
     e=${line%%|*}; e=${e%.*}; rest=${line#*|*|*|}
     ts=$(echo "$rest" | sed -n 's/.* at=\([0-9TZ:-]*\).*/\1/p'); [ -n "$ts" ] && { w=$(pf_iso_to_epoch "$ts") && e=$w; }
   fi
-  b_age=$(( $(date +%s) - e )); b_at=$(TZ=UTC pf_epoch_fmt "$e" +%Y-%m-%dT%H:%M:%SZ)
+  b_line=$rest; b_age=$(( $(date +%s) - e )); b_at=$(TZ=UTC pf_epoch_fmt "$e" +%Y-%m-%dT%H:%M:%SZ)
   read -r b_p5 p7 r7 _ <<EOT
 $rest
 EOT
