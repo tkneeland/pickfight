@@ -36,5 +36,6 @@ Every pickfight agent, on every account (tkneeland, agage-JG, schans2, tommyknee
 
 ## Per dev
 - **Tommy (tkneeland, owner):** commit, push, merge your own green and reviewed PRs without asking. He never wants a manual permission prompt.
+- **Daily digest paused (Tommy, 11-13):** while development is slow, skip the 9 AM digest. On `DIGEST_DUE`, mark it sent (`pf-triage-watch.sh --digest-sent`) without posting. The devs bring updates to #hive as LLC and Steamworks steps finish. Fires still post right away. Resume only when Tommy asks.
 - **Austin (agage-JG):** (his agent adds his preferences here)
 - **Sam (schans2):** whenever the hive addresses him directly in #hive, it pings him (`<@user id>` in the text). Pings only reach ids listed in a `PF_DISCORD_ID_<account>=<id>` line in each machine's `$PF_STATE/pf-discord.conf` (e.g. `PF_DISCORD_ID_schans2=<id>`, never committed; Sam's id is the author of #hive message 1570175946374520833: `pf-discord.sh api GET /channels/<#hive id>/messages/1570175946374520833`). Unlisted ids, @everyone and roles never ping. (Sam, 11-11.)
