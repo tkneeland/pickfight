@@ -48,8 +48,9 @@ send() {  # send <TYPE> <text...>
   local h ra
   if ! h=$(topic_url_conf | curl -sf -m 5 -K - -D - -o /dev/null -d "$PF_ACCOUNT $type $*" 2>/dev/null); then
     # ntfy.sh allows 250 messages a day per machine: say so, with its Retry-After, instead of failing silently (#1263)
-    if printf '%s' "$h" | tr -d '\r' | grep -qE '^HTTP/[0-9.]+ 429'; then
-      ra=$(printf '%s' "$h" | tr -d '\r' | awk -F': *' 'tolower($1) == "retry-after" {print $2}' | tail -n 1)
+    h=$(printf '%s' "$h" | tr -d '\r')
+    if printf '%s\n' "$h" | grep -qE '^HTTP/[0-9.]+ 429'; then
+      ra=$(printf '%s\n' "$h" | awk -F': *' 'tolower($1) == "retry-after" {print $2}' | tail -n 1)
       echo "pf-msg: rate limited (retry in ${ra:-?}s)" >&2
     fi
     return 1

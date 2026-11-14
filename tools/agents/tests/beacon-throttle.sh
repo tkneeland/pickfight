@@ -57,11 +57,18 @@ check "3h of 5-min passes: 12 USAGE" "$(sends)" 12
 check "plain send" "$(beacon)" 0
 check "supervisor after a plain send: throttled" "$(beacon --throttle)" 3
 check "plain then throttled: one USAGE" "$(sends)" 1
-# 6 ntfy over quota (429): exit 1, beacon.log says why, the stamp is not refreshed so the next pass retries
+# 6 ntfy over quota (429): exit 1, beacon.log says why; the slot was claimed before the send, so the next pass waits
+# for the next 15-min slot instead of retrying every 5 min
 : > "$PF_TEST_LOG"; : > "$T/state/beacon.log"; age_stamp 960
 check "429 exits 1" "$(PF_TEST_429=1 beacon --throttle)" 1
 check "429 logged" "$(sed 's/^[^ ]* //' "$T/state/beacon.log")" "USAGE send failed: rate limited (retry in 3600s)"
-check "429: stamp kept old" "$(( $(date +%s) - $(pf_mtime "$STAMP") >= 900 ))" 1
+check "429: next pass throttled" "$(PF_TEST_429=1 beacon --throttle)" 3
+# 6b the slot is claimed before the slow steps: a sender that starts while another is mid-send is throttled
+age_stamp 960; : > "$PF_TEST_LOG"
+mkdir -p "$T/slow"; printf '#!/bin/bash\nsleep 3; exec %q "$@"\n' "$T/bin/curl" > "$T/slow/curl"; chmod +x "$T/slow/curl"
+PATH="$T/slow:$PATH" PF_ACCOUNT=schans2 bash "$AG/pf-beacon.sh" --throttle & slow=$!
+sleep 1; check "concurrent sender throttled" "$(beacon --throttle)" 3
+wait $slow; check "concurrent: one USAGE" "$(sends)" 1
 # 7 pf-msg.sh send itself reports the 429 on stderr and exits 1
 out=$(PF_TEST_429=1 PF_ACCOUNT=schans2 bash "$AG/pf-msg.sh" send INFO test 2>&1); rc=$?
 check "send 429 message" "$out" "pf-msg: rate limited (retry in 3600s)"
