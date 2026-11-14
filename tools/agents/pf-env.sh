@@ -85,21 +85,21 @@ pf_daynight() {
   if [ "$(date +%s)" -lt "$u" ] || { [ "$h" -ge "$NIGHT_END" ] && [ "$h" -lt "$NIGHT_START" ]; }; then echo day; else echo night; fi
 }
 # pf_beacon <handle>: sets b_age (s, 999999 if none) b_p5 b_r5 b_used b_reset (7d) b_at (ISO stamp) from the handle's
-# newest USAGE message in $PF_STATE/msg-inbox.log ("<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> [at=<ISO>] [sl=<state>] ...",
+# newest USAGE message in $PF_STATE/msg-inbox.log ("<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> [at=<ISO>]",
 # filled by pf-msg.sh listen/backfill), or from this account's own usage-snapshot.json. Percent values are floored and
 # empty when unknown ("?", or a 1970 reset). The age is from at= (when the snapshot was taken) when present.
-# Also sets b_sent (epoch the message was sent, or the snapshot's mtime for this account) and b_line (the USAGE text).
+# b_line is the USAGE text itself.
 # Run pf_usage_backfill first so a machine that was off does not decide on an empty or stale inbox.
 pf_beacon() {
-  local line rest ts e w p7 r7; b_age=999999; b_p5=""; b_r5=""; b_used=""; b_reset=""; b_at=""; b_sent=0; b_line=""
+  local line rest ts e w p7 r7; b_age=999999; b_p5=""; b_r5=""; b_used=""; b_reset=""; b_at=""; b_line=""
   if [ "$1" = "$PF_ACCOUNT" ]; then
     local snap=$PF_STATE/usage-snapshot.json; [ -s "$snap" ] || return 0
-    e=$(pf_mtime "$snap") || return 0; b_sent=$e
+    e=$(pf_mtime "$snap") || return 0
     rest=$(jq -r '"\(.rate_limits.five_hour.used_percentage // "?"|if type=="number" then floor else . end)% \(.rate_limits.seven_day.used_percentage // "?"|if type=="number" then floor else . end)% \(.rate_limits.seven_day.resets_at // 0|floor|todate) r5=\(.rate_limits.five_hour.resets_at // 0|floor|todate)"' "$snap" 2>/dev/null) || return 0
   else
     line=$(awk -F'|' -v h="$1" '$2==h && $3=="USAGE" && $1+0>=m {m=$1+0; l=$0} END {print l}' "$PF_STATE/msg-inbox.log" 2>/dev/null)
     [ -n "$line" ] || return 0
-    e=${line%%|*}; e=${e%.*}; b_sent=$e; rest=${line#*|*|*|}
+    e=${line%%|*}; e=${e%.*}; rest=${line#*|*|*|}
     ts=$(echo "$rest" | sed -n 's/.* at=\([0-9TZ:-]*\).*/\1/p'); [ -n "$ts" ] && { w=$(pf_iso_to_epoch "$ts") && e=$w; }
   fi
   b_line=$rest; b_age=$(( $(date +%s) - e )); b_at=$(TZ=UTC pf_epoch_fmt "$e" +%Y-%m-%dT%H:%M:%SZ)

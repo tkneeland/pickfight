@@ -125,20 +125,14 @@ EOT
     ok=$(pf_mtime "$PF_STATE/.msg-sent-ok" || true); ok=${ok:-0}
     for peer in ${WATCH_PEERS:-agage-JG}; do
       [ -f "$INBOX" ] || break
-      # A peer whose setup gives no usage (its newest USAGE says sl=nolimits: status line without rate_limits, or
-      # sl=none: nothing ever wrote its snapshot) is asked to fix it, every 6h at most, and only while its beacons still
-      # arrive (sent in the last 6h; peer-silent covers a peer that is off). Missing numbers alone are healthy: Claude
-      # Code leaves a window's block out while it is idle, so r5=1970 most nights and a 1970 7-day reset after a week
-      # without use (#1261). A beacon from before sl= existed keeps the old rule: a 1970 (or missing) 7-day reset, or ?%.
+      # A peer whose newest USAGE has no real 7-day numbers (a 1970 or missing 7-day reset, or a ?% field) has a broken
+      # status line: ask it to fix, every 6h at most. A 1970 r5 alone is healthy: Claude Code leaves the 5h block out
+      # while no 5-hour window is active, and pf_beacon already reads r5=1970 as "no 5h data" (#1261). Read through
+      # pf_beacon (newest line by message time), and only when the cheap NOSEND and 6h-stamp checks allow an ASK.
       broken=0; nl=$(pf_mtime "$PF_STATE/.msg-usage-nudge-$peer" || true); nl=${nl:-0}
-      if [ -z "${PF_MSG_NOSEND:-}" ] && [ $(( $(date -u +%s) - nl )) -gt 21600 ]; then   # cheap checks before parsing
-        pf_beacon "$peer"   # newest USAGE by message time: b_line, b_sent, b_reset
-        case " $b_line " in
-          *" sl=none "*|*" sl=nolimits "*) broken=1;;
-          *" sl="*) ;;
-          *) { [ -z "$b_reset" ] || [[ "$b_line" == *"?%"* ]]; } && broken=1;;
-        esac
-        [ -n "$b_line" ] && [ $(( $(date -u +%s) - b_sent )) -lt 21600 ] || broken=0
+      if [ -z "${PF_MSG_NOSEND:-}" ] && [ $(( $(date -u +%s) - nl )) -gt 21600 ]; then
+        pf_beacon "$peer"
+        [ -n "$b_line" ] && { [ -z "$b_reset" ] || [[ "$b_line" == *"?%"* ]]; } && broken=1
       fi
       if [ "$broken" = 1 ]; then
         send ASK "$peer: your USAGE reports no real numbers ($b_line). Point your Claude statusLine at tools/agents/statusline-usage.sh with PF_ACCOUNT=$peer (Windows: Git Bash command in tools/agents/windows/README.md), restart Claude, then reply ANSWER." \
