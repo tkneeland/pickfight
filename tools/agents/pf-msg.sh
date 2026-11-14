@@ -125,13 +125,17 @@ EOT
     ok=$(pf_mtime "$PF_STATE/.msg-sent-ok" || true); ok=${ok:-0}
     for peer in ${WATCH_PEERS:-agage-JG}; do
       [ -f "$INBOX" ] || break
-      # A peer whose USAGE carries no real numbers (7-day reset 1970 or a ?% field) has a broken status line: ask it to
-      # fix, every 6h at most. r5=1970 alone is healthy: Claude Code leaves the 5h block out while no 5-hour window is
-      # active, and pf_beacon already reads r5=1970 as "no 5h data" (#1261).
-      u=$(awk -F'|' -v p="$peer" '$2==p && $3=="USAGE" {l=$4} END {print l}' "$INBOX")
-      r7=$(echo "$u" | awk '{print $3}')
+      # A peer whose status line (or usage refresh) is not writing has a broken setup: ask it to fix, every 6h at most.
+      # Broken = its newest USAGE (pf_beacon) has no real 7-day numbers AND comes from a snapshot over 1h old, in a beacon
+      # sent in the last 6h (a peer that is off is not asked). Missing numbers alone are healthy: Claude Code leaves a
+      # window's block out while it is idle (r5=1970 most nights, a 1970 7-day reset after a week without use), and a
+      # working machine still rewrites its snapshot (#1261).
+      pf_beacon "$peer"
+      sent=$(awk -F'|' -v p="$peer" '$2==p && $3=="USAGE" && $1+0>m {m=$1+0} END {print m+0}' "$INBOX")
+      u=$(awk -F'|' -v p="$peer" -v s="$sent" '$2==p && $3=="USAGE" && $1+0==s {l=$4} END {print l}' "$INBOX")
       nl=$(pf_mtime "$PF_STATE/.msg-usage-nudge-$peer" || true); nl=${nl:-0}
-      if [ -z "${PF_MSG_NOSEND:-}" ] && { [[ "$r7" == 1970-01-01* ]] || [[ "$u" == *"?%"* ]]; } && [ $(( $(date -u +%s) - nl )) -gt 21600 ]; then
+      if [ -z "${PF_MSG_NOSEND:-}" ] && [ -z "$b_used" ] && [ "$b_age" -gt 3600 ] && [ $(( $(date -u +%s) - sent )) -lt 21600 ] \
+        && [ $(( $(date -u +%s) - nl )) -gt 21600 ]; then
         send ASK "$peer: your USAGE reports no real numbers ($u). Point your Claude statusLine at tools/agents/statusline-usage.sh with PF_ACCOUNT=$peer (Windows: Git Bash command in tools/agents/windows/README.md), restart Claude, then reply ANSWER." \
           && touch "$PF_STATE/.msg-usage-nudge-$peer"
       fi
