@@ -9,14 +9,14 @@ AG=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d "${TMPDIR:-/tmp}/pf-throttle-test.XXXXXX"); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/state" "$T/home/.claude"
 # curl stub. PF_TEST_429=<Retry-After value>: answer like ntfy.sh over its quota (headers on stdout for -D -, exit 22 as
-# curl -f does). Each send logs the age of .beacon-stamp at call time, to prove the slot was claimed first. The OAuth usage
-# endpoint (pf-usage.sh) answers with $PF_TEST_USAGE.
+# curl -f does). Each send logs whether .beacon-stamp was already newer than the $PF_TEST_MARK file at call time (bash -nt,
+# portable), to prove the slot was claimed first. The OAuth usage endpoint (pf-usage.sh) answers with $PF_TEST_USAGE.
 cat > "$T/bin/curl" <<'STUB'
 #!/bin/bash
 cat > /dev/null
 case "$*" in *api/oauth/usage*) cat "$PF_TEST_USAGE"; exit 0;; esac
-st=$PF_STATE_DIR/.beacon-stamp; age=none; [ -f "$st" ] && age=$(( $(date +%s) - $(date -r "$st" +%s 2>/dev/null || stat -c %Y "$st" 2>/dev/null || stat -f %m "$st") ))
-echo "curl stamp_age=$age $*" >> "$PF_TEST_LOG"
+claimed=no; [ "$PF_STATE_DIR/.beacon-stamp" -nt "$PF_TEST_MARK" ] && claimed=yes
+echo "curl claimed=$claimed $*" >> "$PF_TEST_LOG"
 if [ -n "${PF_TEST_429:-}" ]; then printf 'HTTP/1.1 429 Too Many Requests\r\nRetry-After: %s\r\n\r\n' "$PF_TEST_429"; exit 22; fi
 printf 'HTTP/1.1 200 OK\r\n\r\n'; exit 0
 STUB
@@ -24,7 +24,8 @@ printf '#!/bin/bash\nexit 0\n' > "$T/bin/gh"         # pf_live_agents asks gh fo
 printf '#!/bin/bash\nexit 1\n' > "$T/bin/security"   # pf-usage.sh: never the real macOS keychain
 chmod +x "$T/bin/curl" "$T/bin/gh" "$T/bin/security"
 git init -q "$T/repo"; git -C "$T/repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
-export PATH="$T/bin:$PATH" PF_STATE_DIR=$T/state REPO_PATH=$T/repo PF_TEST_LOG=$T/calls.log HOME=$T/home PF_TEST_USAGE=$T/usage.json
+export PATH="$T/bin:$PATH" PF_STATE_DIR=$T/state REPO_PATH=$T/repo PF_TEST_LOG=$T/calls.log HOME=$T/home PF_TEST_USAGE=$T/usage.json \
+  PF_TEST_MARK=$T/mark
 unset PF_TEST_429
 [ "$(command -v curl)" = "$T/bin/curl" ] || { echo "beacon-throttle: stub curl not first on PATH" >&2; exit 1; }
 PF_ACCOUNT=schans2 . "$AG/pf-env.sh" || exit 1
@@ -41,11 +42,12 @@ exists() { [ -f "$1" ] && echo yes || echo no; }
 beacon() { PF_ACCOUNT=schans2 bash "$AG/pf-beacon.sh" "$@"; echo $?; }
 age_stamp() { touch -t "$(pf_epoch_fmt "$((now - $1))" +%Y%m%d%H%M.%S)" "$STAMP"; }   # age_stamp <seconds old>
 
-# 1 no stamp yet: the first pass sends and starts the 15-min clock, claiming the slot before the send
-: > "$PF_TEST_LOG"; rm -f "$STAMP"
+# 1 no stamp yet: the first pass sends and starts the 15-min clock, claiming the slot before the send (the mark is a
+# minute old, so only a stamp touched before curl ran is newer than it)
+: > "$PF_TEST_LOG"; rm -f "$STAMP"; touch -t "$(pf_epoch_fmt "$((now - 60))" +%Y%m%d%H%M.%S)" "$PF_TEST_MARK"
 check "first pass sends" "$(beacon --throttle)" 0
 check "first pass: one USAGE" "$(sends)" 1
-check "slot claimed before the send" "$(sed -n 's/^curl stamp_age=\([0-9]*\) .*/\1/p' "$PF_TEST_LOG" | awk '{print ($1 <= 30)}')" 1
+check "slot claimed before the send" "$(grep -c '^curl claimed=yes .*schans2 USAGE' "$PF_TEST_LOG")" 1
 # 2 the next supervisor pass (5 min later, stamp fresh): no send, exit 3
 age_stamp 300
 check "second pass throttled" "$(beacon --throttle)" 3
