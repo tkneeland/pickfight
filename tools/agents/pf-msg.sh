@@ -125,18 +125,21 @@ EOT
     ok=$(pf_mtime "$PF_STATE/.msg-sent-ok" || true); ok=${ok:-0}
     for peer in ${WATCH_PEERS:-agage-JG}; do
       [ -f "$INBOX" ] || break
-      # A peer whose status line (or usage refresh) is not writing has a broken setup: ask it to fix, every 6h at most.
-      # Broken = its newest USAGE (pf_beacon) has no real 7-day numbers AND comes from a snapshot over 1h old, in a beacon
-      # sent in the last 6h (a peer that is off is not asked). Missing numbers alone are healthy: Claude Code leaves a
-      # window's block out while it is idle (r5=1970 most nights, a 1970 7-day reset after a week without use), and a
-      # working machine still rewrites its snapshot (#1261).
-      pf_beacon "$peer"
-      sent=$(awk -F'|' -v p="$peer" '$2==p && $3=="USAGE" && $1+0>m {m=$1+0} END {print m+0}' "$INBOX")
-      u=$(awk -F'|' -v p="$peer" -v s="$sent" '$2==p && $3=="USAGE" && $1+0==s {l=$4} END {print l}' "$INBOX")
+      # A peer whose setup is not wired (its newest USAGE says sl=none: nothing ever wrote its snapshot) is asked to fix
+      # its status line, every 6h at most, and only while its beacons still arrive (sent in the last 6h; peer-silent
+      # covers a peer that is off). Missing numbers alone are healthy: Claude Code leaves a window's block out while it
+      # is idle, so r5=1970 most nights and a 1970 7-day reset after a week without use (#1261). A beacon from before
+      # sl= existed keeps the old rule: a 1970 (or missing) 7-day reset, or a ?% field.
+      pf_beacon "$peer"   # newest USAGE by message time: b_line, b_sent, b_reset
+      case " $b_line " in
+        *" sl=none "*) broken=1;;
+        *" sl="*) broken=0;;
+        *) broken=0; { [ -z "$b_reset" ] || [[ "$b_line" == *"?%"* ]]; } && broken=1;;
+      esac
       nl=$(pf_mtime "$PF_STATE/.msg-usage-nudge-$peer" || true); nl=${nl:-0}
-      if [ -z "${PF_MSG_NOSEND:-}" ] && [ -z "$b_used" ] && [ "$b_age" -gt 3600 ] && [ $(( $(date -u +%s) - sent )) -lt 21600 ] \
+      if [ -z "${PF_MSG_NOSEND:-}" ] && [ -n "$b_line" ] && [ "$broken" = 1 ] && [ $(( $(date -u +%s) - b_sent )) -lt 21600 ] \
         && [ $(( $(date -u +%s) - nl )) -gt 21600 ]; then
-        send ASK "$peer: your USAGE reports no real numbers ($u). Point your Claude statusLine at tools/agents/statusline-usage.sh with PF_ACCOUNT=$peer (Windows: Git Bash command in tools/agents/windows/README.md), restart Claude, then reply ANSWER." \
+        send ASK "$peer: your USAGE reports no real numbers ($b_line). Point your Claude statusLine at tools/agents/statusline-usage.sh with PF_ACCOUNT=$peer (Windows: Git Bash command in tools/agents/windows/README.md), restart Claude, then reply ANSWER." \
           && touch "$PF_STATE/.msg-usage-nudge-$peer"
       fi
       last=$(awk -F'|' -v p="$peer" '$2==p && $3=="HELLO" && $1>m {m=$1} END {print m+0}' "$INBOX")

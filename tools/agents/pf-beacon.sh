@@ -1,7 +1,10 @@
 #!/bin/bash
 # Sends this account's usage beacon once, in the foreground: a USAGE message on the private channel (pf-msg.sh), the only
 # usage beacon (#1153; the old issue comments are retired). Built from $PF_STATE/usage-snapshot.json (saved by
-# statusline-usage.sh or pf-usage.sh). Format: "<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> at=<snapshot ISO> [claude_at=<ISO>]".
+# statusline-usage.sh or pf-usage.sh). Format: "<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> at=<snapshot ISO> sl=ok|none [claude_at=<ISO>]".
+# A rate-limit block Claude Code leaves out (its window is idle) shows as 0% and a 1970 reset. sl=none means nothing has
+# ever written the snapshot (no status line JSON and no pf-usage.sh rate_limits: the setup is not wired, #1189); the
+# heartbeat asks only then (#1261).
 # claude_at (#1233) = newest Claude transcript write on this account (pf_claude_at), omitted when unknown; the triagemaster
 # wakes DEV_IDLE when it is old while work waits.
 # Errors go to $PF_STATE/beacon.log; exit 1 when nothing was sent.
@@ -15,7 +18,7 @@ snap=$PF_STATE/usage-snapshot.json
 sat=$(pf_mtime "$snap")
 # running worker agents = live worktrees on an issue branch (pf_live_agents; the status line counts them the same way)
 agents=$(pf_live_agents | wc -l | tr -d " ")
-msg=$(jq -r --arg ag "${agents:-0}" --argjson sat "${sat:-0}" '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate) r5=\(.rate_limits.five_hour.resets_at // 0|floor|todate) agents=\($ag) at=\($sat|todate)"' "$snap") \
+msg=$(jq -r --arg ag "${agents:-0}" --argjson sat "${sat:-0}" '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate) r5=\(.rate_limits.five_hour.resets_at // 0|floor|todate) agents=\($ag) at=\($sat|todate) sl=\(if .model != null or .rate_limits != null then "ok" else "none" end)"' "$snap") \
   || { log "bad snapshot"; exit 1; }
 ca=$(pf_claude_at)
 [ -n "$ca" ] && msg="$msg claude_at=$(TZ=UTC pf_epoch_fmt "$ca" +%Y-%m-%dT%H:%M:%SZ)"
