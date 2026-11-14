@@ -27,7 +27,7 @@ now=$(date -u +%s); far=2099-01-01T00:00:00Z; epoch0=1970-01-01T00:00:00Z   # ep
 pass=0; fail=0
 check() { if [ "$2" = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $1: got '$2', want '$3'"; fi; }
 stamped() { [ -f "$NUDGE" ] && echo yes || echo no; }
-asks() { grep -c "schans2 ASK agage-JG: your USAGE reports no real numbers" "$PF_TEST_LOG"; }
+asks() { grep -c "schans2 ASK agage-JG: your USAGE has no real 7-day numbers" "$PF_TEST_LOG"; }
 # heartbeat: one pass as schans2 with a fresh send log (HELLO counts as just sent, so only ASKs reach the log)
 heartbeat() { : > "$PF_TEST_LOG"; touch "$T/state/.msg-hello-last"; PF_ACCOUNT=schans2 bash "$AG/pf-msg.sh" heartbeat >/dev/null; }
 # beat <USAGE text>: no nudge stamp, an older healthy line then <text> as the peer's newest USAGE, one heartbeat pass;
@@ -44,13 +44,17 @@ check "idle 5h window: no stamp" "$(stamped)" no
 # no real 7-day numbers (empty snapshot, both resets 1970): ASK
 check "all 1970: ASK" "$(beat "0% 0% $epoch0 r5=$epoch0 agents=0 at=$far")" 1
 check "all 1970: stamp" "$(stamped)" yes
-check "ASK quotes the line" "$(grep -c "no real numbers (0% 0% $epoch0 r5=$epoch0 agents=0 at=$far)" "$PF_TEST_LOG")" 1
+check "ASK quotes the line last" "$(grep -c "reply ANSWER. Last USAGE: 0% 0% $epoch0 r5=$epoch0 agents=0 at=$far\$" "$PF_TEST_LOG")" 1
+# listen/backfill keep the first 300 characters of a message: the instructions must fit before the quoted line
+check "ASK instructions fit in 300 chars" "$(sed -n 's/^SEND \(.*reply ANSWER\.\).*/\1/p' "$PF_TEST_LOG" | awk '{print (length($0) <= 300)}')" 1
 # the next pass does not ask again (6h throttle); 6h later the still-broken peer is asked again
 heartbeat; check "throttled: no second ASK" "$(asks)" 0
 touch -t "$(pf_epoch_fmt "$((now - 21660))" +%Y%m%d%H%M.%S)" "$NUDGE"
 heartbeat; check "after 6h: ASK again" "$(asks)" 1
-# unknown percentages (older beacon format)
-check "?% field: ASK" "$(beat "?% ?% $far r5=$far agents=0")" 1
+# unknown percentages (older beacon format): only the 7-day one counts
+check "?% 7-day: ASK" "$(beat "?% ?% $far r5=$far agents=0")" 1
+check "?% 5h only, real 7-day: no ASK" "$(beat "?% 20% $far r5=$far agents=0")" 0
+check "non-numeric 7-day percent: ASK" "$(beat "10% null% $far r5=$far agents=0")" 1
 # newest by message time, not file order: a newer healthy line written before an older broken one wins
 rm -f "$NUDGE"
 { echo "$((now - 60))|agage-JG|USAGE|12% 20% $far r5=$far agents=1"
