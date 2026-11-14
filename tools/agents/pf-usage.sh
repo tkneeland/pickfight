@@ -24,6 +24,13 @@ prev=$(echo "$old" | jq -c '.rate_limits // {}')
 echo "$old" | jq --argjson rl "$rl" '.rate_limits = $rl' > "$snap.tmp" && mv "$snap.tmp" "$snap" ||
   { rm -f "$snap.tmp"; log "pf-usage: snapshot write failed"; exit 1; }
 [ "${1:-}" = --no-beacon ] && exit 0
-stamp=$PF_STATE/.pf-usage-beacon; last=$(cat "$stamp" 2>/dev/null || echo 0)
-[ "$prev" = "$rl" ] && [ $(( $(date +%s) - last )) -lt 3600 ] && exit 0
-bash "$PF_DIR/pf-beacon.sh" --throttle && date +%s > "$stamp"   # shared 15-min clock (#1263); exit 3 = sent recently
+stamp=$PF_STATE/.pf-usage-beacon; last=$(cat "$stamp" 2>/dev/null || echo 0); pending=$PF_STATE/.pf-usage-pending
+[ "$prev" = "$rl" ] && [ ! -f "$pending" ] && [ $(( $(date +%s) - last )) -lt 3600 ] && exit 0
+# shared 15-min clock (#1263): when it holds the send back (exit 3), the changed numbers stay pending for the next run,
+# since the snapshot already holds them and would otherwise look unchanged; a hold-back is not a failed refresh
+bash "$PF_DIR/pf-beacon.sh" --throttle; rc=$?
+case $rc in
+  0) date +%s > "$stamp"; rm -f "$pending";;
+  3) touch "$pending"; exit 0;;
+  *) exit $rc;;
+esac

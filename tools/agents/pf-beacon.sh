@@ -6,15 +6,19 @@
 # wakes DEV_IDLE when it is old while work waits.
 # Errors go to $PF_STATE/beacon.log; exit 1 when nothing was sent.
 # --throttle: exit 3 without sending when $PF_STATE/.beacon-stamp is under 15 min old, so every sender shares one 15-minute
-# clock and the channel stays under ntfy's 250 messages/day (#1263). A send claims that stamp before its slow steps (as the
-# status line does), so two senders cannot both pass the check; a failed send waits for the next 15-min slot.
+# clock and the channel stays under ntfy's 250 messages/day (#1263). Once the cheap checks pass (snapshot is valid JSON,
+# channel configured) a send claims that stamp before its slow steps, as the status line does, which shrinks the window
+# in which two senders both pass the check from seconds to milliseconds. A failed send keeps the claim (it waits for the
+# next 15-min slot) and leaves $PF_STATE/.beacon-failed holding the reason until a send succeeds.
 # Run by statusline-usage.sh every 15 min, pf-usage.sh, and `windows/pf-supervise.sh beacon --throttle`, which outlives the status line.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >> "$PF_STATE/beacon.log"; }
+fail() { log "$1"; echo "$1" > "$PF_STATE/.beacon-failed"; exit 1; }
 stamp=$PF_STATE/.beacon-stamp
 if [ "${1:-}" = --throttle ] && [ -f "$stamp" ] && [ $(( $(date +%s) - $(pf_mtime "$stamp" || echo 0) )) -lt 900 ]; then exit 3; fi
 snap=$PF_STATE/usage-snapshot.json
 [ -s "$snap" ] || { log "no usage snapshot yet (status line not run?)"; exit 1; }
+jq -e . "$snap" >/dev/null 2>&1 || { log "bad snapshot"; exit 1; }
 [ -f "$PF_STATE/pf-msg.conf" ] || { log "no channel configured (pf-msg.sh init); USAGE not sent"; exit 1; }
 touch "$stamp"   # claim this 15-min slot before the slow steps (pf_live_agents, the send)
 # Stamp the beacon with when the snapshot was taken, not now: if the status line stops running, the
@@ -23,7 +27,9 @@ sat=$(pf_mtime "$snap")
 # running worker agents = live worktrees on an issue branch (pf_live_agents; the status line counts them the same way)
 agents=$(pf_live_agents | wc -l | tr -d " ")
 msg=$(jq -r --arg ag "${agents:-0}" --argjson sat "${sat:-0}" '"\(.rate_limits.five_hour.used_percentage // 0|floor)% \(.rate_limits.seven_day.used_percentage // 0|floor)% \(.rate_limits.seven_day.resets_at // 0|floor|todate) r5=\(.rate_limits.five_hour.resets_at // 0|floor|todate) agents=\($ag) at=\($sat|todate)"' "$snap") \
-  || { log "bad snapshot"; exit 1; }
+  || fail "bad snapshot"
 ca=$(pf_claude_at)
 [ -n "$ca" ] && msg="$msg claude_at=$(TZ=UTC pf_epoch_fmt "$ca" +%Y-%m-%dT%H:%M:%SZ)"
-err=$(bash "$PF_DIR/pf-msg.sh" send USAGE "$msg" 2>&1 >/dev/null) || { log "USAGE send failed${err:+: ${err#pf-msg: }}"; exit 1; }
+err=$(bash "$PF_DIR/pf-msg.sh" send USAGE "$msg" 2>&1 >/dev/null) || fail "USAGE send failed${err:+: ${err#pf-msg: }}"
+[ -n "$err" ] && log "$err"   # a notice from a send that did not fail (e.g. no topic configured, not sent)
+rm -f "$PF_STATE/.beacon-failed"

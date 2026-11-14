@@ -45,17 +45,23 @@ send() {  # send <TYPE> <text...>
   case $type in CLAIM|RELEASE|USAGE|ASK|ANSWER|INFO|FIRE|HELLO|TM) ;; *) echo "pf-msg: bad type '$type'" >&2; return 2;; esac
   load_conf || { echo "pf-msg: no topic configured (run pf-msg.sh init); not sent" >&2; return 0; }
   case "$*" in *"$PF_MSG_TOPIC"*) echo "pf-msg: refusing to send text containing the topic" >&2; return 1;; esac
-  local h ra
+  # ntfy.sh allows 250 messages a day per machine. After a 429, every send fails fast until its Retry-After (capped at
+  # 24h) instead of hitting the server again, and says why (#1263).
+  local h ra now_s until_s blk=$PF_STATE/.msg-blocked-until
+  now_s=$(date -u +%s); until_s=$(cat "$blk" 2>/dev/null); case $until_s in ''|*[!0-9]*) until_s=0;; esac
+  if [ "$until_s" -gt "$now_s" ]; then echo "pf-msg: rate limited (retry in $((until_s - now_s))s)" >&2; return 1; fi
   if ! h=$(topic_url_conf | curl -sf -m 5 -K - -D - -o /dev/null -d "$PF_ACCOUNT $type $*" 2>/dev/null); then
-    # ntfy.sh allows 250 messages a day per machine: say so, with its Retry-After, instead of failing silently (#1263)
     h=$(printf '%s' "$h" | tr -d '\r')
     if printf '%s\n' "$h" | grep -qE '^HTTP/[0-9.]+ 429'; then
-      ra=$(printf '%s\n' "$h" | awk -F': *' 'tolower($1) == "retry-after" {print $2}' | tail -n 1)
-      echo "pf-msg: rate limited (retry in ${ra:-?}s)" >&2
+      ra=$(printf '%s\n' "$h" | awk 'tolower($0) ~ /^retry-after:/ {sub(/^[^:]*: */, ""); v=$0} END {print v}')
+      case $ra in
+        ''|*[!0-9]*) echo "pf-msg: rate limited (retry after ${ra:-?})" >&2;;
+        *) [ "$ra" -gt 86400 ] && ra=86400; echo $((now_s + ra)) > "$blk"; echo "pf-msg: rate limited (retry in ${ra}s)" >&2;;
+      esac
     fi
     return 1
   fi
-  touch "$PF_STATE/.msg-sent-ok"
+  rm -f "$blk"; touch "$PF_STATE/.msg-sent-ok"
 }
 cmd=${1:-}; [ $# -gt 0 ] && shift
 case $cmd in

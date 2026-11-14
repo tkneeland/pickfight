@@ -41,7 +41,14 @@ case $KIND in
       snap=$PF_STATE/usage-snapshot.json
       [ $(( $(date +%s) - $(pf_mtime "$snap" 2>/dev/null || echo 0) )) -ge 300 ] && bash "$PF_DIR/pf-usage.sh" --no-beacon
       # status is rewritten every pass (pf-hive-join.sh calls the beacon dead after 15 min without it)
-      bash "$PF_DIR/pf-beacon.sh" --throttle; case $? in 0) status ok;; 3) status ok "sent under 15 min ago";; *) status failed "see beacon.log";; esac
+      # exit 3 after a failed send (slot held, .beacon-failed set) still reports the failure, not ok
+      bash "$PF_DIR/pf-beacon.sh" --throttle
+      case $? in
+        0) status ok;;
+        3) if [ -f "$PF_STATE/.beacon-failed" ]; then status failed "last send failed, retry next 15-min slot: $(cat "$PF_STATE/.beacon-failed")"
+           else status ok "sent under 15 min ago"; fi;;
+        *) status failed "see beacon.log";;
+      esac
       sleep 300
     done;;
   msg)
