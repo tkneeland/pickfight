@@ -2,7 +2,7 @@
 # Offline tests for the USAGE beacon throttle (#1263): `pf-beacon.sh --throttle` (what `windows/pf-supervise.sh beacon`
 # runs every 5 min) sends at most once per 15 min on the stamp the status line shares, and a send refused by ntfy's
 # daily quota (HTTP 429) logs "rate limited (retry in <n>s)" instead of a bare failure.
-# Scratch PF_STATE_DIR, stub curl first on PATH logging every send, a scratch git repo. No network.
+# Scratch PF_STATE_DIR, stub curl and gh first on PATH (curl logs every send), a scratch git repo. No network.
 # macOS, Linux and Git Bash.   bash tools/agents/tests/beacon-throttle.sh
 AG=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d "${TMPDIR:-/tmp}/pf-throttle-test.XXXXXX"); trap 'rm -rf "$T"' EXIT
@@ -14,9 +14,11 @@ cat > /dev/null; echo "curl $*" >> "$PF_TEST_LOG"
 if [ -n "${PF_TEST_429:-}" ]; then printf 'HTTP/1.1 429 Too Many Requests\r\nRetry-After: 3600\r\n\r\n'; exit 22; fi
 printf 'HTTP/1.1 200 OK\r\n\r\n'; exit 0
 STUB
-chmod +x "$T/bin/curl"
+printf '#!/bin/bash\nexit 0\n' > "$T/bin/gh"   # pf_live_agents asks gh for open issues: none
+chmod +x "$T/bin/curl" "$T/bin/gh"
 git init -q "$T/repo"; git -C "$T/repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
 export PATH="$T/bin:$PATH" PF_STATE_DIR=$T/state REPO_PATH=$T/repo PF_TEST_LOG=$T/calls.log
+[ "$(command -v curl)" = "$T/bin/curl" ] || { echo "beacon-throttle: stub curl not first on PATH" >&2; exit 1; }
 PF_ACCOUNT=schans2 . "$AG/pf-env.sh" || exit 1
 echo "PF_MSG_TOPIC=pf-testtopic" > "$T/state/pf-msg.conf"
 now=$(date +%s)
