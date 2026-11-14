@@ -1,8 +1,9 @@
 #!/bin/bash
-# Offline tests for the heartbeat's usage nudge (#1261). pf-beacon.sh marks each USAGE sl=ok, or sl=none when nothing has
-# ever written the snapshot (the #1189 setup: no status line JSON, no pf-usage.sh rate_limits). `pf-msg.sh heartbeat`
-# asks a peer to fix its status line only for sl=none (beacons from before sl=: a 1970 7-day reset or a ?% field), in a
-# beacon sent in the last 6h. Idle windows (r5=1970 at night, a 1970 7-day reset after a week without use) are healthy.
+# Offline tests for the heartbeat's usage nudge (#1261). pf-beacon.sh marks each USAGE sl=ok (snapshot has rate_limits),
+# sl=nolimits (status line JSON without them) or sl=none (nothing ever wrote the snapshot), the two #1189 setups.
+# `pf-msg.sh heartbeat` asks a peer to fix its setup only for nolimits/none (beacons from before sl=: a 1970 7-day reset
+# or a ?% field), in a beacon sent in the last 6h. Idle windows (r5=1970 at night, a 1970 7-day reset after a week
+# without use) are healthy.
 # Scratch PF_STATE_DIR and git repo, stub curl and gh first on PATH. No network. macOS, Linux and Git Bash.
 #   bash tools/agents/tests/heartbeat-usage-nudge.sh
 AG=$(cd "$(dirname "$0")/.." && pwd)
@@ -44,9 +45,10 @@ beat() {
 beacon_sl() { echo "$1" > "$SNAP"; : > "$PF_TEST_LOG"; PF_ACCOUNT=schans2 bash "$AG/pf-beacon.sh"; sed -n 's/.* sl=\([a-z]*\).*/\1/p' "$PF_TEST_LOG"; }
 
 # --- pf-beacon.sh: the sl= marker
-check "beacon: empty snapshot (#1189) is sl=none" "$(beacon_sl '{}')" none
-check "beacon: status line JSON, no rate limits yet, is sl=ok" "$(beacon_sl '{"model":{"id":"m"},"session_id":"s"}')" ok
+check "beacon: empty snapshot (#1189 on schans2) is sl=none" "$(beacon_sl '{}')" none
+check "beacon: status line JSON without rate_limits (API key, old Claude Code) is sl=nolimits" "$(beacon_sl '{"model":{"id":"m"},"session_id":"s"}')" nolimits
 check "beacon: status line, 5h block idle, is sl=ok" "$(beacon_sl "{\"model\":{\"id\":\"m\"},\"rate_limits\":{\"seven_day\":{\"used_percentage\":20,\"resets_at\":$((now + 86400))}}}")" ok
+check "beacon: status line, both blocks idle, is sl=ok" "$(beacon_sl '{"model":{"id":"m"},"rate_limits":{}}')" ok
 check "beacon: pf-usage.sh rate_limits only is sl=ok" "$(beacon_sl '{"rate_limits":{"five_hour":null,"seven_day":null}}')" ok
 check "beacon: sl= before claude_at" "$(grep -c " sl=ok\( claude_at=[0-9TZ:-]*\)\?\$" "$PF_TEST_LOG")" 1
 
@@ -60,6 +62,8 @@ check "idle week: no ASK" "$(beat "0% 0% $epoch0 r5=$epoch0 agents=0 $at sl=ok")
 # not wired (#1189): nothing ever wrote the snapshot, even if the beacon itself is fresh
 check "not wired (sl=none): ASK" "$(beat "0% 0% $epoch0 r5=$epoch0 agents=0 $at sl=none")" 1
 check "not wired: stamp" "$(stamped)" yes
+# status line running without rate limits (API-key login or outdated Claude Code, the #1189 instructions' case)
+check "no rate limits (sl=nolimits): ASK" "$(beat "0% 0% $epoch0 r5=$epoch0 agents=0 $at sl=nolimits")" 1
 # the next pass does not ask again (6h throttle); 6h later the still-broken peer is asked again
 heartbeat; check "throttled: no second ASK" "$(asks)" 0
 touch -t "$(pf_epoch_fmt "$((now - 21660))" +%Y%m%d%H%M.%S)" "$NUDGE"

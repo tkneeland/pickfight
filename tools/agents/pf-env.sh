@@ -85,7 +85,7 @@ pf_daynight() {
   if [ "$(date +%s)" -lt "$u" ] || { [ "$h" -ge "$NIGHT_END" ] && [ "$h" -lt "$NIGHT_START" ]; }; then echo day; else echo night; fi
 }
 # pf_beacon <handle>: sets b_age (s, 999999 if none) b_p5 b_r5 b_used b_reset (7d) b_at (ISO stamp) from the handle's
-# newest USAGE message in $PF_STATE/msg-inbox.log ("<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> [at=<ISO>]",
+# newest USAGE message in $PF_STATE/msg-inbox.log ("<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> [at=<ISO>] [sl=<state>] ...",
 # filled by pf-msg.sh listen/backfill), or from this account's own usage-snapshot.json. Percent values are floored and
 # empty when unknown ("?", or a 1970 reset). The age is from at= (when the snapshot was taken) when present.
 # Also sets b_sent (epoch the message was sent, or the snapshot's mtime for this account) and b_line (the USAGE text).
