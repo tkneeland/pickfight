@@ -125,10 +125,13 @@ EOT
     ok=$(pf_mtime "$PF_STATE/.msg-sent-ok" || true); ok=${ok:-0}
     for peer in ${WATCH_PEERS:-agage-JG}; do
       [ -f "$INBOX" ] || break
-      # A peer whose USAGE carries no real numbers (reset 1970 or ?%) has a broken status line: ask it to fix, every 6h at most.
+      # A peer whose USAGE carries no real numbers (7-day reset 1970 or a ?% field) has a broken status line: ask it to
+      # fix, every 6h at most. r5=1970 alone is healthy: Claude Code leaves the 5h block out while no 5-hour window is
+      # active, and pf_beacon already reads r5=1970 as "no 5h data" (#1261).
       u=$(awk -F'|' -v p="$peer" '$2==p && $3=="USAGE" {l=$4} END {print l}' "$INBOX")
+      r7=$(echo "$u" | awk '{print $3}')
       nl=$(pf_mtime "$PF_STATE/.msg-usage-nudge-$peer" || true); nl=${nl:-0}
-      if [ -z "${PF_MSG_NOSEND:-}" ] && { [[ "$u" == *1970-01-01* ]] || [[ "$u" == *"?%"* ]]; } && [ $(( $(date -u +%s) - nl )) -gt 21600 ]; then
+      if [ -z "${PF_MSG_NOSEND:-}" ] && { [[ "$r7" == 1970-01-01* ]] || [[ "$u" == *"?%"* ]]; } && [ $(( $(date -u +%s) - nl )) -gt 21600 ]; then
         send ASK "$peer: your USAGE reports no real numbers ($u). Point your Claude statusLine at tools/agents/statusline-usage.sh with PF_ACCOUNT=$peer (Windows: Git Bash command in tools/agents/windows/README.md), restart Claude, then reply ANSWER." \
           && touch "$PF_STATE/.msg-usage-nudge-$peer"
       fi
