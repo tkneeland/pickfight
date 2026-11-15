@@ -1380,6 +1380,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"exit_tree_flushes_telemetry_1271",
 	"kind_switch_flushes_joins_1271",
 	"relay_lobby_records_have_their_own_rate_limit_1271",
+	"umbrella_canopy_is_larger_and_tuned_the_same_1276",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4565,6 +4566,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kind_switch_flushes_joins_1271()
 		"relay_lobby_records_have_their_own_rate_limit_1271":
 			return await _scenario_relay_lobby_records_have_their_own_rate_limit_1271()
+		"umbrella_canopy_is_larger_and_tuned_the_same_1276":
+			return await _scenario_umbrella_canopy_is_larger_and_tuned_the_same_1276()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -65578,5 +65581,44 @@ func _scenario_relay_lobby_records_have_their_own_rate_limit_1271() -> Array[Str
 		failures.append("match records were limited as %s after lobby records, wanted two then 429" % [matches])
 	DirAccess.remove_absolute(path)
 	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+## #1276: the umbrella's canopy is 1.35x its old size, scaled about the point where
+## it meets the handle stub (2, 0): the three canopy circles and the canopy outline
+## points together, so the drawn canopy is what catches hits. The handle stub and
+## the small shaft circle are unchanged, so the closed poker reaches as before.
+## Glide and wind are size-independent (umbrella_overhead_slows_the_fall and
+## umbrella_catches_more_wind_than_pickaxe cover them), circles inside the art is
+## weapon_head_circles_within_art, and pickup/Online art parity is #930's scenario.
+func _scenario_umbrella_canopy_is_larger_and_tuned_the_same_1276() -> Array[String]:
+	var failures: Array[String] = []
+	var factor: float = 1.35
+	var anchor := Vector2(2, 0)
+	var canopy := func(p: Vector2) -> Vector2: return anchor + (p - anchor) * factor
+	var stats: Resource = load(UMBRELLA_PATH)
+	# Shaft circle (index 0): as before #1276.
+	if (stats.head_circle_offsets[0] - Vector2(1, 0)).length() > 0.01 or absf(stats.head_circle_radii[0] - 0.9) > 0.01:
+		failures.append("the shaft circle changed: %s r %.3f, wanted (1, 0) r 0.9" % [stats.head_circle_offsets[0], stats.head_circle_radii[0]])
+	# Canopy circles: the old ones scaled about the stub junction.
+	var old_offsets: Array = [Vector2(8, 0), Vector2(7, -7), Vector2(7, 7)]
+	var old_radii: Array = [4.5, 2.7, 2.7]
+	for i in old_offsets.size():
+		var want: Vector2 = canopy.call(old_offsets[i])
+		if (stats.head_circle_offsets[i + 1] - want).length() > 0.01 or absf(stats.head_circle_radii[i + 1] - old_radii[i] * factor) > 0.01:
+			failures.append("canopy circle %d: %s r %.3f, wanted %s r %.3f" % [i + 1, stats.head_circle_offsets[i + 1], stats.head_circle_radii[i + 1], want, old_radii[i] * factor])
+	# Outline: the stub points as before, the canopy tip and half-width scaled.
+	var stub: Array = [Vector2(-2, -1), Vector2(3.5, -1), Vector2(3.5, 1), Vector2(-2, 1)]
+	for p: Vector2 in stub:
+		if not stats.art_outline.has(p):
+			failures.append("the handle stub point %s is gone from the outline" % p)
+	var tip: float = 0.0
+	var half_width: float = 0.0
+	for pt: Vector2 in stats.art_outline:
+		tip = maxf(tip, pt.x)
+		half_width = maxf(half_width, absf(pt.y))
+	var want_tip: float = canopy.call(Vector2(16.5, 0)).x
+	if absf(tip - want_tip) > 0.01 or absf(half_width - 13.0 * factor) > 0.01:
+		failures.append("art tip %.3f half-width %.3f, wanted %.3f / %.3f" % [tip, half_width, want_tip, 13.0 * factor])
 	_scenario_completed = true
 	return failures
