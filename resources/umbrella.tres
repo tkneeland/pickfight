@@ -10,6 +10,10 @@
 ;
 ; The head (redrawn in #621, docs/design/weapon-heads/) is a ribbed canopy on a thin
 ; shaft: a big circle for the canopy, two for its shoulders, a small one for the shaft. Head-local space as every other weapon's, +X along the haft.
+; #1276: the canopy (its three circles and outline points) is 1.35x the #621 size, scaled
+; about the stub junction (2, 0); the handle stub and the shaft circle are unchanged. Glide
+; and wind constants in Player.gd do not depend on size; the bigger canopy also blocks and
+; grips over a larger area.
 
 [resource]
 script = ExtResource("1")
@@ -23,6 +27,6 @@ max_drive_force = 7000.0
 damage = 12.0
 sound_set = &"umbrella"
 special = &"umbrella"
-head_circle_offsets = PackedVector2Array(1, 0, 8, 0, 7, -7, 7, 7)
-head_circle_radii = PackedFloat32Array(0.9, 4.5, 2.7, 2.7)
-art_outline = PackedVector2Array(-2, -1, 3.5, -1, 2, -4.3, 4.6, -8.6, 2, -13, 4.8, -12.6, 7.5, -11.3, 9.8, -9.2, 11.5, -6.5, 12.6, -3.4, 13, -1.2, 16.5, 0, 13, 1.2, 12.6, 3.4, 11.5, 6.5, 9.8, 9.2, 7.5, 11.3, 4.8, 12.6, 2, 13, 4.6, 8.6, 2, 4.3, 3.5, 1, -2, 1)
+head_circle_offsets = PackedVector2Array(1, 0, 10.1, 0, 8.75, -9.45, 8.75, 9.45)
+head_circle_radii = PackedFloat32Array(0.9, 6.075, 3.645, 3.645)
+art_outline = PackedVector2Array(-2, -1, 3.5, -1, 2, -5.805, 5.51, -11.61, 2, -17.55, 5.78, -17.01, 9.425, -15.255, 12.53, -12.42, 14.825, -8.775, 16.31, -4.59, 16.85, -1.62, 21.575, 0, 16.85, 1.62, 16.31, 4.59, 14.825, 8.775, 12.53, 12.42, 9.425, 15.255, 5.78, 17.01, 2, 17.55, 5.51, 11.61, 2, 5.805, 3.5, 1, -2, 1)
