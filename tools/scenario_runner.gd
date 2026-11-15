@@ -1371,6 +1371,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"ctf_rejected_capture_and_carried_in_base_signals_1271",
 	"lobby_record_for_phones_that_joined_without_a_match_1271",
 	"relay_accepts_only_valid_lobby_records_1271",
+	"abandon_does_not_double_count_mode_stats_1271",
+	"ctf_double_signals_1271",
+	"join_seen_ids_last_the_session_1271",
+	"notice_not_reshown_with_sharing_off_1271",
+	"relay_non_string_kind_is_not_an_error_1271",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4538,6 +4543,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_lobby_record_for_phones_that_joined_without_a_match_1271()
 		"relay_accepts_only_valid_lobby_records_1271":
 			return await _scenario_relay_accepts_only_valid_lobby_records_1271()
+		"abandon_does_not_double_count_mode_stats_1271":
+			return await _scenario_abandon_does_not_double_count_mode_stats_1271()
+		"ctf_double_signals_1271":
+			return await _scenario_ctf_double_signals_1271()
+		"join_seen_ids_last_the_session_1271":
+			return await _scenario_join_seen_ids_last_the_session_1271()
+		"notice_not_reshown_with_sharing_off_1271":
+			return await _scenario_notice_not_reshown_with_sharing_off_1271()
+		"relay_non_string_kind_is_not_an_error_1271":
+			return await _scenario_relay_non_string_kind_is_not_an_error_1271()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -65163,12 +65178,12 @@ func _scenario_ctf_abandon_collects_live_counters_1271() -> Array[String]:
 			failures.append("the abandoned match's CTF counters were %s" % [ctf])
 		if records[0].get("completed") != false:
 			failures.append("the record should be abandoned")
-	if int(rm.match_stats().captures.get(0, 0)) != 1:
-		failures.append("the live capture was not handed to the stats")
-	# A second report (the round ending afterwards) adds nothing.
-	mode.report_stats(rm.match_stats())
+	if not rm.match_stats().ctf_events.is_empty() or not rm.match_stats().captures.is_empty():
+		failures.append("the abandon path wrote the live round into the stats: %s %s" % [rm.match_stats().ctf_events, rm.match_stats().captures])
+	# The round ending afterwards reports itself, once.
+	rm._end_game_mode()
 	if int(rm.match_stats().ctf_events.get("takes", 0)) != 2 or int(rm.match_stats().captures.get(0, 0)) != 1:
-		failures.append("a second report double-counted: %s %s" % [rm.match_stats().ctf_events, rm.match_stats().captures])
+		failures.append("the round's own report was %s %s" % [rm.match_stats().ctf_events, rm.match_stats().captures])
 	await _teardown(rig["stage"])
 	_scenario_completed = true
 	return failures
@@ -65200,7 +65215,6 @@ func _scenario_ctf_rejected_capture_and_carried_in_base_signals_1271() -> Array[
 	# The round ends with the flag still carried in the carrier's own base.
 	red.teleport_to(stage.get_base_rect(0).get_center())
 	var stats: RefCounted = _events_stats_1271()
-	mode.report_stats(stats)
 	mode.report_stats(stats)
 	var want: Dictionary = {"captures": 0, "takes": 1, "drops": 0, "drops_in_own_base": 0, "void_returns": 0, "timed_returns": 0, "capture_rejected": 1, "carried_in_base_at_end": 1}
 	if stats.ctf_events != want:
@@ -65297,5 +65311,149 @@ func _scenario_relay_accepts_only_valid_lobby_records_1271() -> Array[String]:
 		failures.append("the stored lobby line was %s" % [stored])
 	DirAccess.remove_absolute(path)
 	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+# --- Issue #1271 round 3 -------------------------------------------------------
+## Abandoning a Soccer round mid-play never reports the mode's numbers; ending the
+## mode afterwards reports them once.
+func _scenario_abandon_does_not_double_count_mode_stats_1271() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _soccer_rig(3)
+	var rm: Node = rig["rm"]
+	if not await _mode_started(rig):
+		failures.append("the Soccer round never started")
+		await _teardown(rig["stage"])
+		return failures
+	var mode: Node = rm.game_mode_node()
+	mode.goal_pause_sec = 0.1
+	rig["players"][1].teleport_to(Vector2(600.0, 240.0))
+	rig["players"][2].teleport_to(Vector2(400.0, 240.0))
+	rig["players"][0].teleport_to(Vector2(-300.0, 240.0))
+	mode.ball.global_position = Vector2(-300.0, 240.0)
+	await _await_ticks(2)
+	mode.score_goal(0)
+	var records: Array = []
+	var was: Array = _events_gate_on_1271(rm, records)
+	rm.match_stats().record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	rm.set("_match_live", true)
+	rm.set("_rounds_finished", 1)
+	rm._abandon_match()
+	_events_gate_restore_1271(was)
+	if records.size() != 1 or records[0].get("completed") != false:
+		failures.append("the abandoned Soccer match sent %s" % [records])
+	if not rm.match_stats().goals.is_empty():
+		failures.append("the abandon path reported the mode's goals early: %s" % [rm.match_stats().goals])
+	rm._end_game_mode()
+	var scored: int = int(mode.scorers.get(0, 0))
+	if scored < 1 or int(rm.match_stats().goals.get(0, 0)) != scored:
+		failures.append("goals after the round ended were %s, wanted %d once" % [rm.match_stats().goals, scored])
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+## A flag already counted as a rejected capture is not also "carried at the end",
+## and a round a capture won has no carried flags to count.
+func _scenario_ctf_double_signals_1271() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var stage: Node2D = rig["rm"]._current_stage
+	var red: RigidBody2D = rig["players"][0]
+	var blue: RigidBody2D = rig["players"][1]
+	# (a) The carrier's own capture refused in their base, then the round ends.
+	red.teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	red.teleport_to(stage.get_base_rect(0).get_center())
+	mode._active = false # the rules refuse a capture now
+	mode.capture(0, 0)
+	mode._active = true
+	if int(mode.events.get("capture_rejected", 0)) != 1:
+		failures.append("the refused capture was not counted: %s" % [mode.events])
+	var live: Dictionary = mode.live_events()
+	if int(live.get("carried_in_base_at_end", 0)) != 0:
+		failures.append("a rejected carrier was also counted as carried at the end: %s" % [live])
+	# (b) A capture wins the round while the other team's carrier stands in their base.
+	mode.return_flag(1)
+	mode._rejected_slots.clear()
+	mode.captures_to_win = 1
+	mode.take_flag(1, 0)
+	blue.teleport_to(stage.get_base_rect(1).get_center())
+	mode.take_flag(0, 1)
+	red.teleport_to(stage.get_base_rect(0).get_center())
+	mode.capture(0, 0)
+	if not mode.is_won():
+		failures.append("the capture did not win the round")
+	if int(mode.live_events().get("carried_in_base_at_end", 0)) != 0:
+		failures.append("a round won by a capture counted a carried flag: %s" % [mode.live_events()])
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+## A phone seen once this host session is not a new join when it reconnects in the
+## next match, or after its record was taken.
+func _scenario_join_seen_ids_last_the_session_1271() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _events_join_rig_1271(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var records: Array = rig["records"]
+	rm.match_stats().record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	rm.send_telemetry(true)
+	if records.size() != 1 or int(((records[0].get("events", {}) as Dictionary).get("joins", {}) as Dictionary).get("lan", 0)) != 1:
+		failures.append("the first record did not count the LAN phone: %s" % [records])
+	var again := WebSocketPeer.new()
+	await _join_phone(again, "lan-1271", [rig["lan"]]) # the same phone, reconnecting in the next match
+	var fresh := WebSocketPeer.new()
+	await _join_phone(fresh, "lan-new-1271", [rig["lan"], again]) # a different phone is a new join
+	rm.match_stats().record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	rm.send_telemetry(true)
+	var joins: Dictionary = (records[1].get("events", {}) as Dictionary).get("joins", {}) if records.size() > 1 else {}
+	if int(joins.get("lan", 0)) != 1 or int(joins.get("relay", 0)) != 0:
+		failures.append("the next record's joins were %s, wanted only the one new LAN phone" % [joins])
+	again.close()
+	fresh.close()
+	await _events_rig_close_1271(rig)
+	_scenario_completed = true
+	return failures
+## A version-1 host who has sharing off is not shown the card again.
+func _scenario_notice_not_reshown_with_sharing_off_1271() -> Array[String]:
+	var failures: Array[String] = []
+	var sfx: Node = _sfx()
+	if sfx == null:
+		return ["the Sfx autoload is missing"]
+	await physics_frame
+	var ui: CanvasLayer = sfx.build_settings_ui()
+	await physics_frame
+	var old: RefCounted = HostSettingsScript372.new()
+	old.persist = false
+	old.telemetry_notice_seen = true # a version-1 save
+	old.share_stats = false
+	ui.host = old
+	ui.refresh()
+	if ui.telemetry_notice().visible:
+		failures.append("a version-1 host with sharing off was shown the card again")
+	old.share_stats = true
+	ui.refresh()
+	if not ui.telemetry_notice().visible:
+		failures.append("a version-1 host with sharing on was not shown the card")
+	ui.host = HostSettingsScript372.shared()
+	ui.refresh()
+	_scenario_completed = true
+	return failures
+## A non-string `kind` is treated as a plain match record, never a script error.
+func _scenario_relay_non_string_kind_is_not_an_error_1271() -> Array[String]:
+	var failures: Array[String] = []
+	for bad_kind: Variant in [5, [1], {"a": 1}, null, 1.5, true]:
+		var rec: Dictionary = _telemetry_relay_record_372()
+		rec["kind"] = bad_kind
+		var cleaned: Dictionary = RelayScript238.clean_stats_record(rec)
+		if cleaned.is_empty() or cleaned.has("kind"):
+			failures.append("kind %s was not treated as a match record: %s" % [bad_kind, cleaned])
+		var bare: Dictionary = RelayScript238.clean_stats_record({"kind": bad_kind, "events": {"joins": {"lan": 1}}})
+		if not bare.is_empty():
+			failures.append("a record with kind %s and no match fields was accepted: %s" % [bad_kind, bare])
 	_scenario_completed = true
 	return failures

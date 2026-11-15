@@ -2432,8 +2432,11 @@ func send_telemetry(completed: bool = true) -> bool:
 		scripted = false
 	if not StatsSenderScript.should_send(host, scripted, OS.get_cmdline_user_args()):
 		return false
-	if not completed and _game_mode_node != null and _game_mode_node.has_method("report_stats"):
-		_game_mode_node.report_stats(_stats) # #1271: an abandoned round's live counters (safe to call twice)
+	# #1271: an abandoned round's live flag counters join the record (a copy: the
+	# mode reports itself when the round ends, and only Capture the Flag has any).
+	var live_ctf: Dictionary = {}
+	if not completed and _game_mode_node != null and _game_mode_node.has_method("live_events"):
+		live_ctf = _game_mode_node.live_events()
 	var winners: Array = []
 	if not completed:
 		pass
@@ -2449,8 +2452,8 @@ func send_telemetry(completed: bool = true) -> bool:
 	var with_events: bool = StatsSenderScript.events_allowed(host)
 	var couch: bool = _is_couch_match_1271()
 	_stats.set("relay_ping", _match_relay_ping_1271())
-	_stats.set("join_events", joins if couch else {})
-	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners, completed, _rounds_finished, with_events, couch)
+	_stats.set("join_events", joins)
+	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners, completed, _rounds_finished, with_events, couch, live_ctf)
 	if record.is_empty():
 		if with_events and couch:
 			_send_lobby_record_1271(joins, false) # phones joined but no damage was dealt

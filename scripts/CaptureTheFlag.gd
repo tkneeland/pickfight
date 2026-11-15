@@ -76,10 +76,8 @@ var capturers: Dictionary = {}
 ## own line); `capture_rejected` and `carried_in_base_at_end` are the stronger
 ## "reached the end zone but did not score" signals (#1269).
 var events: Dictionary = {}
-## What `report_stats` already handed over, so a second call adds only the new (#1271).
-var _reported_events: Dictionary = {}
-var _reported_captures: Dictionary = {}
-var _end_counted: bool = false
+## The round was won by a capture (its flags are home: nothing carried "at the end").
+var _won_by_capture: bool = false
 ## Slots whose refused capture is already counted (cleared when they score or the hall changes).
 var _rejected_slots: Dictionary = {}
 ## team -> HOME / CARRIED / DROPPED, for that team's flag.
@@ -125,9 +123,7 @@ func start_round(slots: Array[int]) -> void:
 	scores = {0: 0, 1: 0}
 	capturers.clear()
 	events = {}
-	_reported_events = {}
-	_reported_captures = {}
-	_end_counted = false
+	_won_by_capture = false
 	_rejected_slots.clear()
 	state = {0: HOME, 1: HOME}
 	carrier = {0: -1, 1: -1}
@@ -174,38 +170,44 @@ func end_round() -> void:
 	_captured_label = null
 	_captured_name_label = null
 
-## Hands this round's captures to the match stats (issue #355).
-## Safe to call twice (the abandon path reports a live round, then the round
-## ends): only what was not handed over yet is added (#1271).
+## Hands this round's captures to the match stats (issue #355), once, at the
+## round's end.
 func report_stats(stats: RefCounted) -> void:
-	if not _end_counted:
-		_end_counted = true
-		_count_carried_in_base_at_end()
 	for slot: int in capturers:
-		var fresh: int = int(capturers[slot]) - int(_reported_captures.get(slot, 0))
-		if fresh > 0:
-			stats.record_captures(slot, fresh)
-		_reported_captures[slot] = int(capturers[slot])
-	var delta: Dictionary = {}
-	for key: String in events:
-		delta[key] = int(events[key]) - int(_reported_events.get(key, 0))
-	stats.record_ctf_events(delta)
-	_reported_events = events.duplicate()
+		stats.record_captures(slot, int(capturers[slot]))
+	stats.record_ctf_events(live_events())
 
-## A round over with a flag still carried by someone standing in their own base:
-## they reached the end zone and did not score (#1269).
-func _count_carried_in_base_at_end() -> void:
+## This round's flag events so far (#1271), read-only: the counters plus the flags
+## still carried in a base right now. `report_stats` hands these over at the round's
+## end; the abandon path merges them into a copy for the abandoned record.
+func live_events() -> Dictionary:
+	var out: Dictionary = events.duplicate()
+	var carried: int = _carried_in_base_count()
+	if carried > 0:
+		out["carried_in_base_at_end"] = int(out.get("carried_in_base_at_end", 0)) + carried
+	return out
+
+## Flags carried by someone standing in their own base, who reached the end zone
+## and did not score (#1269). Not counted when a capture won the round (the flags
+## are home) or for a carrier already counted as `capture_rejected`.
+func _carried_in_base_count() -> int:
+	if _won_by_capture:
+		return 0
+	var count: int = 0
 	for team: int in [0, 1]:
 		var slot: int = int(carrier[team])
-		if slot != -1 and _in_own_base(slot, 1 - team):
-			_count_event("carried_in_base_at_end")
+		if slot != -1 and not _rejected_slots.has(slot) and _in_own_base(slot, 1 - team):
+			count += 1
+	return count
+
+## The one "standing in a base" rule: `position` is inside team `base_team`'s base.
+func _at_base(position: Vector2, base_team: int) -> bool:
+	var rect: Rect2 = base_rect(base_team)
+	return rect.size != Vector2.ZERO and rect.has_point(position)
 
 func _in_own_base(slot: int, base_team: int) -> bool:
 	var player: Node2D = _watched.get(slot)
-	if player == null or not is_instance_valid(player):
-		return false
-	var rect: Rect2 = base_rect(base_team)
-	return rect.size != Vector2.ZERO and rect.has_point(player.global_position)
+	return player != null and is_instance_valid(player) and _at_base(player.global_position, base_team)
 
 ## A capture the rules refused while the carrier stood in the capturing team's
 ## base, counted once per carrier (#1271).
@@ -387,8 +389,7 @@ func _check_captures() -> void:
 		var player: Node2D = _watched.get(slot)
 		if player == null or not is_instance_valid(player):
 			continue
-		var rect: Rect2 = base_rect(team)
-		if rect.size != Vector2.ZERO and rect.has_point(player.global_position):
+		if _at_base(player.global_position, team):
 			capture(team, slot)
 			if _finished:
 				return
@@ -431,8 +432,7 @@ func drop_flag(team: int) -> void:
 		at = player.global_position
 	_count_event("drops")
 	# #1271: dropped where the carrier would have scored (their own base).
-	var own_base: Rect2 = base_rect(1 - team)
-	if own_base.size != Vector2.ZERO and own_base.has_point(at):
+	if _at_base(at, 1 - team):
 		_count_event("drops_in_own_base")
 	flag_dropped.emit(team, slot)
 	_cue(&"flag_drop", at)
@@ -480,6 +480,7 @@ func capture(team: int, slot: int) -> void:
 	callout.emit(&"announce_captured")
 	_update_hud()
 	if int(scores[team]) >= captures_to_win:
+		_won_by_capture = true
 		_win(team)
 		return
 	_pause_left = capture_pause_sec

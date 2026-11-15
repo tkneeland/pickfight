@@ -3744,6 +3744,11 @@ func match_ping_stats() -> Array:
 ## counts twice, and a phone that moves from the LAN to the relay is in both (#1271).
 var _join_lan_ids: Dictionary = {}
 var _join_relay_ids: Dictionary = {}
+## Distinct phones first seen since the last record: the counts the record carries.
+## The id sets above live for the host session (a new session starts with a new
+## server), so a phone that reconnects in the next match is not a new join.
+var _join_lan_new: int = 0
+var _join_relay_new: int = 0
 ## "help", "nudge" (each at most once per lobby: the latch) and "internet" counts.
 var _join_other: Dictionary = {}
 ## Decides whether anything may be counted: set by the RoundManager to the telemetry
@@ -3773,18 +3778,20 @@ func _note_phone_seated(slot: int, peer: Variant) -> void:
 	var id: String = str(_slot_client_id[slot])
 	if id.is_empty():
 		id = "slot:%d" % slot
-	if peer is WebSocketPeer:
+	if peer is WebSocketPeer and not _join_lan_ids.has(id):
 		_join_lan_ids[id] = true
-	elif _is_phone_seat(peer):
+		_join_lan_new += 1
+	elif _is_phone_seat(peer) and not _join_relay_ids.has(id):
 		_join_relay_ids[id] = true
+		_join_relay_new += 1
 
 ## The join counters so far (only the non-zero ones), without resetting them.
 func join_events() -> Dictionary:
 	var out: Dictionary = _join_other.duplicate()
-	if not _join_lan_ids.is_empty():
-		out["lan"] = _join_lan_ids.size()
-	if not _join_relay_ids.is_empty():
-		out["relay"] = _join_relay_ids.size()
+	if _join_lan_new > 0:
+		out["lan"] = _join_lan_new
+	if _join_relay_new > 0:
+		out["relay"] = _join_relay_new
 	return out
 
 ## The join counters so far, then a fresh count (the one reset path).
@@ -3793,9 +3800,10 @@ func take_join_events() -> Dictionary:
 	reset_join_events()
 	return out
 
+## Starts a fresh count; the seen-phone sets stay (see above).
 func reset_join_events() -> void:
-	_join_lan_ids.clear()
-	_join_relay_ids.clear()
+	_join_lan_new = 0
+	_join_relay_new = 0
 	_join_other.clear()
 
 func _note_relay_phone_rtt(slot: int, rtt: int) -> void:

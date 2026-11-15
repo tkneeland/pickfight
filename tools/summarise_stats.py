@@ -185,6 +185,7 @@ def events_summary(records):
     joins = Counter()
     ctf_records = 0
     join_records = 0
+    lobby_records = 0
     relay_records = []
     for rec in records:
         events = rec.get("events")
@@ -198,15 +199,18 @@ def events_summary(records):
             counts = {key: _count(events["joins"].get(key)) for key in JOIN_KEYS}
             if any(counts.values()):
                 join_records += 1
+                if is_lobby(rec):
+                    lobby_records += 1
             joins.update(counts)
         if isinstance(events.get("relay_ping"), list):
             relay_records.append({"ping": [e for e in events["relay_ping"] if isinstance(e, dict)]})
     seats, means = ping_summary(relay_records)
     return {"ctf_records": ctf_records, "ctf": ctf, "join_records": join_records, "joins": joins,
+            "lobby_records": lobby_records,
             "relay": (seats, means)}
 
 
-def print_events(records, lobbies=0):
+def print_events(records, lobbies=0):  # `lobbies`: every lobby record, active or not
     summary = events_summary(records)
     seats, means = summary["relay"]
     if not (summary["ctf_records"] or summary["join_records"] or seats):
@@ -218,9 +222,9 @@ def print_events(records, lobbies=0):
         print("Capture the Flag (%d matches): %s" % (summary["ctf_records"], totals))
     if summary["join_records"]:
         totals = ", ".join("%s %d" % (key, summary["joins"][key]) for key in JOIN_KEYS)
-        print("Couch joins (%d records with join activity, %d of them lobby-only): %s" % (summary["join_records"], lobbies, totals))
-    if lobbies and not summary["join_records"]:
-        print("Lobby records: %d" % lobbies)
+        print("Couch joins (%d records with join activity, %d of them lobby-only): %s" % (summary["join_records"], summary["lobby_records"], totals))
+    if lobbies and not summary["lobby_records"]:
+        print("Lobby records: %d (none with join activity)" % lobbies)
     if seats:
         shown = ["%.0f" % means[f] if means[f] is not None else "-" for f in ("avg", "p95", "max")]
         print("Relay phone ping: %d phones; avg (n-weighted) / p95 (mean) / max (ms): %s" % (seats, " / ".join(shown)))

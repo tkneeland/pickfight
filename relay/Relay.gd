@@ -437,7 +437,7 @@ static func clean_stats_record(raw: Variant) -> Dictionary:
 	if not (raw is Dictionary):
 		return {}
 	var rec: Dictionary = raw
-	if rec.get("kind") == "lobby":
+	if rec.get("kind") is String and rec["kind"] == "lobby":
 		return _clean_lobby_record(rec)
 	if not (rec.get("mode") is String) or (rec["mode"] as String).length() > STATS_MAX_NAME_CHARS:
 		return {}

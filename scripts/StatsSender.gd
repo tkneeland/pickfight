@@ -22,6 +22,8 @@ const SfxScript := preload("res://scripts/Sfx.gd")
 const MatchStatsScript := preload("res://scripts/MatchStats.gd")
 ## The most ping entries a record carries (Relay.STATS_MAX_PING_ENTRIES).
 const PING_MAX_ENTRIES: int = 8
+## The most any event counter may say (Relay.STATS_MAX_EVENT_COUNT).
+const EVENT_COUNT_MAX: int = 100000
 
 var _peer: WebSocketPeer
 var _payload: String = ""
@@ -34,7 +36,7 @@ var _done: bool = true
 ## the winner's weapon; no slot appears in the record.
 ## `completed` false marks a match that ended without a winner (#643): the
 ## record then has no `winner_weapon`.
-static func build_record(stats: RefCounted, mode: String, stages: Array, format: String, length_sec: int, winner_slots: Array, completed: bool = true, rounds_played: int = 0, with_events: bool = true, with_joins: bool = true) -> Dictionary:
+static func build_record(stats: RefCounted, mode: String, stages: Array, format: String, length_sec: int, winner_slots: Array, completed: bool = true, rounds_played: int = 0, with_events: bool = true, with_joins: bool = true, live_ctf: Dictionary = {}) -> Dictionary:
 	if stats.weapon_damage.is_empty():
 		return {}
 	var weapons: Dictionary = {}
@@ -67,7 +69,7 @@ static func build_record(stats: RefCounted, mode: String, stages: Array, format:
 		if not entries.is_empty():
 			record["ping"] = entries
 	if with_events:
-		var events: Dictionary = _build_events(stats, with_joins)
+		var events: Dictionary = _build_events(stats, with_joins, live_ctf)
 		if not events.is_empty():
 			record["events"] = events
 	return record
@@ -87,9 +89,15 @@ static func events_allowed(host: RefCounted) -> bool:
 ## Issue #1271: the optional `events` object for live bug detection. Counts and
 ## summaries only (no slot, name, colour, device or id); each sub-object is
 ## left out when it has nothing, and `events` itself when empty.
-static func _build_events(stats: RefCounted, with_joins: bool = true) -> Dictionary:
+static func _build_events(stats: RefCounted, with_joins: bool = true, live_ctf: Dictionary = {}) -> Dictionary:
 	var events: Dictionary = {}
-	var ctf: Dictionary = _counts_of(stats.get("ctf_events"), MatchStatsScript.CTF_EVENT_KEYS)
+	# An abandoned match's live round is added to a COPY of the match's counters,
+	# never to the stats (the round reports itself when it ends).
+	var ctf_source: Dictionary = {}
+	var banked: Variant = stats.get("ctf_events")
+	for key: String in MatchStatsScript.CTF_EVENT_KEYS:
+		ctf_source[key] = (int((banked as Dictionary).get(key, 0)) if banked is Dictionary else 0) + int(live_ctf.get(key, 0))
+	var ctf: Dictionary = _counts_of(ctf_source, MatchStatsScript.CTF_EVENT_KEYS)
 	if not ctf.is_empty():
 		events["ctf"] = ctf
 	var joins: Dictionary = _counts_of(stats.get("join_events"), MatchStatsScript.JOIN_EVENT_KEYS) if with_joins else {}
@@ -97,12 +105,27 @@ static func _build_events(stats: RefCounted, with_joins: bool = true) -> Diction
 		events["joins"] = joins
 	var relay_ping: Variant = stats.get("relay_ping")
 	if relay_ping is Array:
-		var entries: Array = []
-		for entry: Dictionary in MatchStatsScript.ping_entries(relay_ping, false, PING_MAX_ENTRIES):
-			entries.append({"avg": entry["avg"], "p95": entry["p95"], "max": entry["max"], "n": entry["n"]})
+		var entries: Array = _relay_ping_entries(relay_ping)
 		if not entries.is_empty():
 			events["relay_ping"] = entries
 	return events
+
+## The relay phones' {avg, p95, max, n} entries as ints clamped to -1..PING_MAX_MSEC,
+## at most PING_MAX_ENTRIES, those with the most samples kept.
+static func _relay_ping_entries(list: Array) -> Array:
+	var out: Array = []
+	for entry: Variant in list:
+		if not entry is Dictionary:
+			continue
+		var clean: Dictionary = {}
+		for field: String in ["avg", "p95", "max", "n"]:
+			var v: Variant = (entry as Dictionary).get(field, -1)
+			clean[field] = clampi(int(v), -1, MatchStatsScript.PING_MAX_MSEC) if (v is int or (v is float and is_finite(v))) else -1
+		out.append(clean)
+	if out.size() > PING_MAX_ENTRIES:
+		out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["n"]) > int(b["n"]))
+		out.resize(PING_MAX_ENTRIES)
+	return out
 
 ## `source`'s `keys` as non-negative ints, {} when every one is zero or missing.
 static func _counts_of(source: Variant, keys: PackedStringArray) -> Dictionary:
@@ -111,7 +134,7 @@ static func _counts_of(source: Variant, keys: PackedStringArray) -> Dictionary:
 		return out
 	var any: bool = false
 	for key: String in keys:
-		var v: int = clampi(int((source as Dictionary).get(key, 0)), 0, 100000)
+		var v: int = clampi(int((source as Dictionary).get(key, 0)), 0, EVENT_COUNT_MAX)
 		out[key] = v
 		any = any or v > 0
 	return out if any else {}
