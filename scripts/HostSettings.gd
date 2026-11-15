@@ -543,7 +543,7 @@ func mark_telemetry_notice_seen() -> void:
 
 ## The notice version this host has acknowledged: 0 never, 1 an old save.
 func seen_notice_version() -> int:
-	return maxi(telemetry_notice_version, 1 if telemetry_notice_seen else 0)
+	return maxi(telemetry_notice_version, 1) if telemetry_notice_seen else 0
 
 ## Whether the current notice has been acknowledged (what `events` needs).
 func telemetry_notice_current() -> bool:
