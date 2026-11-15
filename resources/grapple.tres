@@ -3,15 +3,15 @@
 [ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
 
 ; The grappling hook (issue #150): a launcher on a short arm that fires a
-; hook on a rope. Mostly a way round the stage, with a light hit.
+; hook on a rope. Mostly a way round the stage, with a real hit (16 since #1277).
 ;
 ; Flick the drag to fire: the hook flies straight out along the flick at
-; 1600 px/s for up to 560 px. If it meets terrain it sticks there, and while
+; 1600 px/s for up to 650 px (#653). If it meets terrain it sticks there, and while
 ; the drag stays held the rope reels in at 650 px/s, hauling the player
 ; toward the hook with at most 4200 of force (gravity on a player is about
 ; 1470), down to 44 px, where they hang and swing. Release to let go; the
 ; hook reels home and can fire again 0.35 s after it arrives. A hook that
-; meets a player takes 8 off them (nothing for a teammate) and sticks to them
+; meets a player takes 16 off them (8 before #1277; nothing for a teammate) and sticks to them
 ; like a wall, so you zip to them; nobody else moves (GrappleHook.gd, #630). The launcher itself swings as a light melee
 ; weapon: reach S, damage S (12), with the sword's drive.
 ;
@@ -42,7 +42,7 @@ reel_speed = 650.0
 reel_force = 4200.0
 reel_min_length = 44.0
 projectile_speed = 1600.0
-projectile_damage = 8.0
+projectile_damage = 16.0
 projectile_radius = 5.0
 hook_anchors_to_players = true
 pickup_art = PackedVector2Array(-6, -3, 5, -3, 8, -5, 9.65, -5, 9, -6, 5, -8.5, 5.6, -10.6, 10.5, -9.4, 14.5, -5, 16.5, -1.4, 20, 0, 16.5, 1.4, 14.5, 5, 10.5, 9.4, 5.6, 10.6, 5, 8.5, 9, 6, 9.65, 5, 8, 5, 5, 3, -6, 3)

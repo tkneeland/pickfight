@@ -17,14 +17,14 @@ extends Node2D
 ##   `reel_force`, down to `reel_min_length`, where it holds and the player
 ##   hangs and swings. The rope only ever pulls.
 ## - **A player (grapple, #630)**: a hook with `hook_anchors_to_players`
-##   deals `projectile_damage` (nothing to a teammate) and then sticks to that
-##   player's body exactly as to terrain, so the thrower zips to them. The
+##   deals `projectile_damage` (nothing to a teammate) and then, if they are
+##   still standing, sticks to that player's body exactly as to terrain, so the
+##   thrower zips to them. The
 ##   rope pulls only the thrower; the anchor feels nothing. It lets go on
 ##   release or when either player is KO'd, with no time limit.
-## - **A player (other hooks)**: a hook that meets another player takes a light, flat
+## - **A player (other hooks)**: a hook that meets another player takes a flat
 ##   `projectile_damage` off them and tugs them toward the thrower
-##   (`projectile_knockback`), then comes home. It is a traversal tool, not a
-##   gun.
+##   (`projectile_knockback`), then comes home.
 ## - **Reeling** (the fishing rod, `hook_reels_players`, #629): the rod moves
 ##   what it hits to you. It never sticks to terrain (it comes home empty); a
 ##   player it meets takes the flat damage and is pulled toward the thrower by
@@ -193,6 +193,10 @@ func _meet(collider: Object, point: Vector2) -> void:
 			# player is not a surface the arm plants on). Teammates are
 			# anchored too; `land_projectile_hit` deals them nothing.
 			shooter.land_projectile_hit(node, float(_stats.projectile_damage), point)
+			if not bool(node.get("alive")):
+				# #1277: a hit that KOs them leaves nothing to latch onto.
+				state = State.HOME
+				return
 			_stuck_to = node as Node2D
 			_stuck_local = _stuck_to.to_local(global_position)
 			state = State.STUCK
