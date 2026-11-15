@@ -1380,6 +1380,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"exit_tree_flushes_telemetry_1271",
 	"kind_switch_flushes_joins_1271",
 	"relay_lobby_records_have_their_own_rate_limit_1271",
+	"umbrella_canopy_is_larger_and_tuned_the_same_1276",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4565,6 +4566,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kind_switch_flushes_joins_1271()
 		"relay_lobby_records_have_their_own_rate_limit_1271":
 			return await _scenario_relay_lobby_records_have_their_own_rate_limit_1271()
+		"umbrella_canopy_is_larger_and_tuned_the_same_1276":
+			return await _scenario_umbrella_canopy_is_larger_and_tuned_the_same_1276()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -65578,5 +65581,45 @@ func _scenario_relay_lobby_records_have_their_own_rate_limit_1271() -> Array[Str
 		failures.append("match records were limited as %s after lobby records, wanted two then 429" % [matches])
 	DirAccess.remove_absolute(path)
 	relay.queue_free()
+	_scenario_completed = true
+	return failures
+
+## #1276: the umbrella canopy is 1.35x its old size, art outline and hit circles
+## together, and the glide and wind catch are the same as before. The pickup and
+## the Online puppet draw the same outline through Pickup.art_layout.
+func _scenario_umbrella_canopy_is_larger_and_tuned_the_same_1276() -> Array[String]:
+	var failures: Array[String] = []
+	var factor: float = 1.35
+	var old_radii: Array = [0.9, 4.5, 2.7, 2.7]
+	var old_offsets: Array = [Vector2(1, 0), Vector2(8, 0), Vector2(7, -7), Vector2(7, 7)]
+	var old_tip: float = 16.5
+	var old_half_width: float = 13.0
+	var stats: Resource = load(UMBRELLA_PATH)
+	for i in old_radii.size():
+		if absf(stats.head_circle_radii[i] - old_radii[i] * factor) > 0.01:
+			failures.append("hit circle %d radius %.3f, wanted %.3f" % [i, stats.head_circle_radii[i], old_radii[i] * factor])
+		if (stats.head_circle_offsets[i] - old_offsets[i] * factor).length() > 0.01:
+			failures.append("hit circle %d offset %s, wanted %s" % [i, stats.head_circle_offsets[i], old_offsets[i] * factor])
+	var tip: float = 0.0
+	var half_width: float = 0.0
+	for pt: Vector2 in stats.art_outline:
+		tip = maxf(tip, pt.x)
+		half_width = maxf(half_width, absf(pt.y))
+	if absf(tip - old_tip * factor) > 0.01 or absf(half_width - old_half_width * factor) > 0.01:
+		failures.append("art tip %.2f half-width %.2f, wanted %.2f / %.2f" % [tip, half_width, old_tip * factor, old_half_width * factor])
+	# The pickup (and so the Online puppet) draws that same outline.
+	var layout: Dictionary = load("res://scripts/Pickup.gd").art_layout(stats)
+	if layout["outline"] != stats.art_outline:
+		failures.append("pickup art layout does not draw the umbrella's art_outline")
+	# Glide and wind catch keep their old tuning.
+	var steady: float = await _umbrella_fall_speed(UMBRELLA_PATH, Vector2.UP, 40)
+	if steady > 95.0:
+		failures.append("open umbrella steady fall %.0f px/s, wanted 95 or less (cap 60 plus one gravity tick)" % steady)
+	var umbrella_drift: float = await _umbrella_wind_drift(UMBRELLA_PATH)
+	var pickaxe_drift: float = await _umbrella_wind_drift(PICKAXE_STARTER_PATH)
+	if umbrella_drift < pickaxe_drift * 1.5:
+		failures.append("umbrella wind drift %.0f not >= 1.5x pickaxe %.0f" % [umbrella_drift, pickaxe_drift])
+	if not is_equal_approx(PlayerScript976.CANOPY_FALL_CAP, 60.0) or not is_equal_approx(PlayerScript976.CANOPY_WIND_MULTIPLIER, 4.0):
+		failures.append("canopy fall cap / wind multiplier were retuned")
 	_scenario_completed = true
 	return failures
