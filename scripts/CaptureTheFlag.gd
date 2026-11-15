@@ -72,7 +72,16 @@ var scores: Dictionary = {0: 0, 1: 0}
 ## slot -> captures that player made this round.
 var capturers: Dictionary = {}
 ## This round's flag events (#1271), handed to the match stats by `report_stats`.
+## `drops_in_own_base` can include normal play (a carrier dying or hit at their
+## own line); `capture_rejected` and `carried_in_base_at_end` are the stronger
+## "reached the end zone but did not score" signals (#1269).
 var events: Dictionary = {}
+## What `report_stats` already handed over, so a second call adds only the new (#1271).
+var _reported_events: Dictionary = {}
+var _reported_captures: Dictionary = {}
+var _end_counted: bool = false
+## Slots whose refused capture is already counted (cleared when they score or the hall changes).
+var _rejected_slots: Dictionary = {}
 ## team -> HOME / CARRIED / DROPPED, for that team's flag.
 var state: Dictionary = {0: HOME, 1: HOME}
 ## team -> slot carrying that team's flag, or -1.
@@ -116,6 +125,10 @@ func start_round(slots: Array[int]) -> void:
 	scores = {0: 0, 1: 0}
 	capturers.clear()
 	events = {}
+	_reported_events = {}
+	_reported_captures = {}
+	_end_counted = false
+	_rejected_slots.clear()
 	state = {0: HOME, 1: HOME}
 	carrier = {0: -1, 1: -1}
 	return_left = {0: 0.0, 1: 0.0}
@@ -162,10 +175,45 @@ func end_round() -> void:
 	_captured_name_label = null
 
 ## Hands this round's captures to the match stats (issue #355).
+## Safe to call twice (the abandon path reports a live round, then the round
+## ends): only what was not handed over yet is added (#1271).
 func report_stats(stats: RefCounted) -> void:
+	if not _end_counted:
+		_end_counted = true
+		_count_carried_in_base_at_end()
 	for slot: int in capturers:
-		stats.record_captures(slot, int(capturers[slot]))
-	stats.record_ctf_events(events)
+		var fresh: int = int(capturers[slot]) - int(_reported_captures.get(slot, 0))
+		if fresh > 0:
+			stats.record_captures(slot, fresh)
+		_reported_captures[slot] = int(capturers[slot])
+	var delta: Dictionary = {}
+	for key: String in events:
+		delta[key] = int(events[key]) - int(_reported_events.get(key, 0))
+	stats.record_ctf_events(delta)
+	_reported_events = events.duplicate()
+
+## A round over with a flag still carried by someone standing in their own base:
+## they reached the end zone and did not score (#1269).
+func _count_carried_in_base_at_end() -> void:
+	for team: int in [0, 1]:
+		var slot: int = int(carrier[team])
+		if slot != -1 and _in_own_base(slot, 1 - team):
+			_count_event("carried_in_base_at_end")
+
+func _in_own_base(slot: int, base_team: int) -> bool:
+	var player: Node2D = _watched.get(slot)
+	if player == null or not is_instance_valid(player):
+		return false
+	var rect: Rect2 = base_rect(base_team)
+	return rect.size != Vector2.ZERO and rect.has_point(player.global_position)
+
+## A capture the rules refused while the carrier stood in the capturing team's
+## base, counted once per carrier (#1271).
+func _note_rejected_capture(team: int, slot: int) -> void:
+	if _rejected_slots.has(slot) or not _in_own_base(slot, team):
+		return
+	_rejected_slots[slot] = true
+	_count_event("capture_rejected")
 
 func _count_event(key: String) -> void:
 	events[key] = int(events.get(key, 0)) + 1
@@ -241,6 +289,10 @@ func _physics_process(delta: float) -> void:
 		if _pause_left <= 0.0:
 			_pausing = false
 			_next_hall()
+		for team: int in [0, 1]:
+			var held: int = int(carrier[1 - team])
+			if held != -1:
+				_note_rejected_capture(team, held) # carried into the base while the pause lasts
 		_refresh_flags() # a flag still carried rides on its carrier through the pause
 		return
 	for slot: int in _lockout.keys():
@@ -414,11 +466,11 @@ func _cue(sound: StringName, at: Vector2) -> void:
 ## `team` captures with `slot` carrying the other flag, which goes home.
 ## Public so a scenario can drive it.
 func capture(team: int, slot: int) -> void:
-	if not _active or _finished:
-		return
 	var enemy_flag: int = 1 - team
-	if int(carrier[enemy_flag]) != slot:
+	if not _active or _finished or int(carrier[enemy_flag]) != slot:
+		_note_rejected_capture(team, slot)
 		return
+	_rejected_slots.erase(slot)
 	scores[team] = int(scores[team]) + 1
 	_count_event("captures")
 	capturers[slot] = int(capturers.get(slot, 0)) + 1
@@ -440,6 +492,7 @@ func _next_hall() -> void:
 	_hide_captured()
 	round_manager.change_stage_mid_round()
 	_bases_key = [-1]
+	_rejected_slots.clear()
 	_damage_seen.clear()
 	_lockout.clear()
 	state = {0: HOME, 1: HOME}

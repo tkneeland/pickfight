@@ -116,8 +116,7 @@ var goals: Dictionary = {}
 ## slot -> Capture the Flag captures this match (#403).
 var captures: Dictionary = {}
 ## Issue #1271: Capture the Flag flag events summed over the match's rounds,
-## anonymous counters: captures, takes, drops, drops_in_own_base, void_returns,
-## timed_returns (`CTF_EVENT_KEYS`). {} outside Capture the Flag.
+## anonymous counters (`CTF_EVENT_KEYS`). {} outside Capture the Flag.
 var ctf_events: Dictionary = {}
 ## Issue #1271: how Couch phones joined since the last record (`JOIN_EVENT_KEYS`),
 ## set by the RoundManager when the record is built.
@@ -141,7 +140,7 @@ const PING_MAX_MSEC: int = 60000
 const PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", "host_leg"]
 ## The event counters of a record's `events.ctf` and `events.joins` (#1271);
 ## relay/Relay.gd keeps its own copies, kept equal.
-const CTF_EVENT_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns"]
+const CTF_EVENT_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns", "capture_rejected", "carried_in_base_at_end"]
 const JOIN_EVENT_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet"]
 
 ## victim slot -> {"attacker": slot, "msec": int} for the last hit taken.
@@ -181,6 +180,7 @@ func begin_match() -> void:
 	goals.clear()
 	captures.clear()
 	ctf_events.clear()
+	join_events.clear()
 	total_kos = 0
 	ping = []
 	relay_ping = []

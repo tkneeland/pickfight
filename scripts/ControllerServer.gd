@@ -1262,10 +1262,6 @@ func _bind_with_id(peer: Variant, id: String) -> void:
 func _claim_for_phone(slot: int, id: String, peer: Variant) -> void:
 	_fresh_claim(slot, id, "")
 	_attach(slot, peer)
-	if peer is WebSocketPeer:
-		note_join_event("lan") # #1271
-	elif _is_phone_seat(peer):
-		note_join_event("relay")
 	_broadcast_looks(peer)
 	player_joined.emit(slot)
 	if _log_input:
@@ -1409,6 +1405,7 @@ func _attach(slot: int, peer: Variant) -> void:
 	# Issue #487: only a phone (no action button) flicks to launch.
 	_players[slot].flick_launch_enabled = peer is not LocalSeat and not _is_pc_remote(peer)
 	_note_remote_attach(slot, peer)
+	_note_phone_seated(slot, peer) # #1271
 	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
 	if _reduce_flash_on(): # off is the page's default, so a join sends nothing then
 		_send_reduce_flash(slot)
@@ -3743,35 +3740,71 @@ func match_ping_stats() -> Array:
 # each relay phone's round trips this match (the host measures them; the phone
 # sends nothing).
 
-## One of MatchStats.JOIN_EVENT_KEYS -> count since the last record.
-var _join_events: Dictionary = {}
+## Phones seated since the last record, by client id: a reconnect or takeover never
+## counts twice, and a phone that moves from the LAN to the relay is in both (#1271).
+var _join_lan_ids: Dictionary = {}
+var _join_relay_ids: Dictionary = {}
+## "help", "nudge" (each at most once per lobby: the latch) and "internet" counts.
+var _join_other: Dictionary = {}
+## Decides whether anything may be counted: set by the RoundManager to the telemetry
+## gate (sharing on, the current notice acknowledged, not a scripted run). Unset counts nothing.
+var join_count_gate: Callable = Callable()
 ## Joiner identity -> a relay phone's real round trips this match (newest PING_SAMPLES_MAX).
 var _relay_phone_rtts: Dictionary = {}
 
-## Counts one join event: "lan" or "relay" (a phone seated), "help" (the Phones
-## can't join? popup opened), "nudge" (the 30 s internet nudge shown), "internet"
-## (internet join opened). Other words are ignored.
+func _join_counting() -> bool:
+	return join_count_gate.is_valid() and bool(join_count_gate.call())
+
+## Counts one lobby event: "help" (the Phones can't join? popup opened by hand), "nudge"
+## (the 30 s internet nudge shown) or "internet" (internet join opened). "help" and
+## "nudge" count once per lobby. Nothing is kept while the gate refuses.
 func note_join_event(kind: String) -> void:
-	if MatchStatsScript.JOIN_EVENT_KEYS.has(kind):
-		_join_events[kind] = int(_join_events.get(kind, 0)) + 1
+	if not _join_counting():
+		return
+	match kind:
+		"help", "nudge":
+			_join_other[kind] = 1
+		"internet":
+			_join_other[kind] = int(_join_other.get(kind, 0)) + 1
 
-## The join counters so far, without resetting them.
+func _note_phone_seated(slot: int, peer: Variant) -> void:
+	if not _join_counting() or slot < 0 or slot >= _slot_client_id.size():
+		return
+	var id: String = str(_slot_client_id[slot])
+	if id.is_empty():
+		id = "slot:%d" % slot
+	if peer is WebSocketPeer:
+		_join_lan_ids[id] = true
+	elif _is_phone_seat(peer):
+		_join_relay_ids[id] = true
+
+## The join counters so far (only the non-zero ones), without resetting them.
 func join_events() -> Dictionary:
-	return _join_events.duplicate()
+	var out: Dictionary = _join_other.duplicate()
+	if not _join_lan_ids.is_empty():
+		out["lan"] = _join_lan_ids.size()
+	if not _join_relay_ids.is_empty():
+		out["relay"] = _join_relay_ids.size()
+	return out
 
-func reset_join_events() -> void:
-	_join_events.clear()
-
-## The join counters so far, then a fresh count.
+## The join counters so far, then a fresh count (the one reset path).
 func take_join_events() -> Dictionary:
 	var out: Dictionary = join_events()
 	reset_join_events()
 	return out
 
+func reset_join_events() -> void:
+	_join_lan_ids.clear()
+	_join_relay_ids.clear()
+	_join_other.clear()
+
 func _note_relay_phone_rtt(slot: int, rtt: int) -> void:
 	var identity: String = _ping_identity(slot)
 	var samples: PackedInt32Array = _relay_phone_rtts.get(identity, PackedInt32Array())
-	_relay_phone_rtts[identity] = _joined_samples(samples, PackedInt32Array([rtt]))
+	samples.append(rtt)
+	if samples.size() > PING_SAMPLES_MAX:
+		samples = samples.slice(samples.size() - PING_SAMPLES_MAX)
+	_relay_phone_rtts[identity] = samples
 
 ## Every relay phone's round-trip statistics this match, [{"avg","p95","max","n"}]
 ## (ms), one per joiner; [] with none (Local with only LAN phones, Online).

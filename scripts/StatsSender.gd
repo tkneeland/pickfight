@@ -34,7 +34,7 @@ var _done: bool = true
 ## the winner's weapon; no slot appears in the record.
 ## `completed` false marks a match that ended without a winner (#643): the
 ## record then has no `winner_weapon`.
-static func build_record(stats: RefCounted, mode: String, stages: Array, format: String, length_sec: int, winner_slots: Array, completed: bool = true, rounds_played: int = 0) -> Dictionary:
+static func build_record(stats: RefCounted, mode: String, stages: Array, format: String, length_sec: int, winner_slots: Array, completed: bool = true, rounds_played: int = 0, with_events: bool = true, with_joins: bool = true) -> Dictionary:
 	if stats.weapon_damage.is_empty():
 		return {}
 	var weapons: Dictionary = {}
@@ -66,20 +66,33 @@ static func build_record(stats: RefCounted, mode: String, stages: Array, format:
 		var entries: Array = MatchStatsScript.ping_entries(ping_list, true, PING_MAX_ENTRIES)
 		if not entries.is_empty():
 			record["ping"] = entries
-	var events: Dictionary = _build_events(stats)
-	if not events.is_empty():
-		record["events"] = events
+	if with_events:
+		var events: Dictionary = _build_events(stats, with_joins)
+		if not events.is_empty():
+			record["events"] = events
 	return record
+
+## A Couch lobby's record for phones that joined but no match carried (#1271):
+## {"kind": "lobby", "events": {"joins": {...}}}, or {} with nothing counted.
+static func build_lobby_record(joins: Variant) -> Dictionary:
+	var counts: Dictionary = _counts_of(joins, MatchStatsScript.JOIN_EVENT_KEYS)
+	if counts.is_empty():
+		return {}
+	return {"kind": "lobby", "events": {"joins": counts}}
+
+## Whether the notice that lists the events has been acknowledged (#1271).
+static func events_allowed(host: RefCounted) -> bool:
+	return host.telemetry_notice_current()
 
 ## Issue #1271: the optional `events` object for live bug detection. Counts and
 ## summaries only (no slot, name, colour, device or id); each sub-object is
 ## left out when it has nothing, and `events` itself when empty.
-static func _build_events(stats: RefCounted) -> Dictionary:
+static func _build_events(stats: RefCounted, with_joins: bool = true) -> Dictionary:
 	var events: Dictionary = {}
 	var ctf: Dictionary = _counts_of(stats.get("ctf_events"), MatchStatsScript.CTF_EVENT_KEYS)
 	if not ctf.is_empty():
 		events["ctf"] = ctf
-	var joins: Dictionary = _counts_of(stats.get("join_events"), MatchStatsScript.JOIN_EVENT_KEYS)
+	var joins: Dictionary = _counts_of(stats.get("join_events"), MatchStatsScript.JOIN_EVENT_KEYS) if with_joins else {}
 	if not joins.is_empty():
 		events["joins"] = joins
 	var relay_ping: Variant = stats.get("relay_ping")

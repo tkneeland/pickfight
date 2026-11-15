@@ -218,8 +218,8 @@ func open(which: String) -> void:
 	if which == "join_help":
 		ScreenKitScript.pop_in(_join_help_card)
 		var server: Object = _screen._server
-		if server != null and server.has_method("note_join_event"):
-			server.note_join_event("help") # #1271: anonymous telemetry counter
+		if server != null and not _screen._help_via_nudge and server.has_method("note_join_event"):
+			server.note_join_event("help") # #1271: opened by hand, not through the nudge
 	if which == "stages":
 		if not _stages_screen.is_built():
 			_stages_screen.build(_stages_card)

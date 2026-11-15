@@ -24,6 +24,12 @@ import sys
 from collections import Counter, defaultdict
 
 
+def is_lobby(record):
+    """Issue #1271: a lobby record ({"kind": "lobby", "events": {"joins": ...}}) is
+    a Couch lobby whose phones joined but no match record carried; it has no weapons."""
+    return isinstance(record, dict) and record.get("kind") == "lobby"
+
+
 def load(path):
     records = []
     with open(path, encoding="utf-8") as handle:
@@ -35,7 +41,7 @@ def load(path):
                 record = json.loads(line)
             except ValueError:
                 continue
-            if isinstance(record, dict) and isinstance(record.get("weapons"), dict):
+            if isinstance(record, dict) and (isinstance(record.get("weapons"), dict) or is_lobby(record)):
                 records.append(record)
     return records
 
@@ -69,9 +75,15 @@ def main(argv):
     if len(argv) != 2:
         print(__doc__)
         return 2
-    records = load(argv[1])
-    if not records:
+    everything = load(argv[1])
+    records = [rec for rec in everything if not is_lobby(rec)]  # match stats ignore lobby records
+    lobbies = len(everything) - len(records)
+    if not everything:
         print("No records.")
+        return 0
+    if not records:
+        print("No match records (%d lobby records)." % lobbies)
+        print_events(everything, lobbies)
         return 0
     damage, hits, kos, appeared, appeared_completed, wins, modes, lengths = summarise(records)
     abandoned = sum(1 for rec in records if rec.get("completed") is False)
@@ -86,7 +98,7 @@ def main(argv):
     for mode, count in modes.most_common():
         print("%-18s %4d  %5.1f%%" % (mode, count, 100.0 * count / len(records)))
     print_ping(records)
-    print_events(records)
+    print_events(everything, lobbies)
     return 0
 
 
@@ -152,7 +164,11 @@ def print_ping(records):
     print("avg (n-weighted) / p95 (n-weighted mean) / max (largest) / felt / host leg (ms): %s" % " / ".join(shown))
 
 
-CTF_KEYS = ("captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns")
+# The counter names the relay stores (relay/Relay.gd STATS_CTF_KEYS / STATS_JOIN_KEYS);
+# this list is the one place the summary needs them. drops_in_own_base can include
+# normal play; capture_rejected and carried_in_base_at_end are the stronger #1269 signals.
+CTF_KEYS = ("captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns",
+            "capture_rejected", "carried_in_base_at_end")
 JOIN_KEYS = ("lan", "relay", "help", "nudge", "internet")
 
 
@@ -190,7 +206,7 @@ def events_summary(records):
             "relay": (seats, means)}
 
 
-def print_events(records):
+def print_events(records, lobbies=0):
     summary = events_summary(records)
     seats, means = summary["relay"]
     if not (summary["ctf_records"] or summary["join_records"] or seats):
@@ -202,7 +218,9 @@ def print_events(records):
         print("Capture the Flag (%d matches): %s" % (summary["ctf_records"], totals))
     if summary["join_records"]:
         totals = ", ".join("%s %d" % (key, summary["joins"][key]) for key in JOIN_KEYS)
-        print("Couch joins (%d records with join activity): %s" % (summary["join_records"], totals))
+        print("Couch joins (%d records with join activity, %d of them lobby-only): %s" % (summary["join_records"], lobbies, totals))
+    if lobbies and not summary["join_records"]:
+        print("Lobby records: %d" % lobbies)
     if seats:
         shown = ["%.0f" % means[f] if means[f] is not None else "-" for f in ("avg", "p95", "max")]
         print("Relay phone ping: %d phones; avg (n-weighted) / p95 (mean) / max (ms): %s" % (seats, " / ".join(shown)))

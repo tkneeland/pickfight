@@ -129,7 +129,7 @@ var _stages_button: Button
 var _invite_button: Button # under the room code, Online with Steam running (#298)
 var _join_help_button: Button # under the join QR, Couch only (#680)
 var _relay_nudge := RelayNudgeScript.new() # when to show the button below (#727)
-var _nudge_counted: bool = false # this lobby's nudge already counted in the telemetry (#1271)
+var _help_via_nudge: bool = false # the join popup opened by the nudge's button: not a hand-opened help (#1271)
 var _relay_nudge_button: Button # Not connecting? Join over the internet (#727)
 ## The join addresses, re-read at most once a second: listing the host's network
 ## interfaces every frame is wasted work (they rarely change mid-lobby).
@@ -426,7 +426,6 @@ func popup_input(event: InputEvent, pad_mode: bool, opener: Control) -> bool:
 func show_panel(which: String) -> void:
 	if which == "lobby" and not _lobby_panel.visible:
 		_relay_nudge.reset() # a new lobby gets its own 30 s and its own nudge (#727)
-		_nudge_counted = false
 	_lobby_panel.visible = which == "lobby"
 	_victory.victory_panel().visible = which == "victory"
 	if _victory.end_card_panel() != null:
@@ -575,8 +574,7 @@ func _update_relay_nudge(join_source: Object) -> void:
 	var internet_on: bool = couch and join_source.has_method("internet_join_on") and join_source.internet_join_on()
 	var due: bool = _relay_nudge.update(Time.get_ticks_msec(), qr_showing, phone_seated, internet_on)
 	_relay_nudge_button.visible = qr_showing and due
-	if _relay_nudge_button.visible and not _nudge_counted:
-		_nudge_counted = true # #1271: once per lobby, anonymous
+	if _relay_nudge_button.visible:
 		if _server != null and _server.has_method("note_join_event"):
 			_server.note_join_event("nudge")
 
@@ -586,7 +584,9 @@ func _on_relay_nudge_pressed() -> void:
 	if _server == null:
 		return
 	_server.apply_host_command("internet", true)
+	_help_via_nudge = true
 	_host.press_control("join_help")
+	_help_via_nudge = false
 
 func relay_nudge_button() -> Button:
 	return _relay_nudge_button
