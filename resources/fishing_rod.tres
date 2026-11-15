@@ -8,7 +8,7 @@
 ; Flick the drag to fire: the hook flies out along the flick at
 ; 900 px/s for up to 800 px (#641). The rod moves what it hits to you (#629): a hook
 ; that meets terrain does not stick, it reels home empty. One that meets a
-; player takes 6 off them (nothing off a teammate) and reels them in: while the
+; player takes 15 off them (6 before #1277; nothing off a teammate) and reels them in: while the
 ; drag is held a force of at most 3500 pulls them toward the holder, until the
 ; drag is released, they are within 60 px, either is KO'd, or 1.5 s pass. A
 ; head planted on the floor resists but still slides. The hook can fire again
@@ -50,7 +50,7 @@ hook_reel_limit = 1.5
 reel_min_length = 60.0
 projectile_speed = 900.0
 projectile_gravity = 900.0
-projectile_damage = 6.0
+projectile_damage = 15.0
 projectile_knockback = 0.0
 projectile_radius = 4.0
 pickup_art = PackedVector2Array(-6, -1.2, 8, -1.2, 8, -0.7, 16, -0.7, 16, 4, 15.7, 5.3, 15, 6.5, 13.8, 7.2, 12.5, 7.5, 11.2, 7.2, 10, 6.5, 9.3, 5.3, 9, 4, 9, 1.2, 10.4, 2.6, 10.4, 4, 10.7, 5.1, 11.5, 5.8, 12.5, 6.1, 13.6, 5.8, 14.3, 5.1, 14.6, 4, 14.6, 0.7, 8, 0.7, 8, 1.2, 2, 1.2, 2.4, 1.8, 3.2, 3.2, 3.4, 4.9, 3, 6.5, 2, 7.8, 0.6, 8.7, -1, 9, -2.6, 8.7, -4, 7.8, -5, 6.5, -5.4, 4.9, -5.2, 3.2, -4.4, 1.8, -6, 1.2)

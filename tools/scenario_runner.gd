@@ -22540,7 +22540,7 @@ func _scenario_grapple_fires_sticks_reels_and_releases() -> Array[String]:
 		failures.append("the launcher was still not ready %.2f s after its hook came home" % stats.launch_cooldown)
 	await _teardown(stage)
 	return failures
-## A grapple hook that meets a player: a light hit, credited to the thrower;
+## A grapple hook that meets a player: a hit (16 since #1277), credited to the thrower;
 ## it then sticks to them (#630), with no tug on them.
 func _scenario_grapple_hook_hits_player_lightly() -> Array[String]:
 	var failures: Array[String] = []
@@ -22621,7 +22621,7 @@ func _scenario_fishing_rod_fires_sticks_reels_and_releases() -> Array[String]:
 		failures.append("the launcher was still not ready %.2f s after its hook came home" % stats.launch_cooldown)
 	await _teardown(stage)
 	return failures
-## The fishing rod hook that meets a player: a light hit, credited to the thrower, and a tug.
+## The fishing rod hook that meets a player: a hit (15 since #1277), credited to the thrower, and a tug.
 func _scenario_fishing_rod_hook_hits_player_lightly() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
@@ -22645,12 +22645,12 @@ func _scenario_fishing_rod_hook_hits_player_lightly() -> Array[String]:
 	await physics_frame
 	if not hit or absf(victim.damage - stats.projectile_damage) > 0.01:
 		failures.append("the hook took %.1f off the player it met, not its %.1f" % [victim.damage, stats.projectile_damage])
-	# "Lightly" is a real hit, about 6 flat: a rod whose hook does no damage at
-	# all must not pass the check above by matching 0.
+	# A real hit, 15 flat since #1277 (was about 6): a rod whose hook does no
+	# damage at all must not pass the check above by matching 0.
 	if victim.damage <= 0.0 or stats.projectile_damage <= 0.0:
 		failures.append("the hook did no damage to the player it met (%.1f)" % victim.damage)
-	elif absf(stats.projectile_damage - 6.0) > 0.01:
-		failures.append("the fishing rod's hook does %.1f, not about 6" % stats.projectile_damage)
+	elif absf(stats.projectile_damage - 15.0) > 0.01:
+		failures.append("the fishing rod's hook does %.1f, not 15 (#1277)" % stats.projectile_damage)
 	# The one-off tug is now a reel (#629): it takes a few ticks to build up.
 	await _await_ticks(15)
 	print("      hook hit: damage %.1f, victim velocity %s, strikes %d" % [victim.damage, victim.linear_velocity, strikes.size()])
@@ -47002,8 +47002,8 @@ func _scenario_grapple_hit_on_player_anchors_and_thrower_zips_to_them() -> Array
 	print("      zip: %.0f px apart, then %.0f px, victim damage %.1f" % [start, after, victim.damage])
 	if after > start - 60.0:
 		failures.append("the thrower closed only %.0f px of %.0f toward the anchored player" % [start - after, start])
-	if absf(victim.damage - 8.0) > 0.01:
-		failures.append("the hit dealt %.1f, not 8" % victim.damage)
+	if absf(victim.damage - 16.0) > 0.01:
+		failures.append("the hit dealt %.1f, not 16 (#1277)" % victim.damage)
 	await _teardown(z["stage"])
 	_scenario_completed = true
 	return failures
@@ -47307,8 +47307,8 @@ func _scenario_fishing_rod_reel_drags_airborne_player_closer() -> Array[String]:
 		failures.append("the rod's hook never began reeling the player it hit")
 	if r["moved"] > -40.0:
 		failures.append("the airborne victim closed in only %.1f px toward the holder (expected at least 40)" % -r["moved"])
-	if absf(r["damage"] - 6.0) > 0.01:
-		failures.append("the hit took %.1f off, not about 6" % r["damage"])
+	if absf(r["damage"] - 15.0) > 0.01:
+		failures.append("the hit took %.1f off, not 15 (#1277)" % r["damage"])
 	_scenario_completed = true
 	return failures
 func _scenario_fishing_rod_reel_planted_player_moves_less_but_not_zero() -> Array[String]:
