@@ -25,7 +25,11 @@ extends Node
 ##        logged (the rate limiter keys on a salted hash that dies with the
 ##        process); the timestamp is rounded down to the hour. An Online match
 ##        may carry "ping": up to 8 anonymous per-seat round-trip summaries
-##        (issue #1195).
+##        (issue #1195), and an optional "events" object (issue #1271: Capture
+##        the Flag, join and relay-phone ping counters) that, if malformed, is
+##        dropped alone and never rejects the record. A {"kind":"lobby","events":
+##        {"joins":{...}}} record (a Couch lobby with phones joining but no match)
+##        keeps only a valid joins object.
 ##
 ## Control messages (text JSON):
 ##   to host:   {"t":"room","code":"ABCD","token":"<16 hex>"} (a reclaim adds
@@ -150,11 +154,21 @@ const STATS_PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", 
 ## Keep equal to MatchStats.PING_MAX_MSEC (the relay runs as its own server, so it
 ## cannot preload the game's scripts).
 const STATS_MAX_PING_MSEC: int = 60000
+## Issue #1271: an optional `events` object (live bug detection): `ctf` and
+## `joins` counters (these keys, each 0..STATS_MAX_EVENT_COUNT) and `relay_ping`
+## (at most STATS_MAX_PING_ENTRIES of avg/p95/max/n). Keep the key lists equal to
+## MatchStats.CTF_EVENT_KEYS / JOIN_EVENT_KEYS.
+const STATS_CTF_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns", "carrier_in_base_during_pause", "carried_in_base_at_end"]
+const STATS_JOIN_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet"]
+const STATS_RELAY_PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n"]
+const STATS_MAX_EVENT_COUNT: int = 100000
 ## Records allowed per IP per hour.
+@export var stats_lobby_limit_per_hour: int = 10 # lobby records (#1271) have their own bucket
 @export var stats_limit_per_hour: int = 30
 ## Where records are appended. Set PICKFIGHT_STATS_PATH to a file on a mounted
 ## volume (see fly.toml) for them to survive a deploy.
 var stats_path: String = _default_stats_path()
+var _stats_lobby_times: Dictionary = {} # the same, for lobby records
 var _stats_times: Dictionary = {} # salted hash of the caller (int) -> Array[int] of msec
 var _stats_salt: String = Crypto.new().generate_random_bytes(16).hex_encode()
 
@@ -408,13 +422,15 @@ func handle_stats(ip: String, msg: Dictionary) -> Dictionary:
 		return {"status": 400}
 	var now: int = Time.get_ticks_msec()
 	var caller: int = (_stats_salt + ip).hash()
-	var times: Array = _stats_times.get(caller, [])
+	var lobby: bool = record.get("kind") == "lobby"
+	var buckets: Dictionary = _stats_lobby_times if lobby else _stats_times
+	var times: Array = buckets.get(caller, [])
 	times = times.filter(func(t: int) -> bool: return now - t < FEEDBACK_WINDOW_MSEC)
-	if times.size() >= stats_limit_per_hour:
-		_stats_times[caller] = times
+	if times.size() >= (stats_lobby_limit_per_hour if lobby else stats_limit_per_hour):
+		buckets[caller] = times
 		return {"status": 429}
 	times.append(now)
-	_stats_times[caller] = times
+	buckets[caller] = times
 	var hour: int = int(Time.get_unix_time_from_system())
 	record["t"] = hour - hour % 3600
 	return {"status": 200 if _append_line(stats_path, JSON.stringify(record)) else 503}
@@ -425,6 +441,8 @@ static func clean_stats_record(raw: Variant) -> Dictionary:
 	if not (raw is Dictionary):
 		return {}
 	var rec: Dictionary = raw
+	if rec.get("kind") is String and rec["kind"] == "lobby":
+		return _clean_lobby_record(rec)
 	if not (rec.get("mode") is String) or (rec["mode"] as String).length() > STATS_MAX_NAME_CHARS:
 		return {}
 	if not (rec.get("format") is String) or not STATS_FORMATS.has(rec["format"]):
@@ -476,23 +494,85 @@ static func clean_stats_record(raw: Variant) -> Dictionary:
 		cleaned["rounds_played"] = int(rounds)
 	if rec.has("ping"):
 		# Issue #1195: an Online match's per-seat round trips, anonymous.
-		var ping: Variant = rec["ping"]
-		if not (ping is Array) or (ping as Array).size() > STATS_MAX_PING_ENTRIES:
+		var entries: Variant = _clean_ping_entries(rec["ping"], STATS_PING_FIELDS, STATS_MAX_PING_MSEC, false)
+		if entries == null:
 			return {}
-		var entries: Array = []
-		for entry: Variant in ping:
-			if not (entry is Dictionary):
-				return {}
-			var clean_entry: Dictionary = {}
-			for field: String in STATS_PING_FIELDS:
-				var value: Variant = (entry as Dictionary).get(field)
-				if not (value is int or (value is float and is_finite(value))) or float(value) < -1.0 or float(value) > STATS_MAX_PING_MSEC:
-					return {}
-				clean_entry[field] = int(value)
-			entries.append(clean_entry)
-		if not entries.is_empty():
+		if not (entries as Array).is_empty():
 			cleaned["ping"] = entries
+	if rec.has("events"):
+		# Issue #1271: optional, so a bad one drops only itself, never the match.
+		var events: Dictionary = clean_stats_events(rec["events"])
+		if not events.is_empty():
+			cleaned["events"] = events
 	return cleaned
+
+## `raw` rebuilt as a record's `events` from known keys only, or {} when it is
+## the wrong shape or any value is out of range (the caller then leaves `events` out).
+static func clean_stats_events(raw: Variant) -> Dictionary:
+	if not (raw is Dictionary):
+		return {}
+	var out: Dictionary = {}
+	for section: String in ["ctf", "joins"]:
+		if not (raw as Dictionary).has(section):
+			continue
+		var counts: Variant = raw[section]
+		if not (counts is Dictionary):
+			return {}
+		var clean_counts: Dictionary = {}
+		for key: String in (STATS_CTF_KEYS if section == "ctf" else STATS_JOIN_KEYS):
+			if not (counts as Dictionary).has(key):
+				continue
+			var value: Variant = counts[key]
+			if not _is_whole_number(value) or float(value) < 0.0 or float(value) > STATS_MAX_EVENT_COUNT:
+				return {}
+			clean_counts[key] = int(value)
+		if not clean_counts.is_empty():
+			out[section] = clean_counts
+	if (raw as Dictionary).has("relay_ping"):
+		var entries: Variant = _clean_ping_entries(raw["relay_ping"], STATS_RELAY_PING_FIELDS, STATS_MAX_PING_MSEC, true, STATS_MAX_EVENT_COUNT)
+		if entries == null:
+			return {}
+		if not (entries as Array).is_empty():
+			out["relay_ping"] = entries
+	return out
+
+## The one validator for a list of ping entries (the match's `ping`, #1195, and
+## `events.relay_ping`, #1271): an Array of at most STATS_MAX_PING_ENTRIES
+## Dictionaries, each `fields` a number in -1..`msec_top` (`n_top` > 0 gives the
+## field "n" that top instead). `whole_only` refuses fractions and non-numbers
+## other than int/float. Returns the rebuilt Array, or null when anything is off.
+static func _clean_ping_entries(list: Variant, fields: PackedStringArray, msec_top: int, whole_only: bool, n_top: int = 0) -> Variant:
+	if not (list is Array) or (list as Array).size() > STATS_MAX_PING_ENTRIES:
+		return null
+	var entries: Array = []
+	for entry: Variant in list:
+		if not (entry is Dictionary):
+			return null
+		var clean_entry: Dictionary = {}
+		for field: String in fields:
+			var value: Variant = (entry as Dictionary).get(field)
+			var top: float = float(n_top) if (field == "n" and n_top > 0) else float(msec_top)
+			var numeric: bool = _is_whole_number(value) if whole_only else (value is int or (value is float and is_finite(value)))
+			if not numeric or float(value) < -1.0 or float(value) > top:
+				return null
+			clean_entry[field] = int(value)
+		entries.append(clean_entry)
+	return entries
+
+## Issue #1271: a lobby record ({"kind": "lobby", "events": {"joins": {...}}}),
+## sent when a Couch lobby with join activity ended without a match record. Only a
+## valid `events.joins` is kept; anything else makes it {} (rejected).
+static func _clean_lobby_record(rec: Dictionary) -> Dictionary:
+	var events: Variant = rec.get("events")
+	if not (events is Dictionary) or not (events as Dictionary).has("joins"):
+		return {}
+	var cleaned: Dictionary = clean_stats_events({"joins": (events as Dictionary)["joins"]})
+	if not cleaned.has("joins"):
+		return {}
+	return {"kind": "lobby", "events": {"joins": cleaned["joins"]}}
+
+static func _is_whole_number(v: Variant) -> bool:
+	return v is int or (v is float and is_finite(v) and v == floorf(v))
 
 static func _append_line(path: String, line: String) -> bool:
 	var file: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)

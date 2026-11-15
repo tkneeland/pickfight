@@ -115,6 +115,15 @@ var lives_left: Dictionary = {}
 var goals: Dictionary = {}
 ## slot -> Capture the Flag captures this match (#403).
 var captures: Dictionary = {}
+## Issue #1271: Capture the Flag flag events summed over the match's rounds,
+## anonymous counters (`CTF_EVENT_KEYS`). {} outside Capture the Flag.
+var ctf_events: Dictionary = {}
+## Issue #1271: how Couch phones joined since the last record (`JOIN_EVENT_KEYS`),
+## set by the RoundManager when the record is built.
+var join_events: Dictionary = {}
+## Issue #1271: each relay phone seat's round-trip statistics this match,
+## [{"avg","p95","max","n"}] (ms), set by the RoundManager at match end.
+var relay_ping: Array = []
 ## Credited KOs this match, for "first blood".
 var total_kos: int = 0
 ## Seeds the break of a full tie between award candidates (#613); -1 keeps the
@@ -129,6 +138,10 @@ var ping: Array = []
 const PING_MAX_MSEC: int = 60000
 ## The fields of a ping entry that are logged and sent ("share" only filters).
 const PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", "host_leg"]
+## The event counters of a record's `events.ctf` and `events.joins` (#1271);
+## relay/Relay.gd keeps its own copies, kept equal.
+const CTF_EVENT_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns", "carrier_in_base_during_pause", "carried_in_base_at_end"]
+const JOIN_EVENT_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet"]
 
 ## victim slot -> {"attacker": slot, "msec": int} for the last hit taken.
 var _last_hit: Dictionary = {}
@@ -166,8 +179,11 @@ func begin_match() -> void:
 	lives_left.clear()
 	goals.clear()
 	captures.clear()
+	ctf_events.clear()
+	join_events.clear()
 	total_kos = 0
 	ping = []
+	relay_ping = []
 	_last_hit.clear()
 	_streak.clear()
 	_last_killer.clear()
@@ -353,6 +369,11 @@ func record_goals(slot: int, count: int) -> void:
 
 func record_captures(slot: int, count: int) -> void:
 	_add(captures, slot, count)
+
+## Adds one round's Capture the Flag flag events (#1271) to the match's.
+func record_ctf_events(round_events: Dictionary) -> void:
+	for key: String in CTF_EVENT_KEYS:
+		ctf_events[key] = int(ctf_events.get(key, 0)) + maxi(0, int(round_events.get(key, 0)))
 
 ## The awards only `mode_id` gives (issue #355): Longest Hold (King of the
 ## Hill), Hot Hands (Hot Potato), Survivor (Stock). Classic and the other
@@ -681,14 +702,15 @@ func balance_log_line(unix_time: int, completed: bool = true, rounds_played: int
 
 ## `list`'s ping entries cut to `PING_FIELDS` as ints clamped to -1..60000.
 ## `only_shared` keeps the entries whose joiner said it shares stats (#1195 D8);
-## `cap` > 0 keeps at most that many, those with the most samples (`n`).
-static func ping_entries(list: Array, only_shared: bool, cap: int) -> Array:
+## `cap` > 0 keeps at most that many, those with the most samples (`n`, which `fields` must include).
+## `fields` defaults to `PING_FIELDS`.
+static func ping_entries(list: Array, only_shared: bool, cap: int, fields: PackedStringArray = PING_FIELDS) -> Array:
 	var out: Array = []
 	for entry: Variant in list:
 		if not entry is Dictionary or (only_shared and (entry as Dictionary).get("share") != true):
 			continue
 		var clean: Dictionary = {}
-		for field: String in PING_FIELDS:
+		for field: String in fields:
 			var v: Variant = (entry as Dictionary).get(field, -1)
 			clean[field] = clampi(int(v), -1, PING_MAX_MSEC) if (v is int or (v is float and is_finite(v))) else -1
 		out.append(clean)

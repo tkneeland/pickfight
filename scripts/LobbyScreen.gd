@@ -129,6 +129,7 @@ var _stages_button: Button
 var _invite_button: Button # under the room code, Online with Steam running (#298)
 var _join_help_button: Button # under the join QR, Couch only (#680)
 var _relay_nudge := RelayNudgeScript.new() # when to show the button below (#727)
+var _help_via_nudge: bool = false # the join popup opened by the nudge's button: not a hand-opened help (#1271)
 var _relay_nudge_button: Button # Not connecting? Join over the internet (#727)
 ## The join addresses, re-read at most once a second: listing the host's network
 ## interfaces every frame is wasted work (they rarely change mid-lobby).
@@ -572,7 +573,10 @@ func _update_relay_nudge(join_source: Object) -> void:
 	var phone_seated: bool = couch and join_source.has_method("continue_inputs") and join_source.continue_inputs().has("phone")
 	var internet_on: bool = couch and join_source.has_method("internet_join_on") and join_source.internet_join_on()
 	var due: bool = _relay_nudge.update(Time.get_ticks_msec(), qr_showing, phone_seated, internet_on)
-	_relay_nudge_button.visible = qr_showing and due
+	var show_nudge: bool = qr_showing and due
+	if show_nudge and not _relay_nudge_button.visible and _server != null and _server.has_method("note_join_event"):
+		_server.note_join_event("nudge") # only as it turns on (#1271)
+	_relay_nudge_button.visible = show_nudge
 
 ## Opens the #683 relay room, as the Phones can't join? popup's button does, and
 ## shows that popup so the host sees the QR.
@@ -580,7 +584,9 @@ func _on_relay_nudge_pressed() -> void:
 	if _server == null:
 		return
 	_server.apply_host_command("internet", true)
+	_help_via_nudge = true
 	_host.press_control("join_help")
+	_help_via_nudge = false
 
 func relay_nudge_button() -> Button:
 	return _relay_nudge_button

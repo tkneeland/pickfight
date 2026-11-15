@@ -76,6 +76,11 @@ var language: String = LanguagesScript.AUTO
 ## notice has been dismissed or acted on.
 var share_stats: bool = true
 var telemetry_notice_seen: bool = false
+## The notice text the host last saw (#1271): 1 is the original, 2 adds the event
+## telemetry and "find bugs". An older save with only `telemetry_notice_seen` counts
+## as version 1, so the notice shows once more.
+const TELEMETRY_NOTICE_VERSION: int = 2
+var telemetry_notice_version: int = 0
 ## Crash reports (#681): on by default, opt-out in Settings; read by
 ## `CrashReporting` at launch, so a change applies from the next launch.
 var send_crash_reports: bool = true
@@ -533,7 +538,16 @@ func set_send_crash_reports(on: bool) -> void:
 
 func mark_telemetry_notice_seen() -> void:
 	telemetry_notice_seen = true
+	telemetry_notice_version = TELEMETRY_NOTICE_VERSION
 	save_settings()
+
+## The notice version this host has acknowledged: 0 never, 1 an old save.
+func seen_notice_version() -> int:
+	return maxi(telemetry_notice_version, 1) if telemetry_notice_seen else 0
+
+## Whether the current notice has been acknowledged (what `events` needs).
+func telemetry_notice_current() -> bool:
+	return seen_notice_version() >= TELEMETRY_NOTICE_VERSION
 
 ## Returns false (changing nothing) for a language that is not on offer.
 ## Otherwise saves it and switches the live locale straight away.
@@ -667,6 +681,8 @@ func load_settings() -> void:
 		var share: Variant = config.get_value(SECTION, "share_stats", true)
 		share_stats = share if share is bool else true
 		telemetry_notice_seen = bool(config.get_value(SECTION, "telemetry_notice_seen", false))
+		var notice_version: Variant = config.get_value(SECTION, "telemetry_notice_version", 0)
+		telemetry_notice_version = clampi(int(notice_version), 0, TELEMETRY_NOTICE_VERSION) if notice_version is int else 0
 		var crash: Variant = config.get_value(SECTION, "send_crash_reports", true)
 		send_crash_reports = crash if crash is bool else true
 		var replay_on: Variant = config.get_value(SECTION, "play_of_round", true)
@@ -721,6 +737,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "disabled_modifiers", disabled_modifiers)
 	config.set_value(SECTION, "share_stats", share_stats)
 	config.set_value(SECTION, "telemetry_notice_seen", telemetry_notice_seen)
+	config.set_value(SECTION, "telemetry_notice_version", telemetry_notice_version)
 	config.set_value(SECTION, "send_crash_reports", send_crash_reports)
 	config.set_value(SECTION, "play_of_round", play_of_round)
 	config.set_value(SECTION, "auto_save_clips", auto_save_clips)

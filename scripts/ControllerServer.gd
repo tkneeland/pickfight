@@ -1405,6 +1405,7 @@ func _attach(slot: int, peer: Variant) -> void:
 	# Issue #487: only a phone (no action button) flicks to launch.
 	_players[slot].flick_launch_enabled = peer is not LocalSeat and not _is_pc_remote(peer)
 	_note_remote_attach(slot, peer)
+	_note_phone_seated(slot, peer) # #1271
 	peer.send_text(JSON.stringify({"slot": slot, "id": _slot_client_id[slot]}))
 	if _reduce_flash_on(): # off is the page's default, so a join sends nothing then
 		_send_reduce_flash(slot)
@@ -2585,6 +2586,7 @@ func open_internet_join() -> int:
 	if _relay_fallback:
 		return OK
 	_relay_fallback = true
+	note_join_event("internet") # #1271
 	_fallback_relay_url = resolve_relay_url(OS.get_cmdline_user_args())
 	var err: int = _ensure_relay_link().go_online(_fallback_relay_url)
 	_send_lobby_to_all()
@@ -3544,8 +3546,10 @@ func _weak_link_pong(slot: int, msg: Dictionary) -> bool:
 func _weak_link_answered(slot: int, st: Dictionary, rtt: int) -> void:
 	st["rtt"] = clampi(rtt, 0, MatchStatsScript.PING_MAX_MSEC)
 	st["samples"] = int(st.get("samples", 0)) + 1
-	if slot_over_relay(slot) and int(st["samples"]) % RELAY_PING_LOG_EVERY == 1:
-		print("Relay phone slot %d: round trip %d ms (host to relay %s)" % [slot, int(st["rtt"]),
+	if slot_over_relay(slot):
+		_note_relay_phone_rtt(slot, int(st["rtt"]))
+		if int(st["samples"]) % RELAY_PING_LOG_EVERY == 1:
+			print("Relay phone slot %d: round trip %d ms (host to relay %s)" % [slot, int(st["rtt"]),
 				("%d ms" % relay_rtt_msec) if relay_rtt_msec >= 0 else "unknown"])
 
 func _weak_link_sample(slot: int, st: Dictionary, rtt: int, now: int) -> void:
@@ -3682,6 +3686,7 @@ static func _ping_stats_of(samples: PackedInt32Array, felt: int, share: bool) ->
 ## seats that left before.
 func reset_ping_stats() -> void:
 	_departed_ping.clear()
+	_relay_phone_rtts.clear()
 	for seat: RemoteSeat in _remote_seats.values():
 		seat.rtt_samples = PackedInt32Array()
 		seat.felt_msec = -1 # the readout must not show the last match's felt delay
@@ -3726,6 +3731,100 @@ func match_ping_stats() -> Array:
 		var stats: Dictionary = _ping_stats_of(entry["samples"], int(entry["felt"]), bool(entry["share"]))
 		if not stats.is_empty():
 			out.append(stats)
+	return out
+
+# --- Live-bug telemetry (issue #1271) ----------------------------------------
+#
+# Anonymous counters for the match record's `events`: how Couch phones joined
+# since the last record (kept here, taken and reset when a record is built) and
+# each relay phone's round trips this match (the host measures them; the phone
+# sends nothing).
+
+## Phones seated since the last record, by client id: a reconnect or takeover never
+## counts twice, and a phone that moves from the LAN to the relay is in both (#1271).
+var _join_lan_ids: Dictionary = {}
+var _join_relay_ids: Dictionary = {}
+## Distinct phones first seen since the last record: the counts the record carries.
+## The id sets above live for the host session (a new session starts with a new
+## server), so a phone that reconnects in the next match is not a new join.
+var _join_lan_new: int = 0
+var _join_relay_new: int = 0
+## "help", "nudge" (each at most once per lobby: the latch) and "internet" counts.
+var _join_other: Dictionary = {}
+## Decides whether anything may be counted: set by the RoundManager to the telemetry
+## gate (sharing on, the current notice acknowledged, not a scripted run). Unset counts nothing.
+var join_count_gate: Callable = Callable()
+## Sends the counted joins as a lobby record (set by the RoundManager); called when the
+## match kind leaves Couch with joins still counted, before they would be lost.
+var join_flush: Callable = Callable()
+## Joiner identity -> a relay phone's real round trips this match (newest PING_SAMPLES_MAX).
+var _relay_phone_rtts: Dictionary = {}
+
+func _join_counting() -> bool:
+	return join_count_gate.is_valid() and bool(join_count_gate.call())
+
+## Counts one lobby event: "help" (the Phones can't join? popup opened by hand), "nudge"
+## (the 30 s internet nudge shown) or "internet" (internet join opened). "help" and
+## "nudge" count once per lobby. Nothing is kept while the gate refuses.
+func note_join_event(kind: String) -> void:
+	if not _join_counting():
+		return
+	match kind:
+		"help", "nudge":
+			_join_other[kind] = 1
+		"internet":
+			_join_other[kind] = int(_join_other.get(kind, 0)) + 1
+
+func _note_phone_seated(slot: int, peer: Variant) -> void:
+	if not _join_counting() or slot < 0 or slot >= _slot_client_id.size():
+		return
+	var id: String = str(_slot_client_id[slot])
+	if id.is_empty():
+		id = "slot:%d" % slot
+	if peer is WebSocketPeer and not _join_lan_ids.has(id):
+		_join_lan_ids[id] = true
+		_join_lan_new += 1
+	elif _is_phone_seat(peer) and not _join_relay_ids.has(id):
+		_join_relay_ids[id] = true
+		_join_relay_new += 1
+
+## The join counters so far (only the non-zero ones), without resetting them.
+func join_events() -> Dictionary:
+	var out: Dictionary = _join_other.duplicate()
+	if _join_lan_new > 0:
+		out["lan"] = _join_lan_new
+	if _join_relay_new > 0:
+		out["relay"] = _join_relay_new
+	return out
+
+## The join counters so far, then a fresh count (the one reset path).
+func take_join_events() -> Dictionary:
+	var out: Dictionary = join_events()
+	reset_join_events()
+	return out
+
+## Starts a fresh count; the seen-phone sets stay (see above).
+func reset_join_events() -> void:
+	_join_lan_new = 0
+	_join_relay_new = 0
+	_join_other.clear()
+
+func _note_relay_phone_rtt(slot: int, rtt: int) -> void:
+	var identity: String = _ping_identity(slot)
+	var samples: PackedInt32Array = _relay_phone_rtts.get(identity, PackedInt32Array())
+	samples.append(rtt)
+	if samples.size() > PING_SAMPLES_MAX:
+		samples = samples.slice(samples.size() - PING_SAMPLES_MAX)
+	_relay_phone_rtts[identity] = samples
+
+## Every relay phone's round-trip statistics this match, [{"avg","p95","max","n"}]
+## (ms), one per joiner; [] with none (Local with only LAN phones, Online).
+func relay_phone_ping_stats() -> Array:
+	var out: Array = []
+	for samples: PackedInt32Array in _relay_phone_rtts.values():
+		var stats: Dictionary = _ping_stats_of(samples, -1, false)
+		if not stats.is_empty():
+			out.append({"avg": stats["avg"], "p95": stats["p95"], "max": stats["max"], "n": stats["n"]})
 	return out
 
 func _keep_departed_ping_stats(slot: int) -> void:
@@ -3817,6 +3916,8 @@ func kind_drop_notice() -> Dictionary:
 func set_match_kind(kind: String) -> bool:
 	if not [KIND_LOCAL, KIND_ONLINE, KIND_SOLO].has(kind):
 		return false
+	if kind != KIND_LOCAL and not join_events().is_empty() and join_flush.is_valid():
+		join_flush.call() # #1271: a Couch lobby's joins go out before the switch drops them
 	if room_closed() and kind != KIND_SOLO:
 		bot_director.remove_bots() # Solo's bots go with it: none is left to play a room alone (#505)
 	var target: String = KIND_LOCAL if kind == KIND_LOCAL else KIND_ONLINE

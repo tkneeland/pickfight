@@ -285,6 +285,9 @@ func _ready() -> void:
 	_watch_for_survivor()
 	_scores.resize(_players.size())
 	_controller_server = get_node_or_null(controller_server_path)
+	if _controller_server != null and "join_count_gate" in _controller_server:
+		_controller_server.set("join_count_gate", _telemetry_events_gate_1271) # #1271
+		_controller_server.set("join_flush", _send_lobby_record_1271)
 	if _controller_server != null and _controller_server.has_signal("host_command"):
 		_controller_server.connect("host_command", _on_host_command)
 	_watch_for_lobby_changes()
@@ -1319,6 +1322,8 @@ func _build_modifier_label() -> void:
 ## A RoundManager leaving the tree mid-round (a scenario tearing down) must
 ## not leave its modifier on players that outlive it.
 func _exit_tree() -> void:
+	_exiting = true
+	flush_telemetry() # #1271: the abandoned match's or the lobby's record, never dropped
 	_end_final_ko()
 	_end_game_mode()
 	if _paused:
@@ -2417,12 +2422,20 @@ var telemetry_sink: Callable = Callable()
 ## the rounds played so far.
 func send_telemetry(completed: bool = true) -> bool:
 	_stats.set("ping", _match_ping_1195()) # #1195: the Online seats' ping statistics ride along
+	# #1271: every attempt, sent or not, takes the join counters, so nothing counted
+	# while sharing was off can reach a later record.
+	var joins: Dictionary = _take_join_events_1271()
 	var host: RefCounted = HostSettingsScript.shared()
 	var scripted: bool = StatsSenderScript.is_scripted(get_tree(), PackedStringArray())
 	if telemetry_sink.is_valid():
 		scripted = false
 	if not StatsSenderScript.should_send(host, scripted, OS.get_cmdline_user_args()):
 		return false
+	# #1271: an abandoned round's live flag counters join the record (a copy: the
+	# mode reports itself when the round ends, and only Capture the Flag has any).
+	var live_ctf: Dictionary = {}
+	if not completed and _game_mode_node != null and _game_mode_node.has_method("live_events"):
+		live_ctf = _game_mode_node.live_events()
 	var winners: Array = []
 	if not completed:
 		pass
@@ -2433,20 +2446,77 @@ func send_telemetry(completed: bool = true) -> bool:
 	elif _match_winner_slot != -1:
 		winners.append(_match_winner_slot)
 	var length_sec: int = maxi(0, GameClockScript.now_msec() - _match_started_msec) / 1000
-	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners, completed, _rounds_finished)
+	# #1271: `events` only once the notice that lists them has been acknowledged;
+	# the join counters only in a Couch match.
+	var with_events: bool = StatsSenderScript.events_allowed(host)
+	var couch: bool = _is_couch_match_1271()
+	_stats.set("relay_ping", _match_relay_ping_1271())
+	_stats.set("join_events", joins)
+	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners, completed, _rounds_finished, with_events, couch, live_ctf)
 	if record.is_empty():
+		if with_events and couch:
+			_send_lobby_record_1271(joins, false) # phones joined but no damage was dealt
 		return false
+	_dispatch_record_1271(record, false)
+	return true
+
+## Hands `record` to the scenario sink or a sender (fire and forget). `detached`
+## is for a node on its way out of the tree: the sender joins the root instead.
+func _dispatch_record_1271(record: Dictionary, detached_in: bool) -> void:
+	var detached: bool = detached_in or _exiting
 	if telemetry_sink.is_valid():
 		telemetry_sink.call(record)
-		return true
+		return
 	var url: String = telemetry_relay_url
 	if url.is_empty():
 		url = preload("res://scripts/ControllerServer.gd").resolve_relay_url(OS.get_cmdline_user_args())
 	var sender: Node = StatsSenderScript.new()
 	sender.process_mode = Node.PROCESS_MODE_ALWAYS # a paused quit still sends
 	sender.finished.connect(func(_status: int) -> void: sender.queue_free())
-	add_child(sender)
+	if detached:
+		get_tree().root.add_child.call_deferred(sender)
+	else:
+		add_child(sender)
 	sender.send(record, url)
+
+var _exiting: bool = false
+
+## Sends what is still unsent: an abandoned match's record when one qualifies, then
+## a lobby record with any joins no record carried (#1271). The quit path calls this
+## before it waits for senders, so the sender exists when the wait starts.
+func flush_telemetry() -> void:
+	_abandon_match()
+	_send_lobby_record_1271(null, false)
+
+func _is_couch_match_1271() -> bool:
+	return _controller_server != null and _controller_server.has_method("match_kind") and str(_controller_server.match_kind()) == "local"
+
+## The join counters, reset (an empty {} without a controller server).
+func _take_join_events_1271() -> Dictionary:
+	if _controller_server == null or not _controller_server.has_method("take_join_events"):
+		return {}
+	return _controller_server.take_join_events()
+
+## The one gate the server counts joins under: sharing on, the current notice
+## acknowledged, not a scripted run (a scenario's sink lifts that last part).
+func _telemetry_events_gate_1271() -> bool:
+	var host: RefCounted = HostSettingsScript.shared()
+	var scripted: bool = StatsSenderScript.is_scripted(get_tree() if is_inside_tree() else null, PackedStringArray())
+	if telemetry_sink.is_valid():
+		scripted = false
+	return StatsSenderScript.should_send(host, scripted, OS.get_cmdline_user_args()) and StatsSenderScript.events_allowed(host)
+
+## Phones joined a Couch lobby that no match record carried (the #1268 case: the
+## host gave up or quit): one small lobby record through the same gate, then a fresh
+## count. `joins` is taken here when null. Returns whether a record went out.
+func _send_lobby_record_1271(joins: Variant = null, detached: bool = false) -> bool:
+	var counts: Dictionary = joins if joins is Dictionary else _take_join_events_1271()
+	if counts.is_empty() or not _telemetry_events_gate_1271():
+		return false
+	var record: Dictionary = StatsSenderScript.build_lobby_record(counts)
+	if record.is_empty():
+		return false
+	_dispatch_record_1271(record, detached)
 	return true
 
 ## A match that ends without a winner (the host returns to the lobby mid-match,
@@ -2470,7 +2540,7 @@ func _abandon_match() -> void:
 ## moment for the sender before it quits.
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_abandon_match()
+		flush_telemetry() # also the lobby's joins when quitting from the lobby (#1271)
 	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		focus_lost()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
@@ -3409,3 +3479,10 @@ func _match_ping_1195() -> Array:
 func _reset_match_ping_1195() -> void:
 	if _controller_server != null and _controller_server.has_method("reset_ping_stats"):
 		_controller_server.reset_ping_stats()
+
+## #1271: the relay phones' round-trip statistics (the match record's
+## `events.relay_ping`); [] without a controller server.
+func _match_relay_ping_1271() -> Array:
+	if _controller_server == null or not _controller_server.has_method("relay_phone_ping_stats"):
+		return []
+	return _controller_server.relay_phone_ping_stats()

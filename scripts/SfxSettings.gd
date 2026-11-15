@@ -749,8 +749,10 @@ func crash_box() -> CheckBox:
 ## The one-time disclosure (#617): due until it has been dismissed, and only on
 ## the title or in the lobby, never mid-round.
 func _notice_due() -> bool:
-	if host.telemetry_notice_seen:
-		return false
+	if host.telemetry_notice_current():
+		return false # a version-1 host sees the card once more (#1271)
+	if host.telemetry_notice_seen and not host.share_stats:
+		return false # but not with sharing off: nothing could be sent for them
 	if not is_inside_tree():
 		return true
 	var scene: Node = get_tree().current_scene

@@ -71,6 +71,13 @@ var round_manager: Node
 var scores: Dictionary = {0: 0, 1: 0}
 ## slot -> captures that player made this round.
 var capturers: Dictionary = {}
+## This round's flag events (#1271), handed to the match stats by `report_stats`.
+## `drops_in_own_base` can include normal play (a carrier dying or hit at their
+## own line); `carrier_in_base_during_pause` and `carried_in_base_at_end` are the stronger
+## "reached the end zone but did not score" signals (#1269).
+var events: Dictionary = {}
+## Slots already counted as a carrier in their base during the capture pause.
+var _pause_noted: Dictionary = {}
 ## team -> HOME / CARRIED / DROPPED, for that team's flag.
 var state: Dictionary = {0: HOME, 1: HOME}
 ## team -> slot carrying that team's flag, or -1.
@@ -113,6 +120,8 @@ func start_round(slots: Array[int]) -> void:
 	captures_to_win = int(HostSettingsScript.shared().ctf_captures)
 	scores = {0: 0, 1: 0}
 	capturers.clear()
+	events = {}
+	_pause_noted.clear()
 	state = {0: HOME, 1: HOME}
 	carrier = {0: -1, 1: -1}
 	return_left = {0: 0.0, 1: 0.0}
@@ -158,10 +167,54 @@ func end_round() -> void:
 	_captured_label = null
 	_captured_name_label = null
 
-## Hands this round's captures to the match stats (issue #355).
+## Hands this round's captures to the match stats (issue #355), once, at the
+## round's end.
 func report_stats(stats: RefCounted) -> void:
 	for slot: int in capturers:
 		stats.record_captures(slot, int(capturers[slot]))
+	stats.record_ctf_events(live_events())
+
+## This round's flag events so far (#1271), read-only: the counters plus the flags
+## still carried in a base right now. `report_stats` hands these over at the round's
+## end; the abandon path merges them into a copy for the abandoned record.
+func live_events() -> Dictionary:
+	var out: Dictionary = events.duplicate()
+	var carried: int = _carried_in_base_count()
+	if carried > 0:
+		out["carried_in_base_at_end"] = int(out.get("carried_in_base_at_end", 0)) + carried
+	return out
+
+## Flags carried by someone standing in their own base, who reached the end zone
+## and did not score (#1269). A flag a capture sent home has no carrier, so the
+## capturer is not counted; the other team's carrier still is, unless already counted
+## as `carrier_in_base_during_pause`.
+func _carried_in_base_count() -> int:
+	var count: int = 0
+	for team: int in [0, 1]:
+		var slot: int = int(carrier[team])
+		if slot != -1 and not _pause_noted.has(slot) and _in_own_base(slot, 1 - team):
+			count += 1
+	return count
+
+## The one "standing in a base" rule: `position` is inside team `base_team`'s base.
+func _at_base(position: Vector2, base_team: int) -> bool:
+	var rect: Rect2 = base_rect(base_team)
+	return rect.size != Vector2.ZERO and rect.has_point(position)
+
+func _in_own_base(slot: int, base_team: int) -> bool:
+	var player: Node2D = _watched.get(slot)
+	return player != null and is_instance_valid(player) and _at_base(player.global_position, base_team)
+
+## A carrier standing in their own base while the capture pause blocks captures:
+## they reached the end zone and could not score, counted once per carrier (#1271).
+func _note_carrier_in_base_during_pause(team: int, slot: int) -> void:
+	if _pause_noted.has(slot) or not _in_own_base(slot, team):
+		return
+	_pause_noted[slot] = true
+	_count_event("carrier_in_base_during_pause")
+
+func _count_event(key: String) -> void:
+	events[key] = int(events.get(key, 0)) + 1
 
 func connected_count() -> int:
 	return _handlers.size()
@@ -234,6 +287,10 @@ func _physics_process(delta: float) -> void:
 		if _pause_left <= 0.0:
 			_pausing = false
 			_next_hall()
+		for team: int in [0, 1]:
+			var held: int = int(carrier[1 - team])
+			if held != -1:
+				_note_carrier_in_base_during_pause(team, held)
 		_refresh_flags() # a flag still carried rides on its carrier through the pause
 		return
 	for slot: int in _lockout.keys():
@@ -328,8 +385,7 @@ func _check_captures() -> void:
 		var player: Node2D = _watched.get(slot)
 		if player == null or not is_instance_valid(player):
 			continue
-		var rect: Rect2 = base_rect(team)
-		if rect.size != Vector2.ZERO and rect.has_point(player.global_position):
+		if _at_base(player.global_position, team):
 			capture(team, slot)
 			if _finished:
 				return
@@ -340,6 +396,7 @@ func _tick_returns(delta: float) -> void:
 			continue
 		return_left[team] = float(return_left[team]) - delta
 		if float(return_left[team]) <= 0.0:
+			_count_event("timed_returns")
 			return_flag(team)
 
 ## `slot` picks up `team`'s flag. Public so a scenario can drive it.
@@ -351,6 +408,7 @@ func take_flag(team: int, slot: int) -> void:
 		return
 	state[team] = CARRIED
 	carrier[team] = slot
+	_count_event("takes")
 	_damage_seen[slot] = float(player.damage)
 	flag_position[team] = player.global_position
 	flag_taken.emit(team, slot)
@@ -368,10 +426,15 @@ func drop_flag(team: int) -> void:
 	var at: Vector2 = flag_position[team]
 	if player != null and is_instance_valid(player):
 		at = player.global_position
+	_count_event("drops")
+	# #1271: dropped where the carrier would have scored (their own base).
+	if _at_base(at, 1 - team):
+		_count_event("drops_in_own_base")
 	flag_dropped.emit(team, slot)
 	_cue(&"flag_drop", at)
 	var ground: Vector2 = _ground_below(at)
 	if ground == Vector2.INF:
+		_count_event("void_returns")
 		return_flag(team)
 		return
 	flag_position[team] = ground
@@ -399,12 +462,12 @@ func _cue(sound: StringName, at: Vector2) -> void:
 ## `team` captures with `slot` carrying the other flag, which goes home.
 ## Public so a scenario can drive it.
 func capture(team: int, slot: int) -> void:
-	if not _active or _finished:
-		return
 	var enemy_flag: int = 1 - team
-	if int(carrier[enemy_flag]) != slot:
+	if not _active or _finished or int(carrier[enemy_flag]) != slot:
 		return
+	_pause_noted.erase(slot)
 	scores[team] = int(scores[team]) + 1
+	_count_event("captures")
 	capturers[slot] = int(capturers.get(slot, 0)) + 1
 	carrier[enemy_flag] = -1
 	return_flag(enemy_flag, false)
@@ -424,6 +487,7 @@ func _next_hall() -> void:
 	_hide_captured()
 	round_manager.change_stage_mid_round()
 	_bases_key = [-1]
+	_pause_noted.clear()
 	_damage_seen.clear()
 	_lockout.clear()
 	state = {0: HOME, 1: HOME}
