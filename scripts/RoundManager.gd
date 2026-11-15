@@ -3330,8 +3330,9 @@ func _on_mode_flag_captured(_team: int, scorer: int) -> void:
 # --- Online ping readout and match ping statistics (issue #1195) ---------------
 #
 # A small readout in the HUD's bottom right, during a round with a PC client
-# over the relay: a line per remote seat (name, round trip, the joiner's felt
-# delay) and the host's own leg to the relay. `PingReadout.make` builds the same
+# over the relay, or (#1270) a Couch phone joined over the internet: a line per
+# remote seat (name, round trip, the joiner's felt delay) and the host's own leg
+# to the relay. `PingReadout.make` builds the same
 # label on the joiner, and the `hud` frame's UI mirror carries its text, colour
 # and visibility (online parity). Refreshed once a second. At match end each
 # remote seat's average, p95 and max ride into the balance log and telemetry.
@@ -3353,7 +3354,10 @@ func _ping_readout_tick() -> void:
 	var lines: PackedStringArray = []
 	var pings: Array = []
 	for slot: int in _roster():
-		if not _controller_server.slot_is_online_pc(slot):
+		# #1270: a Couch phone joined over the relay gets its line too (its round
+		# trip, no felt delay), so the lag the internet join adds is visible.
+		var over_relay: bool = _controller_server.has_method("slot_over_relay") and _controller_server.slot_over_relay(slot)
+		if not _controller_server.slot_is_online_pc(slot) and not over_relay:
 			continue
 		var ping: int = _controller_server.slot_ping_msec(slot)
 		var felt: int = _controller_server.slot_felt_msec(slot)

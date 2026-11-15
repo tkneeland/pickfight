@@ -1351,6 +1351,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_editor_asks_before_replacing_1047",
 	"stage_editor_reports_failed_recovery_1253",
 	"custom_stage_recovery_keeps_differing_copies_1255",
+	"relay_phone_input_queue_catches_up_1270",
+	"relay_phone_polled_first_and_pinged_1270",
+	"phone_page_caps_relay_send_rate_1270",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4478,6 +4481,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_stage_editor_reports_failed_recovery_1253()
 		"custom_stage_recovery_keeps_differing_copies_1255":
 			return await _scenario_custom_stage_recovery_keeps_differing_copies_1255()
+		"relay_phone_input_queue_catches_up_1270":
+			return _scenario_relay_phone_input_queue_catches_up_1270()
+		"relay_phone_polled_first_and_pinged_1270":
+			return await _scenario_relay_phone_polled_first_and_pinged_1270()
+		"phone_page_caps_relay_send_rate_1270":
+			return _scenario_phone_page_caps_relay_send_rate_1270()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -64185,3 +64194,144 @@ func _scenario_custom_stage_recovery_keeps_differing_copies_1255() -> Array[Stri
 	_scenario_completed = true
 	return failures
 
+# --- Relay phone input lag (#1270) ----------------------------------------------
+## A relay phone's input queue catches up from its first waiting packet and keeps
+## at most RELAY_INPUT_QUEUE_MAX; a steady stream still plays every packet; a LAN
+## phone's queue is unchanged (#669).
+func _scenario_relay_phone_input_queue_catches_up_1270() -> Array[String]:
+	var failures: Array[String] = []
+	var dt: float = 1.0 / 60.0
+	var a := Vector2(0.2, 0.0)
+	var b := Vector2(0.3, 0.0)
+	var lan: RefCounted = ControllerServerScript.InputSmoother.new()
+	lan.push_packet(a)
+	lan.push_packet(b)
+	lan.step(dt)
+	if lan.get("_aim") != a or (lan.get("_queue") as PackedVector2Array).size() != 1:
+		failures.append("LAN: two waiting packets played %s with %d left; want the first, one left" % [lan.get("_aim"), (lan.get("_queue") as PackedVector2Array).size()])
+	var relay: RefCounted = ControllerServerScript.InputSmoother.new()
+	relay.use_relay_queue(true)
+	relay.push_packet(a)
+	relay.push_packet(b)
+	relay.step(dt)
+	if relay.get("_aim") != b or (relay.get("_queue") as PackedVector2Array).size() != 0:
+		failures.append("relay: two waiting packets played %s with %d left; want the newest, none left" % [relay.get("_aim"), (relay.get("_queue") as PackedVector2Array).size()])
+	# A steady stream, one packet a frame, still plays every packet in order.
+	var sent: Array = []
+	var played: Array = []
+	for i in 5:
+		var v := Vector2(0.1 * float(i + 1), 0.05)
+		sent.append(v)
+		relay.push_packet(v)
+		relay.step(dt)
+		played.append(relay.get("_aim"))
+	if played != sent:
+		failures.append("relay: a one-a-frame stream played %s, sent %s" % [played, sent])
+	# A long burst keeps only the newest RELAY_INPUT_QUEUE_MAX.
+	for i in 8:
+		relay.push_packet(Vector2(0.05 * float(i + 1), 0.1))
+	var q: PackedVector2Array = relay.get("_queue")
+	if q.size() != ControllerServerScript.RELAY_INPUT_QUEUE_MAX or q[0] != Vector2(0.05 * 5.0, 0.1):
+		failures.append("relay: a burst of 8 kept %d starting at %s; want %d starting at the 5th" % [q.size(), q[0] if q.size() > 0 else Vector2.ZERO, ControllerServerScript.RELAY_INPUT_QUEUE_MAX])
+	relay.use_relay_queue(false)
+	if relay.get("queue_calm") != ControllerServerScript.INPUT_QUEUE_CALM or relay.get("queue_max") != ControllerServerScript.INPUT_QUEUE_MAX:
+		failures.append("switching the relay queue off left calm %s max %s" % [relay.get("queue_calm"), relay.get("queue_max")])
+	# Switching on trims a queue already longer than the relay cap.
+	var long: RefCounted = ControllerServerScript.InputSmoother.new()
+	for i in 9:
+		long.push_packet(Vector2(0.02 * float(i + 1), 0.0))
+	long.use_relay_queue(true)
+	if (long.get("_queue") as PackedVector2Array).size() != ControllerServerScript.RELAY_INPUT_QUEUE_MAX:
+		failures.append("switching the relay queue on kept %d waiting packets" % (long.get("_queue") as PackedVector2Array).size())
+	_scenario_completed = true
+	return failures
+## Over a real (local) relay: the relay link is processed before the server drains
+## its seats, a relay phone's seat uses the relay queue, it reports a ping once it
+## answers the weak-connection ping, and the in-match readout gets its line.
+func _scenario_relay_phone_polled_first_and_pinged_1270() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _internet_rig_683(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	server.ping_interval_msec = 200
+	server.apply_host_command("internet", true)
+	if not await _wait_for_239(func() -> bool: return server.internet_join_room() != ""):
+		failures.append("no relay room")
+		await _internet_close_683(rig)
+		return failures
+	var link: Node = server.relay_link
+	if link == null or link.process_priority >= server.process_priority:
+		failures.append("the relay link is processed after the server drains its seats (priority %s vs %d)" % [link.process_priority if link != null else "no link", server.process_priority])
+	var phone: WebSocketPeer = await _internet_phone_683(rig, {"id": "net-1270", "client": "phone"})
+	var seat: Dictionary = await _online_wait_239(rig, phone, "slot") if phone != null else {}
+	if not seat.has("slot"):
+		failures.append("the relay phone got no seat")
+		await _internet_close_683(rig)
+		return failures
+	var slot: int = int(seat["slot"])
+	if server.slot_ping_msec(slot) != -1:
+		failures.append("a relay phone reported ping %d before any pong" % server.slot_ping_msec(slot))
+	_online_send_239(phone, 1, JSON.stringify({"t": "name", "v": "Netty"}).to_utf8_buffer())
+	_online_send_239(phone, 1, JSON.stringify({"t": "lag"}).to_utf8_buffer())
+	var input := PackedByteArray()
+	input.resize(8)
+	input.encode_float(0, 0.4)
+	input.encode_float(4, 0.0)
+	# The phone answers the host's pings while it streams input.
+	var deadline: int = Time.get_ticks_msec() + 5000
+	while Time.get_ticks_msec() < deadline and server.slot_ping_msec(slot) < 0:
+		_online_send_239(phone, 0, input)
+		for c: WebSocketPeer in rig["clients"]:
+			c.poll()
+		while phone.get_available_packet_count() > 0:
+			var pkt: PackedByteArray = phone.get_packet()
+			if pkt.size() < 2 or pkt[0] != 1:
+				continue
+			var msg: Variant = JSON.parse_string(pkt.slice(1).get_string_from_utf8())
+			if msg is Dictionary and msg.get("t") == "ping":
+				_online_send_239(phone, 1, JSON.stringify({"t": "pong", "n": msg.get("n")}).to_utf8_buffer())
+		await process_frame
+	var ping: int = server.slot_ping_msec(slot)
+	if ping < 0:
+		failures.append("the relay phone never reported a ping after answering pings")
+	var smoother: RefCounted = (server.get("_smoothers") as Array)[slot]
+	if smoother.get("queue_max") != ControllerServerScript.RELAY_INPUT_QUEUE_MAX or smoother.get("queue_calm") != ControllerServerScript.RELAY_INPUT_QUEUE_CALM:
+		failures.append("the relay phone's seat is not on the relay queue (calm %s max %s)" % [smoother.get("queue_calm"), smoother.get("queue_max")])
+	# The readout, ticked once with the round state forced on for that call only.
+	var readout := preload("res://scripts/PingReadout.gd")
+	var old_state: Variant = rm.get("_state")
+	rm.set("_state", RoundManagerScript.State.ROUND_ACTIVE)
+	rm.set("_ping_readout_next_msec", 0)
+	rm.call("_ping_readout_tick")
+	var want: String = readout.line("Netty", server.slot_ping_msec(slot), -1)
+	rm.set("_state", old_state)
+	var label: Label = rm.get_node(rm.score_label_path).get_parent().get_node_or_null(readout.NODE_NAME) as Label
+	if label == null or not label.visible or not label.text.contains(want):
+		failures.append("the ping readout '%s' lacks the relay phone's line '%s'" % [label.text if label != null else "missing", want])
+	if label != null:
+		label.visible = false
+	await _internet_close_683(rig)
+	_scenario_completed = true
+	return failures
+## The phone page caps its relay sends at about 60 a second and leaves the LAN
+## stream at display rate.
+func _scenario_phone_page_caps_relay_send_rate_1270() -> Array[String]:
+	var failures: Array[String] = []
+	var html: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
+	for needle: String in [
+		"var RELAY_SEND_MIN_MS = 15, lastRelaySend = -Infinity;",
+		"function frame(now) {",
+		"} else if (relayJoined && !(now - lastRelaySend < RELAY_SEND_MIN_MS)) {",
+		"lastRelaySend = now;",
+	]:
+		if not html.contains(needle):
+			failures.append("the phone page lacks: %s" % needle)
+	var lan: int = html.find("if (!RELAY) {", html.find("function frame(now) {"))
+	var relay: int = html.find("} else if (relayJoined && ")
+	if lan < 0 or relay < 0 or not html.substr(lan, relay - lan).contains("ws.send(inputBuf);") \
+			or html.substr(lan, relay - lan).contains("RELAY_SEND_MIN_MS"):
+		failures.append("the LAN branch is not an unthrottled every-frame send")
+	_scenario_completed = true
+	return failures

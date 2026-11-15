@@ -3865,7 +3865,13 @@
   var inputBuf = new ArrayBuffer(8), inputView = new DataView(inputBuf);
   var relayInputBuf = new ArrayBuffer(9), relayInputView = new DataView(relayInputBuf);
   relayInputView.setUint8(0, KIND_INPUT);
-  function frame() {
+  // #1270: over the relay, at most one packet per RELAY_SEND_MIN_MS (about 60 a
+  // second; 15 not 16.7 so a 60 Hz display still sends every frame). A 120 Hz
+  // phone's every-frame stream used up the relay's 120 frames/s budget (frames
+  // dropped) and fed the host twice its frame rate over a laggy TCP link, which
+  // queued up as delay. The newest value always goes out; nothing is lost.
+  var RELAY_SEND_MIN_MS = 15, lastRelaySend = -Infinity;
+  function frame(now) {
     if (ws && ws.readyState === WebSocket.OPEN) {
       // Explicit little-endian, because that is what the wire format promises
       // and what the host's decode_float expects. A Float32Array would use
@@ -3875,7 +3881,8 @@
         inputView.setFloat32(0, vx, true);
         inputView.setFloat32(4, vy, true);
         ws.send(inputBuf);
-      } else if (relayJoined) {
+      } else if (relayJoined && !(now - lastRelaySend < RELAY_SEND_MIN_MS)) {
+        lastRelaySend = now;
         relayInputView.setFloat32(1, vx, true);
         relayInputView.setFloat32(5, vy, true);
         ws.send(relayInputBuf);

@@ -207,6 +207,13 @@ const INPUT_SETTLE_EPSILON: float = 0.001
 const INPUT_QUEUE_CALM: int = 2
 const INPUT_QUEUE_CATCH_UP: int = 2
 const INPUT_QUEUE_MAX: int = 10
+## A phone over the relay (#683) has the internet's round trip on top, and TCP
+## hands its packets over in bunches far more often than Wi-Fi does, so a
+## standing queue of the LAN's size is felt as lag (#1270). Its queue catches up
+## from the first waiting packet (up to INPUT_QUEUE_CATCH_UP a frame) and keeps
+## at most RELAY_INPUT_QUEUE_MAX, about four frames.
+const RELAY_INPUT_QUEUE_CALM: int = 0
+const RELAY_INPUT_QUEUE_MAX: int = 4
 ## Physics frames between "weapon steady" lines. Steadiness has to be provable
 ## from a line that is present, not from the absence of change lines.
 const STEADY_LOG_FRAMES: int = 30
@@ -272,6 +279,18 @@ class InputSmoother extends RefCounted:
 	var _aim: Vector2 = Vector2.ZERO
 	## Packets that arrived bunched, waiting to be played in order (#669).
 	var _queue: PackedVector2Array = PackedVector2Array()
+	## Queue sizes: up to `queue_calm` waiting packets are played one a frame,
+	## more catch up; past `queue_max` the oldest are dropped. A relay phone's
+	## seat uses the tighter RELAY_* pair (#1270, `use_relay_queue`).
+	var queue_calm: int = INPUT_QUEUE_CALM
+	var queue_max: int = INPUT_QUEUE_MAX
+
+	## The relay's tighter queue (#1270) on or off; trims a queue already over the new cap.
+	func use_relay_queue(on: bool) -> void:
+		queue_calm = RELAY_INPUT_QUEUE_CALM if on else INPUT_QUEUE_CALM
+		queue_max = RELAY_INPUT_QUEUE_MAX if on else INPUT_QUEUE_MAX
+		if _queue.size() > queue_max:
+			_queue = _queue.slice(_queue.size() - queue_max)
 
 	## Latest value wins: for a source that is not a packet stream (a mouse,
 	## a stick, a bot), and for a release.
@@ -294,11 +313,11 @@ class InputSmoother extends RefCounted:
 			return
 		target = v.limit_length(1.0)
 		_queue.append(target)
-		if _queue.size() > INPUT_QUEUE_MAX:
-			_queue = _queue.slice(_queue.size() - INPUT_QUEUE_MAX)
+		if _queue.size() > queue_max:
+			_queue = _queue.slice(_queue.size() - queue_max)
 
 	func step(delta: float) -> Vector2:
-		var take: int = mini(_queue.size(), 1 if _queue.size() <= INPUT_QUEUE_CALM else INPUT_QUEUE_CATCH_UP)
+		var take: int = mini(_queue.size(), 1 if _queue.size() <= queue_calm else INPUT_QUEUE_CATCH_UP)
 		if take > 0:
 			_aim = _queue[take - 1]
 			_queue = _queue.slice(take)
@@ -1684,6 +1703,7 @@ func _drain(slot: int, peer: Variant) -> void:
 	if not got:
 		return
 	_slot_last_packet_msec[slot] = Time.get_ticks_msec()
+	_smoothers[slot].use_relay_queue(_is_phone_seat(peer)) # #1270
 	for queued: Vector2 in vectors:
 		_smoothers[slot].push_packet(queued)
 	var v: Vector2 = vectors[vectors.size() - 1]
@@ -2402,6 +2422,10 @@ func _ensure_relay_link() -> Node:
 	if relay_link == null:
 		relay_link = RelayLinkScript.new()
 		relay_link.name = "RelayLink"
+		# #1270: poll the relay before this node drains its seats. A child runs its
+		# _process after its parent, so relayed input used to wait a whole frame
+		# in the seat's inbox; a lower priority runs it first.
+		relay_link.process_priority = process_priority - 1
 		add_child(relay_link)
 		relay_link.peer_joined.connect(_on_relay_peer_joined)
 		relay_link.peer_left.connect(_on_relay_peer_left)
@@ -3436,6 +3460,8 @@ func _on_pong(slot: int, msg: Dictionary) -> void:
 
 const WEAK_ON_MSEC: int = 200
 const WEAK_OFF_MSEC: int = 120
+## #1270: a relay phone's round trip goes to the log on its first sample and every this many after.
+const RELAY_PING_LOG_EVERY: int = 30
 var weak_hold_msec: int = 3000
 var _weak_link: Dictionary = {} # slot -> {n, sent, answered, over_since, weak}
 var _weak_link_in: Dictionary = {} # slot -> true once the phone sent {"t":"lag"}
@@ -3479,6 +3505,13 @@ func _weak_link_pong(slot: int, msg: Dictionary) -> bool:
 	return true
 
 func _weak_link_sample(slot: int, st: Dictionary, rtt: int, now: int) -> void:
+	# #1270: the last round trip is kept, so a relay phone's seat reports a ping
+	# (slot_ping_msec: the in-match readout and the scoreboard), and every
+	# RELAY_PING_LOG_EVERY-th sample of a relay phone goes to the log.
+	st["rtt"] = clampi(rtt, 0, MatchStatsScript.PING_MAX_MSEC)
+	st["samples"] = int(st.get("samples", 0)) + 1
+	if slot_over_relay(slot) and int(st["samples"]) % RELAY_PING_LOG_EVERY == 1:
+		print("Relay phone slot %d: round trip %d ms (host to relay %d ms)" % [slot, int(st["rtt"]), relay_rtt_msec])
 	var weak: bool = st.weak
 	if rtt > WEAK_ON_MSEC:
 		if st.over_since == 0:
@@ -3493,11 +3526,14 @@ func _weak_link_sample(slot: int, st: Dictionary, rtt: int, now: int) -> void:
 		st.weak = weak
 		_slot_peers[slot].send_text(JSON.stringify({"t": "weak", "v": weak}))
 
-## The last round trip to the remote seat in `slot`, in ms; -1 for a phone,
-## the host PC, a bot, or a seat that has not answered a ping yet.
+## The last round trip to the remote seat in `slot`, in ms: a PC client's ping,
+## or (#1270) a relay phone's weak-connection ping; -1 for a LAN phone, the host
+## PC, a bot, or a seat that has not answered a ping yet.
 func slot_ping_msec(slot: int) -> int:
 	if slot < 0 or slot >= _slot_peers.size() or not _slot_peers[slot] is RemoteSeat:
 		return -1
+	if _is_phone_seat(_slot_peers[slot]):
+		return int(_weak_link.get(slot, {}).get("rtt", -1))
 	return _slot_peers[slot].rtt_msec
 
 # --- Match ping statistics and the host leg (issue #1195) --------------------

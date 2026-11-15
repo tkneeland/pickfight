@@ -60,6 +60,11 @@ host-chosen **relay fallback**.
   build.
 - Relay phones never become the host phone, are not streamed snapshots, and are
   not pinged: they play as phones do.
+  *Update (#777, #1270):* they do get the weak-connection ping every phone gets,
+  and since #1270 its round trip is shown on their lobby card, the scoreboard and
+  the in-match ping readout. Their input still takes the phone path, with only a
+  tighter catch-up queue on the host and a capped send rate on the page; there is
+  no prediction or special input handling.
 
 ## Alternatives considered
 
