@@ -149,17 +149,24 @@ func send_control(text: String) -> void:
 func send_text_to(peer: int, text: String) -> void:
 	send_to(peer, KIND_TEXT, text.to_utf8_buffer())
 
+## #1270: set by a parent that calls `pump_inbound` at the start of its own frame
+## (ControllerServer). Then this node's _process only polls (which sends what
+## the parent queued this frame) and leaves every incoming packet to the pump,
+## so relayed input is read at one point per frame, not at two: two drain points
+## handed a steady stream over two packets at a time.
+var external_pump: bool = false
+
 ## #1270: polls the socket and hands every frame already waiting to the server,
 ## which calls this at the start of its own _process so relayed input is read in
 ## the frame it arrives (a child's _process runs after its parent's). This node's
 ## own _process still polls at the end of the frame, and that poll is what sends
 ## the messages the server queued meanwhile (snapshots, pings), so they also go
-## out in the same frame.
+## out in the same frame. Nothing is read before the host hello has gone out.
 func pump_inbound() -> void:
-	if _socket == null:
+	if _socket == null or not _sent_host:
 		return
 	_socket.poll()
-	if _socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+	if _socket != null and _socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		_drain_packets()
 
 func _drain_packets() -> void:
@@ -200,7 +207,8 @@ func _process(_delta: float) -> void:
 			if tick >= _next_keepalive_msec:
 				_next_keepalive_msec = tick + int(keepalive_interval_sec * 1000.0)
 				_socket.send(PackedByteArray([KEEPALIVE_PEER]), WebSocketPeer.WRITE_MODE_BINARY)
-		_drain_packets()
+		if not external_pump:
+			_drain_packets()
 	elif ready_state == WebSocketPeer.STATE_CLOSED:
 		_socket = null
 		if _state == STATE_ONLINE and _token != "":

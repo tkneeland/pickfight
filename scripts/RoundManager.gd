@@ -1027,6 +1027,10 @@ func _show_scoreboard() -> void:
 		_scoreboard_ping(entry, slot)
 	_scoreboard.visible = true
 
+## Issue #683/#1270: whether `slot` is a phone that joined over the relay.
+func _slot_over_relay(slot: int) -> bool:
+	return _controller_server != null and _controller_server.has_method("slot_over_relay") and _controller_server.slot_over_relay(slot)
+
 ## Issue #446: the round trip to a remote seat in ms, -1 when `slot` has none.
 func _slot_ping(slot: int) -> int:
 	if _controller_server == null or not _controller_server.has_method("slot_ping_msec"):
@@ -1701,7 +1705,7 @@ func _publish_lobby_state() -> void:
 		# the lobby's swatches are redrawn in it.
 		players.append({"slot": slot, "ready": _is_ready(slot), "name": _slot_name(slot),
 			"color": _slot_color(slot).to_html(false)})
-		var over_relay: bool = _controller_server != null and _controller_server.has_method("slot_over_relay") and _controller_server.slot_over_relay(slot)
+		var over_relay: bool = _slot_over_relay(slot)
 		var ping: int = _slot_ping(slot)
 		# #1270: a relay phone's ping (new each second) stays out of the published
 		# state, or every change would re-send the lobby to every phone all match
@@ -3360,8 +3364,7 @@ func _ping_readout_tick() -> void:
 	for slot: int in _roster():
 		# #1270: a Couch phone joined over the relay gets its line too (its round
 		# trip, no felt delay), so the lag the internet join adds is visible.
-		var over_relay: bool = _controller_server.has_method("slot_over_relay") and _controller_server.slot_over_relay(slot)
-		if not _controller_server.slot_is_online_pc(slot) and not over_relay:
+		if not _controller_server.slot_is_online_pc(slot) and not _slot_over_relay(slot):
 			continue
 		var ping: int = _controller_server.slot_ping_msec(slot)
 		var felt: int = _controller_server.slot_felt_msec(slot)

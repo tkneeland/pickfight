@@ -2429,6 +2429,7 @@ func _ensure_relay_link() -> Node:
 	if relay_link == null:
 		relay_link = RelayLinkScript.new()
 		relay_link.name = "RelayLink"
+		relay_link.external_pump = true # #1270: _process reads it first thing each frame
 		add_child(relay_link)
 		relay_link.peer_joined.connect(_on_relay_peer_joined)
 		relay_link.peer_left.connect(_on_relay_peer_left)
@@ -3465,6 +3466,8 @@ const WEAK_ON_MSEC: int = 200
 const WEAK_OFF_MSEC: int = 120
 ## #1270: a relay phone's round trip goes to the log on its first sample and every this many after.
 const RELAY_PING_LOG_EVERY: int = 30
+## #1270: how many recent weak-connection pings keep their send time, so a late answer still counts.
+const WEAK_LINK_SENT_KEEP: int = 10
 var weak_hold_msec: int = 3000
 var _weak_link: Dictionary = {} # slot -> {n, sent, answered, over_since, weak}
 var _weak_link_in: Dictionary = {} # slot -> true once the phone sent {"t":"lag"}
@@ -3496,16 +3499,40 @@ func _weak_link_tick() -> void:
 		st.n += 1
 		st.sent = now
 		st.answered = false
+		# #1270: when each recent ping went out, so an answer that arrives after the
+		# next ping (a round trip over ping_interval_msec) still times the link.
+		var sent_log: Dictionary = st.get("sent_log", {})
+		sent_log[st.n] = now
+		sent_log.erase(st.n - WEAK_LINK_SENT_KEEP)
+		st["sent_log"] = sent_log
 		_weak_link[slot] = st
 		_slot_peers[slot].send_text(JSON.stringify({"t": "ping", "n": st.n}))
 
 func _weak_link_pong(slot: int, msg: Dictionary) -> bool:
 	var st: Variant = _weak_link.get(slot)
-	if st == null or not _is_number(msg.get("n")) or int(msg["n"]) != st.n:
+	if st == null or not _is_number(msg.get("n")):
 		return false
+	var n: int = int(msg["n"])
+	var sent_log: Dictionary = st.get("sent_log", {})
+	if n != st.n:
+		# #1270: a late answer to an earlier ping times the link (a slow but live
+		# phone is not shown as stalled); the weak chip still follows the newest.
+		if not sent_log.has(n):
+			return false
+		var late_now: int = Time.get_ticks_msec()
+		_weak_link_answered(slot, st, late_now - int(sent_log[n]))
+		var oldest_open: int = late_now
+		for k: Variant in sent_log.keys():
+			if int(k) <= n:
+				sent_log.erase(k)
+			else:
+				oldest_open = mini(oldest_open, int(sent_log[k]))
+		st["since"] = oldest_open
+		return true
 	if not st.answered:
 		st.answered = true
 		var now: int = Time.get_ticks_msec()
+		sent_log.clear()
 		_weak_link_answered(slot, st, now - st.sent)
 		_weak_link_sample(slot, st, now - st.sent, now)
 	return true

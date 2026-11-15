@@ -64267,6 +64267,8 @@ func _scenario_relay_phone_polled_first_and_pinged_1270() -> Array[String]:
 	var link: Node = server.relay_link
 	if link == null or not link.has_method("pump_inbound") or link.process_priority < server.process_priority:
 		failures.append("the relay link has no pump_inbound or is processed before the server (priority %s vs %d), which delays every send a frame" % [link.process_priority if link != null else "no link", server.process_priority])
+	if link != null and link.get("external_pump") != true:
+		failures.append("the relay link still reads packets in its own _process (two read points a frame)")
 	var phone: WebSocketPeer = await _internet_phone_683(rig, {"id": "net-1270", "client": "phone"})
 	var seat: Dictionary = await _online_wait_239(rig, phone, "slot") if phone != null else {}
 	if not seat.has("slot"):
@@ -64327,6 +64329,31 @@ func _scenario_relay_phone_polled_first_and_pinged_1270() -> Array[String]:
 				failures.append("the lobby state lost the relay phone's relay tag: %s" % entry)
 	if not listed:
 		failures.append("the relay phone is missing from the published lobby state")
+	# A slow but live phone answers each ping only once the next one has arrived (a
+	# round trip longer than the ping interval): the late answers still count, so
+	# its ping stays near that round trip instead of climbing as if it had stalled.
+	var held: Variant = null
+	var slow_until: int = Time.get_ticks_msec() + 1500
+	while Time.get_ticks_msec() < slow_until:
+		for c: WebSocketPeer in rig["clients"]:
+			c.poll()
+		while phone.get_available_packet_count() > 0:
+			var pkt2: PackedByteArray = phone.get_packet()
+			if pkt2.size() < 2 or pkt2[0] != 1:
+				continue
+			var msg2: Variant = JSON.parse_string(pkt2.slice(1).get_string_from_utf8())
+			if msg2 is Dictionary and msg2.get("t") == "ping":
+				if held != null:
+					_online_send_239(phone, 1, JSON.stringify({"t": "pong", "n": held}).to_utf8_buffer())
+				held = msg2.get("n")
+		await process_frame
+	var slow: int = server.slot_ping_msec(slot)
+	if slow < 0 or slow > 3 * server.ping_interval_msec:
+		failures.append("a phone answering every ping one ping late shows ping %d (interval %d ms); want about one interval, not a stall" % [slow, server.ping_interval_msec])
+	# Catch up (answer the held ping and the newest) before the stall phase.
+	if held != null:
+		_online_send_239(phone, 1, JSON.stringify({"t": "pong", "n": held}).to_utf8_buffer())
+	await _await_ticks(10)
 	# A phone that stops answering: its ping climbs with the wait instead of holding
 	# the last answer (a stalled link must not look steady).
 	var answered_rtt: int = server.slot_ping_msec(slot)

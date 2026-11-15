@@ -3860,8 +3860,9 @@
   // Stream continuously at display rate rather than on pointer events, so the
   // host always has the newest value and a dropped move event costs nothing.
   // One reused input packet per transport (send() copies the bytes): the bare
-  // 8 bytes on the LAN, [KIND_INPUT][8 bytes] over the relay. Still sent every
-  // frame, changed or not: the host expects a stream at display rate (ADR-0002).
+  // 8 bytes on the LAN, [KIND_INPUT][8 bytes] over the relay. Sent changed or
+  // not: on the LAN every frame, the stream at display rate the host expects
+  // (ADR-0002); over the relay about 60 a second (#1270, below).
   var inputBuf = new ArrayBuffer(8), inputView = new DataView(inputBuf);
   var relayInputBuf = new ArrayBuffer(9), relayInputView = new DataView(relayInputBuf);
   relayInputView.setUint8(0, KIND_INPUT);
