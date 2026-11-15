@@ -718,7 +718,7 @@ func _choose_goal() -> void:
 			goal = enemy.global_position
 		else:
 			goal = me
-	elif pickup != null and (_holds_pickaxe() or pickup_distance < enemy_distance * PICKUP_DETOUR * float(skill()["pickup"])):
+	elif pickup != null and ((_holds_pickaxe() and not _is_health_pack(pickup)) or pickup_distance < enemy_distance * PICKUP_DETOUR * float(skill()["pickup"])):
 		goal = pickup.global_position
 		if pickup != _chasing:
 			_chasing = pickup
@@ -860,6 +860,8 @@ func _nearest_pickup() -> Node2D:
 			continue
 		if _same_weapon_as_held(pickup):
 			continue # a weapon it already holds gains nothing (#1007)
+		if _is_health_pack(pickup) and float(player.get("damage")) <= 0.0:
+			continue # a health pack gains an unhurt bot nothing (#1267)
 		var at: Vector2 = (pickup as Node2D).global_position
 		var d: float = player.global_position.distance_to(at)
 		if d < best_distance and _footing(at) == FOOT_SOLID and _footing(at + Vector2(EDGE_KEEP, 0.0)) == FOOT_SOLID \
@@ -867,6 +869,11 @@ func _nearest_pickup() -> Node2D:
 			best_distance = d
 			best = pickup
 	return best
+
+## Issue #1267: a health pack, which is never the weapon upgrade a bot holding
+## the pickaxe is looking for.
+func _is_health_pack(pickup: Node) -> bool:
+	return pickup.get("is_health_pack") == true
 
 ## Issue #1007: true when the pickup carries the weapon the bot already holds.
 func _same_weapon_as_held(pickup: Node) -> bool:

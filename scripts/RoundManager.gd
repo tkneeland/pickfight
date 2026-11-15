@@ -2531,6 +2531,16 @@ func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 		real = not _is_bot_slot(attacker_slot)
 	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec(), weapon, real)
 
+## Whether any living fighter has taken damage (#1267): the PickupDirector only
+## offers a health pack while one does.
+func any_living_damaged() -> bool:
+	for player: Variant in _players:
+		if player == null or not is_instance_valid(player) or player.get("alive") == false:
+			continue
+		if float(player.get("damage")) > 0.0:
+			return true
+	return false
+
 func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
 	_stats.record_pickup(slot, weapon_name)
 	var held_ach: Node = _achievements()

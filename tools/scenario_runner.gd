@@ -1354,6 +1354,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"health_pack_spawns_only_when_someone_is_hurt_1267",
 	"health_pack_heals_first_toucher_to_zero_1267",
 	"health_pack_rides_snapshot_and_joiner_draws_it_1267",
+	"bot_ignores_health_pack_unless_hurt_1267",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4487,6 +4488,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_health_pack_heals_first_toucher_to_zero_1267()
 		"health_pack_rides_snapshot_and_joiner_draws_it_1267":
 			return await _scenario_health_pack_rides_snapshot_and_joiner_draws_it_1267()
+		"bot_ignores_health_pack_unless_hurt_1267":
+			return await _scenario_bot_ignores_health_pack_unless_hurt_1267()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -64266,14 +64269,27 @@ func _scenario_health_pack_heals_first_toucher_to_zero_1267() -> Array[String]:
 	var loop: Dictionary = await _ghost_round()
 	var players: Array[RigidBody2D] = loop["players"]
 	var scene: PackedScene = load("res://scenes/Pickup.tscn") as PackedScene
-	players[1].damage = 60.0
 	players[2].damage = 40.0
 	var weapon_before: Resource = players[1].weapon_stats
+	var heals: Array = [0]
+	players[1].healed.connect(func() -> void: heals[0] += 1)
 	var pack: Area2D = scene.instantiate() as Area2D
 	pack.set_health_pack()
 	loop["stage"].add_child(pack)
+	# An unhurt fighter on it gains nothing: the pack stays, no callout, no signal.
 	pack.global_position = players[1].global_position
 	await _await_ticks(5)
+	if not is_instance_valid(pack) or pack.is_queued_for_deletion():
+		failures.append("an unhurt fighter used up the pack")
+		return failures
+	if not _callouts_818(loop).is_empty() or heals[0] != 0:
+		failures.append("an unhurt fighter got a callout or heal signal from the pack")
+	# Once hurt, standing on it takes it.
+	players[1].damage = 60.0
+	pack._on_body_entered(players[1])
+	await _await_ticks(5)
+	if heals[0] != 1:
+		failures.append("the healed signal fired %d times, expected 1" % heals[0])
 	if players[1].damage != 0.0:
 		failures.append("the toucher has %.1f damage, expected 0" % players[1].damage)
 	if players[1].weapon_stats != weapon_before:
@@ -64282,9 +64298,9 @@ func _scenario_health_pack_heals_first_toucher_to_zero_1267() -> Array[String]:
 		failures.append("the pack is still on the stage after being claimed")
 		pack.queue_free()
 	var callouts: Array[Node] = _callouts_818(loop)
-	var want: String = TranslationServer.translate("WEAPON_HEALTH_PACK")
-	if want == "WEAPON_HEALTH_PACK":
-		failures.append("WEAPON_HEALTH_PACK has no translation")
+	var want: String = TranslationServer.translate("PICKUP_HEALED")
+	if want == "PICKUP_HEALED":
+		failures.append("PICKUP_HEALED has no translation")
 	if callouts.size() != 1 or callouts[0].text != want:
 		failures.append("expected one '%s' callout, got %d" % [want, callouts.size()])
 	# A second fighter arriving after the claim gets nothing.
@@ -64316,7 +64332,11 @@ func _scenario_health_pack_rides_snapshot_and_joiner_draws_it_1267() -> Array[St
 	get_root().add_child(host_pack)
 	var fake_rm := Node.new()
 	get_root().add_child(fake_rm)
-	var captured: Array = SnapshotCaptureScript251._pickups(fake_rm)
+	var mine: int = host_pack.get_instance_id() & 0xFFFF
+	var captured: Array = []
+	for entry: Dictionary in SnapshotCaptureScript251._pickups(fake_rm):
+		if entry["pickup_id"] == mine:
+			captured.append(entry)
 	var wire_type: int = -1
 	if captured.size() != 1 or captured[0]["weapon_type"] != PickupType.HEALTH_PACK_TYPE:
 		failures.append("the snapshot's pickup is %s, expected the health pack type" % [captured])
@@ -64348,4 +64368,30 @@ func _scenario_health_pack_rides_snapshot_and_joiner_draws_it_1267() -> Array[St
 	await _rc_close_241(rig)
 	host_pack.queue_free()
 	fake_rm.queue_free()
+	return failures
+
+## Issue #1267: a bot passes over a health pack while unhurt, takes one once
+## hurt, and a pack is never the "pickaxe bot goes for a pickup" upgrade.
+func _scenario_bot_ignores_health_pack_unless_hurt_1267() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, -400.0, 400.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	await _await_ticks(30)
+	var scene: PackedScene = load("res://scenes/Pickup.tscn") as PackedScene
+	var pack: Area2D = scene.instantiate() as Area2D
+	pack.set_health_pack()
+	stage.add_child(pack)
+	pack.global_position = Vector2(-250, 250)
+	await _await_ticks(2)
+	player.damage = 0.0
+	if bot._nearest_pickup() != null:
+		failures.append("an unhurt bot targets %s, want no pickup" % bot._nearest_pickup())
+	player.damage = 30.0
+	if bot._nearest_pickup() != pack:
+		failures.append("a hurt bot targets %s, want the health pack" % bot._nearest_pickup())
+	if not bot._is_health_pack(pack):
+		failures.append("the bot does not recognise a health pack")
+	await _teardown(stage)
 	return failures

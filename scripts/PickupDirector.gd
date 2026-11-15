@@ -164,7 +164,7 @@ func _spawn_pickup() -> void:
 	if spot == null:
 		return
 	if _wants_health_pack():
-		_place(scene.instantiate() as Node2D, parent, spot, true)
+		_add_spawned(scene.instantiate() as Node2D, parent, spot, true)
 		return
 	var weapons: Array[Resource] = _rm.pickup_weapons
 	var offered: Array[Resource] = weapons if not weapons.is_empty() else PickupWeaponsScript.available_weapons()
@@ -174,9 +174,11 @@ func _spawn_pickup() -> void:
 		return
 	var pickup: Node2D = scene.instantiate() as Node2D
 	pickup.set_weapon(weapon)
-	_place(pickup, parent, spot, false)
+	_add_spawned(pickup, parent, spot, false)
 
-func _place(pickup: Node2D, parent: Node, spot: Vector2, health: bool) -> void:
+## Puts a freshly built `pickup` on `spot` under `parent` (a health pack when
+## `health`), tracks it, and plays the pop-in.
+func _add_spawned(pickup: Node2D, parent: Node, spot: Vector2, health: bool) -> void:
 	if health:
 		pickup.set_health_pack()
 	parent.add_child(pickup)
@@ -189,14 +191,7 @@ func _place(pickup: Node2D, parent: Node, spot: Vector2, health: bool) -> void:
 ## Whether this spawn is a health pack (#1267). Draws from `rng` only once a
 ## living fighter is damaged and no pack is already lying there.
 func _wants_health_pack() -> bool:
-	var hurt: bool = false
-	for player: Variant in _rm._players:
-		if player == null or not is_instance_valid(player) or player.get("alive") == false:
-			continue
-		if float(player.get("damage")) > 0.0:
-			hurt = true
-			break
-	if not hurt:
+	if not _rm.any_living_damaged():
 		return false
 	for pickup: Node2D in _live_pickups():
 		if pickup.get("is_health_pack") == true:
@@ -204,7 +199,7 @@ func _wants_health_pack() -> bool:
 	return rng.randf() < HEALTH_PACK_CHANCE
 
 ## The spawn cue (#816): the pickup scales up with an overshoot and a one-shot
-## ring expands from its spot. Added here so Pickup.gd is untouched.
+## ring expands from its spot, for weapons and health packs alike.
 func _pop_in(pickup: Node2D, parent: Node, spot: Vector2) -> void:
 	pop_scale(pickup)
 	PickupSpawnRingScript.spawn_at(parent, spot)

@@ -214,6 +214,10 @@ signal eliminated
 ## counts it for the match stats. Carries the weapon's name, e.g. "Hammer".
 signal weapon_picked_up(weapon_name: String)
 
+## This player took a health pack (#1267) and is back to 0 damage; SfxHooks
+## plays the grab sound off it.
+signal healed
+
 ## Whether this player is in play. False from elimination (damage or a
 ## ring-out) until `start_round()` brings them back for the next round --
 ## there is no mid-round respawn (ADR-0004): a round is over the same body

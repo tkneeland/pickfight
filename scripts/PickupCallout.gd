@@ -28,17 +28,19 @@ var colour: Color = Color.WHITE
 ## Who the callout belongs to: a new one for the same key replaces it.
 var owner_key: int = 0
 
-## Shows `weapon_id` (a resource basename such as "fishing_rod") over `fighter`.
-## Returns the callout, or null when none is due (a ghost, the spawn weapon).
-static func show_for(fighter_body: Node2D, weapon_id: String, parent: Node) -> Node2D:
+## Shows `weapon_id` (a resource basename such as "fishing_rod") over `fighter`,
+## or, when `text_key` is given (#1267, "PICKUP_HEALED"), that translated string
+## instead. Returns the callout, or null when none is due (a ghost, the spawn
+## weapon).
+static func show_for(fighter_body: Node2D, weapon_id: String, parent: Node, text_key: String = "") -> Node2D:
 	if weapon_id == SPAWN_WEAPON or not fighter_body.get("alive") or parent == null:
 		return null
 	var identity: Variant = fighter_body.get("identity_color")
 	var tint: Color = identity if identity is Color else Color.WHITE
 	# The Online joiner's copy (#976), before this machine's setting is asked.
 	EffectStreamScript.record("callout", {"p": fighter_body.global_position, "w": weapon_id, "c": tint,
-		"o": fighter_body.get_instance_id()}, fighter_body)
-	var callout: Node2D = show_at(parent, fighter_body.global_position, weapon_id, tint, fighter_body.get_instance_id())
+		"o": fighter_body.get_instance_id(), "t": text_key}, fighter_body)
+	var callout: Node2D = show_at(parent, fighter_body.global_position, weapon_id, tint, fighter_body.get_instance_id(), text_key)
 	if callout != null:
 		callout.fighter = fighter_body
 	return callout
@@ -46,7 +48,7 @@ static func show_for(fighter_body: Node2D, weapon_id: String, parent: Node) -> N
 ## The callout itself, for a fighter at `at` in `tint`; `key` names the fighter
 ## so its next grab replaces this one. Shared by the host and the Online
 ## joiner (#976). Null with Settings > Pickup callouts off on this machine.
-static func show_at(parent: Node, at: Vector2, weapon_id: String, tint: Color, key: int) -> Node2D:
+static func show_at(parent: Node, at: Vector2, weapon_id: String, tint: Color, key: int, text_key: String = "") -> Node2D:
 	if parent == null or not parent.is_inside_tree():
 		return null
 	# Settings > Pickup callouts (#882); on when there is no Sfx autoload.
@@ -59,9 +61,12 @@ static func show_at(parent: Node, at: Vector2, weapon_id: String, tint: Color, k
 	var callout: Node2D = (load("res://scripts/PickupCallout.gd") as GDScript).new() as Node2D
 	callout.owner_key = key
 	callout.colour = tint
-	var name_key: String = "WEAPON_" + weapon_id.to_upper()
-	var shown: String = TranslationServer.translate(name_key)
-	callout.text = weapon_id.replace("_", " ").capitalize() if shown == name_key else shown
+	if not text_key.is_empty():
+		callout.text = TranslationServer.translate(text_key)
+	else:
+		var name_key: String = "WEAPON_" + weapon_id.to_upper()
+		var shown: String = TranslationServer.translate(name_key)
+		callout.text = weapon_id.replace("_", " ").capitalize() if shown == name_key else shown
 	parent.add_child(callout)
 	callout.global_position = at + Vector2(0.0, -START_RISE)
 	return callout

@@ -14,6 +14,7 @@ extends RefCounted
 ## - `flail` / `grapple`: one of each at most; the first player holding one.
 
 const PickupWeaponsScript := preload("res://scripts/PickupWeapons.gd")
+const PickupScript := preload("res://scripts/Pickup.gd")
 const GameClockScript := preload("res://scripts/GameClock.gd")
 const SnapshotScript := preload("res://scripts/Snapshot.gd")
 const BoomerangScript := preload("res://scripts/Boomerang.gd")
@@ -403,7 +404,7 @@ static func _pickups(rm: Node) -> Array:
 			"pickup_id": node.get_instance_id() & 0xFFFF,
 			"position": node.global_position,
 			# #1267: a health pack is the reserved type the joiner builds a pack from.
-			"weapon_type": 0xFFFF if node.is_health_pack else _weapon_index(node.weapon_stats),
+			"weapon_type": PickupScript.HEALTH_PACK_TYPE if node.is_health_pack else _weapon_index(node.weapon_stats),
 			"halo": node.halo_phase_byte(),
 		})
 	return out
