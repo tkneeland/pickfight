@@ -6,7 +6,7 @@
 ; hook on a rope. Mostly a way round the stage, with a real hit (16 since #1277).
 ;
 ; Flick the drag to fire: the hook flies straight out along the flick at
-; 1600 px/s for up to 560 px. If it meets terrain it sticks there, and while
+; 1600 px/s for up to 650 px (#653). If it meets terrain it sticks there, and while
 ; the drag stays held the rope reels in at 650 px/s, hauling the player
 ; toward the hook with at most 4200 of force (gravity on a player is about
 ; 1470), down to 44 px, where they hang and swing. Release to let go; the

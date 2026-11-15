@@ -3,7 +3,8 @@
 [ext_resource type="Script" path="res://scripts/WeaponStats.gd" id="1"]
 
 ; The fishing rod (issue #273): a light launcher that fires a hook on a line.
-; Lighter and faster than the grapple, with shorter range and less power.
+; Lighter and faster than the grapple; its hook flies further (800 px against 650) and
+; hits about as hard (15 against 16, #1277).
 ;
 ; Flick the drag to fire: the hook flies out along the flick at
 ; 900 px/s for up to 800 px (#641). The rod moves what it hits to you (#629): a hook

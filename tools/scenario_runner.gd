@@ -1380,6 +1380,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"exit_tree_flushes_telemetry_1271",
 	"kind_switch_flushes_joins_1271",
 	"relay_lobby_records_have_their_own_rate_limit_1271",
+	"grapple_lethal_hit_does_not_latch_1277",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4565,6 +4566,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_kind_switch_flushes_joins_1271()
 		"relay_lobby_records_have_their_own_rate_limit_1271":
 			return await _scenario_relay_lobby_records_have_their_own_rate_limit_1271()
+		"grapple_lethal_hit_does_not_latch_1277":
+			return await _scenario_grapple_lethal_hit_does_not_latch_1277()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -65578,5 +65581,33 @@ func _scenario_relay_lobby_records_have_their_own_rate_limit_1271() -> Array[Str
 		failures.append("match records were limited as %s after lobby records, wanted two then 429" % [matches])
 	DirAccess.remove_absolute(path)
 	relay.queue_free()
+	_scenario_completed = true
+	return failures
+## #1277: a grapple hit that KOs its target comes home instead of latching
+## onto the KO'd body (no rope to them, no latch clink).
+func _scenario_grapple_lethal_hit_does_not_latch_1277() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var shooter: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION)
+	var victim: RigidBody2D = _spawn_player(stage, DEEP_PARK_POSITION + Vector2(260, 0))
+	await _await_ticks(2)
+	var stats: WeaponStatsType = await _equip(shooter, GRAPPLE_PATH)
+	_brace(shooter)
+	victim.freeze = true
+	victim.damage = victim.DEATH_DAMAGE - stats.projectile_damage + 1.0
+	await _flick(shooter, Vector2.RIGHT)
+	var hook: Node2D = shooter.launched_hook()
+	if hook == null:
+		failures.append("a flick did not fire the hook")
+		await _teardown(stage)
+		_scenario_completed = true
+		return failures
+	await _await_condition(func() -> bool: return not is_instance_valid(hook) or not hook.is_flying(), 1000)
+	print("      lethal grapple hit: victim alive %s, hook stuck %s" % [victim.alive, is_instance_valid(hook) and hook.is_stuck()])
+	if victim.alive:
+		failures.append("the hook did not KO a victim %.1f short of the KO line" % (victim.DEATH_DAMAGE - victim.damage))
+	if is_instance_valid(hook) and hook.is_stuck():
+		failures.append("the hook latched onto the player its hit had just KO'd")
+	await _teardown(stage)
 	_scenario_completed = true
 	return failures
