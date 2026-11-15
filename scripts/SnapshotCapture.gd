@@ -402,7 +402,8 @@ static func _pickups(rm: Node) -> Array:
 		out.append({
 			"pickup_id": node.get_instance_id() & 0xFFFF,
 			"position": node.global_position,
-			"weapon_type": _weapon_index(node.weapon_stats),
+			# #1267: a health pack is the reserved type the joiner builds a pack from.
+			"weapon_type": 0xFFFF if node.is_health_pack else _weapon_index(node.weapon_stats),
 			"halo": node.halo_phase_byte(),
 		})
 	return out

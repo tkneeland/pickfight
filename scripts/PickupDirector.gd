@@ -44,6 +44,11 @@ const PICKUP_CLEAR_OF_SPAWN_RADIUS: float = 120.0
 ## collectable from the first frame.
 const POP_START_SCALE: float = 0.2
 const POP_SEC: float = 0.3
+## Health packs (#1267): roughly this share of spawns is a health pack instead
+## of a weapon, drawn off `rng` so a seeded match repeats. A pack is only
+## offered while a living fighter has taken damage, and never while another
+## pack is on the stage; otherwise the spawn is a weapon as before.
+const HEALTH_PACK_CHANCE: float = 1.0 / 6.0
 
 ## Multiplies the spawn interval (round modifier Pickup rush, #841); 1.0 is as
 ## authored. A modifier sets it for a round and puts it back on undo.
@@ -158,6 +163,9 @@ func _spawn_pickup() -> void:
 	var spot: Variant = free_spot()
 	if spot == null:
 		return
+	if _wants_health_pack():
+		_place(scene.instantiate() as Node2D, parent, spot, true)
+		return
 	var weapons: Array[Resource] = _rm.pickup_weapons
 	var offered: Array[Resource] = weapons if not weapons.is_empty() else PickupWeaponsScript.available_weapons()
 	offered = _switched_on(offered)
@@ -166,12 +174,34 @@ func _spawn_pickup() -> void:
 		return
 	var pickup: Node2D = scene.instantiate() as Node2D
 	pickup.set_weapon(weapon)
+	_place(pickup, parent, spot, false)
+
+func _place(pickup: Node2D, parent: Node, spot: Vector2, health: bool) -> void:
+	if health:
+		pickup.set_health_pack()
 	parent.add_child(pickup)
 	pickup.global_position = spot
 	# Placed after entering the tree: a spawn, not motion (issue #108).
 	pickup.reset_physics_interpolation()
 	_pickups.append(pickup)
 	_pop_in(pickup, parent, spot)
+
+## Whether this spawn is a health pack (#1267). Draws from `rng` only once a
+## living fighter is damaged and no pack is already lying there.
+func _wants_health_pack() -> bool:
+	var hurt: bool = false
+	for player: Variant in _rm._players:
+		if player == null or not is_instance_valid(player) or player.get("alive") == false:
+			continue
+		if float(player.get("damage")) > 0.0:
+			hurt = true
+			break
+	if not hurt:
+		return false
+	for pickup: Node2D in _live_pickups():
+		if pickup.get("is_health_pack") == true:
+			return false
+	return rng.randf() < HEALTH_PACK_CHANCE
 
 ## The spawn cue (#816): the pickup scales up with an overshoot and a one-shot
 ## ring expands from its spot. Added here so Pickup.gd is untouched.
