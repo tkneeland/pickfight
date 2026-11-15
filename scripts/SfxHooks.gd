@@ -99,6 +99,8 @@ func _watch_player(player: Node) -> void:
 	player.connect("eliminated", _on_eliminated.bind(player))
 	if player.has_signal("weapon_picked_up"):
 		player.connect("weapon_picked_up", _on_weapon_picked_up.bind(player))
+	if player.has_signal("healed"):
+		player.connect("healed", _on_healed.bind(player))
 	if player.has_signal("body_entered"):
 		player.connect("body_entered", _on_player_touched.bind(player))
 	_velocity.track(player)
@@ -120,6 +122,10 @@ func _on_strike_landed(victim: Node, amount: float, point: Vector2, lethal: bool
 ## A body grabbed a pickup (#898): the pickup itself refuses dead players and
 ## claimed pickups before it emits, so every emission is a real grab.
 func _on_weapon_picked_up(_weapon_name: String, player: Node) -> void:
+	sfx.play(&"pickup_grab", player.global_position, 1.0)
+
+## A body took a health pack (#1267): the weapon-grab sound.
+func _on_healed(player: Node) -> void:
 	sfx.play(&"pickup_grab", player.global_position, 1.0)
 
 func _on_eliminated(player: Node) -> void:

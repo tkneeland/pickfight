@@ -1354,6 +1354,12 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"relay_phone_input_queue_catches_up_1270",
 	"relay_phone_polled_first_and_pinged_1270",
 	"phone_page_caps_relay_send_rate_1270",
+	"health_pack_spawns_only_when_someone_is_hurt_1267",
+	"health_pack_heals_first_toucher_to_zero_1267",
+	"health_pack_rides_snapshot_and_joiner_draws_it_1267",
+	"bot_ignores_health_pack_unless_hurt_1267",
+	"health_pack_claimed_by_fighter_hurt_while_standing_on_it_1267",
+	"health_pack_does_not_hold_a_weapon_slot_or_shift_the_weapon_draw_1267",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4487,6 +4493,18 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_relay_phone_polled_first_and_pinged_1270()
 		"phone_page_caps_relay_send_rate_1270":
 			return _scenario_phone_page_caps_relay_send_rate_1270()
+		"health_pack_spawns_only_when_someone_is_hurt_1267":
+			return await _scenario_health_pack_spawns_only_when_someone_is_hurt_1267()
+		"health_pack_heals_first_toucher_to_zero_1267":
+			return await _scenario_health_pack_heals_first_toucher_to_zero_1267()
+		"health_pack_rides_snapshot_and_joiner_draws_it_1267":
+			return await _scenario_health_pack_rides_snapshot_and_joiner_draws_it_1267()
+		"bot_ignores_health_pack_unless_hurt_1267":
+			return await _scenario_bot_ignores_health_pack_unless_hurt_1267()
+		"health_pack_claimed_by_fighter_hurt_while_standing_on_it_1267":
+			return await _scenario_health_pack_claimed_by_fighter_hurt_while_standing_on_it_1267()
+		"health_pack_does_not_hold_a_weapon_slot_or_shift_the_weapon_draw_1267":
+			return await _scenario_health_pack_does_not_hold_a_weapon_slot_or_shift_the_weapon_draw_1267()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -64193,6 +64211,18 @@ func _scenario_custom_stage_recovery_keeps_differing_copies_1255() -> Array[Stri
 	CustomStages1047.dir_override = ""
 	_scenario_completed = true
 	return failures
+## Issue #1267: a stand-in fighter for the director's health-pack rule: alive,
+## with a settable damage, and nothing else.
+func _health_stand_in_1267(at: Vector2, hurt: float) -> Node2D:
+	var script := GDScript.new()
+	script.source_code = "extends Node2D\nvar alive: bool = true\nvar damage: float = 0.0\n"
+	script.reload()
+	var node := Node2D.new()
+	node.set_script(script)
+	node.damage = hurt
+	get_root().add_child(node)
+	node.global_position = at
+	return node
 
 # --- Relay phone input lag (#1270) ----------------------------------------------
 ## A relay phone's input queue catches up from its first waiting packet and keeps
@@ -64403,4 +64433,273 @@ func _scenario_phone_page_caps_relay_send_rate_1270() -> Array[String]:
 		if absf(per_sec - 60.0) > 2.0:
 			failures.append("%.0f Hz display: %.1f relay packets a second, want about 60" % [hz, per_sec])
 	_scenario_completed = true
+	return failures
+## Issue #1267: the director never lays a health pack while nobody is hurt, and
+## does lay one among its spawns once a living fighter is, at most one at a time.
+func _scenario_health_pack_spawns_only_when_someone_is_hurt_1267() -> Array[String]:
+	var failures: Array[String] = []
+	var spawns := PackedVector2Array([Vector2(-900, -40)])
+	var stage: Node2D = _make_pickup_stub_stage("HealthStage", spawns, PackedVector2Array([Vector2(300, -40)])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var fighter: Node2D = _health_stand_in_1267(Vector2(-900, -40), 0.0)
+	rm._players = [fighter]
+	var director: Node = rm._pickup_director
+	director.rng.seed = 1267
+	var packs: int = 0
+	for i in 120:
+		director.clear()
+		director._spawn_pickup()
+		for pickup: Node2D in director._live_pickups():
+			if pickup.is_health_pack:
+				packs += 1
+	if packs != 0:
+		failures.append("%d health packs spawned while nobody was hurt" % packs)
+	fighter.damage = 40.0
+	var seen_weapons: int = 0
+	for i in 120:
+		director.clear()
+		director._spawn_pickup()
+		for pickup: Node2D in director._live_pickups():
+			if pickup.is_health_pack:
+				packs += 1
+			else:
+				seen_weapons += 1
+	if packs < 5 or packs > 40:
+		failures.append("%d health packs in 120 spawns with a hurt fighter, expected about 20" % packs)
+	if seen_weapons < 60:
+		failures.append("only %d weapon spawns in 120, packs should be the minority" % seen_weapons)
+	# One pack at a time: with one lying there, the next spawn is never a second.
+	director.clear()
+	var first: Node2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Node2D
+	first.set_health_pack()
+	stage.add_child(first)
+	director._pickups.append(first)
+	for i in 60:
+		if director._wants_health_pack():
+			failures.append("a second health pack was wanted while one was on the stage")
+			break
+	director.clear()
+	fighter.queue_free()
+	rm.free()
+	await _teardown(stage)
+	return failures
+
+## Issue #1267: the first body to touch a pack ends at 0 damage, keeps their
+## weapon, the pack is gone, and a second fighter gets nothing from it.
+func _scenario_health_pack_heals_first_toucher_to_zero_1267() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	var scene: PackedScene = load("res://scenes/Pickup.tscn") as PackedScene
+	players[2].damage = 40.0
+	var weapon_before: Resource = players[1].weapon_stats
+	var heals: Array = [0]
+	players[1].healed.connect(func() -> void: heals[0] += 1)
+	var pack: Area2D = scene.instantiate() as Area2D
+	pack.set_health_pack()
+	loop["stage"].add_child(pack)
+	# An unhurt fighter on it gains nothing: the pack stays, no callout, no signal.
+	pack.global_position = players[1].global_position
+	await _await_ticks(5)
+	if not is_instance_valid(pack) or pack.is_queued_for_deletion():
+		failures.append("an unhurt fighter used up the pack")
+		return failures
+	if not _callouts_818(loop).is_empty() or heals[0] != 0:
+		failures.append("an unhurt fighter got a callout or heal signal from the pack")
+	# Once hurt, standing on it takes it.
+	players[1].damage = 60.0
+	pack._on_body_entered(players[1])
+	await _await_ticks(5)
+	if heals[0] != 1:
+		failures.append("the healed signal fired %d times, expected 1" % heals[0])
+	if players[1].damage != 0.0:
+		failures.append("the toucher has %.1f damage, expected 0" % players[1].damage)
+	if players[1].weapon_stats != weapon_before:
+		failures.append("the pack changed the toucher's weapon")
+	if is_instance_valid(pack) and not pack.is_queued_for_deletion():
+		failures.append("the pack is still on the stage after being claimed")
+		pack.queue_free()
+	var callouts: Array[Node] = _callouts_818(loop)
+	var want: String = TranslationServer.translate("PICKUP_HEALED")
+	if want == "PICKUP_HEALED":
+		failures.append("PICKUP_HEALED has no translation")
+	if callouts.size() != 1 or callouts[0].text != want:
+		failures.append("expected one '%s' callout, got %d" % [want, callouts.size()])
+	# A second fighter arriving after the claim gets nothing.
+	var other: Area2D = scene.instantiate() as Area2D
+	other.set_health_pack()
+	loop["stage"].add_child(other)
+	other.global_position = Vector2(0, -3000)
+	other._on_body_entered(players[2])
+	other._on_body_entered(players[3])
+	players[3].damage = 25.0
+	other._on_body_entered(players[3])
+	if players[2].damage != 0.0 or players[3].damage != 25.0:
+		failures.append("one pack healed two fighters (damages %.1f, %.1f)" % [players[2].damage, players[3].damage])
+	# A weapon head does not claim it (only bodies enter the area).
+	if other.collision_mask != 1:
+		failures.append("the pack watches layer %d, expected the body layer only" % other.collision_mask)
+	other.queue_free()
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #1267: the snapshot marks a pack, and the joiner builds the host's own
+## pack scene from it, same art, display-only.
+func _scenario_health_pack_rides_snapshot_and_joiner_draws_it_1267() -> Array[String]:
+	var failures: Array[String] = []
+	var PickupType: GDScript = load("res://scripts/Pickup.gd")
+	var scene: PackedScene = load("res://scenes/Pickup.tscn") as PackedScene
+	var host_pack: Node2D = scene.instantiate() as Node2D
+	host_pack.set_health_pack()
+	get_root().add_child(host_pack)
+	var fake_rm := Node.new()
+	get_root().add_child(fake_rm)
+	var mine: int = host_pack.get_instance_id() & 0xFFFF
+	var captured: Array = []
+	for entry: Dictionary in SnapshotCaptureScript251._pickups(fake_rm):
+		if entry["pickup_id"] == mine:
+			captured.append(entry)
+	var wire_type: int = -1
+	if captured.size() != 1 or captured[0]["weapon_type"] != PickupType.HEALTH_PACK_TYPE:
+		failures.append("the snapshot's pickup is %s, expected the health pack type" % [captured])
+	else:
+		var decoded: Dictionary = _rc_codec_241({"is_full_snapshot": true, "stage_id": 0, "pickups": captured, "players": []})
+		var back: Array = decoded.get("pickups", [])
+		wire_type = int(back[0]["weapon_type"]) if not back.is_empty() else -1
+		if wire_type != PickupType.HEALTH_PACK_TYPE:
+			failures.append("the pack type %d did not survive the codec" % wire_type)
+	var rig: Dictionary = {"nodes": [], "relay": null}
+	var client: Node = await _rc_client_241(rig, "ws://127.0.0.1:1")
+	var world: Dictionary = _rc_world_241(0, 1)
+	world["pickups"] = [{"pickup_id": 9, "position": Vector2(50, -40), "weapon_type": PickupType.HEALTH_PACK_TYPE}]
+	client.apply_snapshot(_rc_codec_241(world))
+	client._render()
+	var puppet: Node2D = client._puppets.get("pick9")
+	if puppet == null or puppet.pickup_node() == null:
+		failures.append("the joiner built no pickup puppet for the pack")
+	else:
+		var shown: Node2D = puppet.pickup_node()
+		if not shown.is_health_pack or shown.weapon_stats != null:
+			failures.append("the joiner's pickup is not a health pack")
+		if shown.art_polygon() != host_pack.art_polygon() or shown.art_polygon().size() < 3:
+			failures.append("the joiner's pack art differs from the host's")
+		if puppet.pickup_layout()["outline"] != PickupType.health_layout()["outline"]:
+			failures.append("the puppet layout is not the health layout")
+		if shown.trigger_radius() != host_pack.trigger_radius():
+			failures.append("the joiner's pack trigger differs from the host's")
+	await _rc_close_241(rig)
+	host_pack.queue_free()
+	fake_rm.queue_free()
+	return failures
+
+## Issue #1267: a bot passes over a health pack while unhurt, takes one once
+## hurt, and a pack is never the "pickaxe bot goes for a pickup" upgrade.
+func _scenario_bot_ignores_health_pack_unless_hurt_1267() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, -400.0, 400.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	await _await_ticks(30)
+	var scene: PackedScene = load("res://scenes/Pickup.tscn") as PackedScene
+	var pack: Area2D = scene.instantiate() as Area2D
+	pack.set_health_pack()
+	stage.add_child(pack)
+	pack.global_position = Vector2(-250, 250)
+	await _await_ticks(2)
+	player.damage = 0.0
+	if bot._nearest_pickup() != null:
+		failures.append("an unhurt bot targets %s, want no pickup" % bot._nearest_pickup())
+	player.damage = 30.0
+	if bot._nearest_pickup() != pack:
+		failures.append("a hurt bot targets %s, want the health pack" % bot._nearest_pickup())
+	if not bot._is_health_pack(pack):
+		failures.append("the bot does not recognise a health pack")
+	# A hurt pickaxe bot with a pack nearer than a weapon: never neither.
+	var weapon_pickup: Area2D = scene.instantiate() as Area2D
+	weapon_pickup.set_weapon(load("res://resources/sword.tres"))
+	stage.add_child(weapon_pickup)
+	weapon_pickup.global_position = Vector2(250, 250)
+	await _await_ticks(2)
+	if bot._nearest_pickup(true) != weapon_pickup:
+		failures.append("skip_packs picks %s, want the weapon pickup" % bot._nearest_pickup(true))
+	bot._choose_goal()
+	var goal_at: Vector2 = bot.goal
+	if goal_at.distance_to(pack.global_position) > 30.0 and goal_at.distance_to(weapon_pickup.global_position) > 30.0:
+		failures.append("a hurt pickaxe bot aims at %s, neither the pack nor the weapon" % goal_at)
+	pack.queue_free()
+	await _await_ticks(2)
+	bot._choose_goal()
+	if bot.goal.distance_to(weapon_pickup.global_position) > 30.0 and bot._nearest_pickup() == weapon_pickup:
+		failures.append("with the pack gone a pickaxe bot does not head for the weapon (goal %s)" % bot.goal)
+	await _teardown(stage)
+	return failures
+
+## Issue #1267: an unhurt fighter standing on a pack who is then hurt takes it,
+## though no new body_entered fires.
+func _scenario_health_pack_claimed_by_fighter_hurt_while_standing_on_it_1267() -> Array[String]:
+	var failures: Array[String] = []
+	var loop: Dictionary = await _ghost_round()
+	var players: Array[RigidBody2D] = loop["players"]
+	players[1].damage = 0.0
+	var pack: Area2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Area2D
+	pack.set_health_pack()
+	loop["stage"].add_child(pack)
+	pack.global_position = players[1].global_position
+	await _await_ticks(8)
+	if not is_instance_valid(pack) or pack.is_queued_for_deletion():
+		failures.append("an unhurt fighter used up the pack")
+		return failures
+	players[1].damage = 45.0
+	await _await_ticks(8)
+	if players[1].damage != 0.0:
+		failures.append("a fighter hurt while standing on the pack still has %.1f damage" % players[1].damage)
+	if is_instance_valid(pack) and not pack.is_queued_for_deletion():
+		failures.append("the pack was not consumed")
+		pack.queue_free()
+	await _teardown(loop["stage"])
+	return failures
+
+## Issue #1267: a pack lying on the stage does not count toward the weapon cap,
+## and rolling for one never shifts the weapon draw.
+func _scenario_health_pack_does_not_hold_a_weapon_slot_or_shift_the_weapon_draw_1267() -> Array[String]:
+	var failures: Array[String] = []
+	var spawns := PackedVector2Array([Vector2(-900, -40)])
+	var stage: Node2D = _make_pickup_stub_stage("HealthCapStage", spawns, PackedVector2Array([Vector2(300, -40), Vector2(600, -40), Vector2(900, -40)])).instantiate()
+	get_root().add_child(stage)
+	var rm := RoundManagerScript.new()
+	rm._current_stage = stage
+	rm._stage_spawn_points = stage.get_spawn_points()
+	var fighter: Node2D = _health_stand_in_1267(Vector2(-900, -40), 0.0)
+	rm._players = [fighter]
+	var director: Node = rm._pickup_director
+	var cap: int = director.cap()
+	var pack: Node2D = (load("res://scenes/Pickup.tscn") as PackedScene).instantiate() as Node2D
+	pack.set_health_pack()
+	stage.add_child(pack)
+	director._pickups.append(pack)
+	for i in cap:
+		director._spawn_pickup()
+	var weapons: int = 0
+	for pickup: Node2D in director._live_pickups():
+		if pickup.get("is_health_pack") != true:
+			weapons += 1
+	if weapons != cap:
+		failures.append("%d weapon pickups with a pack on the stage, expected the full cap of %d" % [weapons, cap])
+	# Rolling for a pack draws off health_rng only: the weapon/spot stream is untouched.
+	director.clear()
+	fighter.damage = 50.0
+	director.rng.seed = 1267
+	var before: int = director.rng.state
+	for i in 40:
+		director._wants_health_pack()
+	if director.rng.state != before:
+		failures.append("rolling for a health pack advanced the weapon/spot rng")
+	director.clear()
+	fighter.queue_free()
+	rm.free()
+	await _teardown(stage)
 	return failures

@@ -59,6 +59,20 @@ const HALO_REACH: float = 2.0
 const HALO_PERIOD_SEC: float = 1.2
 const ART_COLOR: Color = Color(0.95, 0.92, 0.8, 1.0)
 const BACKING_SEGMENTS: int = 24
+## Health pack (#1267). Its `weapon_type` in the world snapshot: past every
+## weapon index, so the Online client builds the same pack, not a weapon.
+const HEALTH_PACK_TYPE: int = 0xFFFF
+## The callout's own string (not a weapon name): "Healed!".
+const HEALTH_CALLOUT_KEY: String = "PICKUP_HEALED"
+## Art: a red cross on a white plate with a green ring and halo, so it reads as
+## nothing like a gold weapon pickup.
+const HEALTH_RADIUS: float = 22.0
+const HEALTH_PLATE_COLOR: Color = Color(0.97, 0.97, 0.97, 0.95)
+const HEALTH_RING_COLOR: Color = Color(0.25, 0.85, 0.4, 1.0)
+const HEALTH_HALO_COLOR: Color = Color(0.4, 0.95, 0.5, 0.3)
+const HEALTH_CROSS_COLOR: Color = Color(0.88, 0.12, 0.14, 1.0)
+const HEALTH_CROSS_ARM: float = 14.0
+const HEALTH_CROSS_THICK: float = 5.0
 ## Drawn for a weapon with no art of its own: a plain diamond, reported as the
 ## fallback so a missing outline is visible rather than silent.
 const FALLBACK_ART: PackedVector2Array = [
@@ -67,6 +81,10 @@ const FALLBACK_ART: PackedVector2Array = [
 ## The weapon this pickup hands over. Set through `set_weapon()` before the
 ## pickup enters the tree; its visuals and trigger are built from it.
 var weapon_stats: Resource
+## Issue #1267: a health pack instead of a weapon. Touched by a living body it
+## resets that fighter's damage to 0 and leaves; it never touches their
+## weapon. Set through `set_health_pack()` before the pickup enters the tree.
+var is_health_pack: bool = false
 ## Set the instant someone claims this pickup, so a second body arriving on
 ## the same tick (or before the free lands) gets nothing (user story 12).
 var _claimed: bool = false
@@ -79,6 +97,11 @@ var _trigger_radius: float = 0.0
 
 func set_weapon(stats: Resource) -> void:
 	weapon_stats = stats
+
+## Marks this pickup a health pack (#1267) instead of a weapon; call before it
+## enters the tree. The Online client's puppet calls it too.
+func set_health_pack() -> void:
+	is_health_pack = true
 
 ## Issue #660: a KO'd player's ghost can pick a pickup up and put it down. While
 ## carried it is moved by its carrier (no physics fight); once dropped it falls
@@ -122,6 +145,13 @@ func drop() -> void:
 	_fall_start_y = global_position.y
 
 func _physics_process(delta: float) -> void:
+	# #1267: a fighter already standing on the pack who then takes damage never
+	# re-enters it, so an unclaimed pack re-checks who is on it every tick.
+	if is_health_pack and not _claimed and not display_only:
+		for body: Node2D in get_overlapping_bodies():
+			_on_body_entered(body)
+			if _claimed:
+				return
 	if not _falling and not _dropped:
 		return
 	# #1103: a resting dropped pickup re-checks its ground with the same ray.
@@ -205,6 +235,9 @@ func trigger_radius() -> float:
 ## a blade, and a crescent on a mid-length one are each recognisable from
 ## across the room (user story 10).
 func _build() -> void:
+	if is_health_pack:
+		_build_health_pack()
+		return
 	var layout: Dictionary = art_layout(weapon_stats)
 	_art_is_fallback = layout["fallback"]
 	_art.polygon = layout["outline"]
@@ -222,6 +255,11 @@ func _build() -> void:
 	add_child(haft)
 	move_child(haft, _art.get_index())
 
+	_build_plate(layout, BACKING_COLOR, RING_COLOR, HALO_COLOR)
+
+## The trigger, backing disc, ring and halo every pickup wears, from `layout`
+## in the given colours. Shared by weapon pickups and the health pack.
+func _build_plate(layout: Dictionary, backing_color: Color, ring_color: Color, halo_color: Color) -> void:
 	_trigger_radius = layout["trigger_radius"]
 	var circle := CircleShape2D.new()
 	circle.radius = _trigger_radius
@@ -229,23 +267,52 @@ func _build() -> void:
 
 	var disc: PackedVector2Array = layout["disc"]
 	_backing.polygon = disc
-	_backing.color = BACKING_COLOR
+	_backing.color = backing_color
 
 	var ring := Line2D.new()
 	ring.name = "Ring"
 	ring.points = disc
 	ring.closed = true
 	ring.width = RING_WIDTH
-	ring.default_color = RING_COLOR
+	ring.default_color = ring_color
 	add_child(ring)
 	move_child(ring, _backing.get_index() + 1)
 
 	_halo = Polygon2D.new()
 	_halo.name = "Halo"
 	_halo.polygon = disc
-	_halo.color = HALO_COLOR
+	_halo.color = halo_color
 	add_child(_halo)
 	move_child(_halo, 0)
+
+## The health pack (#1267): the plate above with a cross on it. Shared with the
+## Online client's puppet, which builds this same scene display-only.
+func _build_health_pack() -> void:
+	var layout: Dictionary = health_layout()
+	_art_is_fallback = false
+	_art.polygon = layout["outline"]
+	_art.color = HEALTH_CROSS_COLOR
+	_build_plate(layout, HEALTH_PLATE_COLOR, HEALTH_RING_COLOR, HEALTH_HALO_COLOR)
+
+## The health pack's geometry, in `art_layout`'s shape ("outline", "fallback",
+## "art_scale", "butt", "anchor", "trigger_radius", "disc"). Pure.
+static func health_layout() -> Dictionary:
+	var a: float = HEALTH_CROSS_ARM
+	var t: float = HEALTH_CROSS_THICK
+	var outline: PackedVector2Array = [
+		Vector2(-t, -a), Vector2(t, -a), Vector2(t, -t), Vector2(a, -t), Vector2(a, t), Vector2(t, t),
+		Vector2(t, a), Vector2(-t, a), Vector2(-t, t), Vector2(-a, t), Vector2(-a, -t), Vector2(-t, -t)]
+	return {"outline": outline, "fallback": false, "art_scale": 1.0, "butt": Vector2.ZERO,
+		"anchor": Vector2.ZERO, "trigger_radius": maxf(MIN_TRIGGER_RADIUS, HEALTH_RADIUS),
+		"disc": _disc(HEALTH_RADIUS)}
+
+## A backing circle of `radius` around the pickup's centre.
+static func _disc(radius: float) -> PackedVector2Array:
+	var disc := PackedVector2Array()
+	for i in BACKING_SEGMENTS:
+		var a: float = TAU * float(i) / float(BACKING_SEGMENTS)
+		disc.append(Vector2(cos(a), sin(a)) * radius)
+	return disc
 
 ## The geometry of a pickup for `stats`, shared with the Online client's puppet
 ## (issue #930) so both draw the same thing: "outline" (head-local art),
@@ -291,13 +358,9 @@ static func art_layout(stats: Resource) -> Dictionary:
 		art_radius = MAX_ART_RADIUS
 
 	var trigger: float = maxf(MIN_TRIGGER_RADIUS, art_radius)
-	var disc := PackedVector2Array()
 	var disc_radius: float = maxf(trigger, art_radius + BACKING_MARGIN)
-	for i in BACKING_SEGMENTS:
-		var a: float = TAU * float(i) / float(BACKING_SEGMENTS)
-		disc.append(Vector2(cos(a), sin(a)) * disc_radius)
 	return {"outline": outline, "fallback": is_fallback, "art_scale": art_scale,
-		"butt": butt, "anchor": anchor, "trigger_radius": trigger, "disc": disc}
+		"butt": butt, "anchor": anchor, "trigger_radius": trigger, "disc": _disc(disc_radius)}
 
 var _halo: Polygon2D
 var _halo_t: float = 0.0
@@ -330,9 +393,14 @@ func halo_phase() -> float:
 ## Eliminated players have no collision layer to enter with, and are refused
 ## here too rather than relying on that alone (user story 19).
 func _on_body_entered(body: Node) -> void:
-	if _claimed or weapon_stats == null:
+	if _claimed or (weapon_stats == null and not is_health_pack):
 		return
 	if not body.is_in_group("players") or not body.alive:
+		return
+	if is_health_pack:
+		# A fighter with no damage gains nothing: leave the pack for a hurt one.
+		if float(body.damage) > 0.0:
+			_claim_health(body)
 		return
 	# #1006: a fighter already holding this weapon gains nothing; leave the
 	# pickup for someone else (or for them once they switch).
@@ -346,4 +414,18 @@ func _on_body_entered(body: Node) -> void:
 	if body.has_signal("weapon_picked_up"):
 		body.weapon_picked_up.emit(weapon_stats.resource_path.get_file().get_basename().capitalize())
 	PickupCalloutScript.show_for(body, weapon_stats.resource_path.get_file().get_basename(), get_parent()) # #818
+	queue_free()
+
+## #1267: the first hurt, living body to touch a health pack heals to full --
+## damage back to 0, which the body fill and the snapshot follow on their own --
+## and the pack is gone. Their weapon is untouched. A spawn-protected fighter
+## claims it like a weapon pickup would. The grab sound plays off the `healed`
+## signal (SfxHooks, so Online joiners hear it through the Sfx trailer) and the
+## "Healed!" callout shows.
+func _claim_health(body: Node) -> void:
+	_claimed = true
+	body.damage = 0.0
+	if body.has_signal("healed"):
+		body.healed.emit()
+	PickupCalloutScript.show_for(body, "", get_parent(), HEALTH_CALLOUT_KEY)
 	queue_free()

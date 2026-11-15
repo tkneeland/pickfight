@@ -219,7 +219,7 @@ func play(ev: Dictionary) -> void:
 		"catch":
 			juice.catch_burst(_v2(ev, "p"))
 		"callout":
-			PickupCalloutScript.show_at(self, _v2(ev, "p"), str(ev.get("w", "")), _col(ev, "c"), int(ev.get("o", 0)))
+			PickupCalloutScript.show_at(self, _v2(ev, "p"), str(ev.get("w", "")), _col(ev, "c"), int(ev.get("o", 0)), str(ev.get("t", "")))
 		"shield":
 			ShieldSparkScript.spawn_at(self, _v2(ev, "p"), _col(ev, "c"))
 		"win_ring":

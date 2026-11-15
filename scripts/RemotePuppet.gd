@@ -241,6 +241,8 @@ func head_art() -> PackedVector2Array:
 ## What a pickup puppet draws, from `Pickup.art_layout`; "fallback" is true
 ## when its weapon has no art (the diamond).
 func pickup_layout() -> Dictionary:
+	if weapon_index == PickupScript.HEALTH_PACK_TYPE:
+		return PickupScript.health_layout() # #1267
 	return PickupScript.art_layout(_stats_for(weapon_index))
 
 func _ensure_figure() -> void:
@@ -331,7 +333,10 @@ func show_pickup() -> void:
 		_pickup = PickupScene.instantiate() as Node2D
 		_pickup.name = "Pickup"
 		_pickup.set("display_only", true)
-		_pickup.set_weapon(_stats_for(weapon_index))
+		if weapon_index == PickupScript.HEALTH_PACK_TYPE:
+			_pickup.set_health_pack() # #1267
+		else:
+			_pickup.set_weapon(_stats_for(weapon_index))
 		add_child(_pickup)
 		_pickup_weapon = weapon_index
 	_pickup.set_halo_phase(halo)

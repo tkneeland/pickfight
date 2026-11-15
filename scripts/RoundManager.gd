@@ -2539,6 +2539,15 @@ func _ko_record_hit(victim: Node, amount: float, attacker_slot: int) -> void:
 		real = not _is_bot_slot(attacker_slot)
 	_stats.record_hit(attacker_slot, victim_slot, amount, GameClockScript.now_msec(), weapon, real)
 
+## Whether any living fighter has taken damage (#1267): the PickupDirector only
+## offers a health pack while one does. "Living" is `_alive_slots()`, so a Stock
+## fighter waiting to respawn counts.
+func any_living_damaged() -> bool:
+	for slot: int in _alive_slots():
+		if float(_players[slot].get("damage")) > 0.0:
+			return true
+	return false
+
 func _on_weapon_picked_up(weapon_name: String, slot: int) -> void:
 	_stats.record_pickup(slot, weapon_name)
 	var held_ach: Node = _achievements()
@@ -2805,6 +2814,7 @@ func _seed_match(announce: bool) -> void:
 		stages.seed = rotation_seed
 	_stage_rotation.rng = stages
 	_pickup_director.rng = rng_for("pickups")
+	_pickup_director.health_rng = rng_for("health_packs")
 	_playtest_weapon_rng = rng_for("playtest_weapons")
 	_spawn_rng = rng_for("spawns")
 	# Remade on first use, from `modifier_seed` or this seed (`modifier_rng()`).

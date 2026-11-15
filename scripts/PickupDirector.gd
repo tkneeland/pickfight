@@ -44,6 +44,11 @@ const PICKUP_CLEAR_OF_SPAWN_RADIUS: float = 120.0
 ## collectable from the first frame.
 const POP_START_SCALE: float = 0.2
 const POP_SEC: float = 0.3
+## Health packs (#1267): roughly this share of spawns is a health pack instead
+## of a weapon, drawn off `rng` so a seeded match repeats. A pack is only
+## offered while a living fighter has taken damage, and never while another
+## pack is on the stage; otherwise the spawn is a weapon as before.
+const HEALTH_PACK_CHANCE: float = 1.0 / 6.0
 
 ## Multiplies the spawn interval (round modifier Pickup rush, #841); 1.0 is as
 ## authored. A modifier sets it for a round and puts it back on undo.
@@ -57,6 +62,10 @@ var _next_pickup_msec: int = 0
 ## RoundManager hands it a stream derived from the match seed; until then (a
 ## director driven by hand) it is an unseeded one of its own.
 var rng := RandomNumberGenerator.new()
+## The health pack roll's own stream (#1267), so whether a pack comes up never
+## shifts the weapon bag or the spot picks drawn off `rng`. RoundManager seeds
+## it from the match seed.
+var health_rng := RandomNumberGenerator.new()
 ## Weapons still to come out before the draw repeats one (`draw_weapon`).
 var _bag: Array[Resource] = []
 ## The weapon `draw_weapon` last returned (#1042), so a fresh bag never opens
@@ -67,6 +76,7 @@ func _init(round_manager: Node = null) -> void:
 	name = "PickupDirector"
 	_rm = round_manager
 	rng.randomize()
+	health_rng.randomize()
 
 ## Round start: clear anything left over, put the first pickup down, and
 ## start the interval from now.
@@ -87,7 +97,7 @@ func tick() -> void:
 	if now < _next_pickup_msec:
 		return
 	_next_pickup_msec = now + int(interval_sec() * 1000.0)
-	if _live_pickups().size() < cap():
+	if _live_weapon_count() < cap():
 		_spawn_pickup()
 
 ## Most pickups the stage holds at once right now: one fewer than the players
@@ -137,6 +147,16 @@ func clear() -> void:
 		pickup.queue_free()
 	_pickups.clear()
 
+## Weapon pickups on the stage. Health packs are not counted (#1267): a pack
+## nobody can use must not hold a weapon's slot, and the one-pack rule already
+## bounds it.
+func _live_weapon_count() -> int:
+	var count: int = 0
+	for pickup: Node2D in _live_pickups():
+		if pickup.get("is_health_pack") != true:
+			count += 1
+	return count
+
 ## Pickups still on the stage: collected ones free themselves, so anything
 ## freed or on its way out is dropped from the list here.
 func _live_pickups() -> Array[Node2D]:
@@ -149,7 +169,7 @@ func _live_pickups() -> Array[Node2D]:
 
 func _spawn_pickup() -> void:
 	var scene: PackedScene = _rm.pickup_scene
-	if scene == null or _live_pickups().size() >= cap():
+	if scene == null or _live_weapon_count() >= cap():
 		return
 	var stage: Variant = _rm._current_stage
 	var parent: Node = stage if stage != null else _rm.get_node_or_null(_rm.arena_container_path)
@@ -157,6 +177,11 @@ func _spawn_pickup() -> void:
 		return
 	var spot: Variant = free_spot()
 	if spot == null:
+		return
+	if _wants_health_pack():
+		var pack: Node2D = scene.instantiate() as Node2D
+		pack.set_health_pack()
+		_add_spawned(pack, parent, spot)
 		return
 	var weapons: Array[Resource] = _rm.pickup_weapons
 	var offered: Array[Resource] = weapons if not weapons.is_empty() else PickupWeaponsScript.available_weapons()
@@ -166,6 +191,11 @@ func _spawn_pickup() -> void:
 		return
 	var pickup: Node2D = scene.instantiate() as Node2D
 	pickup.set_weapon(weapon)
+	_add_spawned(pickup, parent, spot)
+
+## Puts a freshly built `pickup` (weapon or health pack, already set up) on
+## `spot` under `parent`, tracks it, and plays the pop-in.
+func _add_spawned(pickup: Node2D, parent: Node, spot: Vector2) -> void:
 	parent.add_child(pickup)
 	pickup.global_position = spot
 	# Placed after entering the tree: a spawn, not motion (issue #108).
@@ -173,8 +203,18 @@ func _spawn_pickup() -> void:
 	_pickups.append(pickup)
 	_pop_in(pickup, parent, spot)
 
+## Whether this spawn is a health pack (#1267). Draws from `rng` only once a
+## living fighter is damaged and no pack is already lying there.
+func _wants_health_pack() -> bool:
+	if not _rm.any_living_damaged():
+		return false
+	for pickup: Node2D in _live_pickups():
+		if pickup.get("is_health_pack") == true:
+			return false
+	return health_rng.randf() < HEALTH_PACK_CHANCE
+
 ## The spawn cue (#816): the pickup scales up with an overshoot and a one-shot
-## ring expands from its spot. Added here so Pickup.gd is untouched.
+## ring expands from its spot, for weapons and health packs alike.
 func _pop_in(pickup: Node2D, parent: Node, spot: Vector2) -> void:
 	pop_scale(pickup)
 	PickupSpawnRingScript.spawn_at(parent, spot)
