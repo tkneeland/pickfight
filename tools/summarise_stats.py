@@ -12,7 +12,11 @@ weapon; a record without "completed" counts as completed. Completed and
 abandoned matches are counted separately, and abandoned ones still count toward
 damage and hits. An Online match (#1195) may carry "ping": per remote seat
 {"avg", "p95", "max", "n", "felt", "host_leg"} in ms (-1 not measured); their
-means are printed last. Bad lines are skipped.
+means are printed last. A record may also carry "events" (#1271, host-only,
+anonymous): "ctf" counters (Capture the Flag), "joins" counters (how Couch
+phones joined) and "relay_ping" (relay phones' {"avg", "p95", "max", "n"}); an
+"Events" section prints their totals. Older records have none. Bad lines are
+skipped.
 """
 import json
 import math
@@ -82,6 +86,7 @@ def main(argv):
     for mode, count in modes.most_common():
         print("%-18s %4d  %5.1f%%" % (mode, count, 100.0 * count / len(records)))
     print_ping(records)
+    print_events(records)
     return 0
 
 
@@ -145,6 +150,62 @@ def print_ping(records):
     shown = ["%.0f" % means[f] if means[f] is not None else "-" for f in PING_FIELDS]
     print("\nOnline ping (remote seats): %d seats" % seats)
     print("avg (n-weighted) / p95 (n-weighted mean) / max (largest) / felt / host leg (ms): %s" % " / ".join(shown))
+
+
+CTF_KEYS = ("captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns")
+JOIN_KEYS = ("lan", "relay", "help", "nudge", "internet")
+
+
+def _count(value):
+    return int(value) if isinstance(value, (int, float)) and math.isfinite(value) and value > 0 else 0
+
+
+def events_summary(records):
+    """Issue #1271: totals of the optional "events" object over `records`.
+    Returns {"ctf_records", "ctf": {key: total}, "join_records", "joins":
+    {key: total}, "relay": (seats, {avg, p95, max})}. Records without events
+    (older hosts, quiet matches) are skipped."""
+    ctf = Counter()
+    joins = Counter()
+    ctf_records = 0
+    join_records = 0
+    relay_records = []
+    for rec in records:
+        events = rec.get("events")
+        if not isinstance(events, dict):
+            continue
+        if isinstance(events.get("ctf"), dict):
+            ctf_records += 1
+            for key in CTF_KEYS:
+                ctf[key] += _count(events["ctf"].get(key))
+        if isinstance(events.get("joins"), dict):
+            counts = {key: _count(events["joins"].get(key)) for key in JOIN_KEYS}
+            if any(counts.values()):
+                join_records += 1
+            joins.update(counts)
+        if isinstance(events.get("relay_ping"), list):
+            relay_records.append({"ping": [e for e in events["relay_ping"] if isinstance(e, dict)]})
+    seats, means = ping_summary(relay_records)
+    return {"ctf_records": ctf_records, "ctf": ctf, "join_records": join_records, "joins": joins,
+            "relay": (seats, means)}
+
+
+def print_events(records):
+    summary = events_summary(records)
+    seats, means = summary["relay"]
+    if not (summary["ctf_records"] or summary["join_records"] or seats):
+        return
+    print()
+    print("Events (#1271)")
+    if summary["ctf_records"]:
+        totals = ", ".join("%s %d" % (key, summary["ctf"][key]) for key in CTF_KEYS)
+        print("Capture the Flag (%d matches): %s" % (summary["ctf_records"], totals))
+    if summary["join_records"]:
+        totals = ", ".join("%s %d" % (key, summary["joins"][key]) for key in JOIN_KEYS)
+        print("Couch joins (%d records with join activity): %s" % (summary["join_records"], totals))
+    if seats:
+        shown = ["%.0f" % means[f] if means[f] is not None else "-" for f in ("avg", "p95", "max")]
+        print("Relay phone ping: %d phones; avg (n-weighted) / p95 (mean) / max (ms): %s" % (seats, " / ".join(shown)))
 
 
 if __name__ == "__main__":

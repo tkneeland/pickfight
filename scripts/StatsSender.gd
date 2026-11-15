@@ -66,7 +66,42 @@ static func build_record(stats: RefCounted, mode: String, stages: Array, format:
 		var entries: Array = MatchStatsScript.ping_entries(ping_list, true, PING_MAX_ENTRIES)
 		if not entries.is_empty():
 			record["ping"] = entries
+	var events: Dictionary = _build_events(stats)
+	if not events.is_empty():
+		record["events"] = events
 	return record
+
+## Issue #1271: the optional `events` object for live bug detection. Counts and
+## summaries only (no slot, name, colour, device or id); each sub-object is
+## left out when it has nothing, and `events` itself when empty.
+static func _build_events(stats: RefCounted) -> Dictionary:
+	var events: Dictionary = {}
+	var ctf: Dictionary = _counts_of(stats.get("ctf_events"), MatchStatsScript.CTF_EVENT_KEYS)
+	if not ctf.is_empty():
+		events["ctf"] = ctf
+	var joins: Dictionary = _counts_of(stats.get("join_events"), MatchStatsScript.JOIN_EVENT_KEYS)
+	if not joins.is_empty():
+		events["joins"] = joins
+	var relay_ping: Variant = stats.get("relay_ping")
+	if relay_ping is Array:
+		var entries: Array = []
+		for entry: Dictionary in MatchStatsScript.ping_entries(relay_ping, false, PING_MAX_ENTRIES):
+			entries.append({"avg": entry["avg"], "p95": entry["p95"], "max": entry["max"], "n": entry["n"]})
+		if not entries.is_empty():
+			events["relay_ping"] = entries
+	return events
+
+## `source`'s `keys` as non-negative ints, {} when every one is zero or missing.
+static func _counts_of(source: Variant, keys: PackedStringArray) -> Dictionary:
+	var out: Dictionary = {}
+	if not source is Dictionary:
+		return out
+	var any: bool = false
+	for key: String in keys:
+		var v: int = clampi(int((source as Dictionary).get(key, 0)), 0, 100000)
+		out[key] = v
+		any = any or v > 0
+	return out if any else {}
 
 ## Whether `tree` is a scripted run: a `-s` script's loop (the scenario runner,
 ## a probe) or a `--bots` launch. Mirrors the guard that keeps those off the

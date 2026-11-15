@@ -2433,9 +2433,16 @@ func send_telemetry(completed: bool = true) -> bool:
 	elif _match_winner_slot != -1:
 		winners.append(_match_winner_slot)
 	var length_sec: int = maxi(0, GameClockScript.now_msec() - _match_started_msec) / 1000
+	# #1271: the join counters since the last record ride along; they reset once
+	# a record is built (a lobby plus its match is counted once).
+	var has_joins: bool = _controller_server != null and _controller_server.has_method("join_events")
+	_stats.set("relay_ping", _match_relay_ping_1271())
+	_stats.set("join_events", _controller_server.join_events() if has_joins else {})
 	var record: Dictionary = StatsSenderScript.build_record(_stats, game_mode, _match_stages, "teams" if _team_mode else "ffa", length_sec, winners, completed, _rounds_finished)
 	if record.is_empty():
 		return false
+	if has_joins:
+		_controller_server.reset_join_events()
 	if telemetry_sink.is_valid():
 		telemetry_sink.call(record)
 		return true
@@ -3409,3 +3416,10 @@ func _match_ping_1195() -> Array:
 func _reset_match_ping_1195() -> void:
 	if _controller_server != null and _controller_server.has_method("reset_ping_stats"):
 		_controller_server.reset_ping_stats()
+
+## #1271: the relay phones' round-trip statistics (the match record's
+## `events.relay_ping`); [] without a controller server.
+func _match_relay_ping_1271() -> Array:
+	if _controller_server == null or not _controller_server.has_method("relay_phone_ping_stats"):
+		return []
+	return _controller_server.relay_phone_ping_stats()

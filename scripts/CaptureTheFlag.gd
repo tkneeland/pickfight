@@ -71,6 +71,8 @@ var round_manager: Node
 var scores: Dictionary = {0: 0, 1: 0}
 ## slot -> captures that player made this round.
 var capturers: Dictionary = {}
+## This round's flag events (#1271), handed to the match stats by `report_stats`.
+var events: Dictionary = {}
 ## team -> HOME / CARRIED / DROPPED, for that team's flag.
 var state: Dictionary = {0: HOME, 1: HOME}
 ## team -> slot carrying that team's flag, or -1.
@@ -113,6 +115,7 @@ func start_round(slots: Array[int]) -> void:
 	captures_to_win = int(HostSettingsScript.shared().ctf_captures)
 	scores = {0: 0, 1: 0}
 	capturers.clear()
+	events = {}
 	state = {0: HOME, 1: HOME}
 	carrier = {0: -1, 1: -1}
 	return_left = {0: 0.0, 1: 0.0}
@@ -162,6 +165,10 @@ func end_round() -> void:
 func report_stats(stats: RefCounted) -> void:
 	for slot: int in capturers:
 		stats.record_captures(slot, int(capturers[slot]))
+	stats.record_ctf_events(events)
+
+func _count_event(key: String) -> void:
+	events[key] = int(events.get(key, 0)) + 1
 
 func connected_count() -> int:
 	return _handlers.size()
@@ -340,6 +347,7 @@ func _tick_returns(delta: float) -> void:
 			continue
 		return_left[team] = float(return_left[team]) - delta
 		if float(return_left[team]) <= 0.0:
+			_count_event("timed_returns")
 			return_flag(team)
 
 ## `slot` picks up `team`'s flag. Public so a scenario can drive it.
@@ -351,6 +359,7 @@ func take_flag(team: int, slot: int) -> void:
 		return
 	state[team] = CARRIED
 	carrier[team] = slot
+	_count_event("takes")
 	_damage_seen[slot] = float(player.damage)
 	flag_position[team] = player.global_position
 	flag_taken.emit(team, slot)
@@ -368,10 +377,16 @@ func drop_flag(team: int) -> void:
 	var at: Vector2 = flag_position[team]
 	if player != null and is_instance_valid(player):
 		at = player.global_position
+	_count_event("drops")
+	# #1271: dropped where the carrier would have scored (their own base).
+	var own_base: Rect2 = base_rect(1 - team)
+	if own_base.size != Vector2.ZERO and own_base.has_point(at):
+		_count_event("drops_in_own_base")
 	flag_dropped.emit(team, slot)
 	_cue(&"flag_drop", at)
 	var ground: Vector2 = _ground_below(at)
 	if ground == Vector2.INF:
+		_count_event("void_returns")
 		return_flag(team)
 		return
 	flag_position[team] = ground
@@ -405,6 +420,7 @@ func capture(team: int, slot: int) -> void:
 	if int(carrier[enemy_flag]) != slot:
 		return
 	scores[team] = int(scores[team]) + 1
+	_count_event("captures")
 	capturers[slot] = int(capturers.get(slot, 0)) + 1
 	carrier[enemy_flag] = -1
 	return_flag(enemy_flag, false)

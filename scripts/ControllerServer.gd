@@ -1262,6 +1262,10 @@ func _bind_with_id(peer: Variant, id: String) -> void:
 func _claim_for_phone(slot: int, id: String, peer: Variant) -> void:
 	_fresh_claim(slot, id, "")
 	_attach(slot, peer)
+	if peer is WebSocketPeer:
+		note_join_event("lan") # #1271
+	elif _is_phone_seat(peer):
+		note_join_event("relay")
 	_broadcast_looks(peer)
 	player_joined.emit(slot)
 	if _log_input:
@@ -2585,6 +2589,7 @@ func open_internet_join() -> int:
 	if _relay_fallback:
 		return OK
 	_relay_fallback = true
+	note_join_event("internet") # #1271
 	_fallback_relay_url = resolve_relay_url(OS.get_cmdline_user_args())
 	var err: int = _ensure_relay_link().go_online(_fallback_relay_url)
 	_send_lobby_to_all()
@@ -3544,6 +3549,8 @@ func _weak_link_pong(slot: int, msg: Dictionary) -> bool:
 func _weak_link_answered(slot: int, st: Dictionary, rtt: int) -> void:
 	st["rtt"] = clampi(rtt, 0, MatchStatsScript.PING_MAX_MSEC)
 	st["samples"] = int(st.get("samples", 0)) + 1
+	if slot_over_relay(slot):
+		_note_relay_phone_rtt(slot, int(st["rtt"]))
 	if slot_over_relay(slot) and int(st["samples"]) % RELAY_PING_LOG_EVERY == 1:
 		print("Relay phone slot %d: round trip %d ms (host to relay %s)" % [slot, int(st["rtt"]),
 				("%d ms" % relay_rtt_msec) if relay_rtt_msec >= 0 else "unknown"])
@@ -3682,6 +3689,7 @@ static func _ping_stats_of(samples: PackedInt32Array, felt: int, share: bool) ->
 ## seats that left before.
 func reset_ping_stats() -> void:
 	_departed_ping.clear()
+	_relay_phone_rtts.clear()
 	for seat: RemoteSeat in _remote_seats.values():
 		seat.rtt_samples = PackedInt32Array()
 		seat.felt_msec = -1 # the readout must not show the last match's felt delay
@@ -3726,6 +3734,53 @@ func match_ping_stats() -> Array:
 		var stats: Dictionary = _ping_stats_of(entry["samples"], int(entry["felt"]), bool(entry["share"]))
 		if not stats.is_empty():
 			out.append(stats)
+	return out
+
+# --- Live-bug telemetry (issue #1271) ----------------------------------------
+#
+# Anonymous counters for the match record's `events`: how Couch phones joined
+# since the last record (kept here, taken and reset when a record is built) and
+# each relay phone's round trips this match (the host measures them; the phone
+# sends nothing).
+
+## One of MatchStats.JOIN_EVENT_KEYS -> count since the last record.
+var _join_events: Dictionary = {}
+## Joiner identity -> a relay phone's real round trips this match (newest PING_SAMPLES_MAX).
+var _relay_phone_rtts: Dictionary = {}
+
+## Counts one join event: "lan" or "relay" (a phone seated), "help" (the Phones
+## can't join? popup opened), "nudge" (the 30 s internet nudge shown), "internet"
+## (internet join opened). Other words are ignored.
+func note_join_event(kind: String) -> void:
+	if MatchStatsScript.JOIN_EVENT_KEYS.has(kind):
+		_join_events[kind] = int(_join_events.get(kind, 0)) + 1
+
+## The join counters so far, without resetting them.
+func join_events() -> Dictionary:
+	return _join_events.duplicate()
+
+func reset_join_events() -> void:
+	_join_events.clear()
+
+## The join counters so far, then a fresh count.
+func take_join_events() -> Dictionary:
+	var out: Dictionary = join_events()
+	reset_join_events()
+	return out
+
+func _note_relay_phone_rtt(slot: int, rtt: int) -> void:
+	var identity: String = _ping_identity(slot)
+	var samples: PackedInt32Array = _relay_phone_rtts.get(identity, PackedInt32Array())
+	_relay_phone_rtts[identity] = _joined_samples(samples, PackedInt32Array([rtt]))
+
+## Every relay phone's round-trip statistics this match, [{"avg","p95","max","n"}]
+## (ms), one per joiner; [] with none (Local with only LAN phones, Online).
+func relay_phone_ping_stats() -> Array:
+	var out: Array = []
+	for samples: PackedInt32Array in _relay_phone_rtts.values():
+		var stats: Dictionary = _ping_stats_of(samples, -1, false)
+		if not stats.is_empty():
+			out.append({"avg": stats["avg"], "p95": stats["p95"], "max": stats["max"], "n": stats["n"]})
 	return out
 
 func _keep_departed_ping_stats(slot: int) -> void:

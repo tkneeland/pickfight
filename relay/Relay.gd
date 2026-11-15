@@ -25,7 +25,9 @@ extends Node
 ##        logged (the rate limiter keys on a salted hash that dies with the
 ##        process); the timestamp is rounded down to the hour. An Online match
 ##        may carry "ping": up to 8 anonymous per-seat round-trip summaries
-##        (issue #1195).
+##        (issue #1195), and an optional "events" object (issue #1271: Capture
+##        the Flag, join and relay-phone ping counters) that, if malformed, is
+##        dropped alone and never rejects the record.
 ##
 ## Control messages (text JSON):
 ##   to host:   {"t":"room","code":"ABCD","token":"<16 hex>"} (a reclaim adds
@@ -150,6 +152,14 @@ const STATS_PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", 
 ## Keep equal to MatchStats.PING_MAX_MSEC (the relay runs as its own server, so it
 ## cannot preload the game's scripts).
 const STATS_MAX_PING_MSEC: int = 60000
+## Issue #1271: an optional `events` object (live bug detection): `ctf` and
+## `joins` counters (these keys, each 0..STATS_MAX_EVENT_COUNT) and `relay_ping`
+## (at most STATS_MAX_PING_ENTRIES of avg/p95/max/n). Keep the key lists equal to
+## MatchStats.CTF_EVENT_KEYS / JOIN_EVENT_KEYS.
+const STATS_CTF_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns"]
+const STATS_JOIN_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet"]
+const STATS_RELAY_PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n"]
+const STATS_MAX_EVENT_COUNT: int = 100000
 ## Records allowed per IP per hour.
 @export var stats_limit_per_hour: int = 30
 ## Where records are appended. Set PICKFIGHT_STATS_PATH to a file on a mounted
@@ -492,7 +502,57 @@ static func clean_stats_record(raw: Variant) -> Dictionary:
 			entries.append(clean_entry)
 		if not entries.is_empty():
 			cleaned["ping"] = entries
+	if rec.has("events"):
+		# Issue #1271: optional, so a bad one drops only itself, never the match.
+		var events: Dictionary = clean_stats_events(rec["events"])
+		if not events.is_empty():
+			cleaned["events"] = events
 	return cleaned
+
+## `raw` rebuilt as a record's `events` from known keys only, or {} when it is
+## the wrong shape or any value is out of range (the caller then leaves `events` out).
+static func clean_stats_events(raw: Variant) -> Dictionary:
+	if not (raw is Dictionary):
+		return {}
+	var out: Dictionary = {}
+	for section: String in ["ctf", "joins"]:
+		if not (raw as Dictionary).has(section):
+			continue
+		var counts: Variant = raw[section]
+		if not (counts is Dictionary):
+			return {}
+		var clean_counts: Dictionary = {}
+		for key: String in (STATS_CTF_KEYS if section == "ctf" else STATS_JOIN_KEYS):
+			if not (counts as Dictionary).has(key):
+				continue
+			var value: Variant = counts[key]
+			if not _is_whole_number(value) or float(value) < 0.0 or float(value) > STATS_MAX_EVENT_COUNT:
+				return {}
+			clean_counts[key] = int(value)
+		if not clean_counts.is_empty():
+			out[section] = clean_counts
+	if (raw as Dictionary).has("relay_ping"):
+		var ping: Variant = raw["relay_ping"]
+		if not (ping is Array) or (ping as Array).size() > STATS_MAX_PING_ENTRIES:
+			return {}
+		var entries: Array = []
+		for entry: Variant in ping:
+			if not (entry is Dictionary):
+				return {}
+			var clean_entry: Dictionary = {}
+			for field: String in STATS_RELAY_PING_FIELDS:
+				var value: Variant = (entry as Dictionary).get(field)
+				var top: float = float(STATS_MAX_EVENT_COUNT) if field == "n" else float(STATS_MAX_PING_MSEC)
+				if not _is_whole_number(value) or float(value) < -1.0 or float(value) > top:
+					return {}
+				clean_entry[field] = int(value)
+			entries.append(clean_entry)
+		if not entries.is_empty():
+			out["relay_ping"] = entries
+	return out
+
+static func _is_whole_number(v: Variant) -> bool:
+	return v is int or (v is float and is_finite(v) and v == floorf(v))
 
 static func _append_line(path: String, line: String) -> bool:
 	var file: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)

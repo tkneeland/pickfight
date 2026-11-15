@@ -1360,6 +1360,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_ignores_health_pack_unless_hurt_1267",
 	"health_pack_claimed_by_fighter_hurt_while_standing_on_it_1267",
 	"health_pack_does_not_hold_a_weapon_slot_or_shift_the_weapon_draw_1267",
+	"ctf_flag_events_reach_the_record_1271",
+	"join_events_count_once_per_record_1271",
+	"relay_phone_ping_summarised_in_record_1271",
+	"relay_validates_and_drops_bad_events_1271",
+	"telemetry_notice_lists_events_1271",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4505,6 +4510,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_health_pack_claimed_by_fighter_hurt_while_standing_on_it_1267()
 		"health_pack_does_not_hold_a_weapon_slot_or_shift_the_weapon_draw_1267":
 			return await _scenario_health_pack_does_not_hold_a_weapon_slot_or_shift_the_weapon_draw_1267()
+		"ctf_flag_events_reach_the_record_1271":
+			return await _scenario_ctf_flag_events_reach_the_record_1271()
+		"join_events_count_once_per_record_1271":
+			return await _scenario_join_events_count_once_per_record_1271()
+		"relay_phone_ping_summarised_in_record_1271":
+			return await _scenario_relay_phone_ping_summarised_in_record_1271()
+		"relay_validates_and_drops_bad_events_1271":
+			return await _scenario_relay_validates_and_drops_bad_events_1271()
+		"telemetry_notice_lists_events_1271":
+			return await _scenario_telemetry_notice_lists_events_1271()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -64702,4 +64717,276 @@ func _scenario_health_pack_does_not_hold_a_weapon_slot_or_shift_the_weapon_draw_
 	fighter.queue_free()
 	rm.free()
 	await _teardown(stage)
+	return failures
+
+# --- Issue #1271: event telemetry for live bug detection -----------------------
+## A match's MatchStats with one real damaging hit, so a record gets built.
+func _events_stats_1271() -> RefCounted:
+	var stats: RefCounted = MatchStatsScript.new()
+	stats.begin_match()
+	stats.record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	return stats
+## Capture the Flag's flag events, driven through its public methods, reach the
+## record's `events.ctf` as anonymous counters; no events elsewhere.
+func _scenario_ctf_flag_events_reach_the_record_1271() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	mode.capture_pause_sec = 0.0
+	var red: RigidBody2D = rig["players"][0]
+	var stage: Node2D = rig["rm"]._current_stage
+	# 1: a drop on the floor, away from the red base.
+	red.teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	mode.drop_flag(1)
+	mode.return_flag(1)
+	# 2: a drop while the carrier stands in their own base (reached the end zone, did not score).
+	mode.take_flag(1, 0)
+	red.teleport_to(stage.get_base_rect(0).get_center())
+	mode.drop_flag(1)
+	if int(mode.events.get("drops_in_own_base", 0)) != 1:
+		failures.append("a drop inside the carrier's own base was not counted: %s" % [mode.events])
+	mode.return_flag(1)
+	# 3: a drop with no ground below goes home at once.
+	mode.take_flag(1, 0)
+	red.teleport_to(Vector2(0.0, 6000.0))
+	mode.drop_flag(1)
+	if int(mode.state[1]) != mode.HOME:
+		failures.append("a drop over the void did not return the flag")
+	# 4: a dropped flag going home on its timer.
+	red.teleport_to(Vector2(0.0, 240.0))
+	mode.take_flag(1, 0)
+	mode.drop_flag(1)
+	red.teleport_to(Vector2(-600.0, 240.0))
+	mode.return_left[1] = 0.05
+	await _await_ticks(30)
+	if int(mode.state[1]) != mode.HOME:
+		failures.append("the dropped flag did not go home on its timer")
+	# 5: a capture.
+	mode.take_flag(1, 0)
+	mode.capture(0, 0)
+	var want: Dictionary = {"captures": 1, "takes": 5, "drops": 4, "drops_in_own_base": 1, "void_returns": 1, "timed_returns": 1}
+	if mode.events != want:
+		failures.append("round events were %s, wanted %s" % [mode.events, want])
+	var stats: RefCounted = _events_stats_1271()
+	mode.report_stats(stats)
+	var record: Dictionary = StatsSenderScript372.build_record(stats, "capture_the_flag", ["Bastion"], "teams", 120, [0])
+	var events: Dictionary = record.get("events", {})
+	if events.keys() != ["ctf"] or events.get("ctf") != want:
+		failures.append("events were %s, wanted only ctf %s" % [events, want])
+	stats.record_ctf_events(want) # a second round adds to the match's counters
+	if int(stats.ctf_events.get("takes", 0)) != 10:
+		failures.append("two rounds did not add up: %s" % [stats.ctf_events])
+	var quiet: Dictionary = StatsSenderScript372.build_record(_events_stats_1271(), "classic", [], "ffa", 60, [0])
+	if quiet.has("events"):
+		failures.append("a match with no events carried an events object: %s" % [quiet])
+	var text: String = JSON.stringify(record).to_lower()
+	for banned: String in ["nick", "name", "colo", "device", "steam", "slot", "\"id\""]:
+		if text.contains(banned):
+			failures.append("the record mentions '%s'" % banned)
+	await _teardown(rig["stage"])
+	_scenario_completed = true
+	return failures
+## A Couch lobby with a relay phone and a LAN phone seated, the help popup and
+## the nudge shown and internet join opened. {} (with a failure) when it could not be built.
+func _events_join_rig_1271(failures: Array[String]) -> Dictionary:
+	var rig: Dictionary = await _internet_rig_683(failures)
+	if rig.is_empty():
+		return {}
+	var server: Node = rig["server"]
+	var screen: CanvasLayer = rig["screen"]
+	server.reset_join_events()
+	server.ping_interval_msec = 200
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	screen.relay_nudge().expire(Time.get_ticks_msec())
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	screen.refresh_lobby.callv(screen._last_lobby_args) # shown again: still one nudge for this lobby
+	var button: Button = screen.relay_nudge_button()
+	if button == null or not button.visible:
+		failures.append("the nudge did not show")
+	else:
+		button.pressed.emit() # opens internet join and the help popup
+	if not await _wait_for_239(func() -> bool: return server.internet_join_room() != ""):
+		failures.append("no relay room")
+		await _internet_close_683(rig)
+		return {}
+	var phone: WebSocketPeer = await _internet_phone_683(rig, {"id": "net-1271", "client": "phone"})
+	var seat: Dictionary = await _online_wait_239(rig, phone, "slot") if phone != null else {}
+	var lan := WebSocketPeer.new()
+	var lan_seat: Dictionary = await _join_phone(lan, "lan-1271", [])
+	if not seat.has("slot") or int(lan_seat.get("slot", -1)) < 0:
+		failures.append("a phone got no seat (relay %s, lan %s)" % [seat, lan_seat])
+		await _internet_close_683(rig)
+		return {}
+	rig["relay_slot"] = int(seat["slot"])
+	rig["lan_slot"] = int(lan_seat["slot"])
+	rig["lan"] = lan
+	return rig
+## The join counters: one LAN phone, one relay phone, the help popup, the nudge
+## and internet join; sent in the record once, then counted afresh.
+func _scenario_join_events_count_once_per_record_1271() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _events_join_rig_1271(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	var want: Dictionary = {"lan": 1, "relay": 1, "help": 1, "nudge": 1, "internet": 1}
+	if server.join_events() != want:
+		failures.append("join counters were %s, wanted %s" % [server.join_events(), want])
+	server.note_join_event("bogus")
+	if server.join_events() != want:
+		failures.append("an unknown join event was counted")
+	var host: RefCounted = HostSettingsScript372.shared()
+	var was: Array = [host.share_stats, host.telemetry_notice_seen, host.persist]
+	host.persist = false
+	host.share_stats = true
+	host.telemetry_notice_seen = true
+	var records: Array = []
+	rm.telemetry_sink = func(record: Dictionary) -> void: records.append(record)
+	rm.match_stats().record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	rm.send_telemetry(true)
+	rm.send_telemetry(true)
+	host.share_stats = was[0]
+	host.telemetry_notice_seen = was[1]
+	host.persist = was[2]
+	if records.size() != 2:
+		failures.append("expected two records, got %d" % records.size())
+	else:
+		if (records[0].get("events", {}) as Dictionary).get("joins") != want:
+			failures.append("the first record's joins were %s" % [records[0].get("events")])
+		if (records[1].get("events", {}) as Dictionary).has("joins"):
+			failures.append("the second record counted the same joins again: %s" % [records[1].get("events")])
+	if not server.join_events().is_empty():
+		failures.append("the counters were not reset after the record")
+	rig["lan"].close()
+	await _internet_close_683(rig)
+	_scenario_completed = true
+	return failures
+## Relay phones' real answers become `events.relay_ping` {avg,p95,max,n}; a LAN
+## phone's never do; a new match starts afresh.
+func _scenario_relay_phone_ping_summarised_in_record_1271() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _events_join_rig_1271(failures)
+	if rig.is_empty():
+		return failures
+	var server: Node = rig["server"]
+	var rm: Node = rig["rm"]
+	rm._reset_match_ping_1195()
+	for rtt: int in [10, 20, 30, 100]:
+		server._weak_link_answered(int(rig["relay_slot"]), {}, rtt)
+		server._weak_link_answered(int(rig["lan_slot"]), {}, 500)
+	var want: Array = [{"avg": 40, "p95": 100, "max": 100, "n": 4}]
+	if server.relay_phone_ping_stats() != want:
+		failures.append("relay phone ping was %s, wanted %s" % [server.relay_phone_ping_stats(), want])
+	var host: RefCounted = HostSettingsScript372.shared()
+	var was: Array = [host.share_stats, host.telemetry_notice_seen, host.persist]
+	host.persist = false
+	host.share_stats = true
+	host.telemetry_notice_seen = true
+	var records: Array = []
+	rm.telemetry_sink = func(record: Dictionary) -> void: records.append(record)
+	rm.match_stats().record_hit(0, 1, 30.0, 0, "pickaxe", true)
+	rm.send_telemetry(true)
+	host.share_stats = was[0]
+	host.telemetry_notice_seen = was[1]
+	host.persist = was[2]
+	if records.is_empty() or (records[0].get("events", {}) as Dictionary).get("relay_ping") != want:
+		failures.append("the record's relay_ping was %s" % [records[0].get("events") if not records.is_empty() else "no record"])
+	rm._reset_match_ping_1195()
+	if not server.relay_phone_ping_stats().is_empty():
+		failures.append("a new match kept the last one's relay ping")
+	var many: Array = []
+	for i in 12:
+		many.append({"avg": i, "p95": i, "max": i, "n": i + 1})
+	var stats: RefCounted = _events_stats_1271()
+	stats.relay_ping = many
+	var capped: Array = (StatsSenderScript372.build_record(stats, "classic", [], "ffa", 5, [0]).get("events", {}) as Dictionary).get("relay_ping", [])
+	if capped.size() != 8 or int(capped[0].get("n", 0)) != 12:
+		failures.append("relay_ping was not capped to the 8 with the most samples: %s" % [capped])
+	rig["lan"].close()
+	await _internet_close_683(rig)
+	_scenario_completed = true
+	return failures
+## The relay keeps a valid `events`, drops unknown keys inside it, and drops an
+## invalid one alone: the rest of the record is still stored.
+func _scenario_relay_validates_and_drops_bad_events_1271() -> Array[String]:
+	var failures: Array[String] = []
+	var good: Dictionary = {"ctf": {"captures": 1, "takes": 5, "drops": 4, "drops_in_own_base": 1, "void_returns": 1, "timed_returns": 1},
+		"joins": {"lan": 2, "relay": 1, "help": 1, "nudge": 1, "internet": 1},
+		"relay_ping": [{"avg": 40, "p95": 100, "max": 100, "n": 4}]}
+	var record: Dictionary = _telemetry_relay_record_372()
+	record["events"] = good.duplicate(true)
+	var cleaned: Dictionary = RelayScript238.clean_stats_record(record)
+	if cleaned.get("events") != good:
+		failures.append("a valid events was changed: %s" % [cleaned.get("events")])
+	record = _telemetry_relay_record_372()
+	var noisy: Dictionary = good.duplicate(true)
+	noisy["nickname"] = "Zed"
+	noisy["ctf"]["slot"] = 3
+	noisy["joins"]["device"] = 9
+	noisy["relay_ping"][0]["name"] = "x"
+	record["events"] = noisy
+	cleaned = RelayScript238.clean_stats_record(record)
+	if cleaned.get("events") != good:
+		failures.append("unknown keys inside events survived: %s" % [cleaned.get("events")])
+	var bad_events: Array = [
+		"nope", [1],
+		{"ctf": "x"}, {"ctf": {"captures": -1}}, {"ctf": {"takes": 100001}}, {"ctf": {"drops": "3"}}, {"ctf": {"drops": 1.5}},
+		{"joins": {"lan": 1000000}}, {"joins": []},
+		{"relay_ping": {}}, {"relay_ping": ["x"]},
+		{"relay_ping": [{"avg": 60001, "p95": 1, "max": 1, "n": 1}]}, {"relay_ping": [{"avg": 1, "p95": 1, "max": 1}]},
+		{"relay_ping": [{"avg": 1, "p95": 1, "max": 1, "n": 100001}]},
+		{"relay_ping": [{"avg": -2, "p95": 1, "max": 1, "n": 1}]},
+	]
+	var nine: Array = []
+	for i in 9:
+		nine.append({"avg": 1, "p95": 1, "max": 1, "n": 1})
+	bad_events.append({"relay_ping": nine})
+	var plain: Dictionary = RelayScript238.clean_stats_record(_telemetry_relay_record_372())
+	for bad: Variant in bad_events:
+		record = _telemetry_relay_record_372()
+		record["events"] = bad
+		cleaned = RelayScript238.clean_stats_record(record)
+		if cleaned.is_empty() or cleaned.has("events") or cleaned != plain:
+			failures.append("an invalid events %s was not dropped alone: %s" % [bad, cleaned])
+	var relay: Node = RelayScript238.new()
+	root.add_child(relay)
+	var path: String = OS.get_temp_dir().path_join("pf_1271_stats_%d.jsonl" % OS.get_process_id())
+	DirAccess.remove_absolute(path)
+	relay.stats_path = path
+	record = _telemetry_relay_record_372()
+	record["events"] = good.duplicate(true)
+	var stored: Dictionary = relay.handle_stats("203.0.113.9", {"t": "stats", "record": record})
+	if stored.get("status") != 200:
+		failures.append("a record with events gave %s" % [stored])
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path).strip_edges())
+	var stored_events: Variant = (parsed as Dictionary).get("events") if parsed is Dictionary else null
+	if not stored_events is Dictionary or (stored_events as Dictionary).keys().size() != 3 or int(stored_events["ctf"]["takes"]) != 5 or int(stored_events["joins"]["lan"]) != 2 or int(stored_events["relay_ping"][0]["p95"]) != 100:
+		failures.append("the stored line lacks the events: %s" % [parsed])
+	DirAccess.remove_absolute(path)
+	relay.queue_free()
+	_scenario_completed = true
+	return failures
+## The first-launch notice lists the new events (English) and still says no names
+## or IDs; every language has it (the CJK coverage scenario checks the glyphs).
+func _scenario_telemetry_notice_lists_events_1271() -> Array[String]:
+	var failures: Array[String] = []
+	var old_locale: String = TranslationServer.get_locale()
+	var locales: Array[String] = ["en", "de", "fr", "es", "pt_BR", "zh_CN", "ja", "ko", "ru"]
+	var english: String = ""
+	for locale: String in locales:
+		TranslationServer.set_locale(locale)
+		var text: String = TranslationServer.translate("TELEMETRY_NOTICE")
+		if text == "TELEMETRY_NOTICE" or text.length() < 80:
+			failures.append("%s has no real TELEMETRY_NOTICE: %s" % [locale, text])
+		if locale == "en":
+			english = text
+	TranslationServer.set_locale(old_locale)
+	for needle: String in ["Capture the Flag", "phones joined", "internet phone", "no names or IDs"]:
+		if not english.contains(needle):
+			failures.append("the English notice does not mention '%s': %s" % [needle, english])
+	_scenario_completed = true
 	return failures
