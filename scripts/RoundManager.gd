@@ -287,6 +287,7 @@ func _ready() -> void:
 	_controller_server = get_node_or_null(controller_server_path)
 	if _controller_server != null and "join_count_gate" in _controller_server:
 		_controller_server.set("join_count_gate", _telemetry_events_gate_1271) # #1271
+		_controller_server.set("join_flush", _send_lobby_record_1271)
 	if _controller_server != null and _controller_server.has_signal("host_command"):
 		_controller_server.connect("host_command", _on_host_command)
 	_watch_for_lobby_changes()
@@ -1321,10 +1322,8 @@ func _build_modifier_label() -> void:
 ## A RoundManager leaving the tree mid-round (a scenario tearing down) must
 ## not leave its modifier on players that outlive it.
 func _exit_tree() -> void:
-	if not _match_live:
-		_send_lobby_record_1271(null, true) # back to the title: the lobby's joins go out (#1271)
-	else:
-		_take_join_events_1271()
+	_exiting = true
+	flush_telemetry() # #1271: the abandoned match's or the lobby's record, never dropped
 	_end_final_ko()
 	_end_game_mode()
 	if _paused:
@@ -2463,7 +2462,8 @@ func send_telemetry(completed: bool = true) -> bool:
 
 ## Hands `record` to the scenario sink or a sender (fire and forget). `detached`
 ## is for a node on its way out of the tree: the sender joins the root instead.
-func _dispatch_record_1271(record: Dictionary, detached: bool) -> void:
+func _dispatch_record_1271(record: Dictionary, detached_in: bool) -> void:
+	var detached: bool = detached_in or _exiting
 	if telemetry_sink.is_valid():
 		telemetry_sink.call(record)
 		return
@@ -2478,6 +2478,15 @@ func _dispatch_record_1271(record: Dictionary, detached: bool) -> void:
 	else:
 		add_child(sender)
 	sender.send(record, url)
+
+var _exiting: bool = false
+
+## Sends what is still unsent: an abandoned match's record when one qualifies, then
+## a lobby record with any joins no record carried (#1271). The quit path calls this
+## before it waits for senders, so the sender exists when the wait starts.
+func flush_telemetry() -> void:
+	_abandon_match()
+	_send_lobby_record_1271(null, false)
 
 func _is_couch_match_1271() -> bool:
 	return _controller_server != null and _controller_server.has_method("match_kind") and str(_controller_server.match_kind()) == "local"
@@ -2502,7 +2511,7 @@ func _telemetry_events_gate_1271() -> bool:
 ## count. `joins` is taken here when null. Returns whether a record went out.
 func _send_lobby_record_1271(joins: Variant = null, detached: bool = false) -> bool:
 	var counts: Dictionary = joins if joins is Dictionary else _take_join_events_1271()
-	if counts.is_empty() or not _is_couch_match_1271() or not _telemetry_events_gate_1271():
+	if counts.is_empty() or not _telemetry_events_gate_1271():
 		return false
 	var record: Dictionary = StatsSenderScript.build_lobby_record(counts)
 	if record.is_empty():
@@ -2531,9 +2540,7 @@ func _abandon_match() -> void:
 ## moment for the sender before it quits.
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_abandon_match()
-		if not _match_live:
-			_send_lobby_record_1271() # quit from the lobby with phones that joined (#1271)
+		flush_telemetry() # also the lobby's joins when quitting from the lobby (#1271)
 	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		focus_lost()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:

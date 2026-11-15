@@ -166,9 +166,9 @@ def print_ping(records):
 
 # The counter names the relay stores (relay/Relay.gd STATS_CTF_KEYS / STATS_JOIN_KEYS);
 # this list is the one place the summary needs them. drops_in_own_base can include
-# normal play; capture_rejected and carried_in_base_at_end are the stronger #1269 signals.
+# normal play; carrier_in_base_during_pause and carried_in_base_at_end are the stronger #1269 signals.
 CTF_KEYS = ("captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns",
-            "capture_rejected", "carried_in_base_at_end")
+            "carrier_in_base_during_pause", "carried_in_base_at_end")
 JOIN_KEYS = ("lan", "relay", "help", "nudge", "internet")
 
 
@@ -189,10 +189,11 @@ def events_summary(records):
     relay_records = []
     for rec in records:
         events = rec.get("events")
+        if rec.get("mode") == "capture_the_flag" or (isinstance(events, dict) and isinstance(events.get("ctf"), dict)):
+            ctf_records += 1 # every Capture the Flag match, whatever its counters say
         if not isinstance(events, dict):
             continue
         if isinstance(events.get("ctf"), dict):
-            ctf_records += 1
             for key in CTF_KEYS:
                 ctf[key] += _count(events["ctf"].get(key))
         if isinstance(events.get("joins"), dict):
@@ -227,7 +228,7 @@ def print_events(records, lobbies=0):  # `lobbies`: every lobby record, active o
         print("Lobby records: %d (none with join activity)" % lobbies)
     if seats:
         shown = ["%.0f" % means[f] if means[f] is not None else "-" for f in ("avg", "p95", "max")]
-        print("Relay phone ping: %d phones; avg (n-weighted) / p95 (mean) / max (ms): %s" % (seats, " / ".join(shown)))
+        print("Relay phone ping: %d phone-matches; avg (n-weighted) / p95 (mean) / max (ms): %s" % (seats, " / ".join(shown)))
 
 
 if __name__ == "__main__":

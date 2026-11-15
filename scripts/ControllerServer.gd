@@ -3548,8 +3548,8 @@ func _weak_link_answered(slot: int, st: Dictionary, rtt: int) -> void:
 	st["samples"] = int(st.get("samples", 0)) + 1
 	if slot_over_relay(slot):
 		_note_relay_phone_rtt(slot, int(st["rtt"]))
-	if slot_over_relay(slot) and int(st["samples"]) % RELAY_PING_LOG_EVERY == 1:
-		print("Relay phone slot %d: round trip %d ms (host to relay %s)" % [slot, int(st["rtt"]),
+		if int(st["samples"]) % RELAY_PING_LOG_EVERY == 1:
+			print("Relay phone slot %d: round trip %d ms (host to relay %s)" % [slot, int(st["rtt"]),
 				("%d ms" % relay_rtt_msec) if relay_rtt_msec >= 0 else "unknown"])
 
 func _weak_link_sample(slot: int, st: Dictionary, rtt: int, now: int) -> void:
@@ -3754,6 +3754,9 @@ var _join_other: Dictionary = {}
 ## Decides whether anything may be counted: set by the RoundManager to the telemetry
 ## gate (sharing on, the current notice acknowledged, not a scripted run). Unset counts nothing.
 var join_count_gate: Callable = Callable()
+## Sends the counted joins as a lobby record (set by the RoundManager); called when the
+## match kind leaves Couch with joins still counted, before they would be lost.
+var join_flush: Callable = Callable()
 ## Joiner identity -> a relay phone's real round trips this match (newest PING_SAMPLES_MAX).
 var _relay_phone_rtts: Dictionary = {}
 
@@ -3913,6 +3916,8 @@ func kind_drop_notice() -> Dictionary:
 func set_match_kind(kind: String) -> bool:
 	if not [KIND_LOCAL, KIND_ONLINE, KIND_SOLO].has(kind):
 		return false
+	if kind != KIND_LOCAL and not join_events().is_empty() and join_flush.is_valid():
+		join_flush.call() # #1271: a Couch lobby's joins go out before the switch drops them
 	if room_closed() and kind != KIND_SOLO:
 		bot_director.remove_bots() # Solo's bots go with it: none is left to play a room alone (#505)
 	var target: String = KIND_LOCAL if kind == KIND_LOCAL else KIND_ONLINE

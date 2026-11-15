@@ -140,7 +140,7 @@ const PING_MAX_MSEC: int = 60000
 const PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", "host_leg"]
 ## The event counters of a record's `events.ctf` and `events.joins` (#1271);
 ## relay/Relay.gd keeps its own copies, kept equal.
-const CTF_EVENT_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns", "capture_rejected", "carried_in_base_at_end"]
+const CTF_EVENT_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns", "carrier_in_base_during_pause", "carried_in_base_at_end"]
 const JOIN_EVENT_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet"]
 
 ## victim slot -> {"attacker": slot, "msec": int} for the last hit taken.
@@ -702,14 +702,15 @@ func balance_log_line(unix_time: int, completed: bool = true, rounds_played: int
 
 ## `list`'s ping entries cut to `PING_FIELDS` as ints clamped to -1..60000.
 ## `only_shared` keeps the entries whose joiner said it shares stats (#1195 D8);
-## `cap` > 0 keeps at most that many, those with the most samples (`n`).
-static func ping_entries(list: Array, only_shared: bool, cap: int) -> Array:
+## `cap` > 0 keeps at most that many, those with the most samples (`n`, which `fields` must include).
+## `fields` defaults to `PING_FIELDS`.
+static func ping_entries(list: Array, only_shared: bool, cap: int, fields: PackedStringArray = PING_FIELDS) -> Array:
 	var out: Array = []
 	for entry: Variant in list:
 		if not entry is Dictionary or (only_shared and (entry as Dictionary).get("share") != true):
 			continue
 		var clean: Dictionary = {}
-		for field: String in PING_FIELDS:
+		for field: String in fields:
 			var v: Variant = (entry as Dictionary).get(field, -1)
 			clean[field] = clampi(int(v), -1, PING_MAX_MSEC) if (v is int or (v is float and is_finite(v))) else -1
 		out.append(clean)

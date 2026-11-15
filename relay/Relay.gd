@@ -158,15 +158,17 @@ const STATS_MAX_PING_MSEC: int = 60000
 ## `joins` counters (these keys, each 0..STATS_MAX_EVENT_COUNT) and `relay_ping`
 ## (at most STATS_MAX_PING_ENTRIES of avg/p95/max/n). Keep the key lists equal to
 ## MatchStats.CTF_EVENT_KEYS / JOIN_EVENT_KEYS.
-const STATS_CTF_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns", "capture_rejected", "carried_in_base_at_end"]
+const STATS_CTF_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns", "carrier_in_base_during_pause", "carried_in_base_at_end"]
 const STATS_JOIN_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet"]
 const STATS_RELAY_PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n"]
 const STATS_MAX_EVENT_COUNT: int = 100000
 ## Records allowed per IP per hour.
+@export var stats_lobby_limit_per_hour: int = 10 # lobby records (#1271) have their own bucket
 @export var stats_limit_per_hour: int = 30
 ## Where records are appended. Set PICKFIGHT_STATS_PATH to a file on a mounted
 ## volume (see fly.toml) for them to survive a deploy.
 var stats_path: String = _default_stats_path()
+var _stats_lobby_times: Dictionary = {} # the same, for lobby records
 var _stats_times: Dictionary = {} # salted hash of the caller (int) -> Array[int] of msec
 var _stats_salt: String = Crypto.new().generate_random_bytes(16).hex_encode()
 
@@ -420,13 +422,15 @@ func handle_stats(ip: String, msg: Dictionary) -> Dictionary:
 		return {"status": 400}
 	var now: int = Time.get_ticks_msec()
 	var caller: int = (_stats_salt + ip).hash()
-	var times: Array = _stats_times.get(caller, [])
+	var lobby: bool = record.get("kind") == "lobby"
+	var buckets: Dictionary = _stats_lobby_times if lobby else _stats_times
+	var times: Array = buckets.get(caller, [])
 	times = times.filter(func(t: int) -> bool: return now - t < FEEDBACK_WINDOW_MSEC)
-	if times.size() >= stats_limit_per_hour:
-		_stats_times[caller] = times
+	if times.size() >= (stats_lobby_limit_per_hour if lobby else stats_limit_per_hour):
+		buckets[caller] = times
 		return {"status": 429}
 	times.append(now)
-	_stats_times[caller] = times
+	buckets[caller] = times
 	var hour: int = int(Time.get_unix_time_from_system())
 	record["t"] = hour - hour % 3600
 	return {"status": 200 if _append_line(stats_path, JSON.stringify(record)) else 503}

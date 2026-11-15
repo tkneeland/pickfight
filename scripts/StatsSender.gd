@@ -24,6 +24,8 @@ const MatchStatsScript := preload("res://scripts/MatchStats.gd")
 const PING_MAX_ENTRIES: int = 8
 ## The most any event counter may say (Relay.STATS_MAX_EVENT_COUNT).
 const EVENT_COUNT_MAX: int = 100000
+## The fields of a relay phone's ping entry (`events.relay_ping`).
+const RELAY_PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n"]
 
 var _peer: WebSocketPeer
 var _payload: String = ""
@@ -105,27 +107,10 @@ static func _build_events(stats: RefCounted, with_joins: bool = true, live_ctf: 
 		events["joins"] = joins
 	var relay_ping: Variant = stats.get("relay_ping")
 	if relay_ping is Array:
-		var entries: Array = _relay_ping_entries(relay_ping)
+		var entries: Array = MatchStatsScript.ping_entries(relay_ping, false, PING_MAX_ENTRIES, RELAY_PING_FIELDS)
 		if not entries.is_empty():
 			events["relay_ping"] = entries
 	return events
-
-## The relay phones' {avg, p95, max, n} entries as ints clamped to -1..PING_MAX_MSEC,
-## at most PING_MAX_ENTRIES, those with the most samples kept.
-static func _relay_ping_entries(list: Array) -> Array:
-	var out: Array = []
-	for entry: Variant in list:
-		if not entry is Dictionary:
-			continue
-		var clean: Dictionary = {}
-		for field: String in ["avg", "p95", "max", "n"]:
-			var v: Variant = (entry as Dictionary).get(field, -1)
-			clean[field] = clampi(int(v), -1, MatchStatsScript.PING_MAX_MSEC) if (v is int or (v is float and is_finite(v))) else -1
-		out.append(clean)
-	if out.size() > PING_MAX_ENTRIES:
-		out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["n"]) > int(b["n"]))
-		out.resize(PING_MAX_ENTRIES)
-	return out
 
 ## `source`'s `keys` as non-negative ints, {} when every one is zero or missing.
 static func _counts_of(source: Variant, keys: PackedStringArray) -> Dictionary:

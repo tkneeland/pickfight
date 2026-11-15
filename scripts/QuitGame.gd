@@ -28,6 +28,11 @@ static func others_seated(server: Object) -> bool:
 ## Closes the room (remote seats are told the host left), has a PC client hang up on the room it is
 ## in, then quits.
 static func quit_game(tree: SceneTree, server: Object = null) -> void:
+	# #1271: the unsent match or lobby record goes out first, so a sender exists
+	# when Music's quit wait looks for one.
+	var rounds: Node = tree.current_scene.get_node_or_null(^"RoundManager") if tree.current_scene != null else null
+	if rounds != null and rounds.has_method("flush_telemetry"):
+		rounds.flush_telemetry()
 	if server != null:
 		if server.has_method("online_requested") and server.online_requested():
 			server.apply_host_command("online", false)
