@@ -4,7 +4,8 @@ extends Node2D
 ## (issue #818). World-space text in the fighter's colour on an ink plate (the
 ## #548 HUD look) that rises RISE_PX and fades over LIFETIME_SEC, drawn above
 ## the name tags. At most one per fighter: a new grab replaces the old label.
-## Self-contained: `Pickup._on_body_entered` is the only caller.
+## Callers: `Pickup._on_body_entered` (a weapon's name) and
+## `Pickup._claim_health` (the `text_key` path, a plain translated string, #1267).
 
 const HookUtilScript := preload("res://scripts/HookUtil.gd")
 const UiThemeScript := preload("res://scripts/UiTheme.gd")
@@ -38,8 +39,11 @@ static func show_for(fighter_body: Node2D, weapon_id: String, parent: Node, text
 	var identity: Variant = fighter_body.get("identity_color")
 	var tint: Color = identity if identity is Color else Color.WHITE
 	# The Online joiner's copy (#976), before this machine's setting is asked.
-	EffectStreamScript.record("callout", {"p": fighter_body.global_position, "w": weapon_id, "c": tint,
-		"o": fighter_body.get_instance_id(), "t": text_key}, fighter_body)
+	var event: Dictionary = {"p": fighter_body.global_position, "w": weapon_id, "c": tint,
+		"o": fighter_body.get_instance_id()}
+	if not text_key.is_empty():
+		event["t"] = text_key
+	EffectStreamScript.record("callout", event, fighter_body)
 	var callout: Node2D = show_at(parent, fighter_body.global_position, weapon_id, tint, fighter_body.get_instance_id(), text_key)
 	if callout != null:
 		callout.fighter = fighter_body

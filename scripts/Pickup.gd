@@ -145,6 +145,13 @@ func drop() -> void:
 	_fall_start_y = global_position.y
 
 func _physics_process(delta: float) -> void:
+	# #1267: a fighter already standing on the pack who then takes damage never
+	# re-enters it, so an unclaimed pack re-checks who is on it every tick.
+	if is_health_pack and not _claimed and not display_only:
+		for body: Node2D in get_overlapping_bodies():
+			_on_body_entered(body)
+			if _claimed:
+				return
 	if not _falling and not _dropped:
 		return
 	# #1103: a resting dropped pickup re-checks its ground with the same ray.

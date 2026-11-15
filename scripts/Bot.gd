@@ -634,6 +634,17 @@ func _choose_goal() -> void:
 	var enemy_distance: float = me.distance_to(enemy.global_position) if enemy != null else INF
 	var pickup: Node2D = _nearest_pickup()
 	var pickup_distance: float = me.distance_to(pickup.global_position) if pickup != null else INF
+	# #1267: which pickup to chase. A hurt bot takes a health pack that is worth
+	# the detour; otherwise the pickaxe rule looks at the nearest WEAPON, so a
+	# nearer pack never switches the weapon hunt off.
+	var in_detour: bool = pickup != null and pickup_distance < enemy_distance * PICKUP_DETOUR * float(skill()["pickup"])
+	var chase_pickup: Node2D = null
+	if pickup != null and _is_health_pack(pickup) and in_detour:
+		chase_pickup = pickup
+	elif _holds_pickaxe():
+		chase_pickup = pickup if pickup != null and not _is_health_pack(pickup) else _nearest_pickup(true)
+	elif in_detour:
+		chase_pickup = pickup
 	var lava_close: bool = _lava_worry()
 	_pad_route = false
 	# Out from under a rock, out of a hazard's margin, off ground giving way
@@ -718,13 +729,13 @@ func _choose_goal() -> void:
 			goal = enemy.global_position
 		else:
 			goal = me
-	elif pickup != null and ((_holds_pickaxe() and not _is_health_pack(pickup)) or pickup_distance < enemy_distance * PICKUP_DETOUR * float(skill()["pickup"])):
-		goal = pickup.global_position
-		if pickup != _chasing:
-			_chasing = pickup
+	elif chase_pickup != null:
+		goal = chase_pickup.global_position
+		if chase_pickup != _chasing:
+			_chasing = chase_pickup
 			_chase_since = _clock
 		elif _clock - _chase_since > PICKUP_GIVE_UP_SEC:
-			_ignored_pickups[pickup.get_instance_id()] = _clock + PICKUP_IGNORE_SEC
+			_ignored_pickups[chase_pickup.get_instance_id()] = _clock + PICKUP_IGNORE_SEC
 			_chasing = null
 	elif enemy != null:
 		_chasing = null
@@ -850,7 +861,7 @@ func _hunt_cost(at: Vector2) -> float:
 
 ## The nearest pickup with solid ground under it and either side of it: one
 ## over open air, a hazard, a pad or ground that will not last is bait.
-func _nearest_pickup() -> Node2D:
+func _nearest_pickup(skip_packs: bool = false) -> Node2D:
 	var best: Node2D = null
 	var best_distance: float = INF
 	for pickup: Node in player.get_tree().get_nodes_in_group("pickups"):
@@ -860,8 +871,8 @@ func _nearest_pickup() -> Node2D:
 			continue
 		if _same_weapon_as_held(pickup):
 			continue # a weapon it already holds gains nothing (#1007)
-		if _is_health_pack(pickup) and float(player.get("damage")) <= 0.0:
-			continue # a health pack gains an unhurt bot nothing (#1267)
+		if _is_health_pack(pickup) and (skip_packs or float(player.get("damage")) <= 0.0):
+			continue # a health pack gains an unhurt bot nothing, and `skip_packs` wants weapons only (#1267)
 		var at: Vector2 = (pickup as Node2D).global_position
 		var d: float = player.global_position.distance_to(at)
 		if d < best_distance and _footing(at) == FOOT_SOLID and _footing(at + Vector2(EDGE_KEEP, 0.0)) == FOOT_SOLID \
