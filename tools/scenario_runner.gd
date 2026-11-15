@@ -65584,42 +65584,41 @@ func _scenario_relay_lobby_records_have_their_own_rate_limit_1271() -> Array[Str
 	_scenario_completed = true
 	return failures
 
-## #1276: the umbrella canopy is 1.35x its old size, art outline and hit circles
-## together, and the glide and wind catch are the same as before. The pickup and
-## the Online puppet draw the same outline through Pickup.art_layout.
+## #1276: the umbrella's canopy is 1.35x its old size, scaled about the point where
+## it meets the handle stub (2, 0): the three canopy circles and the canopy outline
+## points together, so the drawn canopy is what catches hits. The handle stub and
+## the small shaft circle are unchanged, so the closed poker reaches as before.
+## Glide and wind are size-independent (umbrella_overhead_slows_the_fall and
+## umbrella_catches_more_wind_than_pickaxe cover them), circles inside the art is
+## weapon_head_circles_within_art, and pickup/Online art parity is #930's scenario.
 func _scenario_umbrella_canopy_is_larger_and_tuned_the_same_1276() -> Array[String]:
 	var failures: Array[String] = []
 	var factor: float = 1.35
-	var old_radii: Array = [0.9, 4.5, 2.7, 2.7]
-	var old_offsets: Array = [Vector2(1, 0), Vector2(8, 0), Vector2(7, -7), Vector2(7, 7)]
-	var old_tip: float = 16.5
-	var old_half_width: float = 13.0
+	var anchor := Vector2(2, 0)
+	var canopy := func(p: Vector2) -> Vector2: return anchor + (p - anchor) * factor
 	var stats: Resource = load(UMBRELLA_PATH)
-	for i in old_radii.size():
-		if absf(stats.head_circle_radii[i] - old_radii[i] * factor) > 0.01:
-			failures.append("hit circle %d radius %.3f, wanted %.3f" % [i, stats.head_circle_radii[i], old_radii[i] * factor])
-		if (stats.head_circle_offsets[i] - old_offsets[i] * factor).length() > 0.01:
-			failures.append("hit circle %d offset %s, wanted %s" % [i, stats.head_circle_offsets[i], old_offsets[i] * factor])
+	# Shaft circle (index 0): as before #1276.
+	if (stats.head_circle_offsets[0] - Vector2(1, 0)).length() > 0.01 or absf(stats.head_circle_radii[0] - 0.9) > 0.01:
+		failures.append("the shaft circle changed: %s r %.3f, wanted (1, 0) r 0.9" % [stats.head_circle_offsets[0], stats.head_circle_radii[0]])
+	# Canopy circles: the old ones scaled about the stub junction.
+	var old_offsets: Array = [Vector2(8, 0), Vector2(7, -7), Vector2(7, 7)]
+	var old_radii: Array = [4.5, 2.7, 2.7]
+	for i in old_offsets.size():
+		var want: Vector2 = canopy.call(old_offsets[i])
+		if (stats.head_circle_offsets[i + 1] - want).length() > 0.01 or absf(stats.head_circle_radii[i + 1] - old_radii[i] * factor) > 0.01:
+			failures.append("canopy circle %d: %s r %.3f, wanted %s r %.3f" % [i + 1, stats.head_circle_offsets[i + 1], stats.head_circle_radii[i + 1], want, old_radii[i] * factor])
+	# Outline: the stub points as before, the canopy tip and half-width scaled.
+	var stub: Array = [Vector2(-2, -1), Vector2(3.5, -1), Vector2(3.5, 1), Vector2(-2, 1)]
+	for p: Vector2 in stub:
+		if not stats.art_outline.has(p):
+			failures.append("the handle stub point %s is gone from the outline" % p)
 	var tip: float = 0.0
 	var half_width: float = 0.0
 	for pt: Vector2 in stats.art_outline:
 		tip = maxf(tip, pt.x)
 		half_width = maxf(half_width, absf(pt.y))
-	if absf(tip - old_tip * factor) > 0.01 or absf(half_width - old_half_width * factor) > 0.01:
-		failures.append("art tip %.2f half-width %.2f, wanted %.2f / %.2f" % [tip, half_width, old_tip * factor, old_half_width * factor])
-	# The pickup (and so the Online puppet) draws that same outline.
-	var layout: Dictionary = load("res://scripts/Pickup.gd").art_layout(stats)
-	if layout["outline"] != stats.art_outline:
-		failures.append("pickup art layout does not draw the umbrella's art_outline")
-	# Glide and wind catch keep their old tuning.
-	var steady: float = await _umbrella_fall_speed(UMBRELLA_PATH, Vector2.UP, 40)
-	if steady > 95.0:
-		failures.append("open umbrella steady fall %.0f px/s, wanted 95 or less (cap 60 plus one gravity tick)" % steady)
-	var umbrella_drift: float = await _umbrella_wind_drift(UMBRELLA_PATH)
-	var pickaxe_drift: float = await _umbrella_wind_drift(PICKAXE_STARTER_PATH)
-	if umbrella_drift < pickaxe_drift * 1.5:
-		failures.append("umbrella wind drift %.0f not >= 1.5x pickaxe %.0f" % [umbrella_drift, pickaxe_drift])
-	if not is_equal_approx(PlayerScript976.CANOPY_FALL_CAP, 60.0) or not is_equal_approx(PlayerScript976.CANOPY_WIND_MULTIPLIER, 4.0):
-		failures.append("canopy fall cap / wind multiplier were retuned")
+	var want_tip: float = canopy.call(Vector2(16.5, 0)).x
+	if absf(tip - want_tip) > 0.01 or absf(half_width - 13.0 * factor) > 0.01:
+		failures.append("art tip %.3f half-width %.3f, wanted %.3f / %.3f" % [tip, half_width, want_tip, 13.0 * factor])
 	_scenario_completed = true
 	return failures
