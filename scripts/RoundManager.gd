@@ -1701,10 +1701,14 @@ func _publish_lobby_state() -> void:
 		# the lobby's swatches are redrawn in it.
 		players.append({"slot": slot, "ready": _is_ready(slot), "name": _slot_name(slot),
 			"color": _slot_color(slot).to_html(false)})
+		var over_relay: bool = _controller_server != null and _controller_server.has_method("slot_over_relay") and _controller_server.slot_over_relay(slot)
 		var ping: int = _slot_ping(slot)
-		if ping >= 0:
+		# #1270: a relay phone's ping (new each second) stays out of the published
+		# state, or every change would re-send the lobby to every phone all match
+		# long; it shows on the scoreboard and the in-match readout instead.
+		if ping >= 0 and not over_relay:
 			players[-1]["ping"] = ping
-		if _controller_server != null and _controller_server.has_method("slot_over_relay") and _controller_server.slot_over_relay(slot):
+		if over_relay:
 			players[-1]["relay"] = true # #683: a phone that joined over the internet
 	if _controller_server != null and _controller_server.has_method("pad_tip_pending"):
 		for entry: Dictionary in players:

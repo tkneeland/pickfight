@@ -3865,12 +3865,21 @@
   var inputBuf = new ArrayBuffer(8), inputView = new DataView(inputBuf);
   var relayInputBuf = new ArrayBuffer(9), relayInputView = new DataView(relayInputBuf);
   relayInputView.setUint8(0, KIND_INPUT);
-  // #1270: over the relay, at most one packet per RELAY_SEND_MIN_MS (about 60 a
-  // second; 15 not 16.7 so a 60 Hz display still sends every frame). A 120 Hz
-  // phone's every-frame stream used up the relay's 120 frames/s budget (frames
-  // dropped) and fed the host twice its frame rate over a laggy TCP link, which
-  // queued up as delay. The newest value always goes out; nothing is lost.
-  var RELAY_SEND_MIN_MS = 15, lastRelaySend = -Infinity;
+  // #1270: over the relay, about 60 packets a second on any display: a running
+  // schedule one RELAY_SEND_INTERVAL_MS apart (sent once a frame lands within
+  // RELAY_SEND_SLACK_MS of its slot, so a 60 Hz display's jitter still sends
+  // every frame, and 90, 120 or 144 Hz average 60 too), re-anchored to the
+  // frame when it falls a whole interval behind. A 120 Hz phone's every-frame
+  // stream used up the relay's 120 frames/s budget (frames dropped) and fed the
+  // host twice its frame rate over a laggy TCP link, which queued up as delay.
+  // The newest value always goes out; nothing is lost.
+  var RELAY_SEND_INTERVAL_MS = 1000 / 60, RELAY_SEND_SLACK_MS = 2, nextRelaySend = -Infinity;
+  function relaySendDue(now) {
+    if (typeof now !== "number" || !isFinite(now)) now = performance.now();
+    if (!(now + RELAY_SEND_SLACK_MS >= nextRelaySend)) return false;
+    nextRelaySend = (now - nextRelaySend > RELAY_SEND_INTERVAL_MS ? now : nextRelaySend) + RELAY_SEND_INTERVAL_MS;
+    return true;
+  }
   function frame(now) {
     if (ws && ws.readyState === WebSocket.OPEN) {
       // Explicit little-endian, because that is what the wire format promises
@@ -3881,8 +3890,7 @@
         inputView.setFloat32(0, vx, true);
         inputView.setFloat32(4, vy, true);
         ws.send(inputBuf);
-      } else if (relayJoined && !(now - lastRelaySend < RELAY_SEND_MIN_MS)) {
-        lastRelaySend = now;
+      } else if (relayJoined && relaySendDue(now)) {
         relayInputView.setFloat32(1, vx, true);
         relayInputView.setFloat32(5, vy, true);
         ws.send(relayInputBuf);

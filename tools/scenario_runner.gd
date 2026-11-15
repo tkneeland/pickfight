@@ -64261,9 +64261,12 @@ func _scenario_relay_phone_polled_first_and_pinged_1270() -> Array[String]:
 		failures.append("no relay room")
 		await _internet_close_683(rig)
 		return failures
+	# The server reads the relay first thing in its frame (pump_inbound), and the
+	# link itself still runs after the server, so what the server queues for
+	# sending (snapshots, pings) is flushed by the link's poll in the same frame.
 	var link: Node = server.relay_link
-	if link == null or link.process_priority >= server.process_priority:
-		failures.append("the relay link is processed after the server drains its seats (priority %s vs %d)" % [link.process_priority if link != null else "no link", server.process_priority])
+	if link == null or not link.has_method("pump_inbound") or link.process_priority < server.process_priority:
+		failures.append("the relay link has no pump_inbound or is processed before the server (priority %s vs %d), which delays every send a frame" % [link.process_priority if link != null else "no link", server.process_priority])
 	var phone: WebSocketPeer = await _internet_phone_683(rig, {"id": "net-1270", "client": "phone"})
 	var seat: Dictionary = await _online_wait_239(rig, phone, "slot") if phone != null else {}
 	if not seat.has("slot"):
@@ -64312,26 +64315,65 @@ func _scenario_relay_phone_polled_first_and_pinged_1270() -> Array[String]:
 		failures.append("the ping readout '%s' lacks the relay phone's line '%s'" % [label.text if label != null else "missing", want])
 	if label != null:
 		label.visible = false
+	# The relay phone's ping stays out of the published lobby state (a new value
+	# each second would re-send the lobby to every phone).
+	var listed: bool = false
+	for entry: Variant in (server.get("_lobby_state") as Dictionary).get("players", []):
+		if entry is Dictionary and int(entry.get("slot", -1)) == slot:
+			listed = true
+			if entry.has("ping"):
+				failures.append("the lobby state carries the relay phone's ping: %s" % entry)
+			if not entry.get("relay", false):
+				failures.append("the lobby state lost the relay phone's relay tag: %s" % entry)
+	if not listed:
+		failures.append("the relay phone is missing from the published lobby state")
+	# A phone that stops answering: its ping climbs with the wait instead of holding
+	# the last answer (a stalled link must not look steady).
+	var answered_rtt: int = server.slot_ping_msec(slot)
+	await _wait_for_239(func() -> bool: return false, 900)
+	var stalled: int = server.slot_ping_msec(slot)
+	if stalled <= answered_rtt or stalled < 300:
+		failures.append("after 0.9 s unanswered the relay phone's ping is %d (last answer %d); want it climbing" % [stalled, answered_rtt])
 	await _internet_close_683(rig)
 	_scenario_completed = true
 	return failures
-## The phone page caps its relay sends at about 60 a second and leaves the LAN
-## stream at display rate.
+## The phone page sends about 60 packets a second over the relay on any display
+## rate and leaves the LAN stream at display rate. The schedule is mirrored here
+## (same expressions) and simulated at common display rates.
 func _scenario_phone_page_caps_relay_send_rate_1270() -> Array[String]:
 	var failures: Array[String] = []
 	var html: String = FileAccess.get_file_as_string(CONTROLLER_PAGE_PATH)
 	for needle: String in [
-		"var RELAY_SEND_MIN_MS = 15, lastRelaySend = -Infinity;",
+		"var RELAY_SEND_INTERVAL_MS = 1000 / 60, RELAY_SEND_SLACK_MS = 2, nextRelaySend = -Infinity;",
+		"if (!(now + RELAY_SEND_SLACK_MS >= nextRelaySend)) return false;",
+		"nextRelaySend = (now - nextRelaySend > RELAY_SEND_INTERVAL_MS ? now : nextRelaySend) + RELAY_SEND_INTERVAL_MS;",
 		"function frame(now) {",
-		"} else if (relayJoined && !(now - lastRelaySend < RELAY_SEND_MIN_MS)) {",
-		"lastRelaySend = now;",
+		"} else if (relayJoined && relaySendDue(now)) {",
 	]:
 		if not html.contains(needle):
 			failures.append("the phone page lacks: %s" % needle)
 	var lan: int = html.find("if (!RELAY) {", html.find("function frame(now) {"))
 	var relay: int = html.find("} else if (relayJoined && ")
 	if lan < 0 or relay < 0 or not html.substr(lan, relay - lan).contains("ws.send(inputBuf);") \
-			or html.substr(lan, relay - lan).contains("RELAY_SEND_MIN_MS"):
+			or html.substr(lan, relay - lan).contains("relaySendDue"):
 		failures.append("the LAN branch is not an unthrottled every-frame send")
+	# The same schedule, simulated for 10 s at each display rate, with frame jitter.
+	var interval: float = 1000.0 / 60.0
+	var slack: float = 2.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1270
+	for hz: float in [60.0, 90.0, 120.0, 144.0]:
+		var next_send: float = -INF
+		var sent: int = 0
+		var frames: int = int(10.0 * hz)
+		for i in frames:
+			var now: float = float(i) * 1000.0 / hz + rng.randf_range(-0.5, 0.5)
+			if not (now + slack >= next_send):
+				continue
+			next_send = (now if now - next_send > interval else next_send) + interval
+			sent += 1
+		var per_sec: float = float(sent) / 10.0
+		if absf(per_sec - 60.0) > 2.0:
+			failures.append("%.0f Hz display: %.1f relay packets a second, want about 60" % [hz, per_sec])
 	_scenario_completed = true
 	return failures
