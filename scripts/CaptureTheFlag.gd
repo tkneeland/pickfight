@@ -272,10 +272,13 @@ func _physics_process(delta: float) -> void:
 	if _finished:
 		return
 	if _pausing:
-		# #1269: the other side's carrier can still reach their base during the
-		# pause, and that is a capture: it scores (and may win), and the pause
-		# restarts on its banner. Before, the pause skipped this check and the
-		# next hall reset the flag with no point.
+		# #1269: the carrying rules still hold during the pause, in play's order:
+		# a hit (or a KO) drops the flag, and the other side's carrier reaching
+		# their base is a capture that scores (and may win), restarting the pause on
+		# its banner. Before, the pause skipped both and the next hall reset the
+		# flag with no point. Only the clock, pick-ups, returns and the hall change
+		# wait for the pause.
+		_check_carrier_hits()
 		_check_captures()
 		if _finished:
 			return
@@ -522,6 +525,7 @@ func is_won() -> bool:
 ## manager's last-team-standing rule scores it.
 func _win(team: int) -> void:
 	_finished = true
+	_hide_captured() # a win from inside a capture pause (#1269) shows no banner, as any winning capture
 	ModeKitScript.eliminate_other_team(round_manager, _watched, _respawner, team_of, team)
 
 # --- Display -------------------------------------------------------------------
