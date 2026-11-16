@@ -37,7 +37,8 @@ fetch_new() {
   while :; do
     page=$(dcurl "/channels/$CH/messages?limit=50${last:+&after=$last}") || return 2
     echo "$page" | jq -e 'type == "array"' >/dev/null 2>&1 || { echo "pf-discord-bugs: Discord said $(echo "$page" | head -c 200)" >&2; return 2; }
-    all=$(jq -n --argjson a "$all" --argjson p "$page" '$a + $p')
+    # Merged through stdin, never argv: a page of 50 reports is past Windows' ~32 KB command line (#1283).
+    all=$(printf '%s' "$all" "$page" | jq -s 'add')
     i=$((i+1)); [ -z "$last" ] || [ "$(echo "$page" | jq length)" -lt 50 ] || [ "$i" -ge 20 ] && break
     last=$(echo "$page" | jq -r "$SORT_IDS | last.id")
   done
