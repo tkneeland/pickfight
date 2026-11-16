@@ -73,11 +73,10 @@ var scores: Dictionary = {0: 0, 1: 0}
 var capturers: Dictionary = {}
 ## This round's flag events (#1271), handed to the match stats by `report_stats`.
 ## `drops_in_own_base` can include normal play (a carrier dying or hit at their
-## own line); `carrier_in_base_during_pause` and `carried_in_base_at_end` are the stronger
-## "reached the end zone but did not score" signals (#1269).
+## own line); `carried_in_base_at_end` is the stronger "reached the end zone but
+## did not score" signal. `carrier_in_base_during_pause` is no longer counted:
+## that was #1269 itself, and a carrier in their base during the pause now scores.
 var events: Dictionary = {}
-## Slots already counted as a carrier in their base during the capture pause.
-var _pause_noted: Dictionary = {}
 ## team -> HOME / CARRIED / DROPPED, for that team's flag.
 var state: Dictionary = {0: HOME, 1: HOME}
 ## team -> slot carrying that team's flag, or -1.
@@ -121,7 +120,6 @@ func start_round(slots: Array[int]) -> void:
 	scores = {0: 0, 1: 0}
 	capturers.clear()
 	events = {}
-	_pause_noted.clear()
 	state = {0: HOME, 1: HOME}
 	carrier = {0: -1, 1: -1}
 	return_left = {0: 0.0, 1: 0.0}
@@ -186,13 +184,12 @@ func live_events() -> Dictionary:
 
 ## Flags carried by someone standing in their own base, who reached the end zone
 ## and did not score (#1269). A flag a capture sent home has no carrier, so the
-## capturer is not counted; the other team's carrier still is, unless already counted
-## as `carrier_in_base_during_pause`.
+## capturer is not counted; the other team's carrier still is.
 func _carried_in_base_count() -> int:
 	var count: int = 0
 	for team: int in [0, 1]:
 		var slot: int = int(carrier[team])
-		if slot != -1 and not _pause_noted.has(slot) and _in_own_base(slot, 1 - team):
+		if slot != -1 and _in_own_base(slot, 1 - team):
 			count += 1
 	return count
 
@@ -204,14 +201,6 @@ func _at_base(position: Vector2, base_team: int) -> bool:
 func _in_own_base(slot: int, base_team: int) -> bool:
 	var player: Node2D = _watched.get(slot)
 	return player != null and is_instance_valid(player) and _at_base(player.global_position, base_team)
-
-## A carrier standing in their own base while the capture pause blocks captures:
-## they reached the end zone and could not score, counted once per carrier (#1271).
-func _note_carrier_in_base_during_pause(team: int, slot: int) -> void:
-	if _pause_noted.has(slot) or not _in_own_base(slot, team):
-		return
-	_pause_noted[slot] = true
-	_count_event("carrier_in_base_during_pause")
 
 func _count_event(key: String) -> void:
 	events[key] = int(events.get(key, 0)) + 1
@@ -283,14 +272,20 @@ func _physics_process(delta: float) -> void:
 	if _finished:
 		return
 	if _pausing:
+		# #1269: the carrying rules still hold during the pause, in play's order:
+		# a hit (or a KO) drops the flag, and the other side's carrier reaching
+		# their base is a capture that scores (and may win), restarting the pause on
+		# its banner. Before, the pause skipped both and the next hall reset the
+		# flag with no point. Only the clock, pick-ups, returns and the hall change
+		# wait for the pause.
+		_check_carrier_hits()
+		_check_captures()
+		if _finished:
+			return
 		_pause_left -= delta
 		if _pause_left <= 0.0:
 			_pausing = false
 			_next_hall()
-		for team: int in [0, 1]:
-			var held: int = int(carrier[1 - team])
-			if held != -1:
-				_note_carrier_in_base_during_pause(team, held)
 		_refresh_flags() # a flag still carried rides on its carrier through the pause
 		return
 	for slot: int in _lockout.keys():
@@ -465,7 +460,6 @@ func capture(team: int, slot: int) -> void:
 	var enemy_flag: int = 1 - team
 	if not _active or _finished or int(carrier[enemy_flag]) != slot:
 		return
-	_pause_noted.erase(slot)
 	scores[team] = int(scores[team]) + 1
 	_count_event("captures")
 	capturers[slot] = int(capturers.get(slot, 0)) + 1
@@ -487,7 +481,6 @@ func _next_hall() -> void:
 	_hide_captured()
 	round_manager.change_stage_mid_round()
 	_bases_key = [-1]
-	_pause_noted.clear()
 	_damage_seen.clear()
 	_lockout.clear()
 	state = {0: HOME, 1: HOME}
@@ -532,6 +525,7 @@ func is_won() -> bool:
 ## manager's last-team-standing rule scores it.
 func _win(team: int) -> void:
 	_finished = true
+	_hide_captured() # a win from inside a capture pause (#1269) shows no banner, as any winning capture
 	ModeKitScript.eliminate_other_team(round_manager, _watched, _respawner, team_of, team)
 
 # --- Display -------------------------------------------------------------------

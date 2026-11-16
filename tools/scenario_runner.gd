@@ -1383,6 +1383,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"umbrella_canopy_is_larger_and_tuned_the_same_1276",
 	"grapple_lethal_hit_does_not_latch_1277",
 	"ground_push_launches_higher_for_every_weapon_1278",
+	"ctf_carrier_reaching_base_in_capture_pause_scores_1269",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4574,6 +4575,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_grapple_lethal_hit_does_not_latch_1277()
 		"ground_push_launches_higher_for_every_weapon_1278":
 			return await _scenario_ground_push_launches_higher_for_every_weapon_1278()
+		"ctf_carrier_reaching_base_in_capture_pause_scores_1269":
+			return await _scenario_ctf_carrier_reaching_base_in_capture_pause_scores_1269()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -65208,8 +65211,9 @@ func _scenario_ctf_abandon_collects_live_counters_1271() -> Array[String]:
 	await _teardown(rig["stage"])
 	_scenario_completed = true
 	return failures
-## `carrier_in_base_during_pause` and `carried_in_base_at_end`: the "reached the end
-## zone and did not score" signals.
+## `carried_in_base_at_end`: the "reached the end zone and did not score" signal.
+## Its pause twin, `carrier_in_base_during_pause`, is retired: since #1269 a carrier
+## in their base during the capture pause scores.
 func _scenario_ctf_carrier_in_base_signals_1271() -> Array[String]:
 	var failures: Array[String] = []
 	var rig: Dictionary = _ctf_rig(4)
@@ -65226,23 +65230,27 @@ func _scenario_ctf_carrier_in_base_signals_1271() -> Array[String]:
 		failures.append("a flag carried in the carrier's base was not counted at the end: %s" % [mode.live_events()])
 	if mode.events.has("carried_in_base_at_end"):
 		failures.append("live_events mutated the round's counters: %s" % [mode.events])
-	# The same carrier in the base while the capture pause blocks captures: counted once,
-	# and no longer also "at the end".
+	# The same carrier in the base during a capture pause now scores (#1269): no
+	# longer carried "at the end", and the retired pause counter stays unset.
+	mode.captures_to_win = 3
 	mode._pausing = true
 	mode._pause_left = 5.0
 	await _await_ticks(3)
-	if int(mode.events.get("carrier_in_base_during_pause", 0)) != 1:
-		failures.append("a carrier in their base during the pause was not counted once: %s" % [mode.events])
+	if int(mode.scores[0]) != 1 or int(mode.events.get("captures", 0)) != 1:
+		failures.append("a carrier in their base during the pause did not score: %s %s" % [mode.scores, mode.events])
+	if mode.events.has("carrier_in_base_during_pause"):
+		failures.append("the retired pause counter was set: %s" % [mode.events])
 	if int(mode.live_events().get("carried_in_base_at_end", 0)) != 0:
-		failures.append("the same carrier was counted again at the end: %s" % [mode.live_events()])
-	# Outside a pause, a capture the rules refuse is not a signal (it never happens in play).
+		failures.append("the carrier who scored was counted at the end: %s" % [mode.live_events()])
+	# A capture the rules refuse changes nothing.
 	mode._pausing = false
 	mode.capture(0, 2)
-	if int(mode.events.get("carrier_in_base_during_pause", 0)) != 1:
-		failures.append("a refused capture changed the pause counter: %s" % [mode.events])
+	if int(mode.events.get("captures", 0)) != 1:
+		failures.append("a refused capture changed the counters: %s" % [mode.events])
 	var stats: RefCounted = _events_stats_1271()
 	mode.report_stats(stats)
-	if int(stats.ctf_events.get("carrier_in_base_during_pause", 0)) != 1 or int(stats.ctf_events.get("takes", 0)) != 1:
+	var retired: int = int(stats.ctf_events.get("carrier_in_base_during_pause", 0))
+	if int(stats.ctf_events.get("captures", 0)) != 1 or int(stats.ctf_events.get("takes", 0)) != 1 or retired != 0:
 		failures.append("the match's CTF counters were %s" % [stats.ctf_events])
 	var ctf: Dictionary = (StatsSenderScript372.build_record(stats, "capture_the_flag", [], "teams", 5, [0]).get("events", {}) as Dictionary).get("ctf", {})
 	if ctf != stats.ctf_events:
@@ -65753,3 +65761,84 @@ func _ground_push_rise(path: String, boost: float) -> float:
 		highest = minf(highest, player.global_position.y)
 	await _teardown(stage)
 	return planted_y - highest
+## #1269 (owner playtest): "the flag disappeared when it made it into the end zone
+## but no point was scored." With both flags out, Red captures; during the pause
+## that follows, Blue's carrier reaches Blue's base. That is a capture too: Blue
+## scores, Red's flag goes home, and the pause restarts on Blue's banner. Before
+## the fix the pause skipped the capture check, and the next hall reset the flag
+## with no point. A pause capture that reaches the target wins the round, and a
+## hit during the pause still drops the flag.
+func _scenario_ctf_carrier_reaching_base_in_capture_pause_scores_1269() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = _ctf_rig(4)
+	var mode: Node = await _ctf_start(rig, failures)
+	if mode == null:
+		return failures
+	var players: Array[RigidBody2D] = rig["players"]
+	var stage: Node2D = rig["rm"]._current_stage
+	mode.captures_to_win = 3
+	mode.capture_pause_sec = 5.0
+	mode.take_flag(1, 0)
+	mode.take_flag(0, 1)
+	mode.capture(0, 0)
+	if not mode._pausing:
+		failures.append("no pause after Red's capture short of the target")
+	await _await_ticks(30)
+	if int(mode.scores[1]) != 0:
+		failures.append("Blue scored before reaching the base (scores %s)" % [mode.scores])
+	players[1].teleport_to(stage.get_base_rect(1).get_center())
+	await _await_ticks(3)
+	print("      pause capture: scores %s, Red's flag carried by %d, pausing %s, %.2f s left" % [
+		mode.scores, int(mode.carrier[0]), mode._pausing, mode._pause_left])
+	if int(mode.scores[1]) != 1:
+		failures.append("Blue's carrier reached Blue's base in the pause and scored %d, not 1" % int(mode.scores[1]))
+	if int(mode.carrier[0]) != -1 or int(mode.state[0]) != mode.HOME:
+		failures.append("Red's flag was not sent home by Blue's capture (carrier %d, state %d)" % [int(mode.carrier[0]), int(mode.state[0])])
+	if not mode._pausing or mode._pause_left < mode.capture_pause_sec - 0.2:
+		failures.append("the pause did not restart on Blue's capture (%.2f s left)" % mode._pause_left)
+	if int(mode.events.get("captures", 0)) != 2:
+		failures.append("the round counted %d captures, not 2" % int(mode.events.get("captures", 0)))
+	await _teardown(rig["stage"])
+	# The same, one capture from the target: the pause capture wins the round.
+	var rig2: Dictionary = _ctf_rig(4)
+	var mode2: Node = await _ctf_start(rig2, failures)
+	if mode2 == null:
+		return failures
+	var players2: Array[RigidBody2D] = rig2["players"]
+	var stage2: Node2D = rig2["rm"]._current_stage
+	mode2.captures_to_win = 2
+	mode2.scores[1] = 1
+	mode2.take_flag(1, 0)
+	mode2.take_flag(0, 1)
+	mode2.capture(0, 0)
+	players2[1].teleport_to(stage2.get_base_rect(1).get_center())
+	await _await_ticks(13) # the win ends the round (and frees the mode), as in ctf_two_captures_end_the_round
+	var rm2: Node = rig2["rm"]
+	if rm2.team_score(1) != 1 or rm2.team_score(0) != 0 or rm2.lobby_phase() != "round_end":
+		failures.append("Blue's pause capture at 1-1 did not win the round (team scores %d - %d, phase '%s')" % [
+			rm2.team_score(0), rm2.team_score(1), rm2.lobby_phase()])
+	await _teardown(rig2["stage"])
+	# A hit during the pause still drops the flag: the carrier then reaches base with
+	# nothing, and nobody scores.
+	var rig3: Dictionary = _ctf_rig(4)
+	var mode3: Node = await _ctf_start(rig3, failures)
+	if mode3 == null:
+		return failures
+	var players3: Array[RigidBody2D] = rig3["players"]
+	var stage3: Node2D = rig3["rm"]._current_stage
+	mode3.captures_to_win = 3
+	mode3.capture_pause_sec = 5.0
+	mode3.take_flag(1, 0)
+	mode3.take_flag(0, 1)
+	mode3.capture(0, 0)
+	players3[1].damage += 5.0
+	await _await_ticks(2)
+	if int(mode3.carrier[0]) != -1:
+		failures.append("Blue's carrier was hit in the pause and kept Red's flag")
+	players3[1].teleport_to(stage3.get_base_rect(1).get_center())
+	await _await_ticks(3)
+	if int(mode3.scores[1]) != 0:
+		failures.append("Blue scored %d in the pause after dropping the flag to a hit" % int(mode3.scores[1]))
+	await _teardown(rig3["stage"])
+	_scenario_completed = true
+	return failures
