@@ -1382,6 +1382,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"relay_lobby_records_have_their_own_rate_limit_1271",
 	"umbrella_canopy_is_larger_and_tuned_the_same_1276",
 	"grapple_lethal_hit_does_not_latch_1277",
+	"ground_push_launches_higher_for_every_weapon_1278",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4571,6 +4572,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_umbrella_canopy_is_larger_and_tuned_the_same_1276()
 		"grapple_lethal_hit_does_not_latch_1277":
 			return await _scenario_grapple_lethal_hit_does_not_latch_1277()
+		"ground_push_launches_higher_for_every_weapon_1278":
+			return await _scenario_ground_push_launches_higher_for_every_weapon_1278()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -65653,3 +65656,100 @@ func _scenario_grapple_lethal_hit_does_not_latch_1277() -> Array[String]:
 	await _teardown(stage)
 	_scenario_completed = true
 	return failures
+## #1278: launch power. For every weapon, standing on its planted head and
+## pushing straight down throws the body higher than the same push with the
+## ground-launch boost off (the drive as it was before #1278): at least 5% for
+## every weapon (the axe's slow 300 px/s extension gains least, about 9%) and
+## at least 25% for the pickaxe everyone starts with (about 35%). The retired
+## pogo is skipped: a push into the ground charges its own launch instead.
+const GROUND_LAUNCH_MIN_GAIN: float = 1.05
+const GROUND_LAUNCH_PICKAXE_GAIN: float = 1.25
+## `_ground_push_rise` boosts: off (the drive before #1278), or the player's own.
+const GROUND_LAUNCH_OFF: float = 1.0
+const GROUND_LAUNCH_DEFAULT: float = -1.0
+const GROUND_LAUNCH_WATCH_TICKS: int = 90
+func _scenario_ground_push_launches_higher_for_every_weapon_1278() -> Array[String]:
+	var failures: Array[String] = []
+	for path: String in WEAPON_RESOURCE_PATHS:
+		if path == POGO_PATH:
+			continue
+		var base: float = await _ground_push_rise(path, GROUND_LAUNCH_OFF)
+		var boosted: float = await _ground_push_rise(path, GROUND_LAUNCH_DEFAULT)
+		print("      %s: rise %.1f px with no boost, %.1f px boosted (x%.2f)" % [
+			path.get_file().get_basename(), base, boosted, boosted / maxf(base, 0.001)])
+		if base < MIN_PUSH_RISE:
+			failures.append("%s: the unboosted push only rose %.1f px; the plant did not hold" % [path, base])
+		else:
+			var gain: float = GROUND_LAUNCH_PICKAXE_GAIN if path == PICKUP_PICKAXE_PATH else GROUND_LAUNCH_MIN_GAIN
+			if boosted < base * gain:
+				failures.append("%s: boosted push rose %.1f px, not %.0f%% over %.1f" % [
+					path, boosted, (gain - 1.0) * 100.0, base])
+	failures.append_array(await _ground_launch_scale_checks())
+	_scenario_completed = true
+	return failures
+## The rule itself, read off a player standing on its planted pickaxe: full
+## boost straight down; none for a level push, a push 45 degrees down, the bots'
+## 60-degree brake plant (#963) or a retracting one; part of it 15 degrees off
+## vertical; and none while the head also touches a rival.
+func _ground_launch_scale_checks() -> Array[String]:
+	var failures: Array[String] = []
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 100))
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(LANDING_TICKS)
+	player._scan_head_contacts()
+	if not player._head_on_terrain:
+		failures.append("scale checks: the planted head was not on terrain")
+	var full: float = player.GROUND_LAUNCH_BOOST
+	var cases: Array = [
+		["straight down", Vector2.DOWN, 10.0, full],
+		["level", Vector2.RIGHT, 10.0, 1.0],
+		["45 degrees down", Vector2.RIGHT.rotated(deg_to_rad(45.0)), 10.0, 1.0],
+		["the bots' brake plant", Vector2(0.5, 0.87).normalized(), 10.0, 1.0],
+		["retracting straight down", Vector2.DOWN, -10.0, 1.0],
+	]
+	for c: Array in cases:
+		var got: float = player._ground_launch_scale(c[1], c[2])
+		if absf(got - float(c[3])) > 0.001:
+			failures.append("scale checks: %s gave x%.3f, wanted x%.3f" % [c[0], got, c[3]])
+	var near: float = player._ground_launch_scale(Vector2.DOWN.rotated(deg_to_rad(15.0)), 10.0)
+	if near <= 1.0 or near >= full:
+		failures.append("scale checks: 15 degrees off vertical gave x%.3f, wanted between 1 and x%.2f" % [near, full])
+	player._head_on_rival = true
+	var rival: float = player._ground_launch_scale(Vector2.DOWN, 10.0)
+	player._head_on_rival = false
+	if absf(rival - 1.0) > 0.001:
+		failures.append("scale checks: a head on the floor and a rival still got x%.3f" % rival)
+	# Bots keep the drive they were tuned on, and hand the boost back when freed.
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	stage.add_child(bot)
+	await _await_ticks(2)
+	if absf(player.ground_launch_boost - 1.0) > 0.001:
+		failures.append("scale checks: a bot-driven player kept a x%.2f boost" % player.ground_launch_boost)
+	bot.free()
+	if absf(player.ground_launch_boost - full) > 0.001:
+		failures.append("scale checks: the boost was x%.2f after the bot left, not x%.2f" % [player.ground_launch_boost, full])
+	await _teardown(stage)
+	return failures
+## Plants the player on `path`'s head (short and straight down, as in
+## head_plants_terrain), pushes to full reach and returns how far the body rose.
+## GROUND_LAUNCH_DEFAULT keeps the player's own ground_launch_boost.
+func _ground_push_rise(path: String, boost: float) -> float:
+	var stage: Node2D = _new_stage()
+	var player: RigidBody2D = _spawn_player(stage, Vector2(0, 100))
+	await _await_ticks(2)
+	await _equip(player, path)
+	if boost != GROUND_LAUNCH_DEFAULT:
+		player.ground_launch_boost = boost
+	player.set_input_vector(Vector2.DOWN * 0.05)
+	await _await_ticks(LANDING_TICKS)
+	var planted_y: float = player.global_position.y
+	player.set_input_vector(Vector2.DOWN)
+	var highest: float = planted_y
+	for _i in GROUND_LAUNCH_WATCH_TICKS:
+		await physics_frame
+		highest = minf(highest, player.global_position.y)
+	await _teardown(stage)
+	return planted_y - highest
