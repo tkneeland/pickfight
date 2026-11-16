@@ -1188,20 +1188,41 @@ func _drive_extension(delta: float) -> void:
 	var axis: Vector2 = Vector2.RIGHT.rotated(_haft.rotation)
 	var reach: float = (_head.global_position - global_position).dot(axis)
 	var error: float = weapon_length - reach
-	var max_force: float = _stats.max_drive_force
+	var boost: float = _ground_launch_scale(axis, error)
+	var max_force: float = _stats.max_drive_force * boost
+	var extend_speed: float = _stats.extend_speed * boost
 	# Both ends move, so the mass the drive is working against is the pair's
 	# reduced mass, not the head's alone.
 	var reduced_mass: float = 1.0 / (1.0 / _stats.mass + 1.0 / mass)
 	var stop_limit: float = sqrt(2.0 * (max_force / reduced_mass) * absf(error))
-	var limit: float = minf(_stats.extend_speed, stop_limit)
+	var limit: float = minf(extend_speed, stop_limit)
 	var target_v: float = clampf(error / delta, -limit, limit)
 	var relative_v: float = (_head.linear_velocity - linear_velocity).dot(axis)
 	var drive_mass: float = _stalled_mass(axis * signf(target_v - relative_v), reduced_mass,
-			max_force * delta / _stats.extend_speed, 0.0, 1.0)
+			max_force * delta / extend_speed, 0.0, 1.0)
 	var force: float = clampf((target_v - relative_v) * drive_mass / delta, -max_force, max_force)
 	force *= _swing_force_scale(axis, force)
 	_head.apply_central_force(axis * force)
 	apply_central_force(-axis * force)
+
+## Issue #1278: launch power. Shoving a planted head into the ground throws
+## the body up harder, for every weapon: while the head is on terrain and the
+## arm is extending, the extension drive's force and speed are both scaled up
+## by as much as GROUND_LAUNCH_BOOST. Both, because a vault is capped by
+## `extend_speed` as much as by `max_drive_force`: the push stops adding once the
+## body leaves the head at that speed, so more force alone would only get there
+## sooner. The boost follows how far the haft points down (`axis.y`): full
+## for a straight push down, none for a level push, so wall pushes, the
+## steady-swing roll (#667), strikes and clashes are as they were.
+## `ground_launch_boost` is the instance's copy so a scenario can compare with
+## it off.
+const GROUND_LAUNCH_BOOST: float = 1.5
+var ground_launch_boost: float = GROUND_LAUNCH_BOOST
+
+func _ground_launch_scale(axis: Vector2, error: float) -> float:
+	if error <= 0.0 or axis.y <= 0.0 or not _head_on_terrain:
+		return 1.0
+	return 1.0 + (ground_launch_boost - 1.0) * axis.y
 
 ## What a drive sizes its servo on while its head is pushed along `push`
 ## (issue #180), for the extension drive (a mass) and the angle drive (an
