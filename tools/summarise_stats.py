@@ -166,7 +166,8 @@ def print_ping(records):
 
 # The counter names the relay stores (relay/Relay.gd STATS_CTF_KEYS / STATS_JOIN_KEYS);
 # this list is the one place the summary needs them. drops_in_own_base can include
-# normal play; carrier_in_base_during_pause and carried_in_base_at_end are the stronger #1269 signals.
+# normal play; carried_in_base_at_end is the stronger #1269 signal. carrier_in_base_during_pause
+# is kept for old records: #1269 fixed it, so new records always carry 0.
 CTF_KEYS = ("captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns",
             "carrier_in_base_during_pause", "carried_in_base_at_end")
 JOIN_KEYS = ("lan", "relay", "help", "nudge", "internet")
