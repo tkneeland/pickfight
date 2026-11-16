@@ -1224,8 +1224,9 @@ func _drive_extension(delta: float) -> void:
 ## `_head.drive_force`, which the clash rule compares, stays the true rating).
 ## The retired pogo gets none: a push into the ground charges its own launch
 ## (#271, #622).
-## `ground_launch_boost` is the instance's copy so a scenario can compare with
-## it off.
+## `ground_launch_boost` is the instance's copy: a scenario compares with it off,
+## and a bot holds it at 1.0 so bots keep the drive they were tuned on
+## (`Bot._keep_tuned_drive`).
 const GROUND_LAUNCH_BOOST: float = 1.5
 const GROUND_LAUNCH_FROM_Y: float = 0.87
 var ground_launch_boost: float = GROUND_LAUNCH_BOOST

@@ -65720,6 +65720,17 @@ func _ground_launch_scale_checks() -> Array[String]:
 	player._head_on_rival = false
 	if absf(rival - 1.0) > 0.001:
 		failures.append("scale checks: a head on the floor and a rival still got x%.3f" % rival)
+	# Bots keep the drive they were tuned on, and hand the boost back when freed.
+	var bot: Node = BotScript.new()
+	bot.rng.seed = BOT_SEED
+	bot.player = player
+	stage.add_child(bot)
+	await _await_ticks(2)
+	if absf(player.ground_launch_boost - 1.0) > 0.001:
+		failures.append("scale checks: a bot-driven player kept a x%.2f boost" % player.ground_launch_boost)
+	bot.free()
+	if absf(player.ground_launch_boost - full) > 0.001:
+		failures.append("scale checks: the boost was x%.2f after the bot left, not x%.2f" % [player.ground_launch_boost, full])
 	await _teardown(stage)
 	return failures
 ## Plants the player on `path`'s head (short and straight down, as in

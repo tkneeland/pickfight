@@ -420,7 +420,21 @@ var _footing_memo_past: Dictionary = {}
 func _init() -> void:
 	rng.randomize()
 
+## Issue #1278: the ground-launch boost is for people. A bot's moves (its
+## vault push lengths, #181; brake plants, #963; chops near an edge) were tuned
+## on the drive without it, and with it a chop slamming the floor near-vertical
+## threw a bot past a lone rival and off the stage. So the bot holds its
+## player's boost at 1.0 and hands the default back when it leaves.
+func _keep_tuned_drive() -> void:
+	if is_instance_valid(player):
+		player.set(&"ground_launch_boost", 1.0)
+
+func _exit_tree() -> void:
+	if is_instance_valid(player) and &"GROUND_LAUNCH_BOOST" in player:
+		player.set(&"ground_launch_boost", player.get(&"GROUND_LAUNCH_BOOST"))
+
 func _physics_process(delta: float) -> void:
+	_keep_tuned_drive()
 	var v: Vector2 = think(delta)
 	last_input = v
 	if output.is_valid():
