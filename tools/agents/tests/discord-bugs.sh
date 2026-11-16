@@ -133,4 +133,24 @@ check "tm-check flags discord" "$(echo "$out" | grep -c 'FAIL Discord #bug-repor
 check "tm-check keeps levels" "$(echo "$out" | grep -c '^FAIL discord token rejected')" 1
 rm "$PF_STATE_DIR/pf-discord.conf"
 check "tm-check flags missing conf" "$(PF_TM_CHECK_SKIP_PROCS=1 bash "$AG/pf-tm-check.sh" --quiet | grep -c 'is NOT being watched')" 1
+# #1283: a full first page of long reports still counts, and no fetched data ever goes to jq through argv. fetch_new used
+# to merge pages with --argjson, which died with "Argument list too long" on Git Bash (~32 KB command line). A jq shim
+# that refuses any argument over 20 KB makes that regression fail on every OS, not only Windows.
+real_jq=$(command -v jq)
+cat > "$T/bin/jq" <<EOF
+#!/bin/bash
+for a in "\$@"; do [ \${#a} -gt 20000 ] && { echo "jq shim: argument of \${#a} bytes" >&2; exit 7; }; done
+exec "$real_jq" "\$@"
+EOF
+chmod +x "$T/bin/jq"
+echo 'PF_DISCORD_TOKEN="tok123"' > "$PF_STATE_DIR/pf-discord.conf"; rm -f "$PF_STATE_DIR/.discord-bugs-last" "$PF_STATE_DIR/.discord-bugs-handled"
+long=$(printf 'x%.0s' $(seq 1 1200)); L=""
+for i in $(seq 10 59); do L="$L$(msg 15698765140177810$i sam false "report $i $long"),"; done
+echo "[${L%,}]" > "$T/r/$M"
+check "a 60 KB first page counts every report" "$(bash "$D" check 2>&1)" 50
+check "read shows them all" "$(bash "$D" read 2>&1 | grep -c '^--- ')" 50
+# a reply Discord cannot parse is a failure (exit 2), never "nothing new" (exit 1)
+echo 'not json' > "$T/r/$M"; rm -f "$PF_STATE_DIR/.discord-bugs-last"
+bash "$D" check >/dev/null 2>&1; check "a bad page fails loudly" $? 2
+rm -f "$T/bin/jq"
 echo "discord-bugs: $pass passed, $fail failed"; [ "$fail" = 0 ]

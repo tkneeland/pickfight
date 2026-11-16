@@ -32,16 +32,17 @@ id_gt() { [ "${#1}" -gt "${#2}" ] || { [ "${#1}" = "${#2}" ] && [[ "$1" > "$2" ]
 # so a run of bot replies never hides a later report. With no marker (first run on a machine) it is the newest 50,
 # so reports posted before the watcher started are triaged; one already filed is caught by the dupe check.
 fetch_new() {
-  local last page all='[]' i=0
+  local last page all='' i=0
   last=$(cat "$LAST" 2>/dev/null)
   while :; do
     page=$(dcurl "/channels/$CH/messages?limit=50${last:+&after=$last}") || return 2
     echo "$page" | jq -e 'type == "array"' >/dev/null 2>&1 || { echo "pf-discord-bugs: Discord said $(echo "$page" | head -c 200)" >&2; return 2; }
-    all=$(jq -n --argjson a "$all" --argjson p "$page" '$a + $p')
+    all=$all$page   # raw pages, merged once below
     i=$((i+1)); [ -z "$last" ] || [ "$(echo "$page" | jq length)" -lt 50 ] || [ "$i" -ge 20 ] && break
     last=$(echo "$page" | jq -r "$SORT_IDS | last.id")
   done
-  echo "$all" | jq "unique_by(.id) | $SORT_IDS"
+  # Through stdin, never argv: one page of 50 reports is already past Windows' ~32 KB command line (#1283).
+  printf '%s' "$all" | jq -s "add // [] | unique_by(.id) | $SORT_IDS" || { echo "pf-discord-bugs: could not merge the fetched pages" >&2; return 2; }
 }
 advance() {  # advance <id>: the marker (everything up to here handled) moves forward only
   local cur; cur=$(cat "$LAST" 2>/dev/null)
@@ -66,6 +67,8 @@ case "${1:-}" in
       if $i == null then (last.id // empty) elif $i == 0 then empty else .[$i - 1].id end')
     [ -n "$done_to" ] && advance "$done_to"
     n=$(echo "$new" | pending | jq length)
+    # A count that is not a number is a failure, never "nothing new" (#1283 hid behind that).
+    case $n in ''|*[!0-9]*) echo "pf-discord-bugs: could not count unhandled messages" >&2; exit 2;; esac
     [ "$n" -gt 0 ] && { echo "$n"; exit 0; }
     exit 1 ;;
   read)
