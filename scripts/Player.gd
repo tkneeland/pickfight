@@ -1215,20 +1215,23 @@ func _drive_extension(delta: float) -> void:
 ## by as much as GROUND_LAUNCH_BOOST. Both, because a vault is capped by
 ## `extend_speed` as much as by `max_drive_force`: the push stops adding once the
 ## body leaves the head at that speed, so more force alone would only get there
-## sooner. Only a steep push gets it: the boost ramps in from nothing with the
-## haft GROUND_LAUNCH_FROM_Y down (30 degrees below level) to all of it straight
-## down, so wall pushes, pokes along the floor and the steady-swing roll (#667)
-## are as they were. A head also touching a player or another weapon head gets
-## none, so strikes and clashes are unchanged too (and `_head.drive_force`, which
-## the clash rule compares, stays the true rating).
+## sooner. Only a near-vertical shove gets it: the boost ramps in from nothing
+## with the haft about 30 degrees off straight down (GROUND_LAUNCH_FROM_Y) to
+## all of it straight down. So wall pushes, pokes along the floor, the
+## steady-swing roll (#667), angled vaults and the bots' brake plants (60
+## degrees below level, #963) are as they were. A head also touching a player or
+## another weapon head gets none, so strikes and clashes are unchanged too (and
+## `_head.drive_force`, which the clash rule compares, stays the true rating).
+## The retired pogo gets none: a push into the ground charges its own launch
+## (#271, #622).
 ## `ground_launch_boost` is the instance's copy so a scenario can compare with
 ## it off.
 const GROUND_LAUNCH_BOOST: float = 1.5
-const GROUND_LAUNCH_FROM_Y: float = 0.5
+const GROUND_LAUNCH_FROM_Y: float = 0.87
 var ground_launch_boost: float = GROUND_LAUNCH_BOOST
 
 func _ground_launch_scale(axis: Vector2, error: float) -> float:
-	if error <= 0.0 or not _head_on_terrain or _head_on_rival:
+	if error <= 0.0 or not _head_on_terrain or _head_on_rival or _stats.special == &"pogo":
 		return 1.0
 	var steep: float = clampf((axis.y - GROUND_LAUNCH_FROM_Y) / (1.0 - GROUND_LAUNCH_FROM_Y), 0.0, 1.0)
 	return 1.0 + (ground_launch_boost - 1.0) * steep

@@ -65660,7 +65660,8 @@ func _scenario_grapple_lethal_hit_does_not_latch_1277() -> Array[String]:
 ## pushing straight down throws the body higher than the same push with the
 ## ground-launch boost off (the drive as it was before #1278): at least 5% for
 ## every weapon (the axe's slow 300 px/s extension gains least, about 9%) and
-## at least 25% for the pickaxe everyone starts with (about 35%).
+## at least 25% for the pickaxe everyone starts with (about 35%). The retired
+## pogo is skipped: a push into the ground charges its own launch instead.
 const GROUND_LAUNCH_MIN_GAIN: float = 1.05
 const GROUND_LAUNCH_PICKAXE_GAIN: float = 1.25
 ## `_ground_push_rise` boosts: off (the drive before #1278), or the player's own.
@@ -65670,6 +65671,8 @@ const GROUND_LAUNCH_WATCH_TICKS: int = 90
 func _scenario_ground_push_launches_higher_for_every_weapon_1278() -> Array[String]:
 	var failures: Array[String] = []
 	for path: String in WEAPON_RESOURCE_PATHS:
+		if path == POGO_PATH:
+			continue
 		var base: float = await _ground_push_rise(path, GROUND_LAUNCH_OFF)
 		var boosted: float = await _ground_push_rise(path, GROUND_LAUNCH_DEFAULT)
 		print("      %s: rise %.1f px with no boost, %.1f px boosted (x%.2f)" % [
@@ -65685,8 +65688,9 @@ func _scenario_ground_push_launches_higher_for_every_weapon_1278() -> Array[Stri
 	_scenario_completed = true
 	return failures
 ## The rule itself, read off a player standing on its planted pickaxe: full
-## boost straight down, none for a level, shallow (20 degrees down) or retracting
-## push, part of it at 45 degrees, and none while the head also touches a rival.
+## boost straight down; none for a level push, a push 45 degrees down, the bots'
+## 60-degree brake plant (#963) or a retracting one; part of it 15 degrees off
+## vertical; and none while the head also touches a rival.
 func _ground_launch_scale_checks() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_stage()
@@ -65700,16 +65704,17 @@ func _ground_launch_scale_checks() -> Array[String]:
 	var cases: Array = [
 		["straight down", Vector2.DOWN, 10.0, full],
 		["level", Vector2.RIGHT, 10.0, 1.0],
-		["shallow, 20 degrees down", Vector2.RIGHT.rotated(deg_to_rad(20.0)), 10.0, 1.0],
+		["45 degrees down", Vector2.RIGHT.rotated(deg_to_rad(45.0)), 10.0, 1.0],
+		["the bots' brake plant", Vector2(0.5, 0.87).normalized(), 10.0, 1.0],
 		["retracting straight down", Vector2.DOWN, -10.0, 1.0],
 	]
 	for c: Array in cases:
 		var got: float = player._ground_launch_scale(c[1], c[2])
 		if absf(got - float(c[3])) > 0.001:
 			failures.append("scale checks: %s gave x%.3f, wanted x%.3f" % [c[0], got, c[3]])
-	var diagonal: float = player._ground_launch_scale(Vector2.RIGHT.rotated(deg_to_rad(45.0)), 10.0)
-	if diagonal <= 1.0 or diagonal >= full:
-		failures.append("scale checks: 45 degrees down gave x%.3f, wanted between 1 and x%.2f" % [diagonal, full])
+	var near: float = player._ground_launch_scale(Vector2.DOWN.rotated(deg_to_rad(15.0)), 10.0)
+	if near <= 1.0 or near >= full:
+		failures.append("scale checks: 15 degrees off vertical gave x%.3f, wanted between 1 and x%.2f" % [near, full])
 	player._head_on_rival = true
 	var rival: float = player._ground_launch_scale(Vector2.DOWN, 10.0)
 	player._head_on_rival = false
