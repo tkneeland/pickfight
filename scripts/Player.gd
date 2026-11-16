@@ -1184,6 +1184,10 @@ func _swing_force_scale(axis: Vector2, force: float) -> float:
 ## `extend_speed` from standing -- asks for exactly `max_drive_force`. See
 ## `_stalled_mass`. The speed it asks for is unchanged, so nothing is driven
 ## past `extend_speed`, and a head in clear air is sized exactly as before.
+##
+## The one exception is a steep push off the ground (#1278,
+## `_ground_launch_scale`): there both `max_drive_force` and `extend_speed` are
+## scaled up, by at most GROUND_LAUNCH_BOOST.
 func _drive_extension(delta: float) -> void:
 	var axis: Vector2 = Vector2.RIGHT.rotated(_haft.rotation)
 	var reach: float = (_head.global_position - global_position).dot(axis)
@@ -1211,18 +1215,23 @@ func _drive_extension(delta: float) -> void:
 ## by as much as GROUND_LAUNCH_BOOST. Both, because a vault is capped by
 ## `extend_speed` as much as by `max_drive_force`: the push stops adding once the
 ## body leaves the head at that speed, so more force alone would only get there
-## sooner. The boost follows how far the haft points down (`axis.y`): full
-## for a straight push down, none for a level push, so wall pushes, the
-## steady-swing roll (#667), strikes and clashes are as they were.
+## sooner. Only a steep push gets it: the boost ramps in from nothing with the
+## haft GROUND_LAUNCH_FROM_Y down (30 degrees below level) to all of it straight
+## down, so wall pushes, pokes along the floor and the steady-swing roll (#667)
+## are as they were. A head also touching a player or another weapon head gets
+## none, so strikes and clashes are unchanged too (and `_head.drive_force`, which
+## the clash rule compares, stays the true rating).
 ## `ground_launch_boost` is the instance's copy so a scenario can compare with
 ## it off.
 const GROUND_LAUNCH_BOOST: float = 1.5
+const GROUND_LAUNCH_FROM_Y: float = 0.5
 var ground_launch_boost: float = GROUND_LAUNCH_BOOST
 
 func _ground_launch_scale(axis: Vector2, error: float) -> float:
-	if error <= 0.0 or axis.y <= 0.0 or not _head_on_terrain:
+	if error <= 0.0 or not _head_on_terrain or _head_on_rival:
 		return 1.0
-	return 1.0 + (ground_launch_boost - 1.0) * axis.y
+	var steep: float = clampf((axis.y - GROUND_LAUNCH_FROM_Y) / (1.0 - GROUND_LAUNCH_FROM_Y), 0.0, 1.0)
+	return 1.0 + (ground_launch_boost - 1.0) * steep
 
 ## What a drive sizes its servo on while its head is pushed along `push`
 ## (issue #180), for the extension drive (a mass) and the angle drive (an
