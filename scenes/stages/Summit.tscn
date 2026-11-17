@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/parts/BouncePad.tscn" id="pad"]
 [ext_resource type="PackedScene" path="res://scenes/parts/MovingPlatform.tscn" id="mp"]
@@ -6,7 +6,6 @@
 [ext_resource type="Script" path="res://scripts/Stage.gd" id="script"]
 [ext_resource type="PackedScene" path="res://scenes/parts/Platform.tscn" id="platform"]
 [ext_resource type="PackedScene" path="res://scenes/parts/KillFloor.tscn" id="killfloor"]
-[ext_resource type="PackedScene" path="res://scenes/parts/EdgeCatch.tscn" id="edge"]
 
 ; Summit (issue #377, a King of the Hill stage): a stepped tower in the middle
 ; of a wide floor. The hill is fixed on top of the tower; side platforms and two
@@ -59,21 +58,6 @@ size = Vector2(100, 16)
 [node name="FloorIce" parent="." instance=ExtResource("ice")]
 position = Vector2(-340, 384)
 size = Vector2(140, 8)
-
-; EdgeCatch part (#1202): a catch ledge and an end post at each floor end, inside the view (x<=800, ledge top at least a body radius over the view bottom), one node per end. Summit: 80 px ledge 40 px under the floor, post 30 px over it; the kill zone stays at y=700 and beyond x=+-800 is open sky. Spawns pulled inboard to 130+ px from the ends and 45 px clear of the ice patch.
-[node name="EdgeLeft" parent="." instance=ExtResource("edge")]
-position = Vector2(-720, 380)
-side = -1
-ledge_width = 80
-ledge_drop = 40
-post_height = 30
-
-[node name="EdgeRight" parent="." instance=ExtResource("edge")]
-position = Vector2(720, 380)
-side = 1
-ledge_width = 80
-ledge_drop = 40
-post_height = 30
 
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-650, 320)

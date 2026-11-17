@@ -41,9 +41,7 @@
 ; kill zone, and the banks are far enough apart that a shove from the bridge
 ; or from a bank's outer edge sends a player past the far edge and out.
 ; every_stage_can_ring_out holds the same way Erosion and Gauntlet's canyons
-; do. Since #1202 a shelf 72 px down in each gap (y=432) catches a drop
-; straight off the bridge or a bank's inner edge; a body flung past a bank's
-; outer edge, or hard enough to clear the shelf, is still out.
+; do -- there is no floor under the gap to catch a bad landing.
 ;
 ; All four spawns share one height (y=320, all on the banks), so the rising
 ; kill zone (ADR-0012) reaches them together -- nobody is left holding lower
@@ -96,17 +94,6 @@ position = Vector2(0, -430)
 [node name="RockLedgeRight" parent="." instance=ExtResource("3")]
 position = Vector2(640, -430)
 interval_sec = 7.0
-
-; Pit shelves (#1202): a ledge 72 px below the bank tops in each pit (kill zone y=500, shelf top
-; y=432). A body knocked into the pit lands here and climbs back instead of dying on the spot. The
-; outer edges stay open sky, so ring-outs are still possible.
-[node name="PitShelfLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-265, 440)
-size = Vector2(110, 16)
-
-[node name="PitShelfRight" parent="." instance=ExtResource("platform")]
-position = Vector2(265, 440)
-size = Vector2(110, 16)
 
 ; Stage review (#1202): Spawn2/3 were 25 px from the bank's pit edge (x=+-330), so the first shove
 ; ended the round (median first fall 1.4 s in the bot sweep). Spawns are now at least 80 px from

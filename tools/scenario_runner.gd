@@ -167,7 +167,6 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"stage_teleporters_pair_up",
 	"ice_patch_slides_player_and_restores",
 	"ice_patch_summit_spawns_clear",
-	"stage_safety_ledges_on_screen_1202",
 	"ice_patch_two_more_stages_spawns_clear",
 	"ice_patch_plays_skid_once_on_entry",
 	"treadmill_belts_oppose_and_mud_sits_between",
@@ -2181,8 +2180,6 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ice_patch_slides_player_and_restores()
 		"ice_patch_summit_spawns_clear":
 			return await _scenario_ice_patch_summit_spawns_clear()
-		"stage_safety_ledges_on_screen_1202":
-			return await _scenario_stage_safety_ledges_on_screen_1202()
 		"ice_patch_two_more_stages_spawns_clear":
 			return await _scenario_ice_patch_two_more_stages_spawns_clear()
 		"ice_patch_plays_skid_once_on_entry":
@@ -8040,15 +8037,13 @@ const RINGOUT_SHOVE_TICKS: int = 300
 ## amount of open floor would be a balance opinion rather than a correctness
 ## check. What it catches is the real mistake -- a stage whose walls, floor or
 ## kill zone were drawn or placed so that nobody can leave it.
-## Bowl and Tank (#1202) are closed by design: their drains are floored (Bowl keeps a 30 px slot narrower than a fighter), since a drain a fighter can fall through was fallen through by bots within seconds. Neither can ring out.
-const RINGOUT_EXEMPT_1202: PackedStringArray = ["res://scenes/stages/Bowl.tscn", "res://scenes/stages/Tank.tscn"]
 func _scenario_every_stage_can_ring_out() -> Array[String]:
 	# Every stage at once, each on its own copy in a physics world of its own
 	# and well apart from the rest (#168). Per stage nothing changed: one copy,
 	# spawn by spawn, left then right, until the first shove gets out.
 	var jobs: Array[Callable] = []
 	for s in STAGE_PATHS.size():
-		if RINGOUT_EXEMPT_402.has(STAGE_PATHS[s]) or RINGOUT_EXEMPT_403.has(STAGE_PATHS[s]) or RINGOUT_EXEMPT_1202.has(STAGE_PATHS[s]):
+		if RINGOUT_EXEMPT_402.has(STAGE_PATHS[s]) or RINGOUT_EXEMPT_403.has(STAGE_PATHS[s]):
 			continue  # closed pitches: the ball may only leave through a goal
 		jobs.append(_stage_ringout_sweep.bind(STAGE_PATHS[s], _stage_world_offset(s)))
 	var failures: Array[String] = await _run_concurrently(jobs, "stage ring-out sweep")
@@ -12449,56 +12444,6 @@ func _scenario_ice_patch_summit_spawns_clear() -> Array[String]:
 			if absf(marker.position.x - ice.position.x) <= half_x + PLAYER_RADIUS:
 				failures.append("%s at x=%.0f is over the ice" % [child.name, marker.position.x])
 	await _teardown(stage)
-	return failures
-## Stage safety pass (#1202): the catch ledges added to the stages sit fully
-## inside the view (read from Stage.get_view_rect()): every ledge top at least
-## a body radius above the view's bottom edge, every ledge and end post inside
-## its x range, so a caught fighter is seen and no wall is invisible. The
-## EdgeCatch parts' boxes are read off the part itself. The kill zones stay no
-## deeper than they were (Islands, Footbridge, Quarry y=480; Summit, Treadmill
-## y=700; Bowl y=560), so a fall is a visible KO.
-func _scenario_stage_safety_ledges_on_screen_1202() -> Array[String]:
-	var failures: Array[String] = []
-	var wanted: Dictionary = {
-		"Islands": [["ReefLeft", "ReefRight"], 480.0, false],
-		"Footbridge": [["ChasmShelf"], 480.0, true],
-		"Summit": [[], 700.0, true],
-		"Treadmill": [[], 700.0, true],
-		"Quarry": [["PitShelf"], 480.0, true],
-		"Bowl": [["DrainShelf"], 560.0, false],
-	}
-	for stage_name: String in wanted:
-		var stage: Node2D = (load("res://scenes/stages/%s.tscn" % stage_name) as PackedScene).instantiate() as Node2D
-		get_root().add_child(stage)
-		var view: Rect2 = stage.get_view_rect()
-		var rects: Dictionary = {}
-		for ledge_name: String in wanted[stage_name][0]:
-			var ledge: StaticBody2D = stage.get_node_or_null(ledge_name) as StaticBody2D
-			if ledge == null:
-				failures.append("%s lost its %s" % [stage_name, ledge_name])
-				continue
-			rects[ledge_name] = Rect2(ledge.position - ledge.size / 2.0, ledge.size)
-		if wanted[stage_name][2]:
-			for edge_name: String in ["EdgeLeft", "EdgeRight"]:
-				var edge: StaticBody2D = stage.get_node_or_null(edge_name) as StaticBody2D
-				if edge == null:
-					failures.append("%s lost its %s" % [stage_name, edge_name])
-					continue
-				var boxes: Array = edge.call("boxes")
-				for b in 2:
-					var r: Rect2 = boxes[b]
-					r.position += edge.position
-					rects["%s %s" % [edge_name, ["ledge", "post"][b]]] = r
-		for key: String in rects:
-			var r: Rect2 = rects[key]
-			if not key.ends_with("post") and r.position.y > view.end.y - PLAYER_RADIUS:
-				failures.append("%s %s top y=%.0f is too near or below the view bottom (%.0f)" % [stage_name, key, r.position.y, view.end.y])
-			if r.position.x < view.position.x - 0.01 or r.end.x > view.end.x + 0.01:
-				failures.append("%s %s (x %.0f..%.0f) is outside the view (an invisible wall or off-screen ledge)" % [stage_name, key, r.position.x, r.end.x])
-		var kill: Node2D = stage.get_node_or_null("KillZone") as Node2D
-		if kill == null or kill.position.y > float(wanted[stage_name][1]):
-			failures.append("%s kill zone is missing or deeper than y=%.0f" % [stage_name, wanted[stage_name][1]])
-		await _teardown(stage)
 	return failures
 ## Relay and Roundabout (#900) each carry one ice patch on their floor; no
 ## spawn, pickup or hill spot on the floor lies over it. Spots up on a
@@ -59693,11 +59638,7 @@ func _scenario_stage_builder_rebuilds_stages_from_definitions_1046() -> Array[St
 			{"type": "Platform", "pos": [0, 270], "size": [140, 300]},
 			{"type": "Platform", "pos": [320, 270], "size": [140, 300]},
 			{"type": "Platform", "pos": [-640, 270], "size": [140, 300]},
-			{"type": "Platform", "pos": [640, 270], "size": [140, 300]},
-			{"type": "Platform", "pos": [-480, 248], "size": [160, 16]},
-			{"type": "Platform", "pos": [-160, 248], "size": [160, 16]},
-			{"type": "Platform", "pos": [160, 248], "size": [160, 16]},
-			{"type": "Platform", "pos": [480, 248], "size": [160, 16]}, kill_floor]},
+			{"type": "Platform", "pos": [640, 270], "size": [140, 300]}, kill_floor]},
 	}
 	for stage_name: String in defs:
 		var built: Dictionary = builder.build(defs[stage_name])
