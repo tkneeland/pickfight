@@ -20,6 +20,7 @@ background_sky_bottom = Color(0.28, 0.2, 0.16, 1)
 background_silhouette = Color(0.1, 0.08, 0.08, 1)
 background_layers = PackedStringArray("clouds", "mountains", "rocks")
 
+; The whole stage sits 40 px higher than before #1202, which lifted it to fit a catch ledge on screen; #1266 removed the ledge and kept the lift.
 [node name="BankLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-505, 280)
 size = Vector2(430, 40)

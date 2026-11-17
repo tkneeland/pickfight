@@ -8,7 +8,7 @@
 ; Tank (#1202, a no-ledge stage): a walled steel tank. A centre floor (x=-290..290) and two
 ; outer floors (x=+-370..+-760), top y=320, split by two 80 px drains at x=+-330, with a
 ; mud patch across the centre floor and a bridge over it (top y=154). Walls to the view
-; edge leave no outer end; the two drains are floored (closed stage).
+; edge leave no outer end; the two open drains are the only ring-outs (#1266).
 [node name="Tank" type="Node2D"]
 script = ExtResource("script")
 background_sky_top = Color(0.09, 0.12, 0.14, 1)
@@ -36,7 +36,7 @@ size = Vector2(180, 12)
 position = Vector2(0, 166)
 size = Vector2(260, 24)
 
-; Walls (no ledge): a 40 px wall each side (x=+-760..780) from above head height down past the floor, inside the 1600 px view, so there is no open end to walk or be shoved off; Tank has none: its drains are floored (DrainShelf), so it is a closed stage.
+; Walls (no ledge): a 40 px wall each side (x=+-760..780) from above head height down past the floor, inside the 1600 px view, so there is no open end to walk or be shoved off; the drains are the only way out.
 [node name="WallLeft" parent="." instance=ExtResource("platform")]
 position = Vector2(-780, 20)
 size = Vector2(40, 760)

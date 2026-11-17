@@ -15,7 +15,7 @@
 ; sky.
 ;
 ; **Lifts.** Each side of the pit has a lift (160 wide, x=+-100..+-260). It
-; runs between 48 px above the yards (top y=272, #1202) and the roof's height (top
+; runs between 48 px above the yards (top y=272, kept from #1202) and the roof's height (top
 ; y=-100) in 3 s each way. The two lifts run in opposite phase, so one is
 ; always at the bottom. The gap from a yard to a lift is 40 px and the lift is
 ; 48 px above the yard at the bottom, so you jump onto it. If you miss it, you
