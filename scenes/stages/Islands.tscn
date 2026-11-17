@@ -72,15 +72,6 @@ size = Vector2(160, 24)
 position = Vector2(670, 270)
 size = Vector2(160, 24)
 
-; Reef (#1202): two catch ledges under the chain, top y=420 (inside the 450 bottom of the screen, 162 px under the island tops: the 100-180 px hook range; the islands were lifted 30 px so the reef keeps 138 px of headroom under them, ferry included), spanning x=-780..-100 and 100..780 so the outer islets are caught too. A 200 px drain under the ferry crossing stays open: bots shoved or leaping into a gap died within 4 s, and ring-outs now come through the drain and past x=+-780. Islets widened to 160 px and the end spawns pulled inboard. KillZone stays at y=480.
-[node name="ReefLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-440, 428)
-size = Vector2(680, 16)
-
-[node name="ReefRight" parent="." instance=ExtResource("platform")]
-position = Vector2(440, 428)
-size = Vector2(680, 16)
-
 [node name="Spawn0" type="Marker2D" parent="."]
 position = Vector2(-420, 190)
 

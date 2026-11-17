@@ -69,15 +69,6 @@ position = Vector2(-150, 270)
 [node name="Spawn7" type="Marker2D" parent="."]
 position = Vector2(150, 270)
 
-; DrainShelf (#1202): each 80 px drain is floored at y=420 (on screen), so a fighter who falls in is caught and climbs out; bots fell into open drains within ~9 s. The Tank is closed, damage decides it (exempt from every_stage_can_ring_out).
-[node name="DrainShelfLeft" parent="." instance=ExtResource("platform")]
-position = Vector2(-330, 428)
-size = Vector2(80, 16)
-
-[node name="DrainShelfRight" parent="." instance=ExtResource("platform")]
-position = Vector2(330, 428)
-size = Vector2(80, 16)
-
 [node name="KillZone" parent="." instance=ExtResource("killfloor")]
 position = Vector2(0, 480)
 
