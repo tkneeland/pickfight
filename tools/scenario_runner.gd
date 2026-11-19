@@ -1387,6 +1387,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"couch_lobby_firewall_note_and_allow_button_1268",
 	"join_help_internet_qr_fits_the_frame_1268",
 	"couch_lobby_fits_with_firewall_note_1268",
+	"release_sets_steam_app_id_never_480_1289",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4586,6 +4587,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_join_help_internet_qr_fits_the_frame_1268()
 		"couch_lobby_fits_with_firewall_note_1268":
 			return await _scenario_couch_lobby_fits_with_firewall_note_1268()
+		"release_sets_steam_app_id_never_480_1289":
+			return _scenario_release_sets_steam_app_id_never_480_1289()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -66079,5 +66082,100 @@ func _scenario_couch_lobby_fits_with_firewall_note_1268() -> Array[String]:
 	_sfx().set_text_scale(old_scale)
 	firewall.finish_now()
 	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+# --- The release build carries the real Steam app ID, never Spacewar's 480 (#1289)
+## The bash that runs repo shell scripts: `bash` on CI and macOS; on Windows, `bash`
+## on PATH is usually WSL's (System32), so Git Bash (or $PF_BASH) is used instead.
+func _bash_1289() -> String:
+	if OS.get_name() == "Windows":
+		for candidate: String in [OS.get_environment("PF_BASH"), "C:/Program Files/Git/bin/bash.exe"]:
+			if candidate != "" and FileAccess.file_exists(candidate):
+				return candidate
+	return "bash"
+## Runs tools/check_steam_app_id.sh on a temp copy of `project_text` with `app_id`
+## ("<none>" passes no argument): {"code", "out", "after"}.
+func _steam_app_id_run_1289(project_text: String, app_id: String) -> Dictionary:
+	var path: String = OS.get_temp_dir().path_join("pf_steam_app_id_%d_%d.godot" % [OS.get_process_id(), Time.get_ticks_usec()]).replace("\\", "/")
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return {"code": -2, "out": "cannot write %s" % path, "last": "", "after": ""}
+	file.store_string(project_text)
+	file.close()
+	var args: PackedStringArray = [ProjectSettings.globalize_path("res://tools/check_steam_app_id.sh").replace("\\", "/"), path]
+	if app_id != "<none>":
+		args.append(app_id)
+	var out: Array = []
+	var code: int = OS.execute(_bash_1289(), args, out, true)
+	var after: String = FileAccess.get_file_as_string(path)
+	DirAccess.remove_absolute(path)
+	var text: String = (str(out[0]) if not out.is_empty() else "").strip_edges()
+	# "last" is the script's answer; under GitHub Actions an unset ID adds a ::warning:: line before it.
+	var lines: PackedStringArray = text.split("\n", false)
+	return {"code": code, "out": text, "last": lines[lines.size() - 1].strip_edges() if not lines.is_empty() else "", "after": after}
+func _scenario_release_sets_steam_app_id_never_480_1289() -> Array[String]:
+	var failures: Array[String] = []
+	# The release workflow runs the guard on project.godot with the repo variable, before import and export.
+	var workflow: String = FileAccess.get_file_as_string("res://.github/workflows/release.yml")
+	var step: int = workflow.find("bash tools/check_steam_app_id.sh project.godot \"$STEAM_APP_ID\"")
+	if step == -1:
+		failures.append("release.yml does not run tools/check_steam_app_id.sh on project.godot with $STEAM_APP_ID")
+	else:
+		var head: String = workflow.substr(0, step)
+		var step_start: int = head.rfind("- name:")
+		if not workflow.substr(step_start, step - step_start).contains("STEAM_APP_ID: ${{ vars.STEAM_APP_ID }}"):
+			failures.append("the app ID step does not take STEAM_APP_ID from the repo variable")
+		for later: String in ["- name: Import project", "- name: Export builds"]:
+			var at: int = workflow.find(later)
+			if at == -1 or at < step:
+				failures.append("the app ID step does not run before '%s'" % later)
+	var project: String = "[pickfight]\n\nrelay_url=\"wss://relay.example\"\nsteam_app_id=480\nsentry_dsn=\"\"\n"
+	# Unset (no argument, or the empty value an unset variable expands to): nothing changes.
+	for unset: String in ["<none>", ""]:
+		var got: Dictionary = _steam_app_id_run_1289(project, unset)
+		# -1: no bash at all; 127: a bash that could not open the script (WSL's, on Windows without Git Bash).
+		if got["code"] in [-1, -2, 127]:
+			failures.append("bash (%s) could not run the guard: exit %d, %s (on Windows set PF_BASH to Git Bash)" % [_bash_1289(), got["code"], got["out"]])
+			_scenario_completed = true
+			return failures
+		if got["code"] != 0 or got["last"] != "unset" or got["after"] != project:
+			failures.append("unset app ID '%s': exit %d, '%s', file changed %s" % [unset, got["code"], got["out"], got["after"] != project])
+	# Under GitHub Actions an unset ID warns (a tag shipping 480 to itch is visible) and still changes nothing.
+	var had_ci: bool = OS.has_environment("GITHUB_ACTIONS")
+	var old_ci: String = OS.get_environment("GITHUB_ACTIONS")
+	OS.set_environment("GITHUB_ACTIONS", "true")
+	var warned: Dictionary = _steam_app_id_run_1289(project, "")
+	if had_ci:
+		OS.set_environment("GITHUB_ACTIONS", old_ci)
+	else:
+		OS.unset_environment("GITHUB_ACTIONS")
+	if warned["code"] != 0 or warned["last"] != "unset" or not str(warned["out"]).contains("::warning::") or warned["after"] != project:
+		failures.append("unset app ID under GitHub Actions: exit %d, '%s'" % [warned["code"], warned["out"]])
+	# Refused, and nothing written: Spacewar, zero, leading zeros, not a number, beyond 32 bits.
+	for bad: String in ["480", "0480", "0002345670", "0", "12ab", "-5", "4294967296", "99999999999"]:
+		var got: Dictionary = _steam_app_id_run_1289(project, bad)
+		if got["code"] != 1 or got["after"] != project:
+			failures.append("app ID '%s' was not refused (exit %d, file changed %s)" % [bad, got["code"], got["after"] != project])
+	if not str(_steam_app_id_run_1289(project, "480")["out"]).contains("Spacewar"):
+		failures.append("refusing 480 does not say why")
+	# A real ID: written to steam_app_id and nowhere else.
+	var real: Dictionary = _steam_app_id_run_1289(project, "2345670")
+	if real["code"] != 0 or real["last"] != "2345670" or real["after"] != project.replace("steam_app_id=480", "steam_app_id=2345670"):
+		failures.append("app ID 2345670: exit %d, '%s', file now %s" % [real["code"], real["out"], real["after"]])
+	var top: Dictionary = _steam_app_id_run_1289(project, "4294967295")
+	if top["code"] != 0 or top["last"] != "4294967295":
+		failures.append("the largest 32-bit app ID 4294967295 was refused (exit %d, '%s')" % [top["code"], top["out"]])
+	# tools/export.sh (local and demo exports) uses the guard too, the demo with its own app ID, and restores project.godot.
+	var export_sh: String = FileAccess.get_file_as_string("res://tools/export.sh")
+	for want: String in ["tools/check_steam_app_id.sh project.godot \"$APP_ID\"", "STEAM_DEMO_APP_ID", "trap 'mv -f project.godot.export-backup project.godot' EXIT"]:
+		if not export_sh.contains(want):
+			failures.append("tools/export.sh lacks \"%s\"" % want)
+	# A project with no steam_app_id line to set fails rather than shipping without one.
+	var missing: Dictionary = _steam_app_id_run_1289("[pickfight]\nrelay_url=\"x\"\n", "2345670")
+	if missing["code"] != 1:
+		failures.append("a project without steam_app_id= was not refused (exit %d)" % missing["code"])
+	# Dev checkouts stay on Spacewar (the guard only runs in the release workflow).
+	if int(ProjectSettings.get_setting("pickfight/steam_app_id", 0)) != 480:
+		failures.append("pickfight/steam_app_id in the repo is no longer the dev default 480")
 	_scenario_completed = true
 	return failures

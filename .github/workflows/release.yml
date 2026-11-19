@@ -62,6 +62,14 @@ jobs:
       - name: Stamp the build version (#681)
         run: perl -pi -e 's|^config/icon=|config/version="$ENV{GITHUB_REF_NAME}"\nconfig/icon=|' project.godot
 
+      - name: Set the Steam app ID (#1289)
+        # The real app ID from the STEAM_APP_ID repo variable, never Spacewar's 480
+        # (docs/steam-readiness.md 1.5). Unset: builds keep the dev 480 and the steam
+        # job below skips the upload. 480, 0 or not a number: the release fails here.
+        env:
+          STEAM_APP_ID: ${{ vars.STEAM_APP_ID }}
+        run: bash tools/check_steam_app_id.sh project.godot "$STEAM_APP_ID"
+
       - name: Import project
         run: '"$GODOT_DIR/godot" --headless --path . --import'
 
