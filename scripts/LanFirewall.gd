@@ -44,11 +44,17 @@ var _job: String = "" # "check" or "fix", what `_thread` runs
 var _next_check_msec: int = 0
 var _after_fix: bool = false # the check running now follows a fix
 var _checked_ip: String = "" # the join address the last check judged
-var _ports: PackedInt32Array = PackedInt32Array()
+var _ports: PackedInt32Array = PackedInt32Array() # the page's and the WebSocket's
+## Jobs handed off by `abandon()` (a lobby that went away mid-check). Held here so
+## a running Thread is never freed; reaped once finished.
+static var _orphans: Array[Thread] = []
 
-## A new lobby: check again straight away, whatever was known.
+## A new lobby: forget what was known and check again straight away.
 func reset() -> void:
 	_next_check_msec = 0
+	_checked_ip = ""
+	if _thread == null:
+		state = "unknown"
 
 ## Whether the lobby should show the warning and the Allow button.
 func needs_fix() -> bool:
@@ -59,10 +65,12 @@ func busy() -> bool:
 	return _thread != null
 
 ## Collects a finished job and starts a check when one is due. `wanted` is a
-## Couch join QR on screen; `ip` the address that QR points at. Returns true
-## when `state` changed.
-func poll(now_msec: int, wanted: bool, ip: String) -> bool:
+## Couch join QR on screen; `ip` the address that QR points at and `ports` the
+## page's and the WebSocket's. Returns true when `state` changed.
+func poll(now_msec: int, wanted: bool, ip: String, ports: PackedInt32Array = PackedInt32Array()) -> bool:
 	var before: String = state
+	if not ports.is_empty():
+		_ports = ports
 	if _thread != null and not _thread.is_alive():
 		var out: Variant = _thread.wait_to_finish()
 		_thread = null
@@ -88,15 +96,25 @@ func fix(ports: PackedInt32Array) -> bool:
 	_start("fix", "")
 	return true
 
-## Waits for a running check (scenarios, and quitting with one in flight: a few
-## seconds at most). A fix waits on the Windows admin prompt for as long as nobody
-## answers it, so quitting never waits for one; that thread is left to end on its own.
+## Waits for a running job (scenarios only: a fix waits on the admin prompt).
 func finish_now() -> void:
-	if _thread != null and _job == "check":
+	if _thread != null:
 		_thread.wait_to_finish()
 		_thread = null
 
+## Lets a running job end on its own, for a lobby that is going away: joining it
+## would freeze the game for the rest of a check (seconds) or, during a fix, until
+## someone answers the admin prompt. Its result is dropped.
+func abandon() -> void:
+	if _thread != null:
+		_orphans.append(_thread)
+		_thread = null
+
 func _start(job: String, ip: String) -> void:
+	for orphan: Thread in _orphans.duplicate():
+		if not orphan.is_alive():
+			orphan.wait_to_finish()
+			_orphans.erase(orphan)
 	_job = job
 	if job == "check":
 		_checked_ip = ip
@@ -112,11 +130,15 @@ func _finish(job: String, out: Variant, ip: String) -> void:
 			state = "fix_failed" # declined or refused: the check that follows can still find it open
 		return
 	var report: Variant = JSON.parse_string(str(out)) if out is String else null
-	var verdict: Dictionary = evaluate(report as Dictionary if report is Dictionary else {}, ip)
+	var verdict: Dictionary = evaluate(report as Dictionary if report is Dictionary else {}, ip, _ports)
 	profile = verdict["profile"]
 	var got: String = verdict["state"]
-	if _after_fix or state == "fix_failed":
-		state = "open" if got == "open" else ("fix_failed" if got == "blocked" else got)
+	if got == "unknown":
+		# No answer this time: a known block stays on screen rather than vanishing.
+		if _after_fix or not (state == "blocked" or state == "fix_failed"):
+			state = "unknown"
+	elif _after_fix or state == "fix_failed":
+		state = "open" if got == "open" else "fix_failed"
 	else:
 		state = got
 	_after_fix = false
@@ -125,8 +147,10 @@ func _finish(job: String, out: Variant, ip: String) -> void:
 ## Inbound to this program on the join address's network is blocked when a block
 ## rule covers it (block wins over allow in Windows Firewall), or when no allow
 ## rule does and the profile's default is to block (also what Windows does while
-## its own prompt is unanswered). A profile with the firewall off is open.
-static func evaluate(report: Dictionary, ip: String) -> Dictionary:
+## its own prompt is unanswered). A profile with the firewall off is open. A rule
+## limited to local ports counts only for `ports` it covers: a block on any of
+## them blocks, an allow must cover them all. Empty `ports` means any.
+static func evaluate(report: Dictionary, ip: String, ports: PackedInt32Array = PackedInt32Array()) -> Dictionary:
 	var nets: Array = _as_array(report.get("nets", []))
 	var category: String = ""
 	for net: Variant in nets:
@@ -154,11 +178,14 @@ static func evaluate(report: Dictionary, ip: String) -> Dictionary:
 			continue
 		if not str(rule.get("protocol", "")) in ["TCP", "Any", ""]:
 			continue
+		var rule_ports: Array = _as_array(rule.get("ports", []))
 		match str(rule.get("action", "")):
 			"Block":
-				return {"state": "blocked", "profile": name}
+				if _ports_cover(rule_ports, ports, false):
+					return {"state": "blocked", "profile": name}
 			"Allow":
-				allowed = true
+				if _ports_cover(rule_ports, ports, true):
+					allowed = true
 	if allowed or str(settings.get("def", "")) == "Allow":
 		return {"state": "open", "profile": name}
 	return {"state": "blocked", "profile": name}
@@ -171,6 +198,30 @@ static func _covers(rule_profiles: String, name: String) -> bool:
 		if part.strip_edges() == name:
 			return true
 	return false
+
+## Whether a rule's LocalPort list ("Any", "8080", "8000-8100", ...; empty means
+## any) covers all of `ports` (`every`) or at least one. Empty `ports`: any port.
+static func _ports_cover(rule_ports: Array, ports: PackedInt32Array, every: bool) -> bool:
+	if rule_ports.is_empty() or ports.is_empty():
+		return true
+	var hits: int = 0
+	for port: int in ports:
+		var hit: bool = false
+		for entry: Variant in rule_ports:
+			var text: String = str(entry).strip_edges()
+			if text == "Any":
+				hit = true
+			elif text.contains("-"):
+				var low: String = text.get_slice("-", 0)
+				var high: String = text.get_slice("-", 1)
+				hit = low.is_valid_int() and high.is_valid_int() and port >= low.to_int() and port <= high.to_int()
+			else:
+				hit = text.is_valid_int() and text.to_int() == port
+			if hit:
+				break
+		if hit:
+			hits += 1
+	return hits == ports.size() if every else hits > 0
 
 ## ConvertTo-Json writes a one-item array as the item on some PowerShell versions.
 static func _as_array(value: Variant) -> Array:
@@ -186,7 +237,7 @@ static func _ps_quote(text: String) -> String:
 
 ## Prints one JSON line: the connected networks (category and IPv4 addresses),
 ## each firewall profile's on/off and default inbound action, and the enabled
-## inbound rules for `exe` (action, profiles, protocol), or null rules when that
+## inbound rules for `exe` (action, profiles, protocol, local ports), or null rules when that
 ## query fails. The firewall keeps paths lower-cased and `-Program` matches
 ## case-sensitively, so every application filter is compared case-insensitively
 ## here, with %VARS% expanded. The active store merges local and Group Policy rules
@@ -198,7 +249,7 @@ static func check_script(exe: String) -> String:
 		"$nets = @(Get-NetConnectionProfile | ForEach-Object { @{ category = [string]$_.NetworkCategory; ips = @(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 | ForEach-Object { $_.IPAddress }) } })",
 		"$fw = @{}",
 		"Get-NetFirewallProfile -PolicyStore ActiveStore | ForEach-Object { $fw[[string]$_.Name] = @{ on = [string]$_.Enabled; def = [string]$_.DefaultInboundAction } }",
-		"try { $rules = @(Get-NetFirewallApplicationFilter -PolicyStore ActiveStore -ErrorAction Stop | Where-Object { $_.Program -and [Environment]::ExpandEnvironmentVariables($_.Program) -ieq $want } | Get-NetFirewallRule | Where-Object { [string]$_.Direction -eq 'Inbound' -and [string]$_.Enabled -eq 'True' } | ForEach-Object { @{ action = [string]$_.Action; profile = [string]$_.Profile; protocol = [string]($_ | Get-NetFirewallPortFilter).Protocol } }) } catch { $rules = $null }",
+		"try { $rules = @(Get-NetFirewallApplicationFilter -PolicyStore ActiveStore -ErrorAction Stop | Where-Object { $_.Program -and [Environment]::ExpandEnvironmentVariables($_.Program) -ieq $want } | Get-NetFirewallRule | Where-Object { [string]$_.Direction -eq 'Inbound' -and [string]$_.Enabled -eq 'True' } | ForEach-Object { $pf = $_ | Get-NetFirewallPortFilter; @{ action = [string]$_.Action; profile = [string]$_.Profile; protocol = [string]$pf.Protocol; ports = @($pf.LocalPort | ForEach-Object { [string]$_ }) } }) } catch { $rules = $null }",
 		"@{ nets = $nets; firewall = $fw; rules = $rules } | ConvertTo-Json -Compress -Depth 5",
 	])
 

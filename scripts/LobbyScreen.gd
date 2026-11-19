@@ -606,10 +606,12 @@ func _update_firewall(join_source: Object) -> void:
 	if _firewall_button == null:
 		return
 	var couch: bool = join_source != null and not _online_kind(join_source)
-	var wanted: bool = couch and _lobby_panel != null and _lobby_panel.visible and _lobby_qr.visible
+	# Once phones join over the internet (#683) the Wi-Fi path no longer matters.
+	var internet_on: bool = couch and join_source.has_method("internet_join_on") and join_source.internet_join_on()
+	var wanted: bool = couch and not internet_on and _lobby_panel != null and _lobby_panel.visible and _lobby_qr.visible
 	var url: Variant = join_source.get("join_url") if join_source != null else null
-	var was_fixing: bool = _firewall.state == "fixing" or _firewall.state == "fix_failed"
-	_firewall.poll(Time.get_ticks_msec(), wanted, _url_host(str(url) if url != null else ""))
+	var was_fixing: bool = _firewall.state == "fixing" # only the button's own fix counts below
+	_firewall.poll(Time.get_ticks_msec(), wanted, _url_host(str(url) if url != null else ""), _phone_ports())
 	if was_fixing and _firewall.state == "open":
 		_note_join("firewall_fixed")
 	var show_fix: bool = wanted and _firewall.needs_fix()
@@ -621,8 +623,18 @@ func _update_firewall(join_source: Object) -> void:
 		_firewall_note.text = tr(key)
 		_firewall_button.text = tr("FIREWALL_ALLOW")
 		_firewall_button.disabled = _firewall.state == "fixing"
+	# While it shows, the firewall button stands in for Phones can't join? (its
+	# checklist's first cause is this one): the join card has room for one, and
+	# the mode cards below it must stay on screen. A pad host's focus moves across.
+	var help_had_focus: bool = _join_help_button.has_focus()
+	var fix_had_focus: bool = _firewall_button.has_focus()
+	_join_help_button.visible = couch and not show_fix
 	_firewall_note.visible = show_fix
 	_firewall_button.visible = show_fix
+	if help_had_focus and show_fix:
+		_firewall_button.grab_focus()
+	elif fix_had_focus and not show_fix and _join_help_button.visible:
+		_join_help_button.grab_focus()
 
 ## Counts one join step for telemetry (#1271), when the server counts them.
 func _note_join(kind: String) -> void:
@@ -634,11 +646,16 @@ static func _url_host(url: String) -> String:
 	var rest: String = url.trim_prefix("http://").trim_prefix("https://")
 	return rest.get_slice("/", 0).get_slice(":", 0)
 
+## The page's and the WebSocket's ports, the two phones connect to.
+func _phone_ports() -> PackedInt32Array:
+	if _server == null:
+		return PackedInt32Array()
+	return PackedInt32Array([int(_server.get("http_port")), int(_server.get("ws_port"))])
+
 func _on_firewall_pressed() -> void:
 	if _server == null:
 		return
-	var ports := PackedInt32Array([int(_server.get("http_port")), int(_server.get("ws_port"))])
-	if _firewall.fix(ports):
+	if _firewall.fix(_phone_ports()):
 		_update_firewall(_last_lobby_args[2] if not _last_lobby_args.is_empty() else null)
 
 func firewall_button() -> Button:
@@ -985,7 +1002,7 @@ func _input(event: InputEvent) -> void:
 
 func _exit_tree() -> void:
 	_host.exit_tree()
-	_firewall.finish_now() # never leave a check's thread running
+	_firewall.abandon() # never wait here: a check takes seconds, a fix waits on the admin prompt
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	_host.unhandled_key_input(event)

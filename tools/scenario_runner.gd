@@ -1386,6 +1386,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"lan_firewall_verdicts_and_scripts_1268",
 	"couch_lobby_firewall_note_and_allow_button_1268",
 	"join_help_internet_qr_fits_the_frame_1268",
+	"couch_lobby_fits_with_firewall_note_1268",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4583,6 +4584,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_couch_lobby_firewall_note_and_allow_button_1268()
 		"join_help_internet_qr_fits_the_frame_1268":
 			return await _scenario_join_help_internet_qr_fits_the_frame_1268()
+		"couch_lobby_fits_with_firewall_note_1268":
+			return await _scenario_couch_lobby_fits_with_firewall_note_1268()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -64857,6 +64860,7 @@ func _scenario_join_events_count_once_per_record_1271() -> Array[String]:
 	var rm: Node = rig["rm"]
 	var records: Array = rig["records"]
 	var want: Dictionary = {"lan": 1, "relay": 1, "help": 1, "nudge": 1, "internet": 1}
+	var want_record: Dictionary = want.merged({"firewall": 0, "firewall_fixed": 0}) # a record carries every key (#1268)
 	if server.join_events() != want:
 		failures.append("join counters were %s, wanted %s" % [server.join_events(), want])
 	# The same LAN phone reconnecting on a new socket is the same phone.
@@ -64876,7 +64880,7 @@ func _scenario_join_events_count_once_per_record_1271() -> Array[String]:
 	if records.size() != 2:
 		failures.append("expected two records, got %d" % records.size())
 	else:
-		if (records[0].get("events", {}) as Dictionary).get("joins") != want:
+		if (records[0].get("events", {}) as Dictionary).get("joins") != want_record:
 			failures.append("the first record's joins were %s" % [records[0].get("events")])
 		if (records[1].get("events", {}) as Dictionary).has("joins"):
 			failures.append("the second record counted the same joins again: %s" % [records[1].get("events")])
@@ -65218,7 +65222,7 @@ func _scenario_lobby_record_for_phones_that_joined_without_a_match_1271() -> Arr
 	var server: Node = rig["server"]
 	var rm: Node = rig["rm"]
 	var records: Array = rig["records"]
-	var want: Dictionary = {"lan": 1, "relay": 1, "help": 1, "nudge": 1, "internet": 1}
+	var want: Dictionary = {"lan": 1, "relay": 1, "help": 1, "nudge": 1, "internet": 1, "firewall": 0, "firewall_fixed": 0}
 	if StatsSenderScript372.build_lobby_record({}) != {} or StatsSenderScript372.build_lobby_record({"lan": 0}) != {}:
 		failures.append("an empty lobby record was built")
 	# No match, no damage: the lobby record carries the joins.
@@ -65829,6 +65833,21 @@ func _scenario_lan_firewall_verdicts_and_scripts_1268() -> Array[String]:
 		var got: Dictionary = LanFirewallScript1268.evaluate(c[1], ip)
 		if got["state"] != c[2] or got["profile"] != c[3]:
 			failures.append("%s: %s/%s, want %s/%s" % [c[0], got["state"], got["profile"], c[2], c[3]])
+	# Rules limited to local ports count only for the phone ports they cover.
+	var phone_ports := PackedInt32Array([8080, 8081])
+	var port_cases: Array = [
+		["an allow for both ports", [{"action": "Allow", "profile": "Public", "protocol": "TCP", "ports": ["8080", "8081"]}], "open"],
+		["an allow for other ports (an old fix)", [{"action": "Allow", "profile": "Public", "protocol": "TCP", "ports": ["9000", "9001"]}], "blocked"],
+		["an allow for one of the two ports", [{"action": "Allow", "profile": "Public", "protocol": "TCP", "ports": ["8080"]}], "blocked"],
+		["an allow for a covering range", [{"action": "Allow", "profile": "Public", "protocol": "TCP", "ports": ["8000-8100"]}], "open"],
+		["an Any-port allow", [{"action": "Allow", "profile": "Public", "protocol": "TCP", "ports": ["Any"]}], "open"],
+		["a block on one of the ports", [allow_public, {"action": "Block", "profile": "Public", "protocol": "TCP", "ports": ["8081"]}], "blocked"],
+		["a block on other ports only", [allow_public, {"action": "Block", "profile": "Public", "protocol": "TCP", "ports": ["445"]}], "open"],
+	]
+	for c: Array in port_cases:
+		var state: String = LanFirewallScript1268.evaluate(_firewall_report_1268("Public", c[1]), ip, phone_ports)["state"]
+		if state != c[2]:
+			failures.append("%s: %s, want %s" % [c[0], state, c[2]])
 	# Two networks: the join address's own network decides, not the other one.
 	var two: Dictionary = _firewall_report_1268("Private", [allow_private], "True", ["10.0.0.5"])
 	two["nets"].append({"category": "Public", "ips": [ip]})
@@ -65897,28 +65916,37 @@ func _scenario_couch_lobby_firewall_note_and_allow_button_1268() -> Array[String
 		failures.append("the button reads '%s'" % button.text)
 	if not screen._join_box.is_ancestor_of(button):
 		failures.append("the button is not under the join QR")
-	# The pad reaches it: open the pad menu and walk back from Phones can't join?.
+	# It stands in for Phones can't join? while it shows (room in the join card).
+	if screen.join_help_button().visible:
+		failures.append("Phones can't join? still shows beside the Allow phones button")
+	# The pad reaches it from the host menu.
 	await _pad_tap_368(0, JOY_BUTTON_Y)
-	var reached: bool = false
-	var at: Control = screen.join_help_button()
-	for i in 4:
-		at = at.find_prev_valid_focus()
-		if at == button:
-			reached = true
-			break
-	if not reached:
+	var focus: Control = get_root().gui_get_focus_owner()
+	if focus == null or not _focus_reach_368(focus).has("FirewallButton"):
 		failures.append("the pad focus chain does not reach the Allow phones button")
 	await _pad_tap_368(0, JOY_BUTTON_Y)
 	PadMenuScript368.reset()
 	# Declined: the note says so and the button stays.
 	button.pressed.emit()
-	if firewall.state != "fixing" or not button.disabled or note.text != "Approve the Windows prompt to let phones in.":
+	if firewall.state != "fixing" or not button.disabled or not note.text.begins_with("Approve the Windows prompt to let phones in."):
 		failures.append("pressing showed state %s, disabled %s, note '%s'" % [firewall.state, button.disabled, note.text])
 	if not await _wait_for_239(func() -> bool: return firewall.state == "fix_failed" and not firewall.busy()):
 		failures.append("a declined prompt left state %s" % firewall.state)
 	await _await_ticks(2)
 	if not note.text.begins_with("Windows did not let phones in.") or not button.visible or button.disabled:
 		failures.append("after a declined prompt: note '%s', button shown %s, disabled %s" % [note.text, button.visible, button.disabled])
+	# A recheck with no answer (the rules query failed) keeps the warning up.
+	var real_check: Callable = firewall.check_runner
+	firewall.check_runner = func(_script: String) -> String: return JSON.stringify({"nets": [{"category": "Public", "ips": ["203.0.113.7"]}], "firewall": {}, "rules": null})
+	firewall.reset()
+	firewall.state = "fix_failed"
+	await _await_ticks(1)
+	if not await _wait_for_239(func() -> bool: return not firewall.busy()):
+		failures.append("the unanswered recheck never finished")
+	await _await_ticks(2)
+	if firewall.state != "fix_failed" or not button.visible:
+		failures.append("an unanswered recheck hid the warning (state %s)" % firewall.state)
+	firewall.check_runner = real_check
 	# Approved: the note and button go, and stay gone.
 	fake["fix_exit"] = 0
 	button.pressed.emit()
@@ -65927,6 +65955,8 @@ func _scenario_couch_lobby_firewall_note_and_allow_button_1268() -> Array[String
 	await _await_ticks(2)
 	if button.visible or note.visible:
 		failures.append("the note stays after phones were let in")
+	if not screen.join_help_button().visible:
+		failures.append("Phones can't join? did not come back once phones were let in")
 	# Open stays open: no more PowerShell for the same address.
 	firewall.poll(Time.get_ticks_msec() + 3600000, true, LobbyScreenScript1268._url_host(str(server.join_url)))
 	if firewall.busy():
@@ -65943,6 +65973,27 @@ func _scenario_couch_lobby_firewall_note_and_allow_button_1268() -> Array[String
 	var joins: Dictionary = server.join_events()
 	if int(joins.get("firewall", 0)) != 1 or int(joins.get("firewall_fixed", 0)) != 1:
 		failures.append("join events %s, want firewall 1 and firewall_fixed 1" % joins)
+	# A new lobby forgets the old verdict until its own check answers.
+	firewall.state = "fix_failed"
+	screen.show_panel("")
+	screen.show_panel("lobby")
+	if firewall.state != "unknown" and not firewall.busy():
+		failures.append("a new lobby kept the old verdict '%s'" % firewall.state)
+	firewall.finish_now()
+	# Internet join on: the Wi-Fi warning gives way.
+	fake["blocked"] = true
+	firewall.state = "blocked"
+	await _await_ticks(2)
+	if not button.visible:
+		failures.append("the note is not shown for a blocked firewall before internet join")
+	# A Couch join source whose internet room is open (the 683 rig opens a real one).
+	var stub_script := GDScript.new()
+	stub_script.source_code = "extends RefCounted\nvar join_url: String = \"http://203.0.113.7:8080/\"\nfunc internet_join_on() -> bool:\n\treturn true\n"
+	stub_script.reload()
+	screen._update_firewall(stub_script.new())
+	if button.visible or note.visible:
+		failures.append("the Wi-Fi firewall note still shows with internet join on")
+	firewall.finish_now()
 	# Online: no LAN to let in, so no note whatever the firewall says.
 	fake["blocked"] = true
 	firewall.state = "unknown"
@@ -65995,5 +66046,38 @@ func _scenario_join_help_internet_qr_fits_the_frame_1268() -> Array[String]:
 	if not help.lan_help_visible():
 		failures.append("the Wi-Fi checklist did not come back after Stop")
 	await _internet_close_683(rig)
+	_scenario_completed = true
+	return failures
+func _scenario_couch_lobby_fits_with_firewall_note_1268() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var firewall: RefCounted = screen.firewall()
+	_firewall_fake_1268(firewall, {"blocked": true, "fix_exit": 1})
+	if not await _wait_for_239(func() -> bool: return screen.firewall_button().visible):
+		failures.append("no firewall note to measure")
+		firewall.finish_now()
+		await _teardown(rig["main"])
+		return failures
+	screen.relay_nudge().expire(Time.get_ticks_msec())
+	screen.refresh_lobby.callv(screen._last_lobby_args)
+	var old_scale: float = _sfx().text_scale
+	var scales: Array = Array(_sfx().TEXT_SCALES)
+	var frame: Rect2 = screen.lobby_panel().get_viewport().get_visible_rect()
+	for scale: float in [1.0, float(scales.max())]:
+		_sfx().set_text_scale(scale)
+		await _text_fit_settle_751(_sfx()) # the lobby shrinks its own text to fit (#751)
+		for control: Control in [screen.firewall_button(), screen.firewall_note(), screen.relay_nudge_button(), screen._lobby_qr]:
+			if not control.is_visible_in_tree():
+				failures.append("text x%.2f: %s is not shown" % [scale, control.name])
+			elif not frame.encloses(control.get_global_rect()):
+				failures.append("text x%.2f: %s %s runs outside the frame" % [scale, control.name, control.get_global_rect()])
+		for card: Control in screen._mode_cards_by_id.values():
+			if card.is_visible_in_tree() and not frame.encloses(card.get_global_rect()):
+				failures.append("text x%.2f: mode card %s %s runs outside the frame" % [scale, card.name, card.get_global_rect()])
+				break
+	_sfx().set_text_scale(old_scale)
+	firewall.finish_now()
+	await _teardown(rig["main"])
 	_scenario_completed = true
 	return failures
