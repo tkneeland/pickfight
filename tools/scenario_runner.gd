@@ -66192,6 +66192,8 @@ func _scenario_release_sets_steam_app_id_never_480_1289() -> Array[String]:
 	# Dev checkouts stay on Spacewar (the guard only runs in the release workflow).
 	if int(ProjectSettings.get_setting("pickfight/steam_app_id", 0)) != 480:
 		failures.append("pickfight/steam_app_id in the repo is no longer the dev default 480")
+	_scenario_completed = true
+	return failures
 
 ## Issue #1291: four bots finish a King of the Hill and a Stock round on a stage
 ## the #409 bullet in docs/FEATURES.md names. A stall names its stage and mode.
