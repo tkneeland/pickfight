@@ -66103,15 +66103,17 @@ func _scenario_couch_lobby_fits_with_firewall_note_1268() -> Array[String]:
 ## both modes (#1294), and that fix adds its scenario with this helper.
 func _bot_rounds_1291_on(stage_name: String, modes: Array[String] = [GameModesType.KING_OF_THE_HILL, GameModesType.STOCK]) -> Array[String]:
 	var failures: Array[String] = []
+	# Every mode runs even after one fails, so a stall in one cannot hide another.
 	for mode in modes:
+		var before: int = failures.size()
 		var took: float = await _bot_round_409_on(stage_name, mode, 200.0, failures)
-		# _bot_round_409_on's teardown marks the scenario complete; only the last mode
-		# may, or a SCRIPT ERROR in a later mode would still report PASS (#195).
+		# _bot_round_409_on ends in a teardown that marks the scenario complete. A SCRIPT
+		# ERROR before it leaves the flag false: stop there so _run_one reports it (#195).
+		if not _scenario_completed:
+			return failures
 		_scenario_completed = false
 		print("      %s round with four bots on %s took %.1f s" % [mode, stage_name, took])
-		if took < 0.0 and failures.is_empty():
+		if took < 0.0 and failures.size() == before:
 			failures.append("four bots did not finish a %s round on %s in 200 s" % [mode, stage_name])
-		if not failures.is_empty():
-			break
 	_scenario_completed = true
 	return failures
