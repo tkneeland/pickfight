@@ -48,6 +48,20 @@ pf_handles() { for f in "$PF_DIR"/accounts/*.conf; do b=$(basename "$f" .conf); 
 pf_rank1() { for h in $(pf_handles); do grep -q '^SUCCESSION_RANK=1\b' "$PF_DIR/accounts/$h.conf" && echo "$h"; done | head -1; }
 pf_triagemaster() { cat "$PF_STATE/pf-triagemaster" 2>/dev/null || pf_rank1; }
 pf_is_triagemaster() { [ "$(pf_triagemaster)" = "$PF_ACCOUNT" ]; }
+# pf_pr_conflict_risk <pr>: 0 when PR <pr> is conflict-risk (rule 6). Rule 6 labels the ticket, not the PR, so this
+# reads the PR's own labels, the issues it closes and the issue its head branch names (`issue-<n>-`), one GraphQL
+# call plus at most one issue read (#1287: #1285 merged unchecked because only its ticket had the label). When
+# GitHub cannot be read it answers 0: unsure counts as conflict-risk, so nothing merges past the triagemaster.
+pf_pr_conflict_risk() {
+  local out branch k
+  out=$(gh api graphql -F owner="${REPO%%/*}" -F name="${REPO#*/}" -F n="$1" -f query='query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){headRefName labels(first:50){nodes{name}} closingIssuesReferences(first:20){nodes{labels(first:50){nodes{name}}}}}}}' \
+    --jq '.data.repository.pullRequest | (([.labels.nodes[].name] + [.closingIssuesReferences.nodes[].labels.nodes[].name]) | index("conflict-risk") != null | tostring) + " " + .headRefName' 2>/dev/null) || return 0
+  case $out in true\ *) return 0;; false\ *) ;; *) return 0;; esac
+  branch=${out#* }
+  k=$(printf '%s' "$branch" | sed -nE 's/.*issue-([0-9]+).*/\1/p; s#^[a-z]+/([0-9]+)-.*#\1#p' | head -1)   # issue-<n>- or <type>/<n>- (as pf_live_agents)
+  [ -n "$k" ] || return 1
+  gh issue view "$k" -R "$REPO" --json labels -q '.labels[].name' 2>/dev/null | grep -qx conflict-risk
+}
 pf_weekly_used() { jq -r '.rate_limits.seven_day.used_percentage // 0 | floor' "$PF_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
 pf_weekly_reset() { jq -r '.rate_limits.seven_day.resets_at // 0 | floor' "$PF_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
 # 0 when dispatching is allowed: under HANDOFF_WEEKLY_USED, or inside the last RESET_GRACE_HOURS before the weekly reset
