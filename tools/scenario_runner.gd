@@ -1383,6 +1383,9 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"grapple_lethal_hit_does_not_latch_1277",
 	"ground_push_launches_higher_for_every_weapon_1278",
 	"ctf_carrier_reaching_base_in_capture_pause_scores_1269",
+	"lan_firewall_verdicts_and_scripts_1268",
+	"couch_lobby_firewall_note_and_allow_button_1268",
+	"join_help_internet_qr_fits_the_frame_1268",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4574,6 +4577,12 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_ground_push_launches_higher_for_every_weapon_1278()
 		"ctf_carrier_reaching_base_in_capture_pause_scores_1269":
 			return await _scenario_ctf_carrier_reaching_base_in_capture_pause_scores_1269()
+		"lan_firewall_verdicts_and_scripts_1268":
+			return await _scenario_lan_firewall_verdicts_and_scripts_1268()
+		"couch_lobby_firewall_note_and_allow_button_1268":
+			return await _scenario_couch_lobby_firewall_note_and_allow_button_1268()
+		"join_help_internet_qr_fits_the_frame_1268":
+			return await _scenario_join_help_internet_qr_fits_the_frame_1268()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -65781,5 +65790,197 @@ func _scenario_ctf_carrier_reaching_base_in_capture_pause_scores_1269() -> Array
 	if int(mode3.scores[1]) != 0:
 		failures.append("Blue scored %d in the pause after dropping the flag to a hit" % int(mode3.scores[1]))
 	await _teardown(rig3["stage"])
+	_scenario_completed = true
+	return failures
+# --- Couch phones blocked by Windows Firewall; the internet QR fits the frame (#1268)
+const LanFirewallScript1268 := preload("res://scripts/LanFirewall.gd")
+## A check's report as the PowerShell script prints it: one network, the firewall on
+## (or off) everywhere with the default inbound action, and `rules` for this executable.
+func _firewall_report_1268(category: String, rules: Array, on: String = "True", ips: Array = ["192.168.1.20"]) -> Dictionary:
+	var profiles: Dictionary = {}
+	for profile: String in ["Public", "Private", "Domain"]:
+		profiles[profile] = {"on": on, "def": "NotConfigured"}
+	return {"nets": [{"category": category, "ips": ips}], "firewall": profiles, "rules": rules}
+func _scenario_lan_firewall_verdicts_and_scripts_1268() -> Array[String]:
+	var failures: Array[String] = []
+	var ip: String = "192.168.1.20"
+	var allow_public: Dictionary = {"action": "Allow", "profile": "Public", "protocol": "TCP"}
+	var allow_private: Dictionary = {"action": "Allow", "profile": "Private", "protocol": "TCP"}
+	var block_public: Dictionary = {"action": "Block", "profile": "Public", "protocol": "TCP"}
+	var cases: Array = [
+		# [what, report, want state, want profile]
+		["Windows' default answer (Private allowed, Public blocked) on Public Wi-Fi", _firewall_report_1268("Public", [allow_private, block_public]), "blocked", "Public"],
+		["the same answer on a Private network", _firewall_report_1268("Private", [allow_private, block_public]), "open", "Private"],
+		["no rule yet (the prompt unanswered)", _firewall_report_1268("Public", []), "blocked", "Public"],
+		["an allow rule for Public", _firewall_report_1268("Public", [allow_public]), "open", "Public"],
+		["block beats allow on the same profile", _firewall_report_1268("Public", [allow_public, block_public]), "blocked", "Public"],
+		["an Any-profile allow", _firewall_report_1268("Public", [{"action": "Allow", "profile": "Any", "protocol": "Any"}]), "open", "Public"],
+		["a combined profile list", _firewall_report_1268("Public", [{"action": "Allow", "profile": "Private, Public", "protocol": "TCP"}]), "open", "Public"],
+		["a UDP-only block does not stop the TCP page", _firewall_report_1268("Public", [allow_public, {"action": "Block", "profile": "Public", "protocol": "UDP"}]), "open", "Public"],
+		["a UDP-only allow does not let TCP in", _firewall_report_1268("Public", [{"action": "Allow", "profile": "Public", "protocol": "UDP"}]), "blocked", "Public"],
+		["the firewall off for the profile", _firewall_report_1268("Public", [block_public], "False"), "open", "Public"],
+		["a domain network", _firewall_report_1268("DomainAuthenticated", [{"action": "Allow", "profile": "Domain", "protocol": "TCP"}]), "open", "Domain"],
+		["single items, not arrays (old ConvertTo-Json)", {"nets": {"category": "Public", "ips": ip}, "firewall": _firewall_report_1268("Public", [])["firewall"], "rules": block_public}, "blocked", "Public"],
+		["an empty report (PowerShell failed)", {}, "unknown", ""],
+	]
+	for c: Array in cases:
+		var got: Dictionary = LanFirewallScript1268.evaluate(c[1], ip)
+		if got["state"] != c[2] or got["profile"] != c[3]:
+			failures.append("%s: %s/%s, want %s/%s" % [c[0], got["state"], got["profile"], c[2], c[3]])
+	# Two networks: the join address's own network decides, not the other one.
+	var two: Dictionary = _firewall_report_1268("Private", [allow_private], "True", ["10.0.0.5"])
+	two["nets"].append({"category": "Public", "ips": [ip]})
+	if LanFirewallScript1268.evaluate(two, ip)["state"] != "blocked":
+		failures.append("with two networks the join address's Public one was not the one judged")
+	if LanFirewallScript1268.evaluate(two, "172.16.0.9")["state"] != "unknown":
+		failures.append("an address on neither of two networks was judged anyway")
+	# The scripts: a quote in the path survives, the fix names its rule and the ports.
+	var exe: String = "C:/Games/Bob's Pickfight/Pickfight.exe"
+	var check: String = LanFirewallScript1268.check_script(exe)
+	if not check.contains("'C:/Games/Bob''s Pickfight/Pickfight.exe'"):
+		failures.append("the check script does not quote the path")
+	if not check.contains("-ieq $want"):
+		failures.append("the check script matches the program path case-sensitively")
+	var fix: String = LanFirewallScript1268.fix_script(exe, PackedInt32Array([8080, 8081]))
+	for want: String in ["-LocalPort 8080,8081", "'Pickfight phones'", "-Profile Any", "Disable-NetFirewallRule", "-Protocol TCP", "'C:/Games/Bob''s Pickfight/Pickfight.exe'"]:
+		if not fix.contains(want):
+			failures.append("the fix script lacks \"%s\"" % want)
+	var decoded: String = Marshalls.base64_to_raw(LanFirewallScript1268.encode(check)).get_string_from_utf16()
+	if decoded != check:
+		failures.append("-EncodedCommand does not round-trip the script")
+	# Scripted runs never start PowerShell.
+	if LanFirewallScript1268.new().supported:
+		failures.append("the check is on in a scripted run")
+	_scenario_completed = true
+	return failures
+## The lobby's firewall check with fake PowerShell: `fake["blocked"]` decides each
+## check's answer, and a fix exits `fake["fix_exit"]` (0 also unblocks).
+func _firewall_fake_1268(firewall: RefCounted, fake: Dictionary) -> void:
+	firewall.supported = true
+	firewall.check_runner = func(_script: String) -> String:
+		var rules: Array = [{"action": "Allow", "profile": "Private", "protocol": "TCP"}]
+		if fake["blocked"]:
+			rules.append({"action": "Block", "profile": "Public", "protocol": "TCP"})
+		else:
+			rules.append({"action": "Allow", "profile": "Any", "protocol": "TCP"})
+		return JSON.stringify(_firewall_report_1268("Public", rules, "True", ["203.0.113.7"]))
+	firewall.fix_runner = func(_script: String) -> int:
+		fake["fixes"] = int(fake.get("fixes", 0)) + 1
+		if int(fake["fix_exit"]) == 0:
+			fake["blocked"] = false
+		return int(fake["fix_exit"])
+	firewall.reset()
+func _scenario_couch_lobby_firewall_note_and_allow_button_1268() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _deck_rig_368()
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	server.join_count_gate = func() -> bool: return true
+	var firewall: RefCounted = screen.firewall()
+	var button: Button = screen.firewall_button()
+	var note: Label = screen.firewall_note()
+	await _await_ticks(2)
+	if button.visible or note.visible:
+		failures.append("the firewall note shows before any check (scripted runs never check)")
+	var fake: Dictionary = {"blocked": true, "fix_exit": 1223}
+	_firewall_fake_1268(firewall, fake)
+	if not await _wait_for_239(func() -> bool: return button.visible):
+		failures.append("a blocked firewall showed no Allow phones button (state %s)" % firewall.state)
+		firewall.finish_now()
+		await _teardown(rig["main"])
+		return failures
+	if note.text != "Windows Firewall is blocking phones on this network." or not note.visible:
+		failures.append("the note reads '%s'" % note.text)
+	if button.text != "Allow phones (asks for admin)":
+		failures.append("the button reads '%s'" % button.text)
+	if not screen._join_box.is_ancestor_of(button):
+		failures.append("the button is not under the join QR")
+	# The pad reaches it: open the pad menu and walk back from Phones can't join?.
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	var reached: bool = false
+	var at: Control = screen.join_help_button()
+	for i in 4:
+		at = at.find_prev_valid_focus()
+		if at == button:
+			reached = true
+			break
+	if not reached:
+		failures.append("the pad focus chain does not reach the Allow phones button")
+	await _pad_tap_368(0, JOY_BUTTON_Y)
+	PadMenuScript368.reset()
+	# Declined: the note says so and the button stays.
+	button.pressed.emit()
+	if firewall.state != "fixing" or not button.disabled or note.text != "Approve the Windows prompt to let phones in.":
+		failures.append("pressing showed state %s, disabled %s, note '%s'" % [firewall.state, button.disabled, note.text])
+	if not await _wait_for_239(func() -> bool: return firewall.state == "fix_failed" and not firewall.busy()):
+		failures.append("a declined prompt left state %s" % firewall.state)
+	await _await_ticks(2)
+	if not note.text.begins_with("Windows did not let phones in.") or not button.visible or button.disabled:
+		failures.append("after a declined prompt: note '%s', button shown %s, disabled %s" % [note.text, button.visible, button.disabled])
+	# Approved: the note and button go, and stay gone.
+	fake["fix_exit"] = 0
+	button.pressed.emit()
+	if not await _wait_for_239(func() -> bool: return firewall.state == "open" and not firewall.busy()):
+		failures.append("an approved prompt left state %s" % firewall.state)
+	await _await_ticks(2)
+	if button.visible or note.visible:
+		failures.append("the note stays after phones were let in")
+	if int(fake.get("fixes", 0)) != 2:
+		failures.append("%d fixes ran for two presses" % int(fake.get("fixes", 0)))
+	var joins: Dictionary = server.join_events()
+	if int(joins.get("firewall", 0)) != 1 or int(joins.get("firewall_fixed", 0)) != 1:
+		failures.append("join events %s, want firewall 1 and firewall_fixed 1" % joins)
+	# Online: no LAN to let in, so no note whatever the firewall says.
+	fake["blocked"] = true
+	firewall.state = "unknown"
+	_firewall_fake_1268(firewall, fake)
+	server.apply_host_command("kind", "online")
+	await _await_ticks(5)
+	firewall.finish_now()
+	await _await_ticks(2)
+	if button.visible or note.visible:
+		failures.append("the firewall note shows in an Online lobby")
+	firewall.finish_now()
+	await _teardown(rig["main"])
+	_scenario_completed = true
+	return failures
+func _scenario_join_help_internet_qr_fits_the_frame_1268() -> Array[String]:
+	var failures: Array[String] = []
+	var rig: Dictionary = await _internet_rig_683(failures)
+	if rig.is_empty():
+		return failures
+	var screen: CanvasLayer = rig["screen"]
+	var server: Node = rig["server"]
+	screen.join_help_button().pressed.emit()
+	var help = screen.join_help()
+	if not help.lan_help_visible():
+		failures.append("the Wi-Fi checklist is hidden before internet join")
+	help.internet_button().pressed.emit()
+	if not await _wait_for_239(func() -> bool: return server.internet_join_room() != "" and help.internet_qr_visible()):
+		failures.append("no internet room or QR")
+		await _internet_close_683(rig)
+		return failures
+	var popup: Control = screen.join_help_popup()
+	var frame: Rect2 = popup.get_viewport().get_visible_rect()
+	var card: Control = popup.get_node("Center/Card")
+	# The largest text size makes the card tallest (#751).
+	var scales: Array = Array(_sfx().TEXT_SCALES)
+	var old_scale: float = _sfx().text_scale
+	for scale: float in [1.0, float(scales.max())]:
+		_sfx().set_text_scale(scale)
+		await _await_ticks(4)
+		var qr: Rect2 = help.internet_qr().get_global_rect()
+		if not frame.encloses(qr):
+			failures.append("text x%.2f: the internet QR %s runs outside the frame %s" % [scale, qr, frame])
+		if not frame.encloses(card.get_global_rect()):
+			failures.append("text x%.2f: the popup card %s runs outside the frame %s" % [scale, card.get_global_rect(), frame])
+	_sfx().set_text_scale(old_scale)
+	if help.lan_help_visible():
+		failures.append("the Wi-Fi checklist still shows with the internet room open")
+	help.internet_stop_button().pressed.emit()
+	await _await_ticks(2)
+	if not help.lan_help_visible():
+		failures.append("the Wi-Fi checklist did not come back after Stop")
+	await _internet_close_683(rig)
 	_scenario_completed = true
 	return failures

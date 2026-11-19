@@ -69,7 +69,9 @@ how far it reaches. See [ADR-0003](docs/adr/0003-relative-vector-input.md).
    Defender Firewall, or macOS's "accept incoming connections?" prompt if its
    firewall is on. Allow it, and on Windows tick the network type you're
    actually on. Wi-Fi is often set to *Public*, and allowing only *Private*
-   silently blocks every phone.
+   silently blocks every phone. On Windows the Couch lobby checks this for
+   you: if the firewall blocks phones, a note under the QR offers an
+   *Allow phones* button that fixes it with one admin prompt.
 3. **Read the join URL.** It's shown in the top-left of the game window,
    e.g. `http://192.168.1.42:8080/`, and as a QR code at the top right and
    on the lobby screen (drawn in-game, no extra tools needed). If you

@@ -141,7 +141,7 @@ const PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n", "felt", "host_
 ## The event counters of a record's `events.ctf` and `events.joins` (#1271);
 ## relay/Relay.gd keeps its own copies, kept equal.
 const CTF_EVENT_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns", "carrier_in_base_during_pause", "carried_in_base_at_end"]
-const JOIN_EVENT_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet"]
+const JOIN_EVENT_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet", "firewall", "firewall_fixed"]
 
 ## victim slot -> {"attacker": slot, "msec": int} for the last hit taken.
 var _last_hit: Dictionary = {}

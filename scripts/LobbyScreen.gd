@@ -34,6 +34,7 @@ const StagesRulesScreenScript := preload("res://scripts/StagesRulesScreen.gd")
 const HowToPlayDemoScript := preload("res://scripts/HowToPlayDemo.gd")
 const GameModesScript := preload("res://scripts/GameModes.gd")
 const RelayNudgeScript := preload("res://scripts/RelayNudge.gd")
+const LanFirewallScript := preload("res://scripts/LanFirewall.gd")
 const TeamsScript := preload("res://scripts/Teams.gd")
 const ScreenKitScript := preload("res://scripts/ScreenKit.gd")
 const TitleScreenScript := preload("res://scripts/TitleScreen.gd")
@@ -131,6 +132,11 @@ var _join_help_button: Button # under the join QR, Couch only (#680)
 var _relay_nudge := RelayNudgeScript.new() # when to show the button below (#727)
 var _help_via_nudge: bool = false # the join popup opened by the nudge's button: not a hand-opened help (#1271)
 var _relay_nudge_button: Button # Not connecting? Join over the internet (#727)
+## Issue #1268: Windows Firewall blocking Couch phones, and the button that lets them in.
+var _firewall := LanFirewallScript.new()
+var _firewall_note: Label
+var _firewall_button: Button
+var _firewall_noted: bool = false # the "firewall" join event, once per lobby (#1271)
 ## The join addresses, re-read at most once a second: listing the host's network
 ## interfaces every frame is wasted work (they rarely change mid-lobby).
 const JOIN_URLS_REFRESH_MSEC: int = 1000
@@ -426,6 +432,8 @@ func popup_input(event: InputEvent, pad_mode: bool, opener: Control) -> bool:
 func show_panel(which: String) -> void:
 	if which == "lobby" and not _lobby_panel.visible:
 		_relay_nudge.reset() # a new lobby gets its own 30 s and its own nudge (#727)
+		_firewall.reset() # and a fresh firewall check (#1268)
+		_firewall_noted = false
 	_lobby_panel.visible = which == "lobby"
 	_victory.victory_panel().visible = which == "victory"
 	if _victory.end_card_panel() != null:
@@ -495,6 +503,7 @@ func refresh_lobby(state: Dictionary, min_players: int, join_source: Object) -> 
 		_lobby_url.text = str(url) if url != null else ""
 	_apply_streamer_mode(join_source)
 	_update_relay_nudge(join_source)
+	_update_firewall(join_source)
 
 ## The big countdown number over the lobby, punching in on each tick.
 func _show_countdown(count: int) -> void:
@@ -590,6 +599,52 @@ func _on_relay_nudge_pressed() -> void:
 
 func relay_nudge_button() -> Button:
 	return _relay_nudge_button
+
+## Issue #1268: checks, while a Couch join QR is up, whether Windows Firewall lets
+## phones reach this host, and shows a note and an "Allow phones" button when not.
+func _update_firewall(join_source: Object) -> void:
+	if _firewall_button == null:
+		return
+	var couch: bool = join_source != null and not _online_kind(join_source)
+	var wanted: bool = couch and _lobby_panel != null and _lobby_panel.visible and _lobby_qr.visible
+	var url: Variant = join_source.get("join_url") if join_source != null else null
+	var was_fixing: bool = _firewall.state == "fixing" or _firewall.state == "fix_failed"
+	_firewall.poll(Time.get_ticks_msec(), wanted, _url_host(str(url) if url != null else ""))
+	if was_fixing and _firewall.state == "open" and _server != null and _server.has_method("note_join_event"):
+		_server.note_join_event("firewall_fixed")
+	var show_fix: bool = wanted and _firewall.needs_fix()
+	if show_fix and not _firewall_noted and _server != null and _server.has_method("note_join_event"):
+		_firewall_noted = true
+		_server.note_join_event("firewall")
+	if show_fix:
+		var key: String = {"fixing": "FIREWALL_FIXING", "fix_failed": "FIREWALL_FIX_FAILED"}.get(_firewall.state, "FIREWALL_BLOCKED")
+		_firewall_note.text = tr(key)
+		_firewall_button.text = tr("FIREWALL_ALLOW")
+		_firewall_button.disabled = _firewall.state == "fixing"
+	_firewall_note.visible = show_fix
+	_firewall_button.visible = show_fix
+
+## "192.168.1.4" from "http://192.168.1.4:8080/" ("" when there is none).
+static func _url_host(url: String) -> String:
+	var rest: String = url.trim_prefix("http://").trim_prefix("https://")
+	return rest.get_slice("/", 0).get_slice(":", 0)
+
+func _on_firewall_pressed() -> void:
+	if _server == null:
+		return
+	var ports := PackedInt32Array([int(_server.get("http_port")), int(_server.get("ws_port"))])
+	if _firewall.fix(ports):
+		_update_firewall(_last_lobby_args[2] if not _last_lobby_args.is_empty() else null)
+
+func firewall_button() -> Button:
+	return _firewall_button
+
+func firewall_note() -> Label:
+	return _firewall_note
+
+## The firewall check (#1268), for the scenarios.
+func firewall() -> RefCounted:
+	return _firewall
 
 ## The nudge's timer and latch, for the scenarios.
 func relay_nudge() -> RefCounted:
@@ -825,6 +880,14 @@ func _build_left_column() -> Control:
 	_join_note = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "JoinNote", TextServer.AUTOWRAP_WORD_SMART)
 	_join_note.visible = false
 	_join_box.add_child(_join_note)
+	_firewall_note = ScreenKitScript.themed_label("", 20, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_CENTER, "FirewallNote", TextServer.AUTOWRAP_WORD_SMART)
+	_firewall_note.visible = false # Couch on Windows, only while the firewall blocks phones (#1268)
+	_join_box.add_child(_firewall_note)
+	_firewall_button = ScreenKitScript.themed_button(tr("FIREWALL_ALLOW"), UiThemeScript.ACTION_BUTTON, "FirewallButton")
+	_firewall_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # wraps instead of widening the column at a large Text size (#751)
+	_firewall_button.visible = false
+	_firewall_button.pressed.connect(_on_firewall_pressed)
+	_join_box.add_child(_firewall_button)
 	_join_help_button = ScreenKitScript.themed_button(tr("JOIN_HELP_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinHelpButton")
 	_join_help_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # wraps instead of widening the column at a large Text size (#751)
 	_join_help_button.visible = false # Couch only: Online has no LAN address to fix
@@ -910,12 +973,14 @@ func _process(_delta: float) -> void:
 	_host.process()
 	if not _last_lobby_args.is_empty():
 		_update_relay_nudge(_last_lobby_args[2])
+		_update_firewall(_last_lobby_args[2])
 
 func _input(event: InputEvent) -> void:
 	_host.input(event)
 
 func _exit_tree() -> void:
 	_host.exit_tree()
+	_firewall.finish_now() # never leave a check's thread running
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	_host.unhandled_key_input(event)

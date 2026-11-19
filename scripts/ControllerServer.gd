@@ -3749,7 +3749,7 @@ var _join_relay_ids: Dictionary = {}
 ## server), so a phone that reconnects in the next match is not a new join.
 var _join_lan_new: int = 0
 var _join_relay_new: int = 0
-## "help", "nudge" (each at most once per lobby: the latch) and "internet" counts.
+## "help", "nudge", "firewall", "firewall_fixed" (each at most once per lobby: the latch) and "internet" counts.
 var _join_other: Dictionary = {}
 ## Decides whether anything may be counted: set by the RoundManager to the telemetry
 ## gate (sharing on, the current notice acknowledged, not a scripted run). Unset counts nothing.
@@ -3764,13 +3764,15 @@ func _join_counting() -> bool:
 	return join_count_gate.is_valid() and bool(join_count_gate.call())
 
 ## Counts one lobby event: "help" (the Phones can't join? popup opened by hand), "nudge"
-## (the 30 s internet nudge shown) or "internet" (internet join opened). "help" and
-## "nudge" count once per lobby. Nothing is kept while the gate refuses.
+## (the 30 s internet nudge shown), "internet" (internet join opened), "firewall" (the
+## lobby found Windows Firewall blocking phones, #1268) or "firewall_fixed" (its Allow
+## phones button let them in). All but "internet" count once per lobby. Nothing is
+## kept while the gate refuses.
 func note_join_event(kind: String) -> void:
 	if not _join_counting():
 		return
 	match kind:
-		"help", "nudge":
+		"help", "nudge", "firewall", "firewall_fixed":
 			_join_other[kind] = 1
 		"internet":
 			_join_other[kind] = int(_join_other.get(kind, 0)) + 1

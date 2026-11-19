@@ -36,6 +36,9 @@ var _net_qr: TextureRect
 var _net_status: Label
 var _net_url: Label
 var _net_room: Label
+## Issue #1268: the Wi-Fi troubleshooting (checklist, address list, "still stuck?"
+## note), hidden while the internet room is open so the card and its QR fit the frame.
+var _lan_help: Array[Control] = []
 
 func _init(screen) -> void:
 	_screen = screen
@@ -58,10 +61,12 @@ func build(card: Control, on_close: Callable) -> void:
 		line.name = "Check%d" % i
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(line)
+		_lan_help.append(line)
 	var rule_box := PanelContainer.new()
 	rule_box.name = "UrlBox"
 	rule_box.theme_type_variation = UiThemeScript.RULE_BOX
 	box.add_child(rule_box)
+	_lan_help.append(rule_box)
 	_url_box = VBoxContainer.new()
 	_url_box.name = "Urls"
 	_url_box.add_theme_constant_override("separation", 4)
@@ -80,6 +85,7 @@ func _build_internet(box: VBoxContainer) -> void:
 	box.add_child(net)
 	var note: Label = ScreenKitScript.themed_label(_screen.tr("JOIN_NET_NOTE"), 22, UiThemeScript.INK_BOLD_LABEL, HORIZONTAL_ALIGNMENT_LEFT, "NetNote", TextServer.AUTOWRAP_WORD_SMART)
 	net.add_child(note)
+	_lan_help.append(note)
 	_net_button = ScreenKitScript.themed_button(_screen.tr("JOIN_NET_BUTTON"), UiThemeScript.ACTION_BUTTON, "JoinInternetButton", true)
 	_net_button.pressed.connect(_set_internet.bind(true))
 	net.add_child(_net_button)
@@ -135,6 +141,14 @@ func internet_qr_visible() -> bool:
 func internet_live_visible() -> bool:
 	return _net_live != null and _net_live.visible
 
+## The internet room's QR (#683), for the scenarios' fits-the-frame check (#1268).
+func internet_qr() -> TextureRect:
+	return _net_qr
+
+## Whether the Wi-Fi checklist and address list show (hidden while the internet room is open, #1268).
+func lan_help_visible() -> bool:
+	return not _lan_help.is_empty() and _lan_help[0].visible
+
 ## Redraws the fallback block from `server` (streamer mode hides the link,
 ## QR and code, as it does the LAN addresses).
 func refresh_internet(server: Object) -> void:
@@ -142,6 +156,11 @@ func refresh_internet(server: Object) -> void:
 		return
 	var on: bool = server.internet_join_on()
 	_net_live.visible = on
+	# The whole card is centred in the frame: with the Wi-Fi checklist and every
+	# address above it, the QR ran off the bottom (#1268). Once phones join over
+	# the internet, that troubleshooting is moot.
+	for part: Control in _lan_help:
+		part.visible = not on
 	if not on:
 		return
 	var status: String = server.internet_join_status()

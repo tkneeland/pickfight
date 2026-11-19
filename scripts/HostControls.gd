@@ -111,6 +111,7 @@ func attach(server: Object) -> void:
 	_screen.join_help_button().pressed.connect(press_control.bind("join_help"))
 	_controls["join_help"] = _screen.join_help_button()
 	_controls["relay_nudge"] = _screen.relay_nudge_button() # #727, beside it in the pad chain
+	_controls["firewall_fix"] = _screen.firewall_button() # Allow phones (#1268): pressed already runs the fix; above them in the pad chain
 	_controls["invite"] = _screen.invite_button() # Invite Steam friends (#298): pressed already calls the server; in the pad chain so a Steam Deck host reaches it
 	var spacer := Control.new()
 	spacer.name = "Spacer"
@@ -538,7 +539,7 @@ func input(event: InputEvent) -> void:
 ## reachable. Hidden controls (Join outside Online) are skipped.
 func _chain_pad_focus() -> void:
 	var rows: Array = []
-	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode", "team_count"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["invite"], ["join_help", "relay_nudge"], ["start"]]:
+	for ids: Array in [["target_down", "target_up"], ["bots_down", "bots", "bots_up", "bot_skill"], ["mode", "team_count"], ["look"], ["how_to_play"], ["stages_rules"], ["leave"], ["copy_code"], ["invite"], ["firewall_fix"], ["join_help", "relay_nudge"], ["start"]]:
 		var row: Array[Button] = []
 		for id: String in ids:
 			var button: Button = _controls[id]

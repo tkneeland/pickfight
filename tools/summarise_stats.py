@@ -170,7 +170,7 @@ def print_ping(records):
 # is kept for old records: #1269 fixed it, so new records always carry 0.
 CTF_KEYS = ("captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns",
             "carrier_in_base_during_pause", "carried_in_base_at_end")
-JOIN_KEYS = ("lan", "relay", "help", "nudge", "internet")
+JOIN_KEYS = ("lan", "relay", "help", "nudge", "internet", "firewall", "firewall_fixed")
 
 
 def _count(value):
