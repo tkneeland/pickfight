@@ -35,7 +35,7 @@ while true; do
     labels=$(gh pr view $P --repo $REPO --json labels --jq '.labels[].name')
     echo "$labels" | grep -qx review-blocked && continue   # rule 12: confirmed reviewer finding
     echo "$labels" | grep -qx review-passed || continue    # rule 12: no merge before a reviewer pass
-    if ! pf_is_triagemaster && pf_pr_conflict_risk $P; then continue; fi   # rule 6: the ticket's label counts too (#1287)
+    if ! pf_is_triagemaster; then pf_pr_conflict_risk $P; [ $? -eq 1 ] || continue; fi   # rule 6, the ticket's label too (#1287); unsure waits
     states=$(gh pr checks $P --repo $REPO --json state --jq '.[].state' 2>/dev/null)
     [ -n "$states" ] || continue
     echo "$states" | grep -qv "SUCCESS\|SKIPPED\|NEUTRAL" && continue
