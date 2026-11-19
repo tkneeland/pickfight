@@ -1388,6 +1388,11 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"join_help_internet_qr_fits_the_frame_1268",
 	"couch_lobby_fits_with_firewall_note_1268",
 	"release_sets_steam_app_id_never_480_1289",
+	"bot_four_bots_finish_rounds_on_springboard_1291",
+	"bot_four_bots_finish_rounds_on_gantry_1291",
+	"bot_four_bots_finish_rounds_on_mill_1291",
+	"bot_four_bots_finish_rounds_on_updraft_1291",
+	"bot_four_bots_finish_rounds_on_vent_1291",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4589,6 +4594,16 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_couch_lobby_fits_with_firewall_note_1268()
 		"release_sets_steam_app_id_never_480_1289":
 			return _scenario_release_sets_steam_app_id_never_480_1289()
+		"bot_four_bots_finish_rounds_on_springboard_1291":
+			return await _bot_rounds_1291_on("Springboard")
+		"bot_four_bots_finish_rounds_on_gantry_1291":
+			return await _bot_rounds_1291_on("Gantry")
+		"bot_four_bots_finish_rounds_on_mill_1291":
+			return await _bot_rounds_1291_on("Mill")
+		"bot_four_bots_finish_rounds_on_updraft_1291":
+			return await _bot_rounds_1291_on("Updraft")
+		"bot_four_bots_finish_rounds_on_vent_1291":
+			return await _bot_rounds_1291_on("Vent")
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -66177,5 +66192,26 @@ func _scenario_release_sets_steam_app_id_never_480_1289() -> Array[String]:
 	# Dev checkouts stay on Spacewar (the guard only runs in the release workflow).
 	if int(ProjectSettings.get_setting("pickfight/steam_app_id", 0)) != 480:
 		failures.append("pickfight/steam_app_id in the repo is no longer the dev default 480")
+	_scenario_completed = true
+	return failures
+
+## Issue #1291: four bots finish a King of the Hill and a Stock round on a stage
+## the #409 bullet in docs/FEATURES.md names. A stall names its stage and mode.
+## `modes` defaults to both. Summit is not covered here: four bots stall there in
+## both modes (#1294), and that fix adds its scenario with this helper.
+func _bot_rounds_1291_on(stage_name: String, modes: Array[String] = [GameModesType.KING_OF_THE_HILL, GameModesType.STOCK]) -> Array[String]:
+	var failures: Array[String] = []
+	# Every mode runs even after one fails, so a stall in one cannot hide another.
+	for mode in modes:
+		var before: int = failures.size()
+		var took: float = await _bot_round_409_on(stage_name, mode, 200.0, failures)
+		# _bot_round_409_on ends in a teardown that marks the scenario complete. A SCRIPT
+		# ERROR before it leaves the flag false: stop there so _run_one reports it (#195).
+		if not _scenario_completed:
+			return failures
+		_scenario_completed = false
+		print("      %s round with four bots on %s took %.1f s" % [mode, stage_name, took])
+		if took < 0.0 and failures.size() == before:
+			failures.append("four bots did not finish a %s round on %s in 200 s" % [mode, stage_name])
 	_scenario_completed = true
 	return failures
