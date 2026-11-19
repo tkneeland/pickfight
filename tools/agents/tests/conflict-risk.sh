@@ -13,7 +13,7 @@ case "$1 $2" in
   "api graphql")
     [ -f "$PF_TEST_DIR/fail" ] && exit 1
     jqf=; prev=; for a in "$@"; do [ "$prev" = --jq ] && jqf=$a; prev=$a; done
-    jq -r "$jqf" "$PF_TEST_DIR/pr.json" | tr -d '';;   # gh's own --jq never writes CR (Windows jq does)
+    jq -r "$jqf" "$PF_TEST_DIR/pr.json" | tr -d '\r';;   # gh's own --jq never writes CR (Windows jq does)
   "issue view") cat "$PF_TEST_DIR/issue.txt" 2>/dev/null;;
   *) exit 1;;
 esac
