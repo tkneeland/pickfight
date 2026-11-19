@@ -3,7 +3,8 @@
 #   --refs (last argument): the PR only partly fixes the ticket. The body says "Refs #N." instead of "Closes #N.", so the ticket stays open after merge.
 #     On a re-run that cannot refresh an old "Closes" body, it aborts and turns the PR into a draft so nothing merges it.
 # Merges main into the issue's worktree branch, opens the PR (or reuses the branch's open one on a re-run) with a Resource Usage section, waits for CI, merges, installs.
-# Opens but does not merge a conflict-risk PR unless this account is the current triagemaster.
+# Opens but does not merge a conflict-risk PR (the PR or its ticket labelled, pf_pr_conflict_risk) unless this account
+# is the current triagemaster; copies the ticket's conflict-risk label onto the PR.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 i=$1; t=$2; b=$3; R=$ROOT; W=$R/.claude/worktrees/$i/pickfight
 kw=Closes; case ${4:-} in '') ;; --refs) kw=Refs;; *) echo "ABORT $i: unknown option '$4' (usage: pf-ship.sh <issue> \"<title>\" \"<summary body>\" [--refs])"; exit 1;; esac
@@ -56,7 +57,11 @@ pr=$(gh pr view $n --json url -q .url 2>/dev/null); pr=${pr:-$n}
 else pr=$(set -o pipefail; gh pr create --title "$t" --body "$body" | tail -1) || { echo "ABORT $i: gh pr create failed: $pr"; exit 1; }
 n=${pr##*/}; case $n in ''|*[!0-9]*) echo "ABORT $i: no PR number in '$pr'"; exit 1;; esac; fi; echo "PR $pr"
 [ "$kw" = Refs ] && echo "REFS: PR $n says 'Refs #$i'; ticket #$i stays open after merge (no close or transition step runs)."
-if gh pr view $n --json labels -q '.labels[].name' | grep -qx conflict-risk && ! pf_is_triagemaster; then echo "CONFLICT-RISK PR $n opened; only the triagemaster ($(pf_triagemaster)) merges it. Not merging."; exit 0; fi
+# Rule 6 labels the ticket: carry the label onto the PR so reviewers see it, and gate on either (#1287).
+pf_pr_conflict_risk $n $i; cr=$?
+[ $cr -eq 0 ] && gh pr edit $n --add-label conflict-risk >/dev/null 2>&1   # only on a confirmed label, never on a failed read
+if [ $cr -eq 0 ] && ! pf_is_triagemaster; then echo "CONFLICT-RISK PR $n opened; only the triagemaster ($(pf_triagemaster)) merges it. Not merging."; exit 0; fi
+if [ $cr -eq 2 ] && ! pf_is_triagemaster; then echo "UNSURE $n: could not read whether #$i is conflict-risk (GitHub read failed). Not merging; re-run pf-ship.sh."; exit 1; fi
 sleep 20; i=0; until s=$(gh pr checks $n 2>&1); ! echo "$s" | grep -qE "pending|no checks"; do i=$((i+1)); [ $i -gt 60 ] && { echo "CI TIMEOUT $n (conflict?)"; exit 1; }; sleep 30; done
 if gh pr checks $n 2>&1 | grep -qE "[[:space:]]fail[[:space:]]"; then echo "CI FAILED $n"; gh pr checks $n | grep -E "[[:space:]]fail[[:space:]]"; exit 1; fi
 echo "$s" | grep -v pass

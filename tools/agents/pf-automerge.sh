@@ -1,7 +1,8 @@
 #!/bin/bash
 # Zero-token auto-integrator: merges any open PR that is MERGEABLE with every CI check passed, then
 # runs INSTALL_SCRIPT (if set). Conflicting PRs get one comment asking to rebase.
-# PRs labelled conflict-risk are merged only when this account is the current triagemaster.
+# Conflict-risk PRs (the PR or its ticket labelled conflict-risk, pf_pr_conflict_risk) are merged only when this
+# account is the current triagemaster.
 . "$(dirname "$0")/pf-env.sh" || exit 1
 PF_TMP=${TMPDIR:-/tmp}
 LOCK=$PF_TMP/pickfight-automerge-$PF_ACCOUNT.lock
@@ -34,7 +35,7 @@ while true; do
     labels=$(gh pr view $P --repo $REPO --json labels --jq '.labels[].name')
     echo "$labels" | grep -qx review-blocked && continue   # rule 12: confirmed reviewer finding
     echo "$labels" | grep -qx review-passed || continue    # rule 12: no merge before a reviewer pass
-    if gh pr view $P --repo $REPO --json labels --jq '.labels[].name' | grep -qx conflict-risk && ! pf_is_triagemaster; then continue; fi
+    if ! pf_is_triagemaster; then pf_pr_conflict_risk $P; [ $? -eq 1 ] || continue; fi   # rule 6, the ticket's label too (#1287); unsure waits
     states=$(gh pr checks $P --repo $REPO --json state --jq '.[].state' 2>/dev/null)
     [ -n "$states" ] || continue
     echo "$states" | grep -qv "SUCCESS\|SKIPPED\|NEUTRAL" && continue

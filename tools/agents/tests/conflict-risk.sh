@@ -1,0 +1,74 @@
+#!/bin/bash
+# Offline test for pf_pr_conflict_risk (#1287): a PR is conflict-risk when the PR, an issue it closes, or the issue its
+# head branch names (or the ticket pf-ship.sh passes) carries the label (rule 6 labels the ticket); 1 when none does;
+# 2 when any GitHub read fails, so nothing merges past the triagemaster on a guess and no PR is labelled on one.
+# Stub gh first on PATH. No network. macOS, Linux and Git Bash.   bash tools/agents/tests/conflict-risk.sh
+AG=$(cd "$(dirname "$0")/.." && pwd)
+T=$(mktemp -d "${TMPDIR:-/tmp}/pf-conflictrisk-test.XXXXXX"); trap 'rm -rf "$T"' EXIT
+mkdir -p "$T/bin" "$T/state"
+# The stub answers the GraphQL call with $T/pr.json (passed through --jq by real jq) and `issue view` with $T/issue.txt.
+cat > "$T/bin/gh" <<'STUB'
+#!/bin/bash
+echo "gh $*" >> "$PF_TEST_LOG"
+case "$1 $2" in
+  "api graphql")
+    [ -f "$PF_TEST_DIR/fail" ] && exit 1
+    jqf=; prev=; for a in "$@"; do [ "$prev" = --jq ] && jqf=$a; prev=$a; done
+    jq -r "$jqf" "$PF_TEST_DIR/pr.json" | tr -d '\r';;   # gh's own --jq never writes CR (Windows jq does)
+  "issue view") [ -f "$PF_TEST_DIR/issuefail" ] && exit 1; cat "$PF_TEST_DIR/issue.txt" 2>/dev/null;;
+  *) exit 1;;
+esac
+STUB
+chmod +x "$T/bin/gh"
+git init -q "$T/repo"; git -C "$T/repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+export PATH="$T/bin:$PATH" PF_STATE_DIR=$T/state REPO_PATH=$T/repo PF_TEST_LOG=$T/calls.log PF_TEST_DIR=$T PF_ACCOUNT=schans2
+. "$AG/pf-env.sh" || exit 1
+pass=0; fail=0
+check() { if [ "$2" = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $1: got '$2', want '$3'"; fi; }
+pr() { # pr <branch> <pr labels csv> <closing issue labels csv>
+  local pl il
+  pl=$(jq -cn --arg s "$2" '$s | split(",") | map(select(length > 0) | {name: .})')
+  il=$(jq -cn --arg s "$3" '$s | split(",") | map(select(length > 0) | {name: .})')
+  printf '{"data":{"repository":{"pullRequest":{"headRefName":"%s","labels":{"nodes":%s},"closingIssuesReferences":{"nodes":[{"labels":{"nodes":%s}}]}}}}}' "$1" "$pl" "$il" > "$T/pr.json"
+}
+rc() { pf_pr_conflict_risk 42; echo $?; }
+
+pr "fix/issue-7-x" "review-passed,conflict-risk" ""; : > "$T/issue.txt"
+check "T1 label on the PR" "$(rc)" 0
+pr "feat/issue-1266-unplug-pits" "review-passed" "enhancement,conflict-risk"
+check "T2 label on the closed issue only (#1285)" "$(rc)" 0
+pr "feat/issue-9-y" "review-passed" ""; printf 'bug\nconflict-risk\n' > "$T/issue.txt"
+check "T3 label on the branch's issue only (no Closes line)" "$(rc)" 0
+grep -q "issue view 9 " "$T/calls.log"; check "T3 reads issue 9 from the branch name" "$?" 0
+pr "feat/issue-9-y" "review-passed" "bug"; printf 'bug\np2\n' > "$T/issue.txt"
+check "T4 no label anywhere" "$(rc)" 1
+pr "hotfix-no-issue" "review-passed" ""; printf 'conflict-risk\n' > "$T/issue.txt"; : > "$T/calls.log"
+check "T5 branch names no issue: not conflict-risk" "$(rc)" 1
+grep -q "issue view" "$T/calls.log"; check "T5 no issue read without an issue number" "$?" 1
+touch "$T/fail"
+check "T6 GraphQL unreadable is unknown (2), not 'no'" "$(rc)" 2
+rm -f "$T/fail"
+pr "feat/issue-9-y" "review-passed" ""; printf 'conflict-risk\n' > "$T/issue.txt"; touch "$T/issuefail"
+check "T8 the ticket read failing is unknown (2), not 'no'" "$(rc)" 2
+rm -f "$T/issuefail"
+# The branch names its ticket only at its start (review: a later issue-<n> must not win).
+check "T9 fix/issue-12-from-issue-9" "$(pf_branch_issue fix/issue-12-from-issue-9)" 12
+check "T9 issue-12-x" "$(pf_branch_issue issue-12-x)" 12
+check "T9 feat/1300-slug" "$(pf_branch_issue feat/1300-slug)" 1300
+check "T9 chore/tissue-5-x" "$(pf_branch_issue chore/tissue-5-x)" ""
+check "T9 feat/playtest-1300" "$(pf_branch_issue feat/playtest-1300)" ""
+# pf-ship.sh passes the ticket it ships: a free-form branch with a Refs body is still gated.
+pr "feat/playtest-1300" "review-passed" ""; printf 'conflict-risk\n' > "$T/issue.txt"; : > "$T/calls.log"
+check "T10 no ticket from the PR alone: judged by its labels" "$(rc)" 1
+check "T10 the explicit ticket counts" "$(pf_pr_conflict_risk 42 1300; echo $?)" 0
+grep -q "issue view 1300 " "$T/calls.log"; check "T10 reads the explicit ticket" "$?" 0
+# Both callers use the helper and keep no PR-only label check of their own.
+for s in pf-automerge.sh pf-ship.sh; do
+  grep -q "pf_pr_conflict_risk" "$AG/$s"; check "T7 $s uses pf_pr_conflict_risk" "$?" 0
+  grep -vE '^[[:space:]]*#' "$AG/$s" | grep -qE 'grep -qx conflict-risk|name *== *"conflict-risk"'
+  check "T7 $s has no PR-only conflict-risk check" "$?" 1
+done
+grep -q 'cr -eq 0 \] && gh pr edit $n --add-label conflict-risk' "$AG/pf-ship.sh"; check "T7 pf-ship labels only a confirmed risk" "$?" 0
+
+echo "conflict-risk: $pass passed, $fail failed"
+[ $fail -eq 0 ]
