@@ -547,7 +547,7 @@ func _read_mode() -> void:
 	_hill_node = null
 	_hill_rival_inside = false
 	_keep_away_from = null
-	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	var rm: Node = _round_manager()
 	if rm == null or not rm.has_method("active_game_mode_id"):
 		return
 	var node: Node = rm.game_mode_node()
@@ -578,7 +578,7 @@ func _in_hill(who: Node2D, fraction: float = 1.0) -> bool:
 ## Soccer: get behind the ball on the side away from the goal this bot attacks,
 ## then drive through it towards that goal.
 func _soccer_goal() -> Vector2:
-	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	var rm: Node = _round_manager()
 	var team: int = _soccer_node.team_of(rm._players.find(player))
 	var ball_at: Vector2 = _soccer_node.ball.global_position
 	var aim: Vector2 = _soccer_node.attack_point(team)
@@ -597,7 +597,7 @@ func _soccer_goal() -> Vector2:
 ##   has company, and the rest go for the enemy flag (or, if a teammate already
 ##   carries it, escort that teammate home).
 func _ctf_goal() -> Vector2:
-	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	var rm: Node = _round_manager()
 	var slot: int = rm._players.find(player)
 	var team: int = _ctf_node.team_of(slot)
 	var enemy: int = 1 - team
@@ -1790,7 +1790,11 @@ func _ground_kind(collider: Object) -> int:
 	return FOOT_SOLID
 
 ## The side of the nearest clear column above the bot, preferring `side` on
-## a tie; `side` itself if the whole scan is covered.
+## a tie; `side` itself if the whole scan is covered. A column counts only if
+## the bot could stand in it, EDGE_KEEP short of any drop (#1294): Summit's high
+## side platforms end just inside the floor's own ends, so the nearer way round
+## them led to the stage edge, where the edge check held the bot for the rest
+## of the round instead of letting it walk on under the platform to the goal.
 func _way_round_ceiling(side: float) -> float:
 	var me: Vector2 = player.global_position
 	var first: float = side if side != 0.0 else 1.0
@@ -2041,17 +2045,38 @@ func _resting_on_goal() -> bool:
 ## The round manager's current stage, or 0 with none: the key the cached
 ## stage read is valid for (#607).
 func _stage_instance_id() -> int:
-	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	var stage: Node = _current_stage_node()
+	return stage.get_instance_id() if stage != null else 0
+
+## The round manager running this bot's player: the one whose roster holds it,
+## else the first in the group, or null. A manager on its way out (a round torn
+## down this frame, as the scenario suite does between rounds) can still be
+## first in the group, and its stage is gone (#1294).
+func _round_manager() -> Node:
+	var first: Node = null
+	for rm: Node in player.get_tree().get_nodes_in_group("round_manager"):
+		if rm.is_queued_for_deletion():
+			continue
+		if first == null:
+			first = rm
+		var players: Variant = rm.get("_players")
+		if players is Array and (players as Array).has(player):
+			return rm
+	return first
+
+## The round manager's current stage, or null with no round manager or stage.
+func _current_stage_node() -> Node:
+	var rm: Node = _round_manager()
 	if rm == null:
-		return 0
+		return null
 	var stage: Variant = rm.get("_current_stage")
 	if stage == null or not is_instance_valid(stage):
-		return 0
-	return (stage as Node).get_instance_id()
+		return null
+	return stage as Node
 
 ## This bot's roster slot, or 0 with no round manager.
 func _my_slot() -> int:
-	var rm: Node = player.get_tree().get_first_node_in_group("round_manager")
+	var rm: Node = _round_manager()
 	if rm == null:
 		return 0
 	var players: Variant = rm.get("_players")
@@ -2079,9 +2104,16 @@ func _lava_top_uncached() -> float:
 		_lava_looked_up = true
 		_read_stage_id = stage_id
 		lava_lookups += 1
-		for node: Node in player.get_tree().root.find_children("KillZone", "Area2D", true, false):
-			if node.has_method("is_rising"):
-				_lava = node as Area2D
+		# The round's own stage first (#1294): a KillZone elsewhere in the tree (the
+		# scenario suite's Arena fixture, say) is another stage's, and reading that one
+		# left the bot blind to this stage's bounce pads, walls and hazards.
+		var stage: Node = _current_stage_node()
+		for root: Node in ([stage] if stage != null else []) + [player.get_tree().root]:
+			for node: Node in root.find_children("KillZone", "Area2D", true, false):
+				if node.has_method("is_rising"):
+					_lava = node as Area2D
+					break
+			if _lava != null:
 				break
 		_read_stage()
 	if _lava == null:

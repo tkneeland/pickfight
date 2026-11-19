@@ -1393,6 +1393,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_four_bots_finish_rounds_on_mill_1291",
 	"bot_four_bots_finish_rounds_on_updraft_1291",
 	"bot_four_bots_finish_rounds_on_vent_1291",
+	"bot_four_bots_finish_rounds_on_summit_1294",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4604,6 +4605,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _bot_rounds_1291_on("Updraft")
 		"bot_four_bots_finish_rounds_on_vent_1291":
 			return await _bot_rounds_1291_on("Vent")
+		"bot_four_bots_finish_rounds_on_summit_1294":
+			return await _bot_rounds_1291_on("Summit")
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
