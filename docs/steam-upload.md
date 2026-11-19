@@ -20,6 +20,10 @@ one is missing and skips, so tags still pass.
 5. In the GitHub repo settings add:
    - Secrets: `STEAM_USERNAME` (the build account name), `STEAM_CONFIG_VDF` (the base64 text).
    - Variables: `STEAM_APP_ID`, `STEAM_DEPOT_WIN`, `STEAM_DEPOT_MAC`, `STEAM_DEPOT_LINUX`.
+     `STEAM_APP_ID` also goes into every exported build (itch included) as the
+     `pickfight/steam_app_id` setting, replacing the dev default 480 (Spacewar).
+     `tools/check_steam_app_id.sh` does it before export and fails the release
+     on 480, 0 or anything that is not a whole number (#1289). Unset, builds keep 480.
 6. Push a `v*` tag (or run the workflow by hand). The build appears on the
    `beta` branch in Steamworks; promote it to `default` there when ready.
 

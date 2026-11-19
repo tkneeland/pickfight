@@ -49,7 +49,7 @@ The Next Fest demo is the same game with a content slice, chosen by one flag: th
 | 1.2 | Complete identity, tax (W-9 / W-8) and bank forms | owner | 1.1 | todo |
 | 1.3 | Pay Steam Direct app fee, $100 per app (**verify**; recoupable after $1,000 gross revenue, **verify**) | owner | 1.2 | todo |
 | 1.4 | Record the AppID and the depot IDs (one per OS) in the repo as GitHub variables (not secrets) | owner then agent | 1.3 | todo |
-| 1.5 | Do not use the Spacewar test AppID (480) for anything shipped; fine for local GodotSteam tests | agent | none | todo |
+| 1.5 | Do not use the Spacewar test AppID (480) for anything shipped; fine for local GodotSteam tests | agent | none | done (#1289: the release writes `STEAM_APP_ID` into the build and refuses 480; dev checkouts stay on 480) |
 
 ### 2. Store page
 | # | Item | Who | Blocked on | Status |
