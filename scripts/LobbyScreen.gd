@@ -610,12 +610,12 @@ func _update_firewall(join_source: Object) -> void:
 	var url: Variant = join_source.get("join_url") if join_source != null else null
 	var was_fixing: bool = _firewall.state == "fixing" or _firewall.state == "fix_failed"
 	_firewall.poll(Time.get_ticks_msec(), wanted, _url_host(str(url) if url != null else ""))
-	if was_fixing and _firewall.state == "open" and _server != null and _server.has_method("note_join_event"):
-		_server.note_join_event("firewall_fixed")
+	if was_fixing and _firewall.state == "open":
+		_note_join("firewall_fixed")
 	var show_fix: bool = wanted and _firewall.needs_fix()
-	if show_fix and not _firewall_noted and _server != null and _server.has_method("note_join_event"):
+	if show_fix and not _firewall_noted:
 		_firewall_noted = true
-		_server.note_join_event("firewall")
+		_note_join("firewall")
 	if show_fix:
 		var key: String = {"fixing": "FIREWALL_FIXING", "fix_failed": "FIREWALL_FIX_FAILED"}.get(_firewall.state, "FIREWALL_BLOCKED")
 		_firewall_note.text = tr(key)
@@ -623,6 +623,11 @@ func _update_firewall(join_source: Object) -> void:
 		_firewall_button.disabled = _firewall.state == "fixing"
 	_firewall_note.visible = show_fix
 	_firewall_button.visible = show_fix
+
+## Counts one join step for telemetry (#1271), when the server counts them.
+func _note_join(kind: String) -> void:
+	if _server != null and _server.has_method("note_join_event"):
+		_server.note_join_event(kind)
 
 ## "192.168.1.4" from "http://192.168.1.4:8080/" ("" when there is none).
 static func _url_host(url: String) -> String:

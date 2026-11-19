@@ -43,6 +43,7 @@ var _thread: Thread
 var _job: String = "" # "check" or "fix", what `_thread` runs
 var _next_check_msec: int = 0
 var _after_fix: bool = false # the check running now follows a fix
+var _checked_ip: String = "" # the join address the last check judged
 var _ports: PackedInt32Array = PackedInt32Array()
 
 ## A new lobby: check again straight away, whatever was known.
@@ -70,7 +71,9 @@ func poll(now_msec: int, wanted: bool, ip: String) -> bool:
 			_start("check", ip) # see what the fix changed, now
 	if not supported or not wanted or _thread != null:
 		return state != before
-	if state != "open" and state != "fixing" and now_msec >= _next_check_msec:
+	# Open stays open for this address; a new join address (another network) is checked again.
+	var due: bool = (state != "open" or ip != _checked_ip) and now_msec >= _next_check_msec
+	if due and state != "fixing":
 		_next_check_msec = now_msec + RECHECK_MSEC
 		_start("check", ip)
 	return state != before
@@ -85,14 +88,18 @@ func fix(ports: PackedInt32Array) -> bool:
 	_start("fix", "")
 	return true
 
-## Waits for a running job (scenarios, and quitting with a check in flight).
+## Waits for a running check (scenarios, and quitting with one in flight: a few
+## seconds at most). A fix waits on the Windows admin prompt for as long as nobody
+## answers it, so quitting never waits for one; that thread is left to end on its own.
 func finish_now() -> void:
-	if _thread != null:
+	if _thread != null and _job == "check":
 		_thread.wait_to_finish()
 		_thread = null
 
-func _start(job: String, _ip: String) -> void:
+func _start(job: String, ip: String) -> void:
 	_job = job
+	if job == "check":
+		_checked_ip = ip
 	_after_fix = job == "check" and state == "fixing"
 	var script: String = check_script(exe_path) if job == "check" else fix_script(exe_path, _ports)
 	var runner: Callable = check_runner if job == "check" else fix_runner
@@ -131,6 +138,8 @@ static func evaluate(report: Dictionary, ip: String) -> Dictionary:
 	var name: String = "Domain" if category == "DomainAuthenticated" else category
 	if not name in ["Public", "Private", "Domain"]:
 		return {"state": "unknown", "profile": ""}
+	if report.get("rules") == null:
+		return {"state": "unknown", "profile": name} # the rules query failed: no verdict, not "no rules"
 	var firewall: Variant = report.get("firewall", {})
 	var settings: Variant = (firewall as Dictionary).get(name) if firewall is Dictionary else null
 	if not settings is Dictionary:
@@ -177,17 +186,19 @@ static func _ps_quote(text: String) -> String:
 
 ## Prints one JSON line: the connected networks (category and IPv4 addresses),
 ## each firewall profile's on/off and default inbound action, and the enabled
-## inbound rules for `exe` (action, profiles, protocol). The firewall keeps paths
-## lower-cased and `-Program` matches case-sensitively, so every application
-## filter is compared case-insensitively here, with %VARS% expanded.
+## inbound rules for `exe` (action, profiles, protocol), or null rules when that
+## query fails. The firewall keeps paths lower-cased and `-Program` matches
+## case-sensitively, so every application filter is compared case-insensitively
+## here, with %VARS% expanded. The active store merges local and Group Policy rules
+## and settings, which is what Windows enforces.
 static func check_script(exe: String) -> String:
 	return "\n".join([
 		"$ErrorActionPreference = 'SilentlyContinue'",
 		"$want = [IO.Path]::GetFullPath(%s)" % _ps_quote(exe),
 		"$nets = @(Get-NetConnectionProfile | ForEach-Object { @{ category = [string]$_.NetworkCategory; ips = @(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 | ForEach-Object { $_.IPAddress }) } })",
 		"$fw = @{}",
-		"Get-NetFirewallProfile | ForEach-Object { $fw[[string]$_.Name] = @{ on = [string]$_.Enabled; def = [string]$_.DefaultInboundAction } }",
-		"$rules = @(Get-NetFirewallApplicationFilter | Where-Object { $_.Program -and [Environment]::ExpandEnvironmentVariables($_.Program) -ieq $want } | Get-NetFirewallRule | Where-Object { [string]$_.Direction -eq 'Inbound' -and [string]$_.Enabled -eq 'True' } | ForEach-Object { @{ action = [string]$_.Action; profile = [string]$_.Profile; protocol = [string]($_ | Get-NetFirewallPortFilter).Protocol } })",
+		"Get-NetFirewallProfile -PolicyStore ActiveStore | ForEach-Object { $fw[[string]$_.Name] = @{ on = [string]$_.Enabled; def = [string]$_.DefaultInboundAction } }",
+		"try { $rules = @(Get-NetFirewallApplicationFilter -PolicyStore ActiveStore -ErrorAction Stop | Where-Object { $_.Program -and [Environment]::ExpandEnvironmentVariables($_.Program) -ieq $want } | Get-NetFirewallRule | Where-Object { [string]$_.Direction -eq 'Inbound' -and [string]$_.Enabled -eq 'True' } | ForEach-Object { @{ action = [string]$_.Action; profile = [string]$_.Profile; protocol = [string]($_ | Get-NetFirewallPortFilter).Protocol } }) } catch { $rules = $null }",
 		"@{ nets = $nets; firewall = $fw; rules = $rules } | ConvertTo-Json -Compress -Depth 5",
 	])
 

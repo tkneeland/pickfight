@@ -65794,6 +65794,7 @@ func _scenario_ctf_carrier_reaching_base_in_capture_pause_scores_1269() -> Array
 	return failures
 # --- Couch phones blocked by Windows Firewall; the internet QR fits the frame (#1268)
 const LanFirewallScript1268 := preload("res://scripts/LanFirewall.gd")
+const LobbyScreenScript1268 := preload("res://scripts/LobbyScreen.gd")
 ## A check's report as the PowerShell script prints it: one network, the firewall on
 ## (or off) everywhere with the default inbound action, and `rules` for this executable.
 func _firewall_report_1268(category: String, rules: Array, on: String = "True", ips: Array = ["192.168.1.20"]) -> Dictionary:
@@ -65822,6 +65823,7 @@ func _scenario_lan_firewall_verdicts_and_scripts_1268() -> Array[String]:
 		["a domain network", _firewall_report_1268("DomainAuthenticated", [{"action": "Allow", "profile": "Domain", "protocol": "TCP"}]), "open", "Domain"],
 		["single items, not arrays (old ConvertTo-Json)", {"nets": {"category": "Public", "ips": ip}, "firewall": _firewall_report_1268("Public", [])["firewall"], "rules": block_public}, "blocked", "Public"],
 		["an empty report (PowerShell failed)", {}, "unknown", ""],
+		["the rules query failed (null rules), not \"no rules\"", {"nets": [{"category": "Public", "ips": [ip]}], "firewall": _firewall_report_1268("Public", [])["firewall"], "rules": null}, "unknown", "Public"],
 	]
 	for c: Array in cases:
 		var got: Dictionary = LanFirewallScript1268.evaluate(c[1], ip)
@@ -65925,6 +65927,17 @@ func _scenario_couch_lobby_firewall_note_and_allow_button_1268() -> Array[String
 	await _await_ticks(2)
 	if button.visible or note.visible:
 		failures.append("the note stays after phones were let in")
+	# Open stays open: no more PowerShell for the same address.
+	firewall.poll(Time.get_ticks_msec() + 3600000, true, LobbyScreenScript1268._url_host(str(server.join_url)))
+	if firewall.busy():
+		firewall.finish_now()
+		failures.append("an open firewall was checked again for the same address")
+	# A new join address (another network) is checked again.
+	firewall.poll(Time.get_ticks_msec() + 3600000, true, "198.51.100.4")
+	if not firewall.busy():
+		failures.append("a new join address was not checked again")
+	firewall.finish_now()
+	firewall.poll(Time.get_ticks_msec() + 3600000, true, "198.51.100.4")
 	if int(fake.get("fixes", 0)) != 2:
 		failures.append("%d fixes ran for two presses" % int(fake.get("fixes", 0)))
 	var joins: Dictionary = server.join_events()
