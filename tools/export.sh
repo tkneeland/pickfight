@@ -17,6 +17,19 @@ if [ ! -d .godot/imported ]; then
 	"$GODOT" --headless --path . --import
 fi
 
+# The shipped Steam app ID (#1289, docs/steam-readiness.md 1.5): $STEAM_APP_ID for the full game, $STEAM_DEMO_APP_ID
+# for the demo (Steam gives a demo its own app ID). Set, it goes into project.godot for this export only and the
+# file is put back afterwards; 480, 0 or a malformed ID stops the export. Unset, the build keeps the dev 480.
+if [ "$TARGET" = demo ]; then APP_ID="${STEAM_DEMO_APP_ID:-}"; else APP_ID="${STEAM_APP_ID:-}"; fi
+if [ -n "$APP_ID" ]; then
+	cp project.godot project.godot.export-backup
+	trap 'mv -f project.godot.export-backup project.godot' EXIT
+	bash tools/check_steam_app_id.sh project.godot "$APP_ID" >/dev/null
+	echo "Steam app ID $APP_ID for this export"
+else
+	echo "No $([ "$TARGET" = demo ] && echo STEAM_DEMO_APP_ID || echo STEAM_APP_ID) set: this build keeps the dev Steam app ID 480 (do not ship it)" >&2
+fi
+
 export_one() {
 	local preset="$1" out="$2"
 	mkdir -p "$(dirname "$out")"

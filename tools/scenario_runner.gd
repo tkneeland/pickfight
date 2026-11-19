@@ -66098,6 +66098,8 @@ func _bash_1289() -> String:
 func _steam_app_id_run_1289(project_text: String, app_id: String) -> Dictionary:
 	var path: String = OS.get_temp_dir().path_join("pf_steam_app_id_%d_%d.godot" % [OS.get_process_id(), Time.get_ticks_usec()]).replace("\\", "/")
 	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return {"code": -2, "out": "cannot write %s" % path, "last": "", "after": ""}
 	file.store_string(project_text)
 	file.close()
 	var args: PackedStringArray = [ProjectSettings.globalize_path("res://tools/check_steam_app_id.sh").replace("\\", "/"), path]
@@ -66107,7 +66109,10 @@ func _steam_app_id_run_1289(project_text: String, app_id: String) -> Dictionary:
 	var code: int = OS.execute(_bash_1289(), args, out, true)
 	var after: String = FileAccess.get_file_as_string(path)
 	DirAccess.remove_absolute(path)
-	return {"code": code, "out": (str(out[0]) if not out.is_empty() else "").strip_edges(), "after": after}
+	var text: String = (str(out[0]) if not out.is_empty() else "").strip_edges()
+	# "last" is the script's answer; under GitHub Actions an unset ID adds a ::warning:: line before it.
+	var lines: PackedStringArray = text.split("\n", false)
+	return {"code": code, "out": text, "last": lines[lines.size() - 1].strip_edges() if not lines.is_empty() else "", "after": after}
 func _scenario_release_sets_steam_app_id_never_480_1289() -> Array[String]:
 	var failures: Array[String] = []
 	# The release workflow runs the guard on project.godot with the repo variable, before import and export.
@@ -66128,14 +66133,26 @@ func _scenario_release_sets_steam_app_id_never_480_1289() -> Array[String]:
 	# Unset (no argument, or the empty value an unset variable expands to): nothing changes.
 	for unset: String in ["<none>", ""]:
 		var got: Dictionary = _steam_app_id_run_1289(project, unset)
-		if got["code"] == -1:
-			failures.append("bash could not be started to run the guard")
+		# -1: no bash at all; 127: a bash that could not open the script (WSL's, on Windows without Git Bash).
+		if got["code"] in [-1, -2, 127]:
+			failures.append("bash (%s) could not run the guard: exit %d, %s (on Windows set PF_BASH to Git Bash)" % [_bash_1289(), got["code"], got["out"]])
 			_scenario_completed = true
 			return failures
-		if got["code"] != 0 or got["out"] != "unset" or got["after"] != project:
+		if got["code"] != 0 or got["last"] != "unset" or got["after"] != project:
 			failures.append("unset app ID '%s': exit %d, '%s', file changed %s" % [unset, got["code"], got["out"], got["after"] != project])
-	# Refused, and nothing written: Spacewar, zero, not a number, too long.
-	for bad: String in ["480", "0480", "0", "12ab", "-5", "99999999999"]:
+	# Under GitHub Actions an unset ID warns (a tag shipping 480 to itch is visible) and still changes nothing.
+	var had_ci: bool = OS.has_environment("GITHUB_ACTIONS")
+	var old_ci: String = OS.get_environment("GITHUB_ACTIONS")
+	OS.set_environment("GITHUB_ACTIONS", "true")
+	var warned: Dictionary = _steam_app_id_run_1289(project, "")
+	if had_ci:
+		OS.set_environment("GITHUB_ACTIONS", old_ci)
+	else:
+		OS.unset_environment("GITHUB_ACTIONS")
+	if warned["code"] != 0 or warned["last"] != "unset" or not str(warned["out"]).contains("::warning::") or warned["after"] != project:
+		failures.append("unset app ID under GitHub Actions: exit %d, '%s'" % [warned["code"], warned["out"]])
+	# Refused, and nothing written: Spacewar, zero, leading zeros, not a number, beyond 32 bits.
+	for bad: String in ["480", "0480", "0002345670", "0", "12ab", "-5", "4294967296", "99999999999"]:
 		var got: Dictionary = _steam_app_id_run_1289(project, bad)
 		if got["code"] != 1 or got["after"] != project:
 			failures.append("app ID '%s' was not refused (exit %d, file changed %s)" % [bad, got["code"], got["after"] != project])
@@ -66143,8 +66160,16 @@ func _scenario_release_sets_steam_app_id_never_480_1289() -> Array[String]:
 		failures.append("refusing 480 does not say why")
 	# A real ID: written to steam_app_id and nowhere else.
 	var real: Dictionary = _steam_app_id_run_1289(project, "2345670")
-	if real["code"] != 0 or real["out"] != "2345670" or real["after"] != project.replace("steam_app_id=480", "steam_app_id=2345670"):
+	if real["code"] != 0 or real["last"] != "2345670" or real["after"] != project.replace("steam_app_id=480", "steam_app_id=2345670"):
 		failures.append("app ID 2345670: exit %d, '%s', file now %s" % [real["code"], real["out"], real["after"]])
+	var top: Dictionary = _steam_app_id_run_1289(project, "4294967295")
+	if top["code"] != 0 or top["last"] != "4294967295":
+		failures.append("the largest 32-bit app ID 4294967295 was refused (exit %d, '%s')" % [top["code"], top["out"]])
+	# tools/export.sh (local and demo exports) uses the guard too, the demo with its own app ID, and restores project.godot.
+	var export_sh: String = FileAccess.get_file_as_string("res://tools/export.sh")
+	for want: String in ["tools/check_steam_app_id.sh project.godot \"$APP_ID\"", "STEAM_DEMO_APP_ID", "trap 'mv -f project.godot.export-backup project.godot' EXIT"]:
+		if not export_sh.contains(want):
+			failures.append("tools/export.sh lacks \"%s\"" % want)
 	# A project with no steam_app_id line to set fails rather than shipping without one.
 	var missing: Dictionary = _steam_app_id_run_1289("[pickfight]\nrelay_url=\"x\"\n", "2345670")
 	if missing["code"] != 1:

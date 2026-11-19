@@ -23,7 +23,10 @@ one is missing and skips, so tags still pass.
      `STEAM_APP_ID` also goes into every exported build (itch included) as the
      `pickfight/steam_app_id` setting, replacing the dev default 480 (Spacewar).
      `tools/check_steam_app_id.sh` does it before export and fails the release
-     on 480, 0 or anything that is not a whole number (#1289). Unset, builds keep 480.
+     on 480, 0, leading zeros or a value above 4294967295 (#1289). Unset, builds keep 480
+     and the run shows a warning. The Next Fest demo has its own app ID: export it with
+     `STEAM_DEMO_APP_ID=<id> tools/export.sh demo`. With the real ID, itch players who do
+     not own the game on Steam get no Steam features (invites, Steam name).
 6. Push a `v*` tag (or run the workflow by hand). The build appears on the
    `beta` branch in Steamworks; promote it to `default` there when ready.
 
