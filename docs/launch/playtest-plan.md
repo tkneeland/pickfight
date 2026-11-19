@@ -31,7 +31,7 @@ Do in order. Tick each when done.
 - [ ] Remember: a Playtest is public with no NDA by default (playbook). Do not put anything on it you would not show the public.
 - [ ] Remember: a new app can't request keys for its first 3 weeks (playbook). Do not plan on keys for the first batch.
 - [ ] Mention the AI-assisted translations in Steam's AI disclosure (owner decision Oct 18).
-- [ ] Set the `pickfight/steam_app_id` project setting to the real ID for the shipped build. It defaults to 480 (Spacewar). See `docs/steam-readiness.md`. Whether the Playtest uses its own app ID or the main one: TODO, check Valve's docs.
+- [ ] Set the `STEAM_APP_ID` repo variable to the real app ID (and `STEAM_DEMO_APP_ID` in the shell when exporting the demo with `tools/export.sh demo`): builds then carry it instead of the dev default 480 (Spacewar), and 480 is refused (#1289). See `docs/steam-readiness.md`. Whether the Playtest uses its own app ID or the main one: TODO, check Valve's docs.
 
 ## 2. Which build ships
 
