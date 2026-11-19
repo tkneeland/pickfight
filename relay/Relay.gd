@@ -159,7 +159,7 @@ const STATS_MAX_PING_MSEC: int = 60000
 ## (at most STATS_MAX_PING_ENTRIES of avg/p95/max/n). Keep the key lists equal to
 ## MatchStats.CTF_EVENT_KEYS / JOIN_EVENT_KEYS.
 const STATS_CTF_KEYS: PackedStringArray = ["captures", "takes", "drops", "drops_in_own_base", "void_returns", "timed_returns", "carrier_in_base_during_pause", "carried_in_base_at_end"]
-const STATS_JOIN_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet"]
+const STATS_JOIN_KEYS: PackedStringArray = ["lan", "relay", "help", "nudge", "internet", "firewall", "firewall_fixed"]
 const STATS_RELAY_PING_FIELDS: PackedStringArray = ["avg", "p95", "max", "n"]
 const STATS_MAX_EVENT_COUNT: int = 100000
 ## Records allowed per IP per hour.
