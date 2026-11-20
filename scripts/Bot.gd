@@ -196,6 +196,12 @@ const WAIT_PLACE: float = 100.0
 ## pickup the bot drops it for PICKUP_IGNORE_SEC and goes back to fighting.
 const PICKUP_GIVE_UP_SEC: float = 10.0
 const PICKUP_IGNORE_SEC: float = 90.0
+## Issue #1296: nor does it wait out the 10 s while getting no nearer: no
+## PICKUP_GAIN closer for PICKUP_STALL_SEC and the pickup is dropped too. On
+## Summit, bots on a step went for the weapons on the high platforms, which
+## they could not jump to, and lost a fifth of the round between them.
+const PICKUP_STALL_SEC: float = 4.0
+const PICKUP_GAIN: float = 40.0
 ## Nearer than this to an edge, with nowhere to go that way, the bot steps
 ## back from it.
 const EDGE_KEEP: float = 75.0
@@ -367,6 +373,10 @@ var _soft_pass_left: float = 0.0
 var _clock: float = 0.0
 var _chasing: Node2D = null
 var _chase_since: float = 0.0
+## The nearest the bot has come to the pickup it chases, and when it last got
+## PICKUP_GAIN nearer (#1296).
+var _chase_closest: float = INF
+var _chase_gained_at: float = 0.0
 var _ignored_pickups: Dictionary = {}
 ## The side the bot is fleeing a danger to, kept while it flees so a bot
 ## right under a rock's middle does not dither from side to side.
@@ -823,12 +833,18 @@ func _choose_goal() -> void:
 			goal = me
 	elif chase_pickup != null:
 		goal = chase_pickup.global_position
+		var gap: float = me.distance_to(goal)
 		if chase_pickup != _chasing:
 			_chasing = chase_pickup
 			_chase_since = _clock
-		elif _clock - _chase_since > PICKUP_GIVE_UP_SEC:
+			_chase_closest = gap
+			_chase_gained_at = _clock
+		elif _clock - _chase_since > PICKUP_GIVE_UP_SEC or _clock - _chase_gained_at > PICKUP_STALL_SEC:
 			_ignored_pickups[chase_pickup.get_instance_id()] = _clock + PICKUP_IGNORE_SEC
 			_chasing = null
+		elif gap < _chase_closest - PICKUP_GAIN:
+			_chase_closest = gap
+			_chase_gained_at = _clock
 	elif enemy != null:
 		_chasing = null
 		_target = enemy
