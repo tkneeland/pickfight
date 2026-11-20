@@ -74,6 +74,7 @@ export HIVE_ACCOUNT HIVE_DIR
 : "${HANDOFF_WEEKLY_USED:=85}" "${HANDOFF_HARD_WEEKLY_USED:=95}" "${RESET_GRACE_HOURS:=24}" "${WORKER_TARGET:=${DAY_AGENTS:-3}}" "${PACE_SLACK:=10}" "${FIVE_H_SLOW_USED:=70}" "${FIVE_H_STOP_USED:=90}"
 : "${PEER_QUEUE_MIN:=5}" "${BEACON_FRESH_HOURS:=6}" "${DIGEST_HOUR:=9}" "${QUIET_START:=${NIGHT_START:-20}}" "${QUIET_END:=${NIGHT_END:-9}}"   # NIGHT_*/DAY_AGENTS: pre-pace confs
 : "${MAIN_BRANCH:=main}" "${MERGE_METHOD:=merge}" "${DISCORD:=0}" "${MIN_WEEKLY_REMAINING_FOR_TICKETS:=0}" "${SUCCESSION_RANK:=9}"
+: "${STUDIO_REPO:=}" "${HIVE_STUDIO_CACHE:=$HOME/.claude/hive/studio}"
 : "${TRACKER:=github}" "${PRIVATE:=0}" "${SINGLE_ACCOUNT:=0}" "${SCOPE_FILTER:=}" "${WATCH_HOOKS:=}" "${CLOSEOUT_STATUS:=ready-for-human}"
 : "${PROJECT_NAME:=}" "${OWNER:=}" "${DECISIONS_ISSUE:=}" "${REQUIRE_REVIEW_PASS:=1}" "${TRUSTED_TICKET_AUTHORS:=}" "${RESERVE:=0}"
 : "${DISCORD_BUGS_NAME:=change-requests}" "${DISCORD_DEV_NAME:=hive}" "${DISCORD_DEV_ROLE:=Dev}" "${TICKETMAKER_CHANNEL:=}"
@@ -207,6 +208,72 @@ hive_mark_review() { # <repo-slug> <pr> passed|blocked|clear
   esac
 }
 hive_slug_of() { git -C "$1" remote get-url origin 2>/dev/null | sed -E 's#^.*[:/]([^/:]+/[^/]+)$#\1#; s#\.git$##'; }
+
+# ---- studio-wide settings (STUDIO_REPO, edited from the hive hub) ----------------------------------------
+# The cache is $HIVE_STUDIO_CACHE (~/.claude/hive/studio), shared by every game on this machine. Reads never call GitHub.
+HIVE_STUDIO_FILES="hive/account-limits.conf"
+# hive_studio_sync: refresh the cached studio files from GitHub at most every 5 min (hive-beacon.sh calls it). A failed
+# fetch keeps the last copy; a file the studio does not have is cached empty.
+hive_studio_sync() {
+  [ -n "$STUDIO_REPO" ] || return 0
+  local p f t m stamp=$HIVE_STUDIO_CACHE/.synced-at
+  mkdir -p "$HIVE_STUDIO_CACHE" || return 0
+  m=$(hive_mtime "$stamp" || echo 0)
+  [ $(( $(date +%s) - ${m:-0} )) -lt 300 ] && return 0
+  touch "$stamp"
+  for p in $HIVE_STUDIO_FILES; do
+    f=$HIVE_STUDIO_CACHE/${p##*/}
+    if t=$(gh api "repos/$STUDIO_REPO/contents/$p" -H "Accept: application/vnd.github.raw+json" 2>&1); then
+      printf '%s\n' "$t" > "$f.tmp.$$" && mv "$f.tmp.$$" "$f"
+    else
+      case $t in *"Not Found"*|*"HTTP 404"*) : > "$f";; esac
+    fi
+  done
+  return 0
+}
+# hive_limits <handle>: sets l_5h (FIVE_H_STOP_USED) and l_wmin (MIN_WEEKLY_REMAINING_FOR_TICKETS) for that account. The
+# hub's studio hive/account-limits.conf ("<handle> five_h=<used %> weekly=<used %>", either key optional) wins; then the
+# account conf, then _shared.conf, then 90 and 0. weekly=W is stored as l_wmin = 100 - W. No forks in the common case.
+hive_limits() {
+  local h k v kv rest f=$HIVE_STUDIO_CACHE/account-limits.conf; l_5h=""; l_wmin=""
+  if [ -n "$STUDIO_REPO" ] && [ -s "$f" ]; then
+    while read -r h rest; do
+      case $h in ''|'#'*) continue;; esac
+      [ "$h" = "$1" ] || continue   # the hub writes the roster spelling, which is the conf name
+      for kv in $rest; do
+        k=${kv%%=*}; v=${kv#*=}
+        case $v in ''|*[!0-9]*) continue;; esac
+        [ "$v" -ge 1 ] && [ "$v" -le 100 ] || continue
+        case $k in five_h) l_5h=$v;; weekly) l_wmin=$(( 100 - v ));; esac
+      done
+    done < "$f"
+  fi
+  if [ "$1" = "$HIVE_ACCOUNT" ]; then
+    [ -n "$l_5h" ] || l_5h=$FIVE_H_STOP_USED_CONF; [ -n "$l_wmin" ] || l_wmin=$MIN_WEEKLY_REMAINING_FOR_TICKETS_CONF
+    return 0
+  fi
+  for k in FIVE_H_STOP_USED MIN_WEEKLY_REMAINING_FOR_TICKETS; do
+    case $k in FIVE_H_STOP_USED) [ -n "$l_5h" ] && continue;; *) [ -n "$l_wmin" ] && continue;; esac
+    v=$(hive_conf_of "$1" "$k")
+    case $v in ''|*[!0-9]*) v=$(sed -n "s/^$k=//p" "$HIVE_DIR/accounts/_shared.conf" 2>/dev/null | sed 's/[[:space:]]*#.*//; s/^"//; s/"$//' | head -n 1);; esac
+    case $v in ''|*[!0-9]*) case $k in FIVE_H_STOP_USED) v=90;; *) v=0;; esac;; esac
+    case $k in FIVE_H_STOP_USED) l_5h=$v;; *) l_wmin=$v;; esac
+  done
+  return 0
+}
+# hive_weekly_capped <used7> <weekly reset epoch> <min remaining>: 0 when the account is at its weekly ticket limit, i.e. its
+# remaining weekly (100 - used7) is at or below <min remaining>, outside the last RESET_GRACE_HOURS before its weekly reset
+# (that window spends what is left). Unknown used7: not capped. Unknown reset: capped.
+hive_weekly_capped() {
+  case $1 in ''|*[!0-9]*) return 1;; esac
+  [ $(( 100 - $1 )) -le "${3:-0}" ] || return 1
+  case $2 in ''|*[!0-9]*|0) return 0;; esac
+  [ $(( $2 - $(date +%s) )) -gt $(( RESET_GRACE_HOURS * 3600 )) ]
+}
+# this account's own limits: the hub's values replace the conf's (a 5h slow-down above the stop is pulled down to it)
+FIVE_H_STOP_USED_CONF=$FIVE_H_STOP_USED MIN_WEEKLY_REMAINING_FOR_TICKETS_CONF=$MIN_WEEKLY_REMAINING_FOR_TICKETS
+hive_limits "$HIVE_ACCOUNT"; FIVE_H_STOP_USED=$l_5h MIN_WEEKLY_REMAINING_FOR_TICKETS=$l_wmin
+[ "$FIVE_H_SLOW_USED" -gt "$FIVE_H_STOP_USED" ] 2>/dev/null && FIVE_H_SLOW_USED=$FIVE_H_STOP_USED
 
 # ---- budget, pace ----------------------------------------------------------------------------------------
 hive_weekly_used()  { jq -r '.rate_limits.seven_day.used_percentage // 0 | floor' "$HIVE_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }

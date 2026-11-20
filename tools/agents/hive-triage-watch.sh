@@ -37,11 +37,13 @@ hive_ticket_in_progress() {
   case " $2 " in *" $1 "*) return 0;; esac
   git -C "$ROOT" branch -a --list "*issue-$1-*" "*/$1-*" | grep -q .
 }
-# hive_dev_throttled: the beacon in hive_beacon's b_* vars shows an account that must sit idle (rules 2, 3): 5h at the stop with
-# the window still open, or weekly at the handoff level with the reset more than RESET_GRACE_HOURS away. Unknown numbers do not exempt.
+# hive_dev_throttled <handle>: the beacon in hive_beacon's b_* vars shows an account that must sit idle (rules 2, 3, 5): 5h at
+# its own stop (hive_limits) with the window still open, weekly at the handoff level or at its own weekly ticket limit with the
+# reset more than RESET_GRACE_HOURS away. Unknown numbers do not exempt.
 hive_dev_throttled() {
-  local r
-  if [ -n "$b_p5" ] && [ "$b_p5" -ge "${FIVE_H_STOP_USED:-90}" ] && [ -n "$b_r5" ]; then
+  local r; hive_limits "$1"
+  if [ -n "$b_used" ] && [ -n "$b_reset" ] && r=$(hive_iso_to_epoch "$b_reset") && hive_weekly_capped "$b_used" "$r" "$l_wmin"; then return 0; fi
+  if [ -n "$b_p5" ] && [ "$b_p5" -ge "$l_5h" ] && [ -n "$b_r5" ]; then
     r=$(hive_iso_to_epoch "$b_r5") && [ "$r" -gt "$(date +%s)" ] && return 0
   fi
   if [ -n "$b_used" ] && [ "$b_used" -ge "${HANDOFF_WEEKLY_USED:-85}" ] && [ -n "$b_reset" ]; then
@@ -83,7 +85,7 @@ hive_dev_idle_check() {
     [ $((now - t)) -ge 7200 ] && ok=1
     [ "$stage" = 1 ] && [ "$t" -ge "$ca" ] && [ "$idle" -ge 7200 ] && ok=1
     [ "$ok" = 1 ] || continue
-    hive_beacon "$h"; hive_dev_throttled && continue
+    hive_beacon "$h"; hive_dev_throttled "$h" && continue
     hive_dev_waiting "$h" "$1" "$2" "$3" || continue
     stage=1; [ "$idle" -ge 7200 ] && stage=2
     echo "$now $stage" > "$HIVE_STATE/.dev-idle-$h"

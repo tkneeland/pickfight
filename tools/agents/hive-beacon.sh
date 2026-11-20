@@ -17,6 +17,7 @@
 # the snapshot with one jq call, and gets the pace state and last window from one hive-pace.sh process; its output is unchanged.
 _s=$0; case $_s in */*) _s=${_s%/*};; *) _s=.;; esac
 . "$_s/hive-env.sh" || exit 1
+hive_studio_sync   # the hub's studio settings (ticket limits), at most every 5 min
 [ "$SINGLE_ACCOUNT" = 1 ] && exit 0
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >> "$HIVE_STATE/beacon.log"; }
 snap=$HIVE_STATE/usage-snapshot.json
