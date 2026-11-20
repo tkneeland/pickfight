@@ -63,12 +63,13 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   [ $(( $(date +%s) - $(hive_mtime "$LOCK" || echo 0) )) -gt 60 ] && { rmdir "$LOCK" 2>/dev/null; mkdir "$LOCK" 2>/dev/null; } || LOCKED=1
 fi
 [ -z "${LOCKED:-}" ] && trap 'rmdir "$LOCK" 2>/dev/null' EXIT
-# start_unix <kind>: macOS/Linux supervisor in a detached screen; any live session named hive-<kind> or hive-<kind>-<account> counts
+# start_unix <kind>: macOS/Linux supervisor in a detached screen named by hive_screen. Only this repo's name counts: a
+# hive-<kind>-<account> from before is another game's (or an old one, whose supervisor then loses the pid lock and exits).
 start_unix() {
   local kind=$1
   if command -v screen >/dev/null 2>&1; then
-    screen -ls 2>/dev/null | grep -Eq "[0-9]\.hive-$kind(-$HIVE_ACCOUNT)?[[:space:]]" && return 0
-    screen -dmS "hive-$kind-$HIVE_ACCOUNT" bash "$AG/windows/hive-supervise.sh" "$kind" >/dev/null 2>&1
+    screen -ls 2>/dev/null | grep -Fq ".$(hive_screen "$kind")	" && return 0
+    screen -dmS "$(hive_screen "$kind")" bash "$AG/windows/hive-supervise.sh" "$kind" >/dev/null 2>&1
   else
     nohup bash "$AG/windows/hive-supervise.sh" "$kind" >/dev/null 2>&1 &
     keep $!
