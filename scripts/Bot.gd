@@ -127,8 +127,8 @@ const PICKAXE_PATH: String = "res://resources/pickaxe.tres"
 
 ## Issue #176: what the ground under a point is. NONE is open air, a hazard,
 ## or ground about to go; UNSTABLE is ground that will not last (a crumbling
-## ledge, a collapsing floor, a see-saw); PAD is a level bounce pad and
-## TILTED_PAD a sloped one (#1296).
+## ledge, a collapsing floor, a see-saw); PAD is a level bounce pad set in the
+## bot's own floor and OTHER_PAD any other bounce pad (#1296).
 const FOOT_NONE: int = 0
 const FOOT_UNSTABLE: int = 1
 const FOOT_SOLID: int = 2
@@ -136,10 +136,13 @@ const FOOT_PAD: int = 3
 ## Ground that moves under a rider (a ferry, a see-saw, a turning sail): only
 ## stepped onto from solid ground once desperate (#409), and not fled once on.
 const FOOT_RIDE: int = 4
-## A bounce pad tilted LEVEL_PAD_TILT or more (#1296): it throws the bot off
-## along its slope, so it is taken only on purpose or once desperate. PAD is a
-## level one, which a bot walks across (and still gets off, never stays on).
-const FOOT_TILTED_PAD: int = 5
+## A bounce pad tilted LEVEL_PAD_TILT or more, or not set in the floor the bot
+## is on (#1296): it throws the bot off along its slope, or back up to the ledge
+## it dropped from, so it is taken only on purpose or once desperate. PAD is a
+## level one in the bot's floor, which it walks across (and still gets off).
+const FOOT_OTHER_PAD: int = 5
+var _own_floor_frame: int = -1
+var _own_floor_value: float = NAN
 ## Ground this far below the body's edge counts as under its feet.
 const FOOT_SLACK: float = 20.0
 ## The step between the points checked for ground along the way ahead.
@@ -241,6 +244,9 @@ const LEVEL_PAD_TILT: float = 0.09
 ## is on or about to land on is. A body on the floor beside a pad sits about
 ## 16 px above the pad's middle; one bouncing on it, up to about 90.
 const PAD_FLEE_HEIGHT: float = 120.0
+## Off a level pad, solid ground the way the bot was going is taken over the
+## nearest if it is no more than this further (#1296).
+const PAD_FLEE_AHEAD: float = 120.0
 ## Near the launch spot the bot vaults short (PAD_SLOW_SCALE of its push), so
 ## it lands on the spot instead of sailing over the pad; over it, within
 ## PAD_DROP and slower across than PAD_DROP_SPEED, it holds its head up so its
@@ -351,6 +357,8 @@ var _anchor: Vector2 = Vector2.ZERO
 var _anchor_length: float = 0.1
 ## How far out (px) the push may send the head: INF but on a thin platform (#1296).
 var _anchor_cap: float = INF
+## Whether the anchor being planted is for height (a climb or pogo), not travel (#1296).
+var _anchor_rising: bool = false
 ## True when the last anchor search found nothing to push off: the bot is in
 ## the air, and holds the head low and behind instead of pushing.
 var _airborne: bool = true
@@ -380,6 +388,8 @@ var _chase_since: float = 0.0
 ## PICKUP_GAIN nearer (#1296).
 var _chase_closest: float = INF
 var _chase_gained_at: float = 0.0
+## When the bot last thought about chasing a pickup (#1296).
+var _chase_seen_at: float = -INF
 var _ignored_pickups: Dictionary = {}
 ## The side the bot is fleeing a danger to, kept while it flees so a bot
 ## right under a rock's middle does not dither from side to side.
@@ -837,17 +847,26 @@ func _choose_goal() -> void:
 	elif chase_pickup != null:
 		goal = chase_pickup.global_position
 		var gap: float = me.distance_to(goal)
+		# The stall clock only runs while the bot is actually on its way: a fight,
+		# a flee or a pad route (a detour, at first away from the pickup) in
+		# between starts it again.
+		var resumed: bool = _clock - _chase_seen_at > THINK_SEC * 2.0 or is_instance_valid(_pad_target_was)
+		_chase_seen_at = _clock
 		if chase_pickup != _chasing:
 			_chasing = chase_pickup
 			_chase_since = _clock
 			_chase_closest = gap
 			_chase_gained_at = _clock
-		elif _clock - _chase_since > PICKUP_GIVE_UP_SEC or _clock - _chase_gained_at > PICKUP_STALL_SEC:
-			_ignored_pickups[chase_pickup.get_instance_id()] = _clock + PICKUP_IGNORE_SEC
-			_chasing = null
-		elif gap < _chase_closest - PICKUP_GAIN:
-			_chase_closest = gap
-			_chase_gained_at = _clock
+		else:
+			if resumed:
+				_chase_closest = gap
+				_chase_gained_at = _clock
+			if _clock - _chase_since > PICKUP_GIVE_UP_SEC or _clock - _chase_gained_at > PICKUP_STALL_SEC:
+				_ignored_pickups[chase_pickup.get_instance_id()] = _clock + PICKUP_IGNORE_SEC
+				_chasing = null
+			elif gap < _chase_closest - PICKUP_GAIN:
+				_chase_closest = gap
+				_chase_gained_at = _clock
 	elif enemy != null:
 		_chasing = null
 		_target = enemy
@@ -1098,8 +1117,10 @@ func _hook_drive(delta: float) -> Vector2:
 	if hook != null and not throws:
 		_hook_phase = 2
 		# Hold the drag only while the hook flies or is doing its job (stuck
-		# or reeling), and let go once the zip or reel has closed in or the
-		# hook comes home; the rest of the time the bot swings and moves as usual.
+		# or reeling); let go (no input) once the zip or reel has closed in, or
+		# has hauled for HOOK_MAX_HOLD_TICKS without, and rest until the hook is
+		# home (#1296). A hook coming home that the bot did not let go of leaves
+		# it to swing and move as usual.
 		if hook.is_going_home():
 			# Let go on purpose, the bot rests until the hook is home (#1296): a
 			# vault's aim-then-push right after reads as a flick, which recalls
@@ -1617,8 +1638,8 @@ func _gun_drive() -> Vector2:
 ## head out sideways, towards the goal, to slide it off.
 ## Issue #1296: the head can also be caught under the ledge the bot stands on,
 ## curled round its lip (Summit's tower): every anchor it plants is on the top,
-## which the head cannot reach through the ledge. Then the head is swept out
-## towards its own side and up, round the lip.
+## which the head cannot reach through the ledge. Then the head is swept, at
+## its own depth, towards the ledge's nearer end, to come out from under it.
 func _unhook(delta: float) -> Vector2:
 	if _unhook_left > 0.0:
 		_unhook_left -= delta
@@ -1675,8 +1696,8 @@ func _vault(delta: float) -> Vector2:
 		push = minf(push, _length_for(_anchor_cap))
 	return _anchor * push
 
-## Issue #1296: how far out (px) a push through `dir` may send the head when
-## the ground it plants on is a thin platform, or INF on thick ground. A push
+## Issue #1296: how far out (px) a travel push through `dir` may send the head
+## when the ground it plants on is a thin platform, or INF on thick ground. A push
 ## asks for the head well past the surface, which on solid ground only presses
 ## it harder; through a 24 px platform (Summit's steps and tower) it drove the
 ## head out underneath, where it stuck under the lip and the bot stood still.
@@ -1706,6 +1727,8 @@ func _pick_anchor() -> void:
 	var error: float = float(skill()["aim_error"])
 	if error > 0.0:
 		_anchor = _anchor.rotated(rng.randf_range(-error, error)) # a weaker bot plants its head off line (#682)
+	# Travel only (#1296): a climb or pogo off a thin ledge keeps its full push.
+	_anchor_cap = INF if _airborne or _anchor_rising else _thin_anchor_cap(player.global_position, _anchor)
 
 func _plan_anchor() -> void:
 	var me: Vector2 = player.global_position
@@ -1741,13 +1764,12 @@ func _plan_anchor() -> void:
 	# the air: it holds the head short and low, ready to plant on landing,
 	# without pogoing on it.
 	_airborne = true
-	_anchor_cap = INF
+	_anchor_rising = rising
 	for dir: Vector2 in candidates:
 		if _floor_hit(me, me + dir * (_reach() + ANCHOR_SLACK)):
 			_anchor = dir
 			_anchor_length = AIM_LENGTH
 			_airborne = false
-			_anchor_cap = _thin_anchor_cap(me, dir)
 			return
 	# Perched on an edge's corner, the body's middle over the drop and no
 	# ground behind to push off: fling the head up and in over the ground,
@@ -1807,7 +1829,8 @@ func _travel_side() -> float:
 	return safe
 
 ## `side`, or 0 where the way ahead is no ground the bot can trust: open
-## air, a hazard, a pad, or ground that will not last when the bot is on
+## air, a hazard, a pad other than a level one in its own floor (#1296), or
+## ground that will not last when the bot is on
 ## solid ground (issue #176). A gap of up to GAP_STEP_MAX is stepped over.
 func _safe_side(side: float) -> float:
 	if side == 0.0:
@@ -1837,10 +1860,7 @@ func _step_back_from_edges() -> float:
 	return 0.0
 
 ## How far the bot can go along `side` on ground it trusts, up to `limit`,
-## stepping over any gap of up to GAP_STEP_MAX. A level bounce pad is ground
-## here (#1296, `_can_step`): it is no drop to walk to, nor to the fight checks
-## (room behind, a drop past the rival), which had read Summit's floor pads as
-## drops and kept bots from swinging at a rival in reach most of the time.
+## stepping over any gap of up to GAP_STEP_MAX.
 func _edge_room(side: float, limit: float, past_danger: bool = false) -> float:
 	var me: Vector2 = player.global_position
 	var from: int = _standing_on()
@@ -1913,14 +1933,14 @@ func _can_step(kind: int, from: int) -> bool:
 			# floor pads read as edges cut its floor in three, and the last two
 			# bots of a Stock round sat either side of one.
 			return true
-		FOOT_TILTED_PAD:
+		FOOT_OTHER_PAD:
 			# Waited out at an edge, a pad is a way on (#1294).
 			return _pad_route or _desperate()
 	return false
 
-## Whether `kind` is a bounce pad, level or tilted.
+## Whether `kind` is a bounce pad of either kind.
 func _is_pad(kind: int) -> bool:
-	return kind == FOOT_PAD or kind == FOOT_TILTED_PAD
+	return kind == FOOT_PAD or kind == FOOT_OTHER_PAD
 
 ## What the bot is standing on, or over, now.
 func _standing_on() -> int:
@@ -1963,9 +1983,18 @@ func _footing_uncached(point: Vector2, past_danger: bool) -> int:
 			return FOOT_NONE
 	return _ground_kind(hit["collider"], past_danger)
 
+## The y of the ground straight under the bot, worked out once a physics tick
+## (#1296), or NAN over none.
+func _own_floor_y() -> float:
+	var frame: int = Engine.get_physics_frames()
+	if frame != _own_floor_frame:
+		_own_floor_frame = frame
+		_own_floor_value = _ground_below(player.global_position)
+	return _own_floor_value
+
 ## FOOT_* for a piece of terrain. A pad with a danger over it is no footing
-## (#1294), unless `past_danger`. A pad is FOOT_PAD when level, else
-## FOOT_TILTED_PAD (#1296).
+## (#1294), unless `past_danger`. A pad is FOOT_PAD when level and set in the
+## bot's own floor, else FOOT_OTHER_PAD (#1296).
 func _ground_kind(collider: Object, past_danger: bool = false) -> int:
 	if collider == null:
 		return FOOT_NONE
@@ -1980,7 +2009,14 @@ func _ground_kind(collider: Object, past_danger: bool = false) -> int:
 		var pad := collider as Node2D
 		if not past_danger and _pad_under_danger(pad):
 			return FOOT_NONE
-		return FOOT_PAD if absf(angle_difference(pad.global_rotation, 0.0)) < LEVEL_PAD_TILT else FOOT_TILTED_PAD
+		if absf(angle_difference(pad.global_rotation, 0.0)) >= LEVEL_PAD_TILT:
+			return FOOT_OTHER_PAD
+		# Level, and set in the floor the bot is on: walked across. One below a
+		# ledge (or past a drop) still bounces a bot back up to where it was.
+		var size: Variant = pad.get("size")
+		var top: float = pad.global_position.y - ((size as Vector2).y * absf(pad.global_scale.y) * 0.5 if size is Vector2 else 0.0)
+		var floor_y: float = _own_floor_y()
+		return FOOT_PAD if not is_nan(floor_y) and absf(top - floor_y) <= PAD_FLOOR_SLACK else FOOT_OTHER_PAD
 	# A platform moving sideways (a ferry's barge) is gone from under a
 	# step a moment later, and a lift a long way up or down is soon far from
 	# where it was stepped on; a piston's short stroke is ground enough.
@@ -2175,17 +2211,24 @@ func _escape_goal() -> Vector2:
 	# level pad, on the way the bot was going if there is ground that way (#1296):
 	# the nearest side, just after stepping on, sent it back where it came from.
 	var best: float = INF
-	var ahead: float = signf(goal.x - me.x) if kind == FOOT_PAD else 0.0
+	var ahead_side: float = signf(goal.x - me.x) if kind == FOOT_PAD else 0.0
+	var ahead: float = INF
 	for side: float in [1.0, -1.0]:
 		var d: float = SCAN_STEP
 		while d <= SOLID_SEARCH:
 			if _footing(me + Vector2(side * d, 0.0)) == FOOT_SOLID:
-				if side == ahead or best == INF or (d < absf(best) and signf(best) != ahead):
+				if d < absf(best):
 					best = side * d
+				if side == ahead_side:
+					ahead = side * d
 				break
 			d += SCAN_STEP
 	if best == INF:
 		return Vector2.INF
+	# The way it was going wins only when that ground is about as near: not
+	# across a pit past a pad at its edge.
+	if ahead != INF and absf(ahead) <= absf(best) + PAD_FLEE_AHEAD:
+		best = ahead
 	# Up on to a ledge when the solid ground is higher than the bot: a bot
 	# fleeing level with its own height, wedged below a lip, never climbs (#409).
 	var goal_x: float = me.x + best + signf(best) * EDGE_KEEP
