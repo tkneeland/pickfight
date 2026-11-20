@@ -35,9 +35,12 @@ bash "$AG/windows/hive-supervise.sh" voice 2>"$T/sup.err" & sp=$!
 waitfor hive-voice.mjs "$T/calls.log"; ok "hub.conf: runner started" $?
 grep -q -- "--experimental-websocket" "$T/calls.log"; ok "node 20: --experimental-websocket" $?
 waitfor running "$T/state/voice-status.json"; ok "status running" $?
+: > "$T/calls.log"; bash "$AG/windows/hive-supervise.sh" voice 2>"$T/dup.err"; rc=$?
+[ "$rc" = 0 ] && grep -q "already running" "$T/dup.err" && ! grep -q hive-voice.mjs "$T/calls.log"; ok "second voice supervisor exits at once" $?
 ! grep -rq s3cret-token "$T/calls.log" "$T/sup.err" "$T/state/voice-status.json" "$T/state/voice-runner.log" 2>/dev/null; ok "token never printed" $?
 kill "$sp"; wait "$sp" 2>/dev/null; sp=""
 sleep 0.3; ! pgrep -qf "hive-voicesup-test.*supervise" 2>/dev/null; ok "stop signal ends the supervisor" $?
+[ ! -e "$T/state/supervise-voice.pid" ]; ok "...and frees its lock" $?
 
 : > "$T/calls.log"
 HIVE_TEST_NODE_MAJOR=22 bash "$AG/windows/hive-supervise.sh" voice 2>/dev/null & sp=$!
