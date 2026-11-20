@@ -220,6 +220,10 @@ const PAD_CLEAR_HEIGHT: float = 220.0
 const PAD_CLEAR_STEP: float = 5.0
 ## The scan's rays start this far above the pad's top, so they never begin inside it.
 const PAD_CLEAR_LIFT: float = 2.0
+## How many moving or breakable parts a fixed-terrain ray sees through.
+const FIXED_RAY_TRIES: int = 4
+## How high over a pad a danger zone makes the pad no footing: about a launch's height.
+const PAD_DANGER_HEIGHT: float = 440.0
 ## Near the launch spot the bot vaults short (PAD_SLOW_SCALE of its push), so
 ## it lands on the spot instead of sailing over the pad; over it, within
 ## PAD_DROP and slower across than PAD_DROP_SPEED, it holds its head up so its
@@ -386,10 +390,17 @@ var _danger_frame: int = -1
 ## True while the bot is heading for a bounce pad on purpose, so the pad
 ## counts as ground to walk onto.
 var _pad_route: bool = false
-## Whether the think before this one was on its way to a pad (#1294).
-var _pad_route_was: bool = false
-## Pad instance id -> the x its launch goes up clear from (#1294).
+## The pad the bot is heading for (null when none), and the one the think
+## before this one was heading for (#1294).
+var _pad_target: Node2D = null
+var _pad_target_was: Node2D = null
+## Pad instance id -> the x its launch goes up clear from, and whether any
+## fixed terrain is over the pad at all (#1294).
 var _pad_launch: Dictionary = {}
+var _pad_tight: Dictionary = {}
+## `_round_manager()` worked out once a physics tick (#1294).
+var _rm_frame: int = -1
+var _rm_cached: Node = null
 var _hooked_for: float = 0.0
 var _aggression: float = 0.0
 ## The skill level (#682) this bot plays at; "" follows the room's setting.
@@ -472,7 +483,8 @@ func think(delta: float) -> Vector2:
 		_footing_frame = -1
 		_lava_top_frame = -1
 		_pad_route = false
-		_pad_route_was = false
+		_pad_target = null
+		_pad_target_was = null
 		_edge_wait = 0.0
 		_desperate_left = 0.0
 		_wait_total = 0.0
@@ -540,11 +552,14 @@ func think(delta: float) -> Vector2:
 		return _pad_approach(delta)
 	return _vault(delta)
 
-## On the way to a pad's launch spot (#1294): short vaults once near it, and
-## the head held up once over it, so the body drops onto the clear part of the
-## pad. Fast vaults sailed over Summit's pads and back, and a bot over the pad
-## planted its head on it and stood there on it, never launched.
+## On the way to a pad's launch spot with something overhead (#1294): short
+## vaults once near it, and the head held up once over it, so the body drops
+## onto the clear part of the pad. Fast vaults sailed over Summit's pads and
+## back, and a bot over the pad planted its head on it and stood there on it,
+## never launched. An open pad is run onto as before: the launch keeps the run.
 func _pad_approach(delta: float) -> Vector2:
+	if not is_instance_valid(_pad_target) or not bool(_pad_tight.get(_pad_target.get_instance_id(), false)):
+		return _vault(delta)
 	var dx: float = absf(goal.x - player.global_position.x)
 	var body := player as RigidBody2D
 	var slow: bool = body == null or absf(body.linear_velocity.x) <= PAD_DROP_SPEED
@@ -696,7 +711,8 @@ func _choose_goal() -> void:
 	elif in_detour:
 		chase_pickup = pickup
 	var lava_close: bool = _lava_worry()
-	_pad_route_was = _pad_route
+	_pad_target_was = _pad_target if _pad_route else null
+	_pad_target = null
 	_pad_route = false
 	# Out from under a rock, out of a hazard's margin, off ground giving way
 	# or ground that will not last: before anything else (issue #176).
@@ -1752,6 +1768,10 @@ func _walkable_to(x: float) -> bool:
 ## Whether ground of kind `kind` is somewhere to step, for a bot now on
 ## ground of kind `from`.
 func _can_step(kind: int, from: int) -> bool:
+	# A pad is fixed ground to step from (#1294): from it, ground that gives way
+	# or moves is no more a way on than from the floor.
+	if from == FOOT_PAD:
+		from = FOOT_SOLID
 	match kind:
 		FOOT_SOLID:
 			return true
@@ -1805,10 +1825,11 @@ func _footing_uncached(point: Vector2, past_danger: bool) -> int:
 		if point.x >= rect.position.x and point.x <= rect.end.x \
 				and rect.position.y <= ground_y + BODY_RADIUS and rect.end.y >= point.y:
 			return FOOT_NONE
-	return _ground_kind(hit["collider"])
+	return _ground_kind(hit["collider"], past_danger)
 
-## FOOT_* for a piece of terrain.
-func _ground_kind(collider: Object) -> int:
+## FOOT_* for a piece of terrain. A pad with a danger over it is no footing
+## (#1294), unless `past_danger`.
+func _ground_kind(collider: Object, past_danger: bool = false) -> int:
 	if collider == null:
 		return FOOT_NONE
 	var script: Script = collider.get_script()
@@ -1819,7 +1840,7 @@ func _ground_kind(collider: Object) -> int:
 	if script == RotatingPlatformScript:
 		return FOOT_RIDE
 	if script == BouncePadScript:
-		return FOOT_PAD
+		return FOOT_NONE if not past_danger and _pad_under_danger(collider as Node2D) else FOOT_PAD
 	# A platform moving sideways (a ferry's barge) is gone from under a
 	# step a moment later, and a lift a long way up or down is soon far from
 	# where it was stepped on; a piston's short stroke is ground enough.
@@ -1968,11 +1989,11 @@ func _escape_goal() -> Vector2:
 	# Ground made to be ridden is not fled once the bot is on it (#409).
 	if kind == FOOT_RIDE:
 		return Vector2.INF
-	# Nor is a pad the bot was making for, or has waited at an edge to take
-	# (#1294): fleeing it turned a bot back at the pad it had walked to, and
-	# put one back on the step it had waited on. `_pad_route_was`, not
-	# `_pad_route`: this runs inside _choose_goal after `_pad_route` is reset.
-	if kind == FOOT_PAD and (_pad_route_was or _desperate()):
+	# Nor is the pad the bot was making for, or any pad once it has waited at an
+	# edge to take one (#1294): fleeing it turned a bot back at the pad it had
+	# walked to, and put one back on the step it had waited on. `_pad_target_was`,
+	# not `_pad_target`: this runs inside _choose_goal after the route is reset.
+	if kind == FOOT_PAD and (_desperate() or (is_instance_valid(_pad_target_was) and _pad_below() == _pad_target_was)):
 		return Vector2.INF
 	# Over nothing (or ground giving way), or on ground that will not last:
 	# to the nearest solid ground either way, if there is any near enough.
@@ -2021,35 +2042,42 @@ func _pad_towards(high: Vector2) -> Vector2:
 		return Vector2.INF
 	var floor_y: float = (hit["position"] as Vector2).y
 	var best: Vector2 = Vector2.INF
+	var best_pad: Node2D = null
+	# Shortest trip first; between pads on the way (the same trip), the nearer one.
+	var trip := func(x: float) -> Vector2: return Vector2(absf(x - me.x) + absf(high.x - x), absf(x - me.x))
 	for pad: Node2D in _pads:
 		if not is_instance_valid(pad) or not pad.is_inside_tree():
 			continue
 		var at := Vector2(_pad_launch_x(pad), pad.global_position.y)
 		if absf(at.y - floor_y) > PAD_FLOOR_SLACK or absf(at.x - me.x) > PAD_SEARCH:
 			continue
-		var trip := func(x: float) -> float: return absf(x - me.x) + absf(high.x - x)
-		if best != Vector2.INF and trip.call(at.x) >= trip.call(best.x):
+		if best != Vector2.INF and not ((trip.call(at.x) as Vector2) < (trip.call(best.x) as Vector2)):
 			continue
 		_pad_route = true
 		var reachable: bool = _walkable_to(at.x)
 		_pad_route = false
 		if reachable:
 			best = at
+			best_pad = pad
+	_pad_target = best_pad
 	return best
 
 ## Where on `pad` a launch goes up clear (#1294): the middle of the widest run of
 ## the pad's top with nothing overhead for PAD_CLEAR_HEIGHT, or the pad's middle
 ## when no run is a body wide. Summit's pads reach under the step on one side
 ## and the tower on the other, and a launch from either end hit the underside.
-## Worked out once a stage read: pads do not move.
+## Only fixed terrain counts as overhead (`_fixed_ray_hits`): a platform that
+## moves or a wall that breaks is not there for good. Worked out once a stage
+## read, with whether anything is overhead at all (`_pad_tight`).
 func _pad_launch_x(pad: Node2D) -> float:
 	var id: int = pad.get_instance_id()
 	if _pad_launch.has(id):
 		return _pad_launch[id]
 	var middle: float = pad.global_position.x
+	_pad_launch[id] = middle
+	_pad_tight[id] = false
 	var size: Variant = pad.get("size")
 	if not size is Vector2 or not is_zero_approx(pad.global_rotation):
-		_pad_launch[id] = middle
 		return middle
 	var half: Vector2 = (size as Vector2) * pad.global_scale.abs() * 0.5
 	var top: float = pad.global_position.y - half.y - PAD_CLEAR_LIFT
@@ -2058,8 +2086,9 @@ func _pad_launch_x(pad: Node2D) -> float:
 	var best_width: float = 0.0
 	var x: float = pad.global_position.x - half.x
 	while x <= pad.global_position.x + half.x + 0.01:
-		if _ray_hits(Vector2(x, top), Vector2(x, top - PAD_CLEAR_HEIGHT)):
+		if _fixed_ray_hits(Vector2(x, top), Vector2(x, top - PAD_CLEAR_HEIGHT)):
 			run_from = NAN
+			_pad_tight[id] = true
 		else:
 			if is_nan(run_from):
 				run_from = x
@@ -2067,9 +2096,49 @@ func _pad_launch_x(pad: Node2D) -> float:
 				best_width = x - run_from
 				best_from = run_from
 		x += PAD_CLEAR_STEP
-	var launch: float = best_from + best_width * 0.5 if best_width >= BODY_RADIUS * 2.0 - PAD_CLEAR_STEP else middle
-	_pad_launch[id] = launch
-	return launch
+	if best_width >= BODY_RADIUS * 2.0:
+		_pad_launch[id] = best_from + best_width * 0.5
+	return _pad_launch[id]
+
+## The bounce pad straight under the bot (within GROUND_PROBE), or null.
+func _pad_below() -> Node2D:
+	var me: Vector2 = player.global_position
+	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
+	var query := PhysicsRayQueryParameters2D.create(me, me + Vector2(0.0, GROUND_PROBE), LAYER_WORLD, _player_rids())
+	query.hit_from_inside = true
+	var hit: Dictionary = space.intersect_ray(query)
+	if hit.is_empty() or hit["collider"] == null or (hit["collider"] as Object).get_script() != BouncePadScript:
+		return null
+	return hit["collider"] as Node2D
+
+## Like `_ray_hits`, but only fixed terrain counts: platforms that move, walls
+## that break and falling rocks are seen through (#1294).
+func _fixed_ray_hits(from: Vector2, to: Vector2) -> bool:
+	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
+	var skip: Array[RID] = _player_rids().duplicate()
+	for i in FIXED_RAY_TRIES:
+		var query := PhysicsRayQueryParameters2D.create(from, to, LAYER_WORLD, skip)
+		var hit: Dictionary = space.intersect_ray(query)
+		if hit.is_empty():
+			return false
+		var collider: Object = hit["collider"]
+		var script: Script = collider.get_script() if collider != null else null
+		if script not in [MovingPlatformScript, RotatingPlatformScript, BreakableWallScript, FallingRockScript]:
+			return true
+		skip.append(hit["rid"])
+	return true
+
+## Whether a danger zone (hazard, saw, rock column) lies over `pad`'s launch
+## column (#1294): such a pad is no footing, even for a bot that has waited at an
+## edge, and no way up.
+func _pad_under_danger(pad: Node2D) -> bool:
+	var size: Variant = pad.get("size")
+	var half: Vector2 = ((size as Vector2) * pad.global_scale.abs() * 0.5) if size is Vector2 else Vector2(BODY_RADIUS, 0.0)
+	var column := Rect2(pad.global_position.x - half.x, pad.global_position.y - half.y - PAD_DANGER_HEIGHT, half.x * 2.0, PAD_DANGER_HEIGHT)
+	for rect: Rect2 in _danger_rects():
+		if rect.intersects(column):
+			return true
+	return false
 
 ## No real progress towards the goal for STUCK_SEC and the bot wiggles.
 func _track_progress(delta: float) -> void:
@@ -2134,8 +2203,16 @@ func _stage_instance_id() -> int:
 ## The round manager running this bot's player: the one whose roster holds it,
 ## else the first in the group, or null. A manager on its way out (a round torn
 ## down this frame, as the scenario suite does between rounds) can still be
-## first in the group, and its stage is gone (#1294).
+## first in the group, and its stage is gone (#1294). Worked out once a physics
+## tick: the lava lookup asks every tick.
 func _round_manager() -> Node:
+	var frame: int = Engine.get_physics_frames()
+	if frame != _rm_frame or (_rm_cached != null and not is_instance_valid(_rm_cached)):
+		_rm_frame = frame
+		_rm_cached = _round_manager_uncached()
+	return _rm_cached
+
+func _round_manager_uncached() -> Node:
 	var first: Node = null
 	for rm: Node in player.get_tree().get_nodes_in_group("round_manager"):
 		if rm.is_queued_for_deletion():
@@ -2219,6 +2296,7 @@ func _read_stage() -> void:
 	_rocks.clear()
 	_pads.clear()
 	_pad_launch.clear()
+	_pad_tight.clear()
 	_saws.clear()
 	_gusts.clear()
 	_danger_frame = -1
