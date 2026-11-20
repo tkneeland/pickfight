@@ -286,6 +286,28 @@ hive_fresh_clone_check() {
   rm -rf "$d"; return $rc
 }
 hive_run_tests() { [ -n "${TEST_CMD:-}" ] || return 0; bash -c "$TEST_CMD"; }
+# hive_branch_issue <branch>: the ticket a branch names at its start, `issue-<n>-` or `<type>/issue-<n>-` or `<type>/<n>-`
+# ("" when none). `fix/issue-12-from-issue-9` gives 12; `chore/tissue-5-x` gives nothing.
+hive_branch_issue() { printf '%s' "$1" | sed -nE 's#^([a-z]+/)?issue-([0-9]+)-.*#\2#p; s#^[a-z]+/([0-9]+)-.*#\1#p' | head -1; }
+# hive_pr_conflict_risk <slug> <pr> [ticket]: is the PR conflict-risk (rule 6)? 0 yes, 1 no, 2 unknown (a GitHub read
+# failed; callers treat it as "not for a non-triagemaster to merge"). Rule 6 labels the ticket, not the PR, so this reads
+# the PR's own labels and those of the issues it closes (one GraphQL call), then the ticket its head branch names and the
+# optional [ticket]. Pickfight #1287: a PR merged unchecked because only its ticket had the label.
+hive_pr_conflict_risk() {
+  local out branch n labels
+  out=$(gh api graphql -F owner="${1%%/*}" -F name="${1#*/}" -F n="$2" -f query='query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){headRefName labels(first:50){nodes{name}} closingIssuesReferences(first:20){nodes{labels(first:50){nodes{name}}}}}}}' \
+    --jq '.data.repository.pullRequest | (([.labels.nodes[].name] + [.closingIssuesReferences.nodes[].labels.nodes[].name]) | index("conflict-risk") != null | tostring) + " " + .headRefName' 2>/dev/null) || return 2
+  case $out in true\ *) return 0;; false\ *) ;; *) return 2;; esac
+  branch=${out#* }
+  for n in $(printf '%s\n%s\n' "${3:-}" "$(hive_branch_issue "$branch")" | grep -E '^[0-9]+$' | sort -u); do
+    labels=$(gh issue view "$n" -R "$1" --json labels -q '.labels[].name' 2>/dev/null) || return 2
+    printf '%s\n' "$labels" | grep -qx conflict-risk && return 0
+  done
+  return 1
+}
+# hive_merge_gated <slug> <pr> [ticket]: 0 when this account must not merge the PR (conflict-risk, or unknown, and not
+# the triagemaster). Private mode has no labels, so never gated.
+hive_merge_gated() { [ "$PRIVATE" != 1 ] || return 1; hive_is_triagemaster && return 1; hive_pr_conflict_risk "$@"; [ $? != 1 ]; }
 hive_run_install() { [ -n "${INSTALL_CMD:-}" ] && ( cd "$ROOT" && bash -c "$INSTALL_CMD" ); return 0; }
 # Append one tagged line to the outbox the main terminal watches: hive_outbox FIRE "text"
 hive_outbox() { printf '[%s] %s\n' "$1" "$2" >> "$HIVE_OUTBOX"; }

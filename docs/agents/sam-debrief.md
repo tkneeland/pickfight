@@ -11,7 +11,7 @@ What you need from the owners, outside the repo:
 - the private message-channel topic (given to you directly, never committed, posted or pasted anywhere public),
 - the itch.io page password if you want to download builds (`pookman4/pickfight`; builds come from the release workflow, so there is no need to export zips locally).
 
-Your account settings are `tools/agents/accounts/schans2.conf` (timezone, night hours, `AUTO_FILE`, succession rank 3: below `tkneeland` and `agage-JG`). Change them and commit like any file.
+Your account settings are `tools/agents/accounts/schans2.conf` (timezone, quiet hours, `AUTO_FILE`, succession rank 3: below `tkneeland` and `agage-JG`). Change them and commit like any file.
 
 ## Set up (for your Claude)
 

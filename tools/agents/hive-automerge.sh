@@ -44,7 +44,7 @@ while true; do
       [ "$m" = "MERGEABLE" ] || continue
       hive_review_blocked "$slug" "$P" && continue   # rule 12: confirmed reviewer finding
       hive_review_passed "$slug" "$P" || continue    # rule 12: no merge before a reviewer pass
-      if [ "$PRIVATE" != 1 ] && gh pr view "$P" --repo "$slug" --json labels --jq '.labels[].name' | grep -qx conflict-risk && ! hive_is_triagemaster; then continue; fi
+      hive_merge_gated "$slug" "$P" && continue   # rule 6: conflict-risk (PR or its ticket) is the triagemaster's
       if [ "$PRIVATE" != 1 ] && [ "$(gh pr view "$P" --repo "$slug" --json files,labels --jq "$HIVE_EDIT_JQ" 2>/dev/null)" = true ]; then
         [ -e "$HIVE_STATE/held/$sk-$P" ] || { mkdir -p "$HIVE_STATE/held"; : > "$HIVE_STATE/held/$sk-$P"; echo "$(date '+%F %T') HELD $slug#$P edits hive files (make the change in claude-hive and re-install)"; }
         continue

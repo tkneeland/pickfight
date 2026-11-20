@@ -102,7 +102,7 @@ if [ -n "${POST_PR_CMD:-}" ] && [ -n "${n:-}" ]; then
   fi
 fi
 [ "$kw" = Refs ] && [ "$PRIVATE" != 1 ] && echo "REFS: PR $n says 'Refs #$i'; ticket #$i stays open after merge (no close or transition step runs)."
-if [ "$PRIVATE" != 1 ] && gh pr view "$n" -R "$slug" --json labels -q '.labels[].name' | grep -qx conflict-risk && ! hive_is_triagemaster; then echo "CONFLICT-RISK PR $n opened; only the triagemaster ($(hive_triagemaster)) merges it. Not merging."; exit 0; fi
+if hive_merge_gated "$slug" "$n" "$i"; then echo "CONFLICT-RISK PR $n opened; only the triagemaster ($(hive_triagemaster)) merges it. Not merging."; exit 0; fi
 sleep "${HIVE_SHIP_WAIT:-20}"; k=0
 until s=$(gh pr checks "$n" -R "$slug" 2>&1); ! echo "$s" | grep -qE "pending|no checks"; do
   [ "${REQUIRE_CI:-1}" = 0 ] && echo "$s" | grep -q "no checks" && break

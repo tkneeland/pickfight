@@ -6,10 +6,10 @@ has no counterpart there.
 
 | File | What it does |
 | --- | --- |
-| `pickfight-install-mac.sh` | Exports origin/main headlessly and installs `/Applications/Pickfight.app`. Reference copy with the owner's Mac paths (`/Users/tkneeland/...`); `tools/agents/accounts/tkneeland.conf` runs the live copy from `~/.claude/` as `INSTALL_SCRIPT`. |
+| `pickfight-install-mac.sh` | Exports origin/main headlessly and installs `/Applications/Pickfight.app`. Reference copy with the owner's Mac paths (`/Users/tkneeland/...`); `tools/agents/accounts/tkneeland.conf` runs the live copy from `~/.claude/` as `INSTALL_CMD`. |
 | `dev-agent-prompt.txt` | The setup prompt the owner gave tommykneeland's autonomous dev agent (Oct 3): git identity, plugin installs, the ticket lane, verification and PR rules. Use it as a template: swap in your handle and lane. The Atlas plugin source is left out because the repo is public; ask the owner for it. |
 
-Retired from this folder (#1134): `hive-atlas.sh`, `hive-rate.sh`, `hive-ship.sh` and `statusline.sh` (stale copies of
+Retired from this folder (#1134): `pf-atlas.sh`, `pf-rate.sh`, `pf-ship.sh` and `statusline-usage.sh` (stale copies of
 the `tools/agents/` scripts of the same name), `pickfight-automerge.sh` (now `tools/agents/hive-automerge.sh`),
 `pickfight-watch-austin.sh` (now `tools/agents/hive-watch-peers.sh`), and `pf-fix-runner.sh` + `pf-runner-union.py`
 (now `tools/game/pf-scenario-merge.sh`).
