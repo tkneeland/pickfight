@@ -6,6 +6,8 @@
 #                             state; then the team: fires, unhandled reports in the Discord bug and dev channels,
 #                             needs-triage waiting for a ✅, decisions waiting on the owner (open "- [ ]" items under
 #                             "## Open" on DECISIONS_ISSUE, ready-for-human assigned to OWNER)
+#   hive.sh limits [handle...]  each account's ticket limits and AUTO_FILE in force (the hub's studio values, else the conf):
+#                             "<handle> five_h_stop=<5h %> weekly_stop=<7d % used> auto_file=<0|1>"; default: this account
 #   hive.sh status --short    the compact form for posting (rule 21: "status" in the dev channel replies with it)
 #   hive.sh status --short --cached
 #                             prints the last --short result at once and refreshes it in the background (the
@@ -22,7 +24,12 @@ AG=$(cd "$(dirname "$0")" && pwd)
 . "$AG/hive-env.sh" || exit 1
 INBOX=$HIVE_STATE/msg-inbox.log
 CACHE=$HIVE_STATE/hive-status-short.txt
-[ "${1:-}" = status ] || { sed -n '2,20p' "$0"; exit 2; }
+if [ "${1:-}" = limits ]; then   # hive.sh limits [handle...]: the ticket limits and auto-filing in force (hub, else conf)
+  shift; [ $# -gt 0 ] || set -- "$HIVE_ACCOUNT"
+  for h in "$@"; do hive_limits "$h"; echo "$h five_h_stop=$l_5h weekly_stop=$(( 100 - l_wmin )) auto_file=$l_auto"; done
+  exit 0
+fi
+[ "${1:-}" = status ] || { sed -n '2,22p' "$0"; exit 2; }
 [ "$SINGLE_ACCOUNT" != 1 ] || { echo "hive: single-account mode, no hive to show" >&2; exit 3; }
 shift; short=""; cached=""
 for a in "$@"; do case $a in --short) short=1;; --cached) cached=1;; *) echo "hive: unknown option $a" >&2; exit 2;; esac; done

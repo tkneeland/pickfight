@@ -7,7 +7,7 @@
 in=$(cat)
 [ "$(printf '%s' "$in" | jq -r '.stop_hook_active // false' 2>/dev/null)" = true ] && exit 0   # never loop
 . "$(dirname "$0")/hive-env.sh" >/dev/null 2>&1 || exit 0
-[ "$(cat "$HIVE_STATE/at-mode" 2>/dev/null || echo AT)" = AT ] || exit 0
+hive_mt && exit 0   # MT (switched out in the hub, or the local at-mode file without a studio): nothing to guard
 command -v pgrep >/dev/null 2>&1 || exit 0   # no pgrep (Git Bash): cannot tell, never block
 LC_ALL=C pgrep -f "$HIVE_DIR/hive-triage-watch.sh" >/dev/null && exit 0
 jq -cn --arg cmd "HIVE_ACCOUNT=$HIVE_ACCOUNT bash $HIVE_DIR/hive-triage-watch.sh" \

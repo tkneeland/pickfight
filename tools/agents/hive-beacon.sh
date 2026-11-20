@@ -3,7 +3,8 @@
 # the only usage beacon (nothing is posted on GitHub). Built from $HIVE_STATE/usage-snapshot.json (saved by statusline.sh or
 # hive-usage.sh). Format: "<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> at=<snapshot ISO> [claude_at=<ISO>]".
 # pace=<AHEAD|ON_PACE|BEHIND> [win5=<last window's final 5h %> idle=<its idle minutes with ready work>] come from hive-pace.sh (issue #274).
-# mode=AT|MT tmaker=on|off: mode from the at-mode file, tmaker from hive-ticketmaker.sh (the hub shows both).
+# tmaker=on|off from hive-ticketmaker.sh (the hub shows it). The old mode=AT|MT field is retired (issue #58): whether an
+# account works on its own is the studio's in/out switch, which the hub reads itself.
 # claude_at = newest Claude transcript write on this account (hive_claude_at), omitted when unknown; the triagemaster wakes
 # DEV_IDLE when it is old while work waits.
 # Change-only gate (issue #111, the ntfy daily quota): due when the 5h % or the 7d % moved 5 points or more, the 5h reset
@@ -17,7 +18,7 @@
 # the snapshot with one jq call, and gets the pace state and last window from one hive-pace.sh process; its output is unchanged.
 _s=$0; case $_s in */*) _s=${_s%/*};; *) _s=.;; esac
 . "$_s/hive-env.sh" || exit 1
-hive_studio_sync   # the hub's studio settings (ticket limits), at most every 5 min
+hive_studio_sync   # the hub's studio settings (ticket limits, in/out and the triagemaster queue), at most every 5 min
 [ "$SINGLE_ACCOUNT" = 1 ] && exit 0
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >> "$HIVE_STATE/beacon.log"; }
 snap=$HIVE_STATE/usage-snapshot.json
@@ -68,8 +69,7 @@ msg="$msg pace=${ps:-ON_PACE}"
 [ -n "$lw" ] && msg="$msg win5=${lw% *} idle=${lw#* }"
 ca=$(hive_claude_at)
 [ -n "$ca" ] && msg="$msg claude_at=$(TZ=UTC hive_fmt "$ca" +%Y-%m-%dT%H:%M:%SZ)"
-m=$(cat "$HIVE_STATE/at-mode" 2>/dev/null | tr -d "\r "); [ "$m" = MT ] || m=AT
-msg="$msg mode=$m tmaker=$(bash "$HIVE_DIR/hive-ticketmaker.sh")"
+msg="$msg tmaker=$(bash "$HIVE_DIR/hive-ticketmaker.sh")"
 # hive-msg.sh logs its own failures (budget drop, 429 backoff, HTTP code) to beacon.log
 bash "$HIVE_DIR/hive-msg.sh" send USAGE "$msg" >/dev/null 2>>"$HIVE_STATE/beacon.log" || exit 1
 echo "$t $p5 $p7 $r5 $agents" > "$last"
