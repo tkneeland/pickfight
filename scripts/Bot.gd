@@ -349,6 +349,8 @@ var _phase: int = 0
 var _phase_left: float = 0.0
 var _anchor: Vector2 = Vector2.ZERO
 var _anchor_length: float = 0.1
+## How far out (px) the push may send the head: INF but on a thin platform (#1296).
+var _anchor_cap: float = INF
 ## True when the last anchor search found nothing to push off: the bot is in
 ## the air, and holds the head low and behind instead of pushing.
 var _airborne: bool = true
@@ -1050,6 +1052,12 @@ const HOOK_ARM_TICKS: int = 3
 const HOOK_FLICK_TICKS: int = 2
 ## Ticks a stuck or reeling hook is held before the bot may let it go (#1296).
 const HOOK_LET_GO_TICKS: int = 12
+## Ticks a stuck or reeling hook is held at most before the bot lets it go (#1296).
+const HOOK_MAX_HOLD_TICKS: int = 120
+## A platform with open space this far under its top is thin (#1296): a push
+## planted on it sends the head no more than THIN_PUSH_DEPTH past its top.
+const THIN_PROBE: float = 30.0
+const THIN_PUSH_DEPTH: float = 16.0
 ## The rod casts at a rival within this fraction of its launch range.
 const ROD_RANGE_FRACTION: float = 0.8
 ## The grapple fires at a rival or a wall within this fraction of its range.
@@ -1099,8 +1107,12 @@ func _hook_drive(delta: float) -> Vector2:
 			return Vector2.ZERO if _hook_let_go else Vector2.INF
 		if hook.is_stuck() or hook.is_reeling():
 			_hook_held_ticks += 1
-			if _hook_held_ticks >= HOOK_LET_GO_TICKS \
-					and player.global_position.distance_to(hook.global_position) <= _reach() + HOOK_RELEASE_MARGIN:
+			# Also once the haul has had HOOK_MAX_HOLD_TICKS and not brought the bot
+			# in (#1296): a hook stuck past Summit's tower lip held a bot on the
+			# tower, input pinned to the cast, for over a minute.
+			if (_hook_held_ticks >= HOOK_LET_GO_TICKS \
+					and player.global_position.distance_to(hook.global_position) <= _reach() + HOOK_RELEASE_MARGIN) \
+					or _hook_held_ticks >= HOOK_MAX_HOLD_TICKS:
 				# Let go with no input (#1296): any other input holds the drag,
 				# and a bot that went straight back to vaulting stayed tied to a
 				# hook stuck in the floor beside it for the rest of the round. Not
@@ -1658,7 +1670,30 @@ func _vault(delta: float) -> Vector2:
 			_phase_left = react_sec(lerpf(PUSH_SEC, PUSH_SEC_AGGRESSIVE, _aggression))
 	if _phase == 0 or _airborne:
 		return _anchor * _anchor_length
-	return _anchor * PICKAXE_PUSH_LENGTH if _holds_pickaxe() else _anchor
+	var push: float = PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0
+	if _anchor_cap < INF:
+		push = minf(push, _length_for(_anchor_cap))
+	return _anchor * push
+
+## Issue #1296: how far out (px) a push through `dir` may send the head when
+## the ground it plants on is a thin platform, or INF on thick ground. A push
+## asks for the head well past the surface, which on solid ground only presses
+## it harder; through a 24 px platform (Summit's steps and tower) it drove the
+## head out underneath, where it stuck under the lip and the bot stood still.
+func _thin_anchor_cap(from: Vector2, dir: Vector2) -> float:
+	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
+	var query := PhysicsRayQueryParameters2D.create(from, from + dir * (_reach() + ANCHOR_SLACK), LAYER_WORLD, _player_rids())
+	var hit: Dictionary = space.intersect_ray(query)
+	if hit.is_empty():
+		return INF
+	var surface: Vector2 = hit["position"]
+	var probe := PhysicsPointQueryParameters2D.new()
+	probe.position = surface + Vector2(0.0, THIN_PROBE)
+	probe.collision_mask = LAYER_WORLD
+	probe.exclude = _player_rids()
+	if not space.intersect_point(probe, 1).is_empty():
+		return INF
+	return from.distance_to(surface) + THIN_PUSH_DEPTH
 
 ## Where the head plants for the next vault. Pushing the head out through
 ## the anchor throws the body the opposite way, so the anchor is below and
@@ -1706,11 +1741,13 @@ func _plan_anchor() -> void:
 	# the air: it holds the head short and low, ready to plant on landing,
 	# without pogoing on it.
 	_airborne = true
+	_anchor_cap = INF
 	for dir: Vector2 in candidates:
 		if _floor_hit(me, me + dir * (_reach() + ANCHOR_SLACK)):
 			_anchor = dir
 			_anchor_length = AIM_LENGTH
 			_airborne = false
+			_anchor_cap = _thin_anchor_cap(me, dir)
 			return
 	# Perched on an edge's corner, the body's middle over the drop and no
 	# ground behind to push off: fling the head up and in over the ground,
