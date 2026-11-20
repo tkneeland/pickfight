@@ -1,7 +1,7 @@
 # Collaboration: two devs working at the same time
 
 Several agents work in parallel on this repo, one per GitHub account:
-`tkneeland` (the **triagemaster**: triage, conflict-risk tickets and watching main; the role passes down `SUCCESSION_RANK` when its weekly use hits 85%, see [autotriage.md](autotriage.md)), `tommykneeland` (the owner's second agent) and
+`tkneeland` (the **triagemaster**: triage, conflict-risk tickets and watching main; the role passes down `SUCCESSION_RANK` when its weekly use hits 85%, see [hive.md](hive.md)), `tommykneeland` (the owner's second agent) and
 `agage-JG` (Austin) and `schans2` (Sam). This file is the working agreement every agent follows. It sits alongside
 `issue-tracker.md`, which still owns claim/label/transition mechanics.
 
@@ -11,7 +11,7 @@ Several agents work in parallel on this repo, one per GitHub account:
   `gh issue edit <n> --add-assignee @me`.
 - **Never start, edit, or comment-as-owner on an issue assigned to someone
   else.** If there's no unassigned work in your lane, stop and tell your human.
-- Posting a `[CLAIM]` comment on an issue is followed by `tools/agents/pf-msg.sh claim <n>`, which tells the other account's agent over the private channel; never take over an issue with a `[CLAIM]` from another account in the last 24h.
+- Posting a `[CLAIM]` comment on an issue is followed by `tools/agents/hive-msg.sh claim <n>`, which tells the other account's agent over the private channel; never take over an issue with a `[CLAIM]` from another account in the last 24h.
 - Every issue body has a **Touches** section listing the files it expects to
   change. When you're planning, fill it in accurately. It is how the other
   dev's agent sees collisions coming.
@@ -26,7 +26,7 @@ Several agents work in parallel on this repo, one per GitHub account:
    - post a one-line comment on your issue: `Touching <file>: <what>`.
 3. `.tscn` scene files merge badly. Where you can, add new scenes instead of
    editing shared ones; an edit to an existing one is conflict-risk (see
-   [autotriage.md](autotriage.md), rule 6).
+   [hive.md](hive.md), rule 6).
 
 Current hot shared files: `scripts/RoundManager.gd`, `scenes/Main.tscn`,
 `tools/scenario_runner.gd` (append new scenarios at the end of the list and
@@ -69,7 +69,7 @@ the dispatcher; don't reorder), `CONTEXT.md`.
      reruns red, go back to step 1. GitHub refuses a conflicting merge, so this
      costs time, never broken code.
 - **Conflict-risk PRs** (a ticket labelled `conflict-risk`, rules in
-  [autotriage.md](autotriage.md)) are merged only by the **triagemaster**:
+  [hive.md](hive.md)) are merged only by the **triagemaster**:
   `tkneeland`'s Claude, or the next `SUCCESSION_RANK` account while it stands in
   at 85% weekly use. Comment on the PR and let the triagemaster merge it.
 - **Main went red after a merge:** whoever merged last fixes it or reverts their
@@ -122,21 +122,21 @@ Both owners want maximum throughput. Every agent working this repo should:
 ## Usage beacon and triage by headroom
 
 - **Keep your beacon current.** The beacon is a `USAGE` message on the private
-  channel (`pf-msg.sh`), the only usage beacon since #1153 (the old issue
+  channel (`hive-msg.sh`), the only usage beacon since #1153 (the old issue
   comments are retired). Each agent's status-line hook sends it at most every
   15 minutes: 5-hour and 7-day used percentages, the reset times in UTC, the
   running agent count and when the numbers were taken.
 - **Any agent that files or reassigns tickets reads every beacon first:** the
-  newest `USAGE` line per account in `$PF_STATE/msg-inbox.log`, e.g.
-  `awk -F'|' '$3=="USAGE"{u[$2]=$0} END{for(a in u)print u[a]}' "$PF_STATE/msg-inbox.log"`
-  (`pf_beacon <handle>` in `pf-env.sh` parses one; run `pf-msg.sh backfill`
+  newest `USAGE` line per account in `$HIVE_STATE/msg-inbox.log`, e.g.
+  `awk -F'|' '$3=="USAGE"{u[$2]=$0} END{for(a in u)print u[a]}' "$HIVE_STATE/msg-inbox.log"`
+  (`hive_beacon <handle>` in `hive-env.sh` parses one; run `hive-msg.sh backfill`
   first when the listener was down).
 - **Assign by weekly headroom, not by ticket count.** Headroom is 100 minus the
   7-day %. Split new tickets in proportion to headroom across every agent with a
   fresh beacon. For example, at 85% and 51% headroom, about 60/40 to the
   first. Recompute on every triage. Reserve accounts (`RESERVE=1`, tommykneeland)
   are left out of the split while every regular dev can work normally
-  ([autotriage.md](autotriage.md) rule 5); `pf-reserve.sh` hands back any that
+  ([hive.md](hive.md) rule 5); `hive-reserve.sh` hands back any that
   reach them anyway, and also hands a reserve's tickets to an able dev when its
   own weekly remaining is at or below `MIN_WEEKLY_REMAINING_FOR_TICKETS`.
 - **The 5-hour window only decides timing, not ownership.** At 90% or more,

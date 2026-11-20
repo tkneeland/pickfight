@@ -1,6 +1,6 @@
 # Required status check on main: a PR merges only after a reviewer pass has
-# labelled it review-passed (autotriage rule 12). pf-automerge.sh and
-# pf-ship.sh already wait for the label; this makes GitHub refuse any other
+# labelled it review-passed (hive rule 12). hive-automerge.sh and
+# hive-ship.sh already wait for the label; this makes GitHub refuse any other
 # merge path too (owner, 2026-11-10). Re-runs whenever labels change.
 name: review-gate
 

@@ -17,7 +17,7 @@ Every session on every account reads `docs/agents/team-memory.md` first: the hiv
 Two devs work in parallel, each with their own agent. Before claiming an issue,
 starting work, or editing a file another open issue lists under **Touches**,
 read and follow `docs/agents/collaboration.md`.
-AT mode, triagemaster and per-account settings: `docs/agents/autotriage.md`; other accounts read `docs/agents/autotriage-debrief.md` once.
+AT mode, triagemaster and per-account settings: `docs/agents/hive.md`; other accounts read `docs/agents/hive-debrief.md` once.
 
 ### Domain docs
 
