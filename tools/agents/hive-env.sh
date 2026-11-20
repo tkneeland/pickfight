@@ -308,6 +308,9 @@ hive_pr_conflict_risk() {
 # hive_merge_gated <slug> <pr> [ticket]: 0 when this account must not merge the PR (conflict-risk, or unknown, and not
 # the triagemaster). Private mode has no labels, so never gated.
 hive_merge_gated() { [ "$PRIVATE" != 1 ] || return 1; hive_is_triagemaster && return 1; hive_pr_conflict_risk "$@"; [ $? != 1 ]; }
+# hive_screen <kind>: this repo's screen session name for a watcher, hive-<kind>-<repo>-<account>. The repo is in the
+# name so one machine can run several games' hives side by side (a bare hive-<kind>-<account> was one game's only).
+hive_screen() { printf 'hive-%s-%s-%s' "$1" "${HIVE_SLUG#*__}" "$HIVE_ACCOUNT"; }
 hive_run_install() { [ -n "${INSTALL_CMD:-}" ] && ( cd "$ROOT" && bash -c "$INSTALL_CMD" ); return 0; }
 # Append one tagged line to the outbox the main terminal watches: hive_outbox FIRE "text"
 hive_outbox() { printf '[%s] %s\n' "$1" "$2" >> "$HIVE_OUTBOX"; }

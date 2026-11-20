@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
   Registers (or replaces) two scheduled tasks for the account:
-  - "hive AT watchers (<Account>)": runs hive-start.ps1 at logon and every 5 minutes, so a dead watcher (above all the
+  - "hive AT watchers (<repo>, <Account>)": runs hive-start.ps1 at logon and every 5 minutes, so a dead watcher (above all the
     private-channel listener, `msg`) is back within 5 minutes and the machines in the hive can always reach each other.
-  - "hive AT session (<Account>)": runs hive-keepalive.ps1 at logon and every 5 minutes, which keeps ONE always-on headless
+  - "hive AT session (<repo>, <Account>)": runs hive-keepalive.ps1 at logon and every 5 minutes, which keeps ONE always-on headless
     Claude session running the AT prompt. Nobody needs a terminal open (skip it with -NoSession).
 .PARAMETER Account
   GitHub handle (HIVE_ACCOUNT).
@@ -16,7 +16,7 @@
   hive-start.ps1 and hive-keepalive.ps1 leave a running copy alone, so the repeat is safe. Also keeps the PC from
   sleeping while plugged in. Both tasks run with no window at all (conhost --headless).
   Run once: powershell -ExecutionPolicy Bypass -File tools\agents\windows\hive-install-task.ps1 -Account <handle>
-  Check:    Get-ScheduledTask -TaskName "hive AT watchers (<handle>)" | Get-ScheduledTaskInfo
+  Check:    Get-ScheduledTask -TaskName "hive AT watchers (<repo>, <handle>)" | Get-ScheduledTaskInfo
             powershell -ExecutionPolicy Bypass -File tools\agents\windows\hive-status.ps1 -Account <handle>
 #>
 param([Parameter(Mandatory = $true)][string]$Account, [switch]$NoSession, [switch]$SkipPermissions)
@@ -24,7 +24,8 @@ $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $start = Join-Path $here "hive-start.ps1"
 $keepalive = Join-Path $here "hive-keepalive.ps1"
-$name = "hive AT watchers ($Account)"
+$repo = Split-Path -Leaf (Resolve-Path (Join-Path $here "..\..\..")).Path   # one task pair per game on a machine
+$name = "hive AT watchers ($repo, $Account)"
 # conhost --headless: PowerShell's own -WindowStyle Hidden only hides the console after it has opened, so the task
 # flashed a window every 5 minutes. A headless console host never shows one (Windows 10 1809+ and 11).
 $a = New-ScheduledTaskAction -Execute "conhost.exe" `
@@ -40,7 +41,7 @@ powercfg /change standby-timeout-ac 0
 Write-Host "Registered '$name' (logon + every 5 min); AC sleep off."
 
 if (-not $NoSession) {
-  $sname = "hive AT session ($Account)"
+  $sname = "hive AT session ($repo, $Account)"
   $extra = if ($SkipPermissions) { " -SkipPermissions" } else { "" }
   $sa = New-ScheduledTaskAction -Execute "conhost.exe" `
     -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$keepalive`" -Account $Account$extra"

@@ -10,7 +10,7 @@
 #                              refresh can stop, which froze the beacon at 0%.
 #   hive-supervise.sh msg        keeps `hive-msg.sh listen` alive (private ntfy channel) and runs `hive-msg.sh heartbeat` every 60 s.
 #                              Holds msg-run.pid (shared with `hive-msg.sh run`): a second channel supervisor exits at once.
-#                              macOS: screen -dmS hive-msg-<account> bash tools/agents/windows/hive-supervise.sh msg
+#                              macOS: screen -dmS hive-msg-<repo>-<account> bash tools/agents/windows/hive-supervise.sh msg
 #   hive-supervise.sh voice      keeps the hub voice runner (hive-voice.mjs) alive and rewrites voice-status.json every 60 s.
 #                              Only on a machine whose $HIVE_STATE/hub.conf (or env) has HUB_URL and HUB_VOICE_TOKEN; it
 #                              exits at once otherwise. Node 20.10-21 gets --experimental-websocket. Runner log: voice.log.

@@ -3,7 +3,7 @@
 # For an account with RESERVE=1 in its accounts/<handle>.conf. Zero tokens unless it starts Claude.
 # While every non-reserve dev can work normally, it hands this account's unstarted ready-for-agent tickets back with a
 # [TRIAGE] comment, and also when a regular dev is down but this account's own weekly is at or below
-# MIN_WEEKLY_REMAINING_FOR_TICKETS. It starts a headless AT session (screen hive-reserve-<handle>) when this account has
+# MIN_WEEKLY_REMAINING_FOR_TICKETS. It starts a headless AT session (screen hive-reserve-<repo>-<handle>) when this account has
 # in-flight tickets that need work, or is needed and has ready tickets. Log: $HIVE_STATE/reserve.log
 # The headless session runs with every permission and reads ticket text, so only tickets whose author and last editor are
 # in TRUSTED_TICKET_AUTHORS (hive.conf or _shared.conf; empty = none) go in.
@@ -43,14 +43,14 @@ fi
 DRY=0; [ "${1:-}" = --dry ] && DRY=1
 log() { echo "$(date -u +%FT%TZ) $*" >> "$HIVE_STATE/reserve.log"; }
 [ "$(cat "$HIVE_STATE/at-mode" 2>/dev/null || echo AT)" = MT ] && exit 0
-SESSION=hive-reserve-$HIVE_ACCOUNT
+SESSION=$(hive_screen reserve)
 name=${REPO#*/}
 if [ "$DRY" = 0 ]; then
   # no status line here or in the headless session: refresh the usage snapshot and USAGE beacon from the usage endpoint
   bash "$HIVE_DIR/hive-usage.sh" || log "usage refresh failed (see beacon.log)"
   # the automerger is cheap and should outlive reboots too
-  screen -ls 2>/dev/null | grep -q "\.hive-automerge-$HIVE_ACCOUNT[[:space:]]" ||
-    screen -dmS "hive-automerge-$HIVE_ACCOUNT" bash -c "HIVE_ACCOUNT=$HIVE_ACCOUNT bash $(printf '%q' "$HIVE_DIR/windows/hive-supervise.sh") automerge"
+  screen -ls 2>/dev/null | grep -Fq ".$(hive_screen automerge)	" ||
+    screen -dmS "$(hive_screen automerge)" bash -c "HIVE_ACCOUNT=$HIVE_ACCOUNT bash $(printf '%q' "$HIVE_DIR/windows/hive-supervise.sh") automerge"
   screen -ls 2>/dev/null | grep -q "\.$SESSION[[:space:]]" && exit 0   # a session is already working
   [ "$(git -C "$ROOT" branch --show-current 2>/dev/null)" = "$MAIN_BRANCH" ] && git -C "$ROOT" pull -q --ff-only 2>/dev/null
 fi
