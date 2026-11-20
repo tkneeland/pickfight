@@ -4609,7 +4609,7 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _bot_rounds_1291_on("Vent")
 		"bot_four_bots_finish_rounds_on_summit_1294":
 			# King of the Hill only: Summit's Stock round ends under the cap on about
-			# 72% of seeds (32 measured, with #1299's route planning); route planning did
+			# 70% of seeds (48 measured, with #1299's route planning); route planning did
 			# not raise that, so the rest is tracked on #1299 with the numbers.
 			return await _bot_rounds_1291_on("Summit", [GameModesType.KING_OF_THE_HILL] as Array[String])
 		"bot_route_map_of_summit_1299":
@@ -66212,7 +66212,7 @@ func _scenario_release_sets_steam_app_id_never_480_1289() -> Array[String]:
 ## Issue #1291: four bots finish a King of the Hill and a Stock round on a stage
 ## the #409 bullet in docs/FEATURES.md names. A stall names its stage and mode.
 ## `modes` defaults to both. Summit runs King of the Hill only (#1294): its Stock
-## round no longer stalls (#1296) but ends under the cap on only about 72% of seeds (#1299).
+## round no longer stalls (#1296) but ends under the cap on only about 70% of seeds (#1299).
 func _bot_rounds_1291_on(stage_name: String, modes: Array[String] = [GameModesType.KING_OF_THE_HILL, GameModesType.STOCK]) -> Array[String]:
 	var failures: Array[String] = []
 	# Every mode runs even after one fails, so a stall in one cannot hide another.
