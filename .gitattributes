@@ -6,3 +6,4 @@
 tools/agents/**/*.sh text eol=lf
 tools/agents/accounts/*.conf text eol=lf
 tools/agents/windows/*.ps1 text eol=lf
+tools/game/*.sh text eol=lf

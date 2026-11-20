@@ -1,15 +1,16 @@
 #!/bin/bash
-# Offline test for pf-discord.sh (autotriage.md rule 20): a stub curl answers by URL from canned JSON, logs every call.
+# Offline test for hive-discord.sh (hive.md rule 20): a stub curl answers by URL from canned JSON, logs every call.
 # No network. macOS, Linux and Git Bash.   bash tools/agents/tests/discord-admin.sh
-AG=$(cd "$(dirname "$0")/.." && pwd)
-T=$(mktemp -d "${TMPDIR:-/tmp}/pf-discord-admin.XXXXXX") || exit 1; trap 'rm -rf "$T"' EXIT
-export PF_STATE_DIR=$T/state PF_ACCOUNT=tommykneeland PF_DISCORD_POLL=0; mkdir -p "$PF_STATE_DIR" "$T/bin"
+. "$(dirname "$0")/lib.sh"
+T=$(mktemp -d "${TMPDIR:-/tmp}/hive-discord-admin.XXXXXX") || exit 1; trap 'rm -rf "$T"' EXIT
+hive_fixture "$T" || exit 1
+export HIVE_STATE_DIR=$T/state HIVE_ACCOUNT=dave HIVE_DISCORD_POLL=0; mkdir -p "$HIVE_STATE_DIR" "$T/bin"
 cat > "$T/channels.json" <<'J'
 [{"id":"11","type":4,"name":"🎮 Game","position":2},{"id":"12","type":0,"name":"🐛・bug-reports","parent_id":"11","position":3},
  {"id":"13","type":0,"name":"💬・general","position":1},{"id":"14","type":0,"name":"🔒・dev-chat","position":4}]
 J
 echo '[{"id":"900","name":"@everyone","position":0},{"id":"901","name":"Dev","position":1}]' > "$T/roles.json"
-echo '[{"id":"501","timestamp":"2026-11-10T20:00:00","author":{"username":"sam"},"content":"hi","attachments":[]}]' > "$T/msgs.json"
+echo '[{"id":"501","timestamp":"2026-11-10T20:00:00","author":{"username":"carol"},"content":"hi","attachments":[]}]' > "$T/msgs.json"
 # stub: first stdin line has the header, second the url; argv logged after it
 cat > "$T/bin/curl" <<EOF
 #!/bin/bash
@@ -24,15 +25,15 @@ EOF
 chmod +x "$T/bin/curl"; export PATH=$T/bin:$PATH
 pass=0; fail=0
 check() { if [ "$2" = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $1: got '$2', want '$3'"; fi; }
-D="$AG/pf-discord.sh"
+D="$AG/hive-discord.sh"
 bash "$D" channels >/dev/null 2>&1; check "no conf" $? 2
-echo 'PF_DISCORD_TOKEN=tok' > "$PF_STATE_DIR/pf-discord.conf"
+echo 'HIVE_DISCORD_TOKEN=tok' > "$HIVE_STATE_DIR/discord.conf"
 check "channels sorted with category" "$(bash "$D" channels | head -n 1)" "13  text  💬・general"
 check "child shows category" "$(bash "$D" channels | grep -c '🎮 Game / 🐛・bug-reports')" 1
 check "read by name fragment" "$(bash "$D" read bug 5 | grep -c '^hi$')" 1
 grep -q 'channels/12/messages?limit=5' "$T/curl.log"; check "read hits resolved id" $? 0
 bash "$D" read e >/dev/null 2>&1; check "ambiguous name refused" $? 2
-check "watch wakes on a post" "$(bash "$D" watch bug)" "DISCORD 🐛・bug-reports 1 new (pf-discord.sh read 12 1)"
+check "watch wakes on a post" "$(bash "$D" watch bug)" "DISCORD 🐛・bug-reports 1 new (hive-discord.sh read 12 1)"
 check "post returns id" "$(bash "$D" post general 'hello @everyone')" 600
 grep 'messages | ' "$T/curl.log" | grep -- '-XPOST' | grep -q '"parse":\[\]'; check "post pings nobody" $? 0
 check "topic" "$(bash "$D" topic 12 'new topic')" "#🐛・bug-reports topic: t"

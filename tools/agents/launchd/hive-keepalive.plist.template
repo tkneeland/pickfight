@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- macOS: keeps the AT session alive. Fill the {{PLACEHOLDERS}}, save as ~/Library/LaunchAgents/{{LABEL}}.plist, then
+       launchctl load ~/Library/LaunchAgents/{{LABEL}}.plist
+     LABEL: e.g. com.example.hive-<repo>-<account>. SCRIPT: absolute path to tools/agents/hive-keepalive.sh in your checkout. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>{{LABEL}}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>{{SCRIPT}}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HIVE_ACCOUNT</key><string>{{ACCOUNT}}</string>
+    <key>HOME</key><string>{{HOME}}</string>
+  </dict>
+  <key>WorkingDirectory</key><string>{{REPO_PATH}}</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>{{HOME}}/.claude/hive/keepalive.log</string>
+  <key>StandardErrorPath</key><string>{{HOME}}/.claude/hive/keepalive.log</string>
+</dict>
+</plist>
