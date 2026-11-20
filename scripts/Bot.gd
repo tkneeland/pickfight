@@ -214,6 +214,20 @@ const PAD_CLIMB: float = 150.0
 const PAD_SEARCH: float = 700.0
 ## A pad this close in height to the bot's own ground is on its floor.
 const PAD_FLOOR_SLACK: float = 40.0
+## How high over a pad's top must be clear for a launch to count as clear, and
+## the step of the scan along the pad (#1294).
+const PAD_CLEAR_HEIGHT: float = 220.0
+const PAD_CLEAR_STEP: float = 5.0
+## Near the launch spot the bot vaults short (PAD_SLOW_SCALE of its push), so
+## it lands on the spot instead of sailing over the pad; over it, within
+## PAD_DROP and slower across than PAD_DROP_SPEED, it holds its head up so its
+## body, not its head, comes down on the pad (a head planted on a pad holds the
+## body off it). The launch keeps the run, and Summit's clear column is 70 px for
+## a 48 px body: a launch carried 190 px/s across clipped the tower (#1294).
+const PAD_SLOW: float = 110.0
+const PAD_SLOW_SCALE: float = 0.5
+const PAD_DROP: float = 14.0
+const PAD_DROP_SPEED: float = 100.0
 ## A moving platform travelling further than this sideways counts as ground
 ## that will not last.
 const SIDEWAYS_TRAVEL: float = 20.0
@@ -370,6 +384,10 @@ var _danger_frame: int = -1
 ## True while the bot is heading for a bounce pad on purpose, so the pad
 ## counts as ground to walk onto.
 var _pad_route: bool = false
+## Whether the think before this one was on its way to a pad (#1294).
+var _pad_route_was: bool = false
+## Pad instance id -> the x its launch goes up clear from (#1294).
+var _pad_launch: Dictionary = {}
 var _hooked_for: float = 0.0
 var _aggression: float = 0.0
 ## The skill level (#682) this bot plays at; "" follows the room's setting.
@@ -452,6 +470,7 @@ func think(delta: float) -> Vector2:
 		_footing_frame = -1
 		_lava_top_frame = -1
 		_pad_route = false
+		_pad_route_was = false
 		_edge_wait = 0.0
 		_desperate_left = 0.0
 		_wait_total = 0.0
@@ -515,7 +534,22 @@ func think(delta: float) -> Vector2:
 	var unhook: Vector2 = _unhook(delta)
 	if unhook != Vector2.ZERO:
 		return unhook
+	if mode == "move" and _pad_route:
+		return _pad_approach(delta)
 	return _vault(delta)
+
+## On the way to a pad's launch spot (#1294): short vaults once near it, and
+## the head held up once over it, so the body drops onto the clear part of the
+## pad. Fast vaults sailed over Summit's pads and back, and a bot over the pad
+## planted its head on it and stood there on it, never launched.
+func _pad_approach(delta: float) -> Vector2:
+	var dx: float = absf(goal.x - player.global_position.x)
+	var body := player as RigidBody2D
+	var slow: bool = body == null or absf(body.linear_velocity.x) <= PAD_DROP_SPEED
+	if dx <= PAD_DROP and slow and player.global_position.y < goal.y:
+		return Vector2(0.0, -AIR_LENGTH)
+	var drive: Vector2 = _vault(delta)
+	return drive * PAD_SLOW_SCALE if dx <= PAD_SLOW else drive
 
 # --- Mode objectives (issue #353) -------------------------------------------------
 
@@ -660,6 +694,7 @@ func _choose_goal() -> void:
 	elif in_detour:
 		chase_pickup = pickup
 	var lava_close: bool = _lava_worry()
+	_pad_route_was = _pad_route
 	_pad_route = false
 	# Out from under a rock, out of a hazard's margin, off ground giving way
 	# or ground that will not last: before anything else (issue #176).
@@ -1723,7 +1758,10 @@ func _can_step(kind: int, from: int) -> bool:
 		FOOT_RIDE:
 			return from != FOOT_SOLID or _desperate()
 		FOOT_PAD:
-			return _pad_route
+			# Waited out at an edge, a pad is a way on (#1294): Summit's pads lie
+			# across the floor and under the steps' inner edges, so a bot that
+			# would only take one on purpose never crossed the middle.
+			return _pad_route or _desperate()
 	return false
 
 ## What the bot is standing on, or over, now.
@@ -1790,11 +1828,7 @@ func _ground_kind(collider: Object) -> int:
 	return FOOT_SOLID
 
 ## The side of the nearest clear column above the bot, preferring `side` on
-## a tie; `side` itself if the whole scan is covered. A column counts only if
-## the bot could stand in it, EDGE_KEEP short of any drop (#1294): Summit's high
-## side platforms end just inside the floor's own ends, so the nearer way round
-## them led to the stage edge, where the edge check held the bot for the rest
-## of the round instead of letting it walk on under the platform to the goal.
+## a tie; `side` itself if the whole scan is covered.
 func _way_round_ceiling(side: float) -> float:
 	var me: Vector2 = player.global_position
 	var first: float = side if side != 0.0 else 1.0
@@ -1932,6 +1966,11 @@ func _escape_goal() -> Vector2:
 	# Ground made to be ridden is not fled once the bot is on it (#409).
 	if kind == FOOT_RIDE:
 		return Vector2.INF
+	# Nor is a pad the bot was making for, or has waited at an edge to take
+	# (#1294): fleeing it turned a bot back at the pad it had walked to, and
+	# put one back on the step it had waited on.
+	if kind == FOOT_PAD and (_pad_route_was or _desperate()):
+		return Vector2.INF
 	# Over nothing (or ground giving way), or on ground that will not last:
 	# to the nearest solid ground either way, if there is any near enough.
 	var best: float = INF
@@ -1959,11 +1998,17 @@ func _floor_top(x: float, above_y: float) -> float:
 	var hit: Dictionary = space.intersect_ray(query)
 	return NAN if hit.is_empty() else (hit["position"] as Vector2).y
 
-## The nearest bounce pad on the bot's own floor that it can walk to, when
-## the target is high above (issue #176): the pad is the way up. The bot
-## runs onto it and the launch keeps its run. Vector2.INF when there is none.
+## The bounce pad on the bot's own floor that it can walk to and that is the
+## shortest way to the target along x (the walk to the pad, then the pad to the
+## target), when the target is high above (issue #176): the pad is the way up.
+## The bot runs onto it and the launch keeps its run. Not just the nearest pad
+## (#1294): on Summit that sent a bot under the tower up the far side's gap,
+## away from a goal on the other wing. Vector2.INF when there is none.
 func _pad_towards(high: Vector2) -> Vector2:
-	if _pads.is_empty() or _standing_on() != FOOT_SOLID:
+	# From over the pad itself too (#1294): dropping the route there walked the
+	# bot back off the pad it had come for.
+	var on: int = _standing_on()
+	if _pads.is_empty() or (on != FOOT_SOLID and on != FOOT_PAD):
 		return Vector2.INF
 	var me: Vector2 = player.global_position
 	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
@@ -1976,10 +2021,10 @@ func _pad_towards(high: Vector2) -> Vector2:
 	for pad: Node2D in _pads:
 		if not is_instance_valid(pad) or not pad.is_inside_tree():
 			continue
-		var at: Vector2 = pad.global_position
+		var at := Vector2(_pad_launch_x(pad), pad.global_position.y)
 		if absf(at.y - floor_y) > PAD_FLOOR_SLACK or absf(at.x - me.x) > PAD_SEARCH:
 			continue
-		if absf(at.x - me.x) >= absf(best.x - me.x):
+		if best != Vector2.INF and absf(at.x - me.x) + absf(high.x - at.x) >= absf(best.x - me.x) + absf(high.x - best.x):
 			continue
 		_pad_route = true
 		var reachable: bool = _walkable_to(at.x)
@@ -1987,6 +2032,40 @@ func _pad_towards(high: Vector2) -> Vector2:
 		if reachable:
 			best = at
 	return best
+
+## Where on `pad` a launch goes up clear (#1294): the middle of the widest run of
+## the pad's top with nothing overhead for PAD_CLEAR_HEIGHT, or the pad's middle
+## when no run is a body wide. Summit's pads reach under the step on one side
+## and the tower on the other, and a launch from either end hit the underside.
+## Worked out once a stage read: pads do not move.
+func _pad_launch_x(pad: Node2D) -> float:
+	var id: int = pad.get_instance_id()
+	if _pad_launch.has(id):
+		return _pad_launch[id]
+	var middle: float = pad.global_position.x
+	var size: Variant = pad.get("size")
+	if not size is Vector2 or not is_zero_approx(pad.global_rotation):
+		_pad_launch[id] = middle
+		return middle
+	var half: Vector2 = (size as Vector2) * pad.global_scale.abs() * 0.5
+	var top: float = pad.global_position.y - half.y - 2.0
+	var run_from: float = NAN
+	var best_from: float = NAN
+	var best_width: float = 0.0
+	var x: float = pad.global_position.x - half.x
+	while x <= pad.global_position.x + half.x + 0.01:
+		if _ray_hits(Vector2(x, top), Vector2(x, top - PAD_CLEAR_HEIGHT)):
+			run_from = NAN
+		else:
+			if is_nan(run_from):
+				run_from = x
+			if x - run_from > best_width:
+				best_width = x - run_from
+				best_from = run_from
+		x += PAD_CLEAR_STEP
+	var launch: float = best_from + best_width * 0.5 if best_width >= BODY_RADIUS * 2.0 - PAD_CLEAR_STEP else middle
+	_pad_launch[id] = launch
+	return launch
 
 ## No real progress towards the goal for STUCK_SEC and the bot wiggles.
 func _track_progress(delta: float) -> void:
@@ -2135,6 +2214,7 @@ func _read_stage() -> void:
 	_walls.clear()
 	_rocks.clear()
 	_pads.clear()
+	_pad_launch.clear()
 	_saws.clear()
 	_gusts.clear()
 	_danger_frame = -1

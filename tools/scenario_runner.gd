@@ -38831,7 +38831,9 @@ func _scenario_announcer_calls_capture_the_flag() -> Array[String]:
 	return failures
 ## Issue #409, part 2: `_bot_round_409` on a named stage (scenes/stages/<stage>.tscn).
 func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failures: Array[String]) -> float:
-	var stage: Node2D = _new_stage()
+	# No Arena fixture (#1294): its ground slab and platforms overlapped the round's
+	# stage, so the bots played a different map (on Summit the slab covered both pads).
+	var stage: Node2D = _new_empty_stage()
 	var container := Node2D.new()
 	container.name = "ModeContainer"
 	stage.add_child(container)
