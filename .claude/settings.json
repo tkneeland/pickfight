@@ -3,7 +3,7 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "f=\"$CLAUDE_PROJECT_DIR/tools/agents/pf-hive-join.sh\"; [ -f \"$f\" ] && bash \"$f\"; exit 0", "timeout": 8 }
+          { "type": "command", "command": "f=\"$CLAUDE_PROJECT_DIR/tools/agents/hive-join.sh\"; [ -f \"$f\" ] && bash \"$f\"; exit 0", "timeout": 8 }
         ]
       }
     ]

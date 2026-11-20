@@ -60903,12 +60903,12 @@ func _scenario_look_picker_buttons_show_icons() -> Array[String]:
 ## (#1135, tools/agents/README.md). Each rule is [regex, message, guard tool]:
 ## a non-empty guard tool exempts lines covered by `command -v <tool>`.
 const AGENT_SCRIPT_IDIOMS_1135: Array = [
-	["(?<![\\w-])stat\\s+-f", "`stat -f` is BSD-only; use pf_mtime from pf-env.sh", ""],
-	["(?<![\\w-])date\\s+(?:-\\S+\\s+)*-[A-Za-z]*[jr]", "`date -j`/`date -r` is BSD-only; use pf_iso_to_epoch/pf_epoch_fmt from pf-env.sh", ""],
+	["(?<![\\w-])stat\\s+-f", "`stat -f` is BSD-only; use hive_mtime from hive-env.sh", ""],
+	["(?<![\\w-])date\\s+(?:-\\S+\\s+)*-[A-Za-z]*[jr]", "`date -j`/`date -r` is BSD-only; use hive_iso_to_epoch/hive_fmt from hive-env.sh", ""],
 	["(?:^|[|;&(`{]|\\b(?:then|do|else)\\s)\\s*bc(?=\\s|$|[);|<&`])", "`bc` is missing on Git Bash for Windows; use awk", "bc"],
 	["(?<![\\w-])sed\\s+(?:-\\S+\\s+)*-i\\s*(?:''|\"\")", "`sed -i ''` is BSD-only; use `sed -i.bak ...` then rm the .bak", ""],
 	["(?<![\\w-])readlink\\s+(?:-\\S+\\s+)*-[A-Za-z]*f", "`readlink -f` is missing on older macOS", ""],
-	["(?<![\\w-])osascript(?![\\w-])", "`osascript` is macOS-only; use pf_notify or guard it with `command -v osascript`", "osascript"],
+	["(?<![\\w-])osascript(?![\\w-])", "`osascript` is macOS-only; use hive_desktop_notify or guard it with `command -v osascript`", "osascript"],
 ]
 ## Every .sh under `dir`, recursively (.gitattributes covers tools/agents/**/*.sh).
 func _agent_script_paths_1135(dir: String) -> PackedStringArray:
@@ -60972,7 +60972,7 @@ func _agent_script_problems_1135(label: String, bytes: PackedByteArray, check_id
 	return problems
 ## Every tools/agents script stays runnable on macOS, Linux and Windows Git
 ## Bash: a shebang, LF line endings, and none of the BSD- or macOS-only idioms
-## outside pf-env.sh, which holds the portable helpers (#1135).
+## outside hive-env.sh, which holds the portable helpers (#1135).
 func _scenario_agent_scripts_stay_portable() -> Array[String]:
 	var failures: Array[String] = []
 	var paths: PackedStringArray = _agent_script_paths_1135("res://tools/agents")
@@ -60980,7 +60980,7 @@ func _scenario_agent_scripts_stay_portable() -> Array[String]:
 	if paths.size() < 15:
 		failures.append("only %d scripts found under tools/agents; the listing came back empty?" % paths.size())
 	for path: String in paths:
-		failures.append_array(_agent_script_problems_1135(path.trim_prefix("res://"), FileAccess.get_file_as_bytes(path), path.get_file() != "pf-env.sh"))
+		failures.append_array(_agent_script_problems_1135(path.trim_prefix("res://"), FileAccess.get_file_as_bytes(path), path.get_file() != "hive-env.sh"))
 	# The CRLF check reads the working tree; this rule keeps CRLF out of the
 	# committed content and out of every checkout, whatever core.autocrlf says.
 	if not FileAccess.get_file_as_string("res://.gitattributes").contains("tools/agents/**/*.sh text eol=lf"):
