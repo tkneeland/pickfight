@@ -35,6 +35,22 @@ sed -i.bak 's/^STUDIO_REPO=.*/STUDIO_REPO=/' "$T/repo/hive.conf"
 check "no STUDIO_REPO: conf only" "$(own bob)" "80 30 70"
 sed -i.bak 's/^STUDIO_REPO=.*/STUDIO_REPO=example\/studio/' "$T/repo/hive.conf"
 
+# auto_file: studio wins (0|1 only), else the conf (alice has none -> 0); own AUTO_FILE follows; hive.sh limits prints all three
+printf '\n%s\n' "AUTO_FILE=1" >> "$AG/accounts/carol.conf"
+auto() { HIVE_ACCOUNT=${2:-alice} bash -c '. "$1/hive-env.sh" || exit 1; hive_limits "$2"; echo "$l_auto"' _ "$AG" "$1"; }
+ownauto() { HIVE_ACCOUNT=$1 bash -c '. "$1/hive-env.sh" || exit 1; echo "$AUTO_FILE"' _ "$AG"; }
+check "auto_file from conf" "$(auto carol)" "1"
+check "auto_file default 0" "$(auto bob)" "0"
+printf '%s\n' "bob five_h=60 weekly=75 auto_file=1" "carol weekly=90 auto_file=0" "alice auto_file=7" > "$T/studio/account-limits.conf"
+check "auto_file from studio" "$(auto bob)" "1"
+check "studio auto_file=0 beats conf 1" "$(auto carol)" "0"
+check "bad auto_file ignored" "$(auto alice bob)" "0"
+check "own AUTO_FILE from studio" "$(ownauto bob)" "1"
+check "own AUTO_FILE studio 0" "$(ownauto carol)" "0"
+check "hive.sh limits" "$(HIVE_ACCOUNT=alice bash "$AG/hive.sh" limits bob carol)" "bob five_h_stop=60 weekly_stop=75 auto_file=1
+carol five_h_stop=90 weekly_stop=90 auto_file=0"
+check "hive.sh limits default: self" "$(HIVE_ACCOUNT=alice bash "$AG/hive.sh" limits)" "alice five_h_stop=90 weekly_stop=100 auto_file=0"
+
 # hive_weekly_capped <used7> <reset epoch> <min remaining>
 cap() { HIVE_ACCOUNT=alice bash -c '. "$1/hive-env.sh" || exit 1; hive_weekly_capped "$2" "$3" "$4" && echo capped || echo ok' _ "$AG" "$@"; }
 now=$(date +%s)

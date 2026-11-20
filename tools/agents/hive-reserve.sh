@@ -42,7 +42,7 @@ EOF
 fi
 DRY=0; [ "${1:-}" = --dry ] && DRY=1
 log() { echo "$(date -u +%FT%TZ) $*" >> "$HIVE_STATE/reserve.log"; }
-[ "$(cat "$HIVE_STATE/at-mode" 2>/dev/null || echo AT)" = MT ] && exit 0
+hive_mt && exit 0   # switched out in the hub (or local MT without a studio): the reserve starts nothing
 SESSION=$(hive_screen reserve)
 name=${REPO#*/}
 if [ "$DRY" = 0 ]; then

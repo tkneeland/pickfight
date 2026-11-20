@@ -15,7 +15,8 @@
 # Rules: a message is ANSWERED by any bot reply that is not a takeover notice (an ack with no reply does not count: in
 # #hive always reply). A notice restarts the 10 minute clock and names the new holder, so a taker that dies is failed
 # over in turn. Holder = the newest notice's "(now X)", else this machine's triagemaster file. Successor = the first
-# live account after the holder by SUCCESSION_RANK, wrapping to the lowest. Live = any channel message from it in
+# live account after the holder by SUCCESSION_RANK, wrapping to the lowest; with the hub's studio file, the next live
+# account after it in the studio queue (hive_queue: accounts switched out are never successors), wrapping to the top. Live = any channel message from it in
 # msg-inbox.log under HIVE_LIVE_SECS (default HIVE_PEER_LIVE_SECS, 5400); this account always counts as live.
 # Env (tests): HIVE_NOW epoch override, HIVE_FAILOVER_SECS (600), HIVE_LIVE_SECS (5400), HIVE_ACCOUNTS_DIR.
 . "$(dirname "$0")/hive-env.sh" || exit 1
@@ -33,7 +34,13 @@ live() {  # live <account>
   local h; h=$(hive_peer_heard "$1"); [ "$h" -gt 0 ] && [ $(( $(now) - h )) -lt "$LIVE" ]
 }
 successor() {  # successor <holder>: the next live account by rank after it (wraps), never the holder itself
-  local hr h r order first=""
+  local hr h r order first="" seen=0
+  if hive_studio_on; then   # the studio queue (hive_queue: accounts that are in, in the hub's order)
+    order=$(hive_queue)
+    for h in $order; do [ "$h" = "$1" ] && { seen=1; continue; }; [ "$seen" = 1 ] && live "$h" && { echo "$h"; return; }; done
+    for h in $order; do [ "$h" = "$1" ] && return; live "$h" && { echo "$h"; return; }; done
+    return
+  fi
   hr=$(rank_of "$1"); hr=${hr:-0}
   order=$(for f in "$ACC"/*.conf; do h=$(basename "$f" .conf)
     case $h in (_*|example-*) continue;; esac

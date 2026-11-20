@@ -11,7 +11,7 @@
 - `QUIET_START` / `QUIET_END`: your quiet hours (default 20 to 9), when the hive pings you only about p1. They never slow the work.
 - `AUTO_FILE`: `0` = your Claude asks for tickets instead of filing them. Set `1` only if the team agrees.
 - `MIN_WEEKLY_REMAINING_FOR_TICKETS`: your account gets no new tickets when its remaining weekly percent is at or below this (use 50 for a reserve account), except in the last 24h before your weekly reset. Set it, and your 5-hour stop, in the hive hub; the hub's values win over the conf.
-- `SUCCESSION_RANK`: who stands in as triagemaster when the current one runs low (2 is next, then 3).
+- `SUCCESSION_RANK`: who stands in as triagemaster when the current one runs low (2 is next, then 3). With a studio, the hive hub's members list sets this order instead.
 - `DISPLAY_NAME`: your name as the hive writes it (optional).
 - `RESERVE=1`: only for a spare account that should work only while the regular devs cannot (`accounts/example-reserve.conf`).
 
@@ -21,7 +21,7 @@
 
 **Requesting tickets.** Ask the triagemaster, send an `ASK` on the private channel (`hive-ask.sh <account> "<question>"` waits for the answer), or, when the team uses Discord, post in the dev channel. Before asking, your Claude runs `tools/agents/hive-dupe-check.sh "<keywords>"` so you do not request something that exists.
 
-**Switching modes.** Tell your Claude "MT mode" to make it act only when asked, or "AT mode" to switch back (`bash tools/agents/hive-at-mode.sh MT` or `AT`).
+**Switching modes.** With a studio, switch your account out (MT: it acts only when asked) or in (AT) on the hive hub's members tab. Without one, tell your Claude "MT mode" or "AT mode" (`bash tools/agents/hive-at-mode.sh MT` or `AT`).
 
 **The status line.**
 ```
