@@ -247,6 +247,9 @@ const PAD_FLEE_HEIGHT: float = 120.0
 ## Off a level pad, solid ground the way the bot was going is taken over the
 ## nearest if it is no more than this further (#1296).
 const PAD_FLEE_AHEAD: float = 120.0
+## A pad is set in a floor when floor level with its top is found this far past
+## each of its ends (#1296).
+const PAD_FLOOR_PAST: float = 30.0
 ## Near the launch spot the bot vaults short (PAD_SLOW_SCALE of its push), so
 ## it lands on the spot instead of sailing over the pad; over it, within
 ## PAD_DROP and slower across than PAD_DROP_SPEED, it holds its head up so its
@@ -357,8 +360,8 @@ var _anchor: Vector2 = Vector2.ZERO
 var _anchor_length: float = 0.1
 ## How far out (px) the push may send the head: INF but on a thin platform (#1296).
 var _anchor_cap: float = INF
-## Whether the anchor being planted is for height (a climb or pogo), not travel (#1296).
-var _anchor_rising: bool = false
+## Whether the anchor being planted is a travel one, whose push the thin-platform cap limits (#1296).
+var _anchor_capped: bool = false
 ## True when the last anchor search found nothing to push off: the bot is in
 ## the air, and holds the head low and behind instead of pushing.
 var _airborne: bool = true
@@ -443,6 +446,8 @@ var _pad_target_was: Node2D = null
 ## fixed terrain is over the pad at all (#1294).
 var _pad_launch: Dictionary = {}
 var _pad_tight: Dictionary = {}
+## Pad instance id -> whether floor goes on past both its ends (#1296).
+var _pad_flush: Dictionary = {}
 ## `_round_manager()` worked out once a physics tick (#1294).
 var _rm_frame: int = -1
 var _rm_cached: Node = null
@@ -479,8 +484,8 @@ func wall_chop_sec(sweep: bool) -> float:
 var _last_head: Vector2 = Vector2.ZERO
 var _unhook_left: float = 0.0
 var _unhook_side: float = 1.0
-## The input held while unhooking: sideways, or sideways and up for a head
-## trapped under the bot's own ledge (#1296).
+## The input held while unhooking: sideways, or for a head trapped under the
+## bot's own ledge, towards the ledge's nearer end at the head's depth (#1296).
 var _unhook_dir: Vector2 = Vector2.RIGHT
 ## The players' bodies, which every ray ignores: gathered once a physics tick,
 ## not once a ray (issue #165).
@@ -529,6 +534,7 @@ func think(delta: float) -> Vector2:
 		_wall_target = null
 		_danger_frame = -1
 		_footing_frame = -1
+		_own_floor_frame = -1
 		_lava_top_frame = -1
 		_pad_route = false
 		_pad_target = null
@@ -848,9 +854,10 @@ func _choose_goal() -> void:
 		goal = chase_pickup.global_position
 		var gap: float = me.distance_to(goal)
 		# The stall clock only runs while the bot is actually on its way: a fight,
-		# a flee or a pad route (a detour, at first away from the pickup) in
-		# between starts it again.
-		var resumed: bool = _clock - _chase_seen_at > THINK_SEC * 2.0 or is_instance_valid(_pad_target_was)
+		# a flee, a pad route or a way round (detours that lead away from the
+		# pickup at first) start it again.
+		var resumed: bool = _clock - _chase_seen_at > THINK_SEC * 2.0 or is_instance_valid(_pad_target_was) \
+				or _travel_side() * signf(goal.x - me.x) < 0.0
 		_chase_seen_at = _clock
 		if chase_pickup != _chasing:
 			_chasing = chase_pickup
@@ -1077,6 +1084,8 @@ const HOOK_MAX_HOLD_TICKS: int = 120
 ## planted on it sends the head no more than THIN_PUSH_DEPTH past its top.
 const THIN_PROBE: float = 30.0
 const THIN_PUSH_DEPTH: float = 16.0
+## Half the width the thin test checks under the planted head (#1296).
+const THIN_FOOTPRINT: float = 10.0
 ## The rod casts at a rival within this fraction of its launch range.
 const ROD_RANGE_FRACTION: float = 0.8
 ## The grapple fires at a rival or a wall within this fraction of its range.
@@ -1128,12 +1137,13 @@ func _hook_drive(delta: float) -> Vector2:
 			return Vector2.ZERO if _hook_let_go else Vector2.INF
 		if hook.is_stuck() or hook.is_reeling():
 			_hook_held_ticks += 1
-			# Also once the haul has had HOOK_MAX_HOLD_TICKS and not brought the bot
-			# in (#1296): a hook stuck past Summit's tower lip held a bot on the
-			# tower, input pinned to the cast, for over a minute.
+			# Also once a stuck hook's haul has had HOOK_MAX_HOLD_TICKS and not
+			# brought the bot in (#1296): a hook stuck past Summit's tower lip held
+			# a bot on the tower, input pinned to the cast, for over a minute. Not a
+			# reel (the fishing rod's), which may take longer to bring a rival in.
 			if (_hook_held_ticks >= HOOK_LET_GO_TICKS \
 					and player.global_position.distance_to(hook.global_position) <= _reach() + HOOK_RELEASE_MARGIN) \
-					or _hook_held_ticks >= HOOK_MAX_HOLD_TICKS:
+					or (hook.is_stuck() and _hook_held_ticks >= HOOK_MAX_HOLD_TICKS):
 				# Let go with no input (#1296): any other input holds the drag,
 				# and a bot that went straight back to vaulting stayed tied to a
 				# hook stuck in the floor beside it for the rest of the round. Not
@@ -1668,8 +1678,8 @@ func _unhook(delta: float) -> Vector2:
 		# head's depth: the head cannot come up through the ledge, and swept
 		# towards its own side it only went further under (Summit's steps are
 		# 24 px thick, and a shallow vault's head went through one).
-		var right: float = _edge_room(1.0, TRAPPED_LIP_SEARCH, true)
-		var left: float = _edge_room(-1.0, TRAPPED_LIP_SEARCH, true)
+		var right: float = _ledge_end(1.0)
+		var left: float = _ledge_end(-1.0)
 		_unhook_side = 1.0 if right <= left else -1.0
 		var lip := Vector2(me.x + _unhook_side * (minf(right, left) + BODY_RADIUS * 2.0), head.y)
 		_unhook_dir = (lip - me).normalized()
@@ -1678,6 +1688,23 @@ func _unhook(delta: float) -> Vector2:
 	_unhook_side = side if side != 0.0 else (-1.0 if rng.randf() < 0.5 else 1.0)
 	_unhook_dir = Vector2(_unhook_side, 0.0)
 	return _unhook_dir
+
+## How far along `side` the ledge under the bot runs before it ends (#1296):
+## the first column whose ground is not at the bot's own floor, up to
+## TRAPPED_LIP_SEARCH. `_edge_room` will not do: it counts a drop to the floor
+## below as ground, so from Summit's tower neither of its ends showed up.
+func _ledge_end(side: float) -> float:
+	var me: Vector2 = player.global_position
+	var floor_y: float = _own_floor_y()
+	if is_nan(floor_y):
+		return 0.0
+	var d: float = SCAN_STEP
+	while d <= TRAPPED_LIP_SEARCH:
+		var ground: float = _ground_below(me + Vector2(side * d, 0.0))
+		if is_nan(ground) or absf(ground - floor_y) > FLOOR_SAME_LEVEL:
+			return d - SCAN_STEP
+		d += SCAN_STEP
+	return TRAPPED_LIP_SEARCH
 
 ## Vault towards `goal`: aim short at an anchor, then push out through it.
 func _vault(delta: float) -> Vector2:
@@ -1708,12 +1735,15 @@ func _thin_anchor_cap(from: Vector2, dir: Vector2) -> float:
 	if hit.is_empty():
 		return INF
 	var surface: Vector2 = hit["position"]
+	# Thin only with open space under the head's whole width: a hit near a thick
+	# floor's corner is not a thin platform.
 	var probe := PhysicsPointQueryParameters2D.new()
-	probe.position = surface + Vector2(0.0, THIN_PROBE)
 	probe.collision_mask = LAYER_WORLD
 	probe.exclude = _player_rids()
-	if not space.intersect_point(probe, 1).is_empty():
-		return INF
+	for dx: float in [-THIN_FOOTPRINT, THIN_FOOTPRINT]:
+		probe.position = surface + Vector2(dx, THIN_PROBE)
+		if not space.intersect_point(probe, 1).is_empty():
+			return INF
 	return from.distance_to(surface) + THIN_PUSH_DEPTH
 
 ## Where the head plants for the next vault. Pushing the head out through
@@ -1728,7 +1758,7 @@ func _pick_anchor() -> void:
 	if error > 0.0:
 		_anchor = _anchor.rotated(rng.randf_range(-error, error)) # a weaker bot plants its head off line (#682)
 	# Travel only (#1296): a climb or pogo off a thin ledge keeps its full push.
-	_anchor_cap = INF if _airborne or _anchor_rising else _thin_anchor_cap(player.global_position, _anchor)
+	_anchor_cap = _thin_anchor_cap(player.global_position, _anchor) if _anchor_capped else INF
 
 func _plan_anchor() -> void:
 	var me: Vector2 = player.global_position
@@ -1764,12 +1794,14 @@ func _plan_anchor() -> void:
 	# the air: it holds the head short and low, ready to plant on landing,
 	# without pogoing on it.
 	_airborne = true
-	_anchor_rising = rising
+	_anchor_capped = false
 	for dir: Vector2 in candidates:
 		if _floor_hit(me, me + dir * (_reach() + ANCHOR_SLACK)):
 			_anchor = dir
 			_anchor_length = AIM_LENGTH
 			_airborne = false
+			# A travel vault: a climb or pogo keeps its full push (#1296).
+			_anchor_capped = not rising
 			return
 	# Perched on an edge's corner, the body's middle over the drop and no
 	# ground behind to push off: fling the head up and in over the ground,
@@ -1983,6 +2015,23 @@ func _footing_uncached(point: Vector2, past_danger: bool) -> int:
 			return FOOT_NONE
 	return _ground_kind(hit["collider"], past_danger)
 
+## Whether there is floor level with `pad`'s top (at `top`) just past both its
+## ends (#1296). Worked out once a stage read: pads and floors do not move.
+func _pad_in_floor(pad: Node2D, top: float) -> bool:
+	var id: int = pad.get_instance_id()
+	if _pad_flush.has(id):
+		return _pad_flush[id]
+	var size: Variant = pad.get("size")
+	var half: float = ((size as Vector2).x * absf(pad.global_scale.x) * 0.5) if size is Vector2 else BODY_RADIUS
+	var flush: bool = true
+	for side: float in [-1.0, 1.0]:
+		var past := Vector2(pad.global_position.x + side * (half + PAD_FLOOR_PAST), top - BODY_RADIUS)
+		var ground: float = _ground_below(past)
+		if is_nan(ground) or absf(ground - top) > PAD_FLOOR_SLACK:
+			flush = false
+	_pad_flush[id] = flush
+	return flush
+
 ## The y of the ground straight under the bot, worked out once a physics tick
 ## (#1296), or NAN over none.
 func _own_floor_y() -> float:
@@ -2016,7 +2065,11 @@ func _ground_kind(collider: Object, past_danger: bool = false) -> int:
 		var size: Variant = pad.get("size")
 		var top: float = pad.global_position.y - ((size as Vector2).y * absf(pad.global_scale.y) * 0.5 if size is Vector2 else 0.0)
 		var floor_y: float = _own_floor_y()
-		return FOOT_PAD if not is_nan(floor_y) and absf(top - floor_y) <= PAD_FLOOR_SLACK else FOOT_OTHER_PAD
+		if is_nan(floor_y) or absf(top - floor_y) > PAD_FLOOR_SLACK:
+			return FOOT_OTHER_PAD
+		# And with the floor going on past both its ends: a pad at the end of a
+		# floor (Treadmill's) throws a bot walking out on to it off the stage.
+		return FOOT_PAD if _pad_in_floor(pad, top) else FOOT_OTHER_PAD
 	# A platform moving sideways (a ferry's barge) is gone from under a
 	# step a moment later, and a lift a long way up or down is soon far from
 	# where it was stepped on; a piston's short stroke is ground enough.
@@ -2054,7 +2107,7 @@ func _way_round_floor(side: float, under: float) -> float:
 		for s: float in [first, -first]:
 			var column: Vector2 = me + Vector2(s * step, 0.0)
 			var ground: float = _ground_below(column)
-			if not is_nan(ground) and ground > under + FLOOR_DOWN_STEP and _footing(column) != FOOT_NONE:
+			if not is_nan(ground) and ground > under + FLOOR_DOWN_STEP and _can_step(_footing(column), _standing_on()):
 				return s
 		step += CEILING_SCAN_STEP
 	return side
@@ -2235,9 +2288,12 @@ func _escape_goal() -> Vector2:
 	# Ground at or below the bot's own height there is walked out onto (#1296):
 	# a bot over Summit's pad, beside the floor under the step, was sent up on
 	# to the step's top instead, which it could not climb to from the gap.
-	var level: float = _ground_below(Vector2(goal_x, me.y))
-	if not is_nan(level) and level > me.y:
-		return Vector2(goal_x, me.y)
+	# Off a pad only: from ground giving way beside a ledge, climbing on to it
+	# is still the way (#409).
+	if kind == FOOT_PAD:
+		var level: float = _ground_below(Vector2(goal_x, me.y))
+		if not is_nan(level) and level > me.y:
+			return Vector2(goal_x, me.y)
 	var top: float = _floor_top(goal_x, me.y)
 	return Vector2(goal_x, minf(me.y, top - BODY_RADIUS * 2.0) if not is_nan(top) else me.y)
 
@@ -2521,10 +2577,12 @@ func _read_stage() -> void:
 	_pads.clear()
 	_pad_launch.clear()
 	_pad_tight.clear()
+	_pad_flush.clear()
 	_saws.clear()
 	_gusts.clear()
 	_danger_frame = -1
 	_footing_frame = -1
+	_own_floor_frame = -1
 	if _lava == null or _lava.get_parent() == null:
 		return
 	for node: Node in _lava.get_parent().find_children("*", "", true, false):
