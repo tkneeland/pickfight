@@ -2124,6 +2124,12 @@ func _escape_goal() -> Vector2:
 	# Up on to a ledge when the solid ground is higher than the bot: a bot
 	# fleeing level with its own height, wedged below a lip, never climbs (#409).
 	var goal_x: float = me.x + best + signf(best) * EDGE_KEEP
+	# Ground at or below the bot's own height there is walked out onto (#1296):
+	# a bot over Summit's pad, beside the floor under the step, was sent up on
+	# to the step's top instead, which it could not climb to from the gap.
+	var level: float = _ground_below(Vector2(goal_x, me.y))
+	if not is_nan(level) and level > me.y:
+		return Vector2(goal_x, me.y)
 	var top: float = _floor_top(goal_x, me.y)
 	return Vector2(goal_x, minf(me.y, top - BODY_RADIUS * 2.0) if not is_nan(top) else me.y)
 
