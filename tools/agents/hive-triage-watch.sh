@@ -21,7 +21,9 @@
 #                      account is the next live one in succession order (rule 21): run hive-failover.sh takeover <id>, then answer
 #   DISCORD_APPROVED <issue> <user>  every 5 min: a dev reacted ✅ to the Discord source of a needs-triage issue
 #   TM_CHECK_FAIL <line>  (triagemaster only) every 6h hive-tm-check.sh found a duty not covered; the line says how to fix it
-#   MODE_MT            hive-at-mode.sh says MT: stop watching
+#   MODE_MT            no studio file and the local at-mode file says MT: stop watching. With the hub's studio file
+#                      (hive/accounts-active.conf), an account switched out keeps watching but gets no MYTICKET or IDLE_SLOTS
+# The triagemaster's DEV_IDLE and PEER_QUEUE_LOW skip accounts that are out (hive_is_out, hive_peers).
 # TRACKER=local: UNTRIAGED <ids> = in-scope needs-triage tickets, MYTICKET <id> = in-scope ready-for-agent ticket while no
 # work package is active. GitHub is not polled at all (no FEATURES?/DEV_IDLE/PEER_QUEUE_LOW lines).
 
@@ -37,20 +39,7 @@ hive_ticket_in_progress() {
   case " $2 " in *" $1 "*) return 0;; esac
   git -C "$ROOT" branch -a --list "*issue-$1-*" "*/$1-*" | grep -q .
 }
-# hive_dev_throttled <handle>: the beacon in hive_beacon's b_* vars shows an account that must sit idle (rules 2, 3, 5): 5h at
-# its own stop (hive_limits) with the window still open, weekly at the handoff level or at its own weekly ticket limit with the
-# reset more than RESET_GRACE_HOURS away. Unknown numbers do not exempt.
-hive_dev_throttled() {
-  local r; hive_limits "$1"
-  if [ -n "$b_used" ] && [ -n "$b_reset" ] && r=$(hive_iso_to_epoch "$b_reset") && hive_weekly_capped "$b_used" "$r" "$l_wmin"; then return 0; fi
-  if [ -n "$b_p5" ] && [ "$b_p5" -ge "$l_5h" ] && [ -n "$b_r5" ]; then
-    r=$(hive_iso_to_epoch "$b_r5") && [ "$r" -gt "$(date +%s)" ] && return 0
-  fi
-  if [ -n "$b_used" ] && [ "$b_used" -ge "${HANDOFF_WEEKLY_USED:-85}" ] && [ -n "$b_reset" ]; then
-    r=$(hive_iso_to_epoch "$b_reset") && [ $(( r - $(date +%s) )) -gt $(( ${RESET_GRACE_HOURS:-24} * 3600 )) ] && return 0
-  fi
-  return 1
-}
+# hive_dev_throttled (an account at its 5h or weekly stop) lives in hive-env.sh, shared with hive_viable (succession).
 # hive_dev_waiting <handle> <issues> <pr_tickets> <cr_busy>: 0 when work waits on the handle (hive.md rule 21): a ready-for-agent
 # ticket with no open PR, or a review-blocked PR of theirs with no commit pushed since the block. In the handle's quiet hours only p1.
 hive_dev_waiting() {
@@ -75,6 +64,7 @@ hive_dev_idle_check() {
   now=${HIVE_NOW:-$(date +%s)}   # HIVE_NOW pins the clock (tests)
   for h in $(hive_handles); do
     [ "$h" = "$HIVE_ACCOUNT" ] && continue
+    hive_is_out "$h" && continue   # switched out in the hub: it does no autonomous work, so nothing waits on it
     # live: any channel message from it under HIVE_PEER_LIVE_SECS old (HELLO and USAGE only go out hourly when idle)
     [ $(( now - $(hive_peer_heard "$h") )) -lt "$HIVE_PEER_LIVE_SECS" ] || continue
     ca=$(hive_peer_claude_at "$h"); [ -n "$ca" ] || continue
@@ -110,7 +100,9 @@ run_hooks() {  # WATCH_HOOKS: ';'-separated commands, run from the install root
 ticketmaker() { bash "$HIVE_DIR/hive-ticketmaker.sh" 2>/dev/null || echo on; }
 while true; do
   : > "$HIVE_STATE/.triage-watch-alive"   # heartbeat for hive-tm-check.sh (rule 19), every poll and tick
-  [ "$(bash "$HIVE_DIR/hive-at-mode.sh")" = MT ] && { echo MODE_MT; exit 0; }
+  # in/out (the hub's studio file, re-read every poll): out starts nothing new, so no MYTICKET and no IDLE_SLOTS (its worker
+  # target is 0); the watcher keeps running for channel messages. Without a studio file the local at-mode MT stops it as before.
+  out=0; if hive_studio_on; then hive_is_out && out=1; elif hive_mt; then echo MODE_MT; exit 0; fi
   # every 6h the triagemaster self-checks its duties (rule 19); first in the loop so other wakes never postpone it
   if hive_is_triagemaster && [ "$SINGLE_ACCOUNT" != 1 ]; then
     last=$(cat "$HIVE_STATE/.tmcheck-last" 2>/dev/null || echo 0)
@@ -124,7 +116,7 @@ while true; do
   issues=""; pr_tickets=""; cr_busy=0
   if [ "$TRACKER" = local ]; then
     u=$(hive_tickets needs-triage | tr '\n' ' '); [ -n "${u// /}" ] && { echo "UNTRIAGED $u"; exit 0; }
-    if [ "$(hive_active_packages)" = 0 ]; then
+    if [ "$out" = 0 ] && [ "$(hive_active_packages)" = 0 ]; then
       r=$(hive_tickets ready-for-agent | head -1); [ -n "$r" ] && { echo "MYTICKET $r"; exit 0; }
     fi
   else
@@ -142,7 +134,7 @@ while true; do
     for c in $(echo "$issues" | jq -r '.[] | select(.pull_request==null) | select(any(.labels[]; .name=="conflict-risk")) | .number'); do
       hive_ticket_in_progress "$c" "$pr_tickets" && { cr_busy=1; break; }
     done
-    for n in $(echo "$issues" | jq -r --arg me "$HIVE_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | select(any(.labels[]; .name=="ready-for-agent")) | "\(.number)|\(any(.labels[]; .name=="conflict-risk"))"'); do
+    [ "$out" = 1 ] || for n in $(echo "$issues" | jq -r --arg me "$HIVE_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.assignees[]; .login==$me)) | select(any(.labels[]; .name=="ready-for-agent")) | "\(.number)|\(any(.labels[]; .name=="conflict-risk"))"'); do
       cr=${n#*|}; n=${n%%|*}
       # skip tickets already in progress: a branch for the issue, or an open PR that closes or refs it
       hive_ticket_in_progress "$n" "$pr_tickets" && continue
@@ -195,7 +187,7 @@ while true; do
         hive_ticket_in_progress "$n" "$pr_tickets" || { startable=1; break; }
       done
     fi
-    if [ "$active" -lt "$min" ] && [ "$startable" = 1 ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
+    if [ "$out" = 0 ] && [ "$active" -lt "$min" ] && [ "$startable" = 1 ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
     # peers' queues (no refill while the ticket-maker is off, rule 11; meta and skip tickets excluded)
     if [ -n "$issues" ] && [ "$SINGLE_ACCOUNT" != 1 ] && hive_is_triagemaster && hive_budget_ok && [ "$(ticketmaker)" = on ]; then
       for peer in $(hive_peers); do

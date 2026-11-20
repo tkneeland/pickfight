@@ -151,9 +151,19 @@ hive_conf_of() { sed -n "s/^$2=//p" "$HIVE_DIR/accounts/$1.conf" 2>/dev/null | s
 hive_is_reserve() { [ "$(hive_conf_of "$1" RESERVE)" = 1 ]; }
 hive_display_name() { local n; n=$(hive_conf_of "$1" DISPLAY_NAME); hive_is_reserve "$1" && n="${n:-$1} (reserve)"; [ -n "$n" ] && echo "$n ($1)" || echo "$1"; }
 hive_rank1() { for h in $(hive_handles); do [ "$(hive_rank_of "$h")" = 1 ] && echo "$h"; done | head -1; }
-hive_peers() { if [ -n "${WATCH_PEERS:-}" ]; then echo $WATCH_PEERS; else for h in $(hive_handles); do [ "$h" = "$HIVE_ACCOUNT" ] || echo "$h"; done; fi; }
-hive_triagemaster() { cat "$HIVE_STATE/triagemaster" 2>/dev/null || hive_rank1; }
-hive_is_triagemaster() { [ "$SINGLE_ACCOUNT" = 1 ] || [ "$(hive_triagemaster)" = "$HIVE_ACCOUNT" ]; }
+# hive_peers: the other accounts that get work (WATCH_PEERS when set, else every other account conf), minus the ones
+# switched out in the hub (hive_is_out): an account that is out is never assigned tickets or woken about its queue.
+hive_peers() {
+  local h l; if [ -n "${WATCH_PEERS:-}" ]; then l=$WATCH_PEERS; else l=$(hive_handles); fi
+  for h in $l; do
+    [ -z "${WATCH_PEERS:-}" ] && [ "$h" = "$HIVE_ACCOUNT" ] && continue
+    hive_is_out "$h" || echo "$h"
+  done
+}
+# hive_triagemaster: the holder hive-succession.sh last wrote, else the top of the queue (hive_queue_top)
+hive_triagemaster() { cat "$HIVE_STATE/triagemaster" 2>/dev/null || hive_queue_top; }
+# an account that is out never acts as the triagemaster, even before succession has moved the role on
+hive_is_triagemaster() { [ "$SINGLE_ACCOUNT" = 1 ] || { [ "$(hive_triagemaster)" = "$HIVE_ACCOUNT" ] && ! hive_is_out; }; }
 [ "$SINGLE_ACCOUNT" = 1 ] && { hive_peers() { :; }; hive_triagemaster() { echo "$HIVE_ACCOUNT"; }; }
 
 # ---- tracker (TRACKER=github: GitHub Issues; TRACKER=local: TRACKER_DIR/<feature>/issues/NN-slug.md, one "Status:" line) ----
@@ -211,7 +221,7 @@ hive_slug_of() { git -C "$1" remote get-url origin 2>/dev/null | sed -E 's#^.*[:
 
 # ---- studio-wide settings (STUDIO_REPO, edited from the hive hub) ----------------------------------------
 # The cache is $HIVE_STUDIO_CACHE (~/.claude/hive/studio), shared by every game on this machine. Reads never call GitHub.
-HIVE_STUDIO_FILES="hive/account-limits.conf"
+HIVE_STUDIO_FILES="hive/account-limits.conf hive/accounts-active.conf"
 # hive_studio_sync: refresh the cached studio files from GitHub at most every 5 min (hive-beacon.sh calls it). A failed
 # fetch keeps the last copy; a file the studio does not have is cached empty.
 hive_studio_sync() {
@@ -270,6 +280,94 @@ hive_weekly_capped() {
   case $2 in ''|*[!0-9]*|0) return 0;; esac
   [ $(( $2 - $(date +%s) )) -gt $(( RESET_GRACE_HOURS * 3600 )) ]
 }
+# hive_dev_throttled <handle>: the beacon in hive_beacon's b_* vars shows an account that must sit idle (rules 2, 3, 5): 5h at
+# its own stop (hive_limits) with the window still open, weekly at the handoff level or at its own weekly ticket limit with the
+# reset more than RESET_GRACE_HOURS away. Unknown numbers do not exempt. Also sets v_free: the epoch the last of those stops
+# lifts (0 when none applies).
+hive_dev_throttled() {
+  local r now t=1; now=$(date +%s); v_free=0; hive_limits "$1"
+  if [ -n "$b_used" ] && [ -n "$b_reset" ] && r=$(hive_iso_to_epoch "$b_reset"); then
+    if hive_weekly_capped "$b_used" "$r" "$l_wmin" ||
+       { [ "$b_used" -ge "${HANDOFF_WEEKLY_USED:-85}" ] && [ $(( r - now )) -gt $(( ${RESET_GRACE_HOURS:-24} * 3600 )) ]; }; then
+      t=0; v_free=$(( r - ${RESET_GRACE_HOURS:-24} * 3600 ))
+    fi
+  fi
+  if [ -n "$b_p5" ] && [ "$b_p5" -ge "$l_5h" ] && [ -n "$b_r5" ] && r=$(hive_iso_to_epoch "$b_r5") && [ "$r" -gt "$now" ]; then
+    t=0; [ "$r" -gt "$v_free" ] && v_free=$r
+  fi
+  return $t
+}
+# hive_viable <handle>: may the account hold the triagemaster role right now? Its beacon (hive_beacon; this account's own
+# usage snapshot) is under BEACON_FRESH_HOURS old, hive_dev_throttled names no stop, and its weekly is under
+# HANDOFF_HARD_WEEKLY_USED. Leaves the b_* vars set, and v_free: the epoch it should become viable again (0 = unknown,
+# e.g. a stale beacon: the machine is offline).
+hive_viable() {
+  local t=1 r
+  hive_beacon "$1"
+  [ "$b_age" -lt $(( BEACON_FRESH_HOURS * 3600 )) ] || { v_free=0; return 1; }
+  hive_dev_throttled "$1" && t=0
+  if [ -n "$b_used" ] && [ "$b_used" -ge "${HANDOFF_HARD_WEEKLY_USED:-95}" ]; then
+    t=0; r=$(hive_iso_to_epoch "$b_reset" 2>/dev/null) || r=0; [ "${r:-0}" -gt "$v_free" ] && v_free=$r
+  fi
+  [ "$t" = 1 ]
+}
+
+# ---- in/out and the triagemaster queue (the hub's studio hive/accounts-active.conf, issue #58) ------------
+# The file: "#" comment lines, then one "<handle>=on|off" line per account. In (on, or not listed): the account works on its
+# own. Out (off): it finishes or hands back what it holds, starts nothing new and gets no work. The line order is the
+# triagemaster queue. It governs once STUDIO_REPO is set and the cache holds a non-empty copy (hive_studio_on; the studio
+# answering 404 caches it empty). Without it nothing changes: SUCCESSION_RANK orders the role, and the local at-mode file
+# (hive-at-mode.sh AT|MT) is still the MT switch.
+hive_studio_on() { [ -n "$STUDIO_REPO" ] && [ -s "$HIVE_STUDIO_CACHE/accounts-active.conf" ]; }
+# hive_studio_read: sets s_listed (the listed handles in file order, each once) and s_out (" <h> <h> ", the ones that are
+# off; a handle listed twice takes its last value, as the hub's parseActive does). No forks: hive-env.sh is sourced constantly.
+hive_studio_read() {
+  local l k; s_listed=""; s_out=" "
+  while IFS= read -r l || [ -n "$l" ]; do
+    l=${l%%#*}; l=${l//[[:space:]]/}
+    case $l in *=on|*=off) ;; *) continue;; esac
+    k=${l%=*}
+    case $k in ''|*[!A-Za-z0-9_.-]*) continue;; esac
+    case " $s_listed " in *" $k "*) ;; *) s_listed="${s_listed:+$s_listed }$k";; esac
+    s_out=${s_out// $k / }
+    case $l in *=off) s_out="$s_out$k ";; esac
+  done < "$HIVE_STUDIO_CACHE/accounts-active.conf"
+  return 0
+}
+# hive_is_out [handle]: 0 when the studio switched the account (default this one) out. Always 1 without a studio file.
+hive_is_out() {
+  hive_studio_on || return 1
+  hive_studio_read
+  case $s_out in *" ${1:-$HIVE_ACCOUNT} "*) return 0;; esac
+  return 1
+}
+# hive_mt: 0 when this account does no autonomous work (MT): switched out in the studio; without a studio file, when the
+# local at-mode file says MT (the pre-studio switch, kept for games without a studio).
+hive_mt() {
+  if hive_studio_on; then hive_is_out; return; fi
+  local m=""; [ -f "$HIVE_STATE/at-mode" ] && read -r m < "$HIVE_STATE/at-mode"
+  [ "${m%$'\r'}" = MT ]
+}
+# hive_queue: the triagemaster queue, one handle per line, best first. With a studio file: its listed accounts that are in
+# and have an account conf here, in file order, then the accounts it does not list, by SUCCESSION_RANK. Else every
+# account by SUCCESSION_RANK (no rank counts as 9).
+hive_queue() {
+  local h r ranked
+  ranked=$(for h in $(hive_handles); do r=$(hive_rank_of "$h"); echo "${r:-9} $h"; done | sort -n | awk '{print $2}')
+  hive_studio_on || { [ -n "$ranked" ] && echo "$ranked"; return 0; }
+  hive_studio_read
+  for h in $s_listed; do
+    case $h in _*|example-*) continue;; esac
+    [ -f "$HIVE_DIR/accounts/$h.conf" ] || continue
+    case $s_out in *" $h "*) continue;; esac
+    echo "$h"
+  done
+  for h in $ranked; do case " $s_listed " in *" $h "*) ;; *) echo "$h";; esac; done
+  return 0
+}
+# hive_queue_top: who holds the role before succession has run: the top of the studio queue, else SUCCESSION_RANK=1
+hive_queue_top() { if hive_studio_on; then hive_queue | head -n 1; else hive_rank1; fi; }
+
 # this account's own limits: the hub's values replace the conf's (a 5h slow-down above the stop is pulled down to it)
 FIVE_H_STOP_USED_CONF=$FIVE_H_STOP_USED MIN_WEEKLY_REMAINING_FOR_TICKETS_CONF=$MIN_WEEKLY_REMAINING_FOR_TICKETS
 hive_limits "$HIVE_ACCOUNT"; FIVE_H_STOP_USED=$l_5h MIN_WEEKLY_REMAINING_FOR_TICKETS=$l_wmin
@@ -321,8 +419,10 @@ hive_pace() {
     'BEGIN{e=1-(r-n)/604800; if (e<0) e=0; print (u > e*h + s) ? "ahead" : "on pace"}'
 }
 # worker target right now: WORKER_TARGET while on pace, 1 while ahead of pace or once the 5h window reaches FIVE_H_SLOW_USED,
-# 0 at FIVE_H_STOP_USED or when the weekly budget says stop. Start workers only while running < target; never above it.
+# 0 at FIVE_H_STOP_USED, when the weekly budget says stop, or while the account is switched out in the hub (hive_is_out).
+# Start workers only while running < target; never above it.
 hive_worker_target() {
+  hive_is_out && { echo 0; return; }   # out: start nothing; running work finishes or is handed back
   hive_budget_ok || { echo 0; return; }
   local f; f=$(hive_five_h_used)
   if [ "$f" -ge "$FIVE_H_STOP_USED" ]; then echo 0; elif [ "$f" -ge "$FIVE_H_SLOW_USED" ]; then echo 1
@@ -554,7 +654,7 @@ hive_peer_claude_at() {
 : "${STALL_MINUTES:=15}"
 hive_project_dir() { echo "$HOME/.claude/projects/$(printf '%s' "$ROOT" | sed 's#[^A-Za-z0-9]#-#g')"; }
 hive_limit_stalled() {
-  [ "$(cat "$HIVE_STATE/at-mode" 2>/dev/null || echo AT)" = AT ] || return 1
+  hive_mt && return 1
   local d; d=$(hive_project_dir); [ -d "$d" ] || return 1
   [ -n "$(find "$d" -name '*.jsonl' -mmin -"$STALL_MINUTES" 2>/dev/null | head -1)" ] && return 1
   # Only a stuck MAIN session counts. A subagent that died on a limit under a live main session is that
@@ -582,7 +682,7 @@ hive_login_expired() {
 # night). Limit stalls are hive_limit_stalled's job, so a session parked on a limit is not "idle".
 : "${IDLE_NUDGE_MINUTES:=30}"
 hive_session_idle() {
-  [ "$(cat "$HIVE_STATE/at-mode" 2>/dev/null || echo AT)" = AT ] || return 1
+  hive_mt && return 1
   local d; d=$(hive_project_dir); [ -d "$d" ] || return 1
   [ -n "$(find "$d" -name '*.jsonl' -mmin -"$IDLE_NUDGE_MINUTES" 2>/dev/null | head -1)" ] && return 1
   [ -n "$(find "$d" -name '*.jsonl' 2>/dev/null | head -1)" ] || return 1

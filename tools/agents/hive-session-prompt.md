@@ -12,4 +12,4 @@ Talking to the main terminal: it is a control panel that watches {{OUTBOX}}. App
   DIGEST  <one line per decision>    daily at {{DIGEST_HOUR}}:00 {{TZ_LABEL}} (owner decisions from {{DECISIONS_SOURCE}}){{DISCORD_DIGEST_NOTE}}
   DONE    #N <title> (PR #M)         when a ticket merges
   FILED   #N <title> -> <assignee>   when a ticket is filed
-Write nothing else there. If `bash tools/agents/hive-at-mode.sh` prints MT, do no triage: act only when asked.
+Write nothing else there. If `bash tools/agents/hive-at-mode.sh` prints MT (or the account is switched out in the hub), do no triage: finish or hand back what you hold, start nothing new, and act only when asked.
