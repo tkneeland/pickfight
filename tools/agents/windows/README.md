@@ -28,7 +28,8 @@ powershell -ExecutionPolicy Bypass -File tools\agents\windows\hive-stop.ps1   -A
   share the topic out of band). It fills the inbox the other accounts' beacons are read from.
 - `hive-supervise.sh voice` keeps the hub voice runner (`hive-voice.mjs`) alive. It runs only when the state folder's
   `hub.conf` holds `HUB_URL` and `HUB_VOICE_TOKEN` (never commit that file), and exits at once otherwise.
-- `hive-stop.ps1` kills the supervisors and sweeps any leftover `hive-*.sh` watcher process on the machine.
+- `hive-stop.ps1` kills the supervisors and sweeps any leftover watcher started from this repo's scripts; another game's
+  hive on the same machine keeps running.
 - In `SINGLE_ACCOUNT` (and `PRIVATE`) mode the `beacon` and `msg` supervisors exit at once: there is no channel.
 
 ## Keep the watchers alive (Task Scheduler)

@@ -1,5 +1,5 @@
 # Installed by claude-hive's install.sh. Do not edit hive files in this repo: change claude-hive and re-install.
-# claude-hive 2359876
+# claude-hive 0a60e2e
 8f34a1c41f572fbb4099c97a385292d7b683f38914f3dea94409e759b0b20e10 docs/agents/discord.md
 8acaea512b4b50bad46ba61799242036bcc4d9f262cf15aee08d8550a1299cc1 docs/agents/hive-debrief.md
 5a69bf63e1a17faa66c8cf1b2369e25bf119603708f34456160afb2fba7dd7d8 docs/agents/hive.md
@@ -80,6 +80,6 @@ def8c8b9208d8abb0a0b2b2d94112d7889dc6d9095b551d69394e592a47b7275 tools/agents/te
 c5c085877aad2c06bca6e37b6ae0359153430c8abb2145cd9a9f84267014c1db tools/agents/windows/hive-keepalive.ps1
 19491690a137d6952a7f2ebc911c52c1156f7a8f5f63a0330383bf8e1ddcf8d6 tools/agents/windows/hive-start.ps1
 98fc618a4e3ab030fc6318f991f8da3a255d407f72b8823a736cebcf0b7374bd tools/agents/windows/hive-status.ps1
-22811024460beb605e1502da48796dc14dc666229ddcb6ce472b1ce2de445eae tools/agents/windows/hive-stop.ps1
+103dee340d78cca607002d1f1f1eef90af31ea309c89f75c0f20611bd533b578 tools/agents/windows/hive-stop.ps1
 c03f08403259deb993f50ff97d0717db68607d3ae448cf8ad4e0ffcea924c2d9 tools/agents/windows/hive-supervise.sh
-f4a8ee76b55e81d8717829a8df46304cf8299f188873fa22625b16d240025f39 tools/agents/windows/README.md
+706913f0ad96f13fb2aab30e67903a7bc660825eb302eead83a2af1c9c7e3136 tools/agents/windows/README.md
