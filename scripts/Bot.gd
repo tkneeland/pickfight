@@ -453,8 +453,13 @@ var _routes: RefCounted = BotRoutesScript.new()
 const ROUTE_LAUNCH_MAX: float = 350.0
 ## Within this of a link's start (along x), the bot takes the link (#1299).
 const ROUTE_AT_START: float = 30.0
-## How long a route's leap lets the bot run off a ledge's end (#1299).
+## How long a route's leap or drop lets the bot run off a ledge's end (#1299).
 const ROUTE_LEAP_SEC: float = 0.6
+## A bot with its body no more than this above standing height plans routes (#1299).
+const ROUTE_STANDING: float = 16.0
+## The route link the bot is on, and whether it is crossing it (#1299).
+var _route_hop: Dictionary = {}
+var _route_taking: bool = false
 ## Pad instance id -> whether floor goes on past both its ends (#1296).
 var _pad_flush: Dictionary = {}
 ## `_round_manager()` worked out once a physics tick (#1294).
@@ -2586,6 +2591,7 @@ func _read_stage() -> void:
 	_walls.clear()
 	_rocks.clear()
 	_pads.clear()
+	_routes.clear()
 	_pad_launch.clear()
 	_pad_tight.clear()
 	_pad_flush.clear()
@@ -2617,12 +2623,14 @@ func _read_stage() -> void:
 		elif node is Node2D and node.has_method("is_warning") and node.has_method("gust_direction"):
 			_gusts.append(node as Node2D)
 	# The stage's map for getting between its levels (#1299).
-	_routes.build(_lava.get_parent(), [MovingPlatformScript, RotatingPlatformScript, BreakableWallScript, FallingRockScript,
-			CrumblingLedgeScript, CollapsingFloorScript], BouncePadScript, _pads, _pad_launch_x, _pad_launch_height)
+	_routes.build(_lava.get_parent(), player.get_world_2d().direct_space_state, _player_rids(), _pads,
+			_pad_launch_x, _pad_launch_height, MAX_DROP)
 
-## How high (px) `pad` throws the bot (#1299): from its launch speed and the
-## body's gravity, capped at ROUTE_LAUNCH_MAX (air drag and the run carried
-## across take off a lot: Summit's 2000 px/s pads lift a body about 330 px).
+## How high (px) `pad` may throw the bot, for route planning (#1299): the ideal
+## height for its launch speed under the body's gravity, capped at
+## ROUTE_LAUNCH_MAX. The cap is what counts for every pad the stages have now
+## (the ideal height of a 2000 px/s pad is about 2000 px; drag and the swing of
+## the rig bring the real one down to about 330), so only a weak pad is cut lower.
 func _pad_launch_height(pad: Node2D) -> float:
 	var speed: float = float(pad.get("launch_speed")) if pad.get("launch_speed") != null else 0.0
 	var body := player as RigidBody2D
@@ -2636,27 +2644,62 @@ func _pad_launch_height(pad: Node2D) -> float:
 func _take_route() -> bool:
 	var me: Vector2 = player.global_position
 	var floor_y: float = _own_floor_y()
-	var goal_ground: float = _ground_below(goal)
-	if is_nan(floor_y) or is_nan(goal_ground):
+	# Planned only from ground the bot stands on: in the air (mid-leap over a
+	# pad's gap, mid-launch) the ground below is not where it is going, and a plan
+	# from there turned it back. Until it lands it keeps to the hop it took.
+	if is_nan(floor_y) or floor_y - me.y > BODY_RADIUS + ROUTE_STANDING:
+		if not _route_hop.is_empty() and _route_taking:
+			goal = _route_hop["land"]
+			return true
 		return false
+	var goal_ground: float = _ground_below(goal)
+	if is_nan(goal_ground):
+		return _route_none()
 	var from: int = _routes.surface_at(me.x, floor_y)
 	var to: int = _routes.surface_at(goal.x, goal_ground)
-	var hop: Dictionary = _routes.next_hop(from, me.x, to)
+	var hop: Dictionary = _routes.next_hop(from, me.x, to, goal.x)
 	if hop.is_empty():
-		return false
+		return _route_none()
+	# A leap over a hazard, or on to ground in one, is no way to go.
+	if hop["kind"] == BotRoutesScript.LEAP and not _leap_clear(hop["start"], hop["land"]):
+		return _route_none()
+	_route_hop = hop
 	var start: Vector2 = hop["start"]
 	if hop["kind"] == BotRoutesScript.PAD:
+		# The pad's own height (below the body), so the #1294 drop on to it works.
 		_pad_route = true
 		_pad_target = hop["pad"]
 		goal = start
+		_route_taking = false
 		return true
-	if absf(start.x - me.x) > ROUTE_AT_START:
+	# At the start, or held at an edge on the way to it (the edge checks stop a
+	# bot short of an end it cannot step past): take the link.
+	var side: float = signf(start.x - me.x)
+	var at_start: bool = absf(start.x - me.x) <= ROUTE_AT_START or (_held_at_edge and side == signf(hop["land"].x - me.x))
+	if not at_start:
 		goal = start
+		_route_taking = false
 		return true
 	goal = hop["land"]
-	if hop["kind"] == BotRoutesScript.LEAP:
-		# Off the end on purpose, at a run: the edge checks would hold it there.
+	_route_taking = true
+	if hop["kind"] == BotRoutesScript.LEAP or hop["kind"] == BotRoutesScript.DROP:
+		# Off the end on purpose: the edge checks would hold it there.
 		_leap_left = maxf(_leap_left, ROUTE_LEAP_SEC)
+	return true
+
+## No route this think: forget the last hop (#1299).
+func _route_none() -> bool:
+	_route_hop = {}
+	_route_taking = false
+	return false
+
+## Whether a leap from `start` to `land` crosses or lands in no danger (#1299):
+## a leap overrides the edge and hazard checks while it lasts.
+func _leap_clear(start: Vector2, land: Vector2) -> bool:
+	var span := Rect2(minf(start.x, land.x), minf(start.y, land.y) - BODY_RADIUS, absf(land.x - start.x), absf(land.y - start.y) + MAX_DROP)
+	for rect: Rect2 in _danger_rects():
+		if rect.intersects(span):
+			return false
 	return true
 
 ## A zone's rectangle shape in world space (unrotated, as stages place them).
