@@ -317,8 +317,9 @@ const FLOOR_DOWN_MIN: float = 100.0
 const FLOOR_DOWN_STEP: float = 40.0
 ## Ground over the goal's x within this of the bot's own is the same ledge (#1296).
 const FLOOR_SAME_LEVEL: float = 12.0
-## How steeply up (rise over run) a head trapped under the bot's own ledge is swept out (#1296).
-const UNHOOK_LIFT: float = 0.6
+## How far along its ledge the bot looks for the nearer end to sweep a trapped
+## head out round (#1296).
+const TRAPPED_LIP_SEARCH: float = 400.0
 ## A head counts as caught under a ledge only with terrain this close above it (#1296).
 const TRAPPED_HEAD_ROOF: float = 72.0
 const HOOKED_HEAD_ABOVE: float = 40.0
@@ -1629,9 +1630,20 @@ func _unhook(delta: float) -> Vector2:
 		return Vector2.ZERO
 	_hooked_for = 0.0
 	_unhook_left = UNHOOK_SEC
-	var side: float = signf((head.x if trapped else goal.x) - me.x)
+	if trapped:
+		# Out from under round the nearer end of the bot's own ledge, at the
+		# head's depth: the head cannot come up through the ledge, and swept
+		# towards its own side it only went further under (Summit's steps are
+		# 24 px thick, and a shallow vault's head went through one).
+		var right: float = _edge_room(1.0, TRAPPED_LIP_SEARCH, true)
+		var left: float = _edge_room(-1.0, TRAPPED_LIP_SEARCH, true)
+		_unhook_side = 1.0 if right <= left else -1.0
+		var lip := Vector2(me.x + _unhook_side * (minf(right, left) + BODY_RADIUS * 2.0), head.y)
+		_unhook_dir = (lip - me).normalized()
+		return _unhook_dir
+	var side: float = signf(goal.x - me.x)
 	_unhook_side = side if side != 0.0 else (-1.0 if rng.randf() < 0.5 else 1.0)
-	_unhook_dir = Vector2(_unhook_side, -UNHOOK_LIFT).normalized() if trapped else Vector2(_unhook_side, 0.0)
+	_unhook_dir = Vector2(_unhook_side, 0.0)
 	return _unhook_dir
 
 ## Vault towards `goal`: aim short at an anchor, then push out through it.
