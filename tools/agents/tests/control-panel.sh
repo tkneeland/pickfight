@@ -29,12 +29,12 @@ ok "join exits 0" "$rc"
 : > "$T/calls.log"
 bash "$AG/hive-msg.sh" send CLAIM 5 2>"$T/err.txt"; rc=$?; [ "$rc" != 0 ]; ok "send CLAIM refused (rc=$rc)" $?; refused; ok "send CLAIM says refused" $?; nocalls; ok "send CLAIM: no network call" $?
 bash "$AG/hive-msg.sh" claim 5 2>"$T/err.txt"; rc=$?; [ "$rc" != 0 ] && refused && nocalls; ok "claim 5 refused, no call" $?
-(. "$AG/hive-env.sh"; hive_mark_review o/r 1 passed) 2>"$T/err.txt"; rc=$?; [ "$rc" != 0 ] && refused && ! grep -q 'pr edit' "$T/calls.log"; ok "hive_mark_review refused, no label edit" $?
+(. "$AG/hive-env.sh"; GRILL_DOC=docs/grill-decisions.md; hive_mark_review o/r 1 passed) 2>"$T/err.txt"; rc=$?; [ "$rc" != 0 ] && refused && ! grep -q 'pr edit' "$T/calls.log"; ok "hive_mark_review refused, no label edit" $?
 pace >/dev/null; rc=$?; [ "$rc" != 0 ] && refused; ok "pace start refused" $?
 out=$(bash "$AG/hive-pace.sh" 2>&1); case $out in AHEAD|ON_PACE|BEHIND) ok "bare pace stays open" 0;; *) ok "bare pace stays open ($out)" 1;; esac
-# grill-decisions PR: allowed only for that exact file by this account (stub gh answers `pr view` from GRILL_PR)
+# grill-log PR: allowed only for that exact file (GRILL_DOC) by this account (stub gh answers `pr view` from GRILL_PR)
 printf '#!/bin/bash\necho "gh $*" >> "$HIVE_TEST_LOG"\ncase "$*" in "pr view"*) echo "$GRILL_PR";; esac\nexit 0\n' > "$T/bin/gh"
-grill() { : > "$T/calls.log"; (. "$AG/hive-env.sh"; hive_mark_review o/r 1 passed) 2>"$T/err.txt"; }
+grill() { : > "$T/calls.log"; (. "$AG/hive-env.sh"; GRILL_DOC=docs/grill-decisions.md; hive_mark_review o/r 1 passed) 2>"$T/err.txt"; }
 export GRILL_PR="alice docs/grill-decisions.md"; grill; rc=$?; [ "$rc" = 0 ] && grep -q 'pr edit' "$T/calls.log"; ok "control panel: grill-decisions-only PR by this account allowed" $?
 export GRILL_PR="alice docs/grill-decisions.md,scripts/a.gd"; grill; rc=$?; [ "$rc" != 0 ] && refused && ! grep -q 'pr edit' "$T/calls.log"; ok "control panel: mixed diff refused" $?
 export GRILL_PR="alice docs/design.md"; grill; rc=$?; [ "$rc" != 0 ] && refused && ! grep -q 'pr edit' "$T/calls.log"; ok "control panel: other file refused" $?

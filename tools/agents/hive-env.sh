@@ -188,10 +188,10 @@ hive_review_blocked() { # <repo-slug> <pr>
 hive_review_passed() { # <repo-slug> <pr>
   [ "$REQUIRE_REVIEW_PASS" = 1 ] || return 0
   if [ "$PRIVATE" = 1 ]; then [ -f "$HIVE_STATE/review-passed/${1//\//__}-$2" ]; else gh pr view "$2" -R "$1" --json labels -q '.labels[].name' 2>/dev/null | grep -qx review-passed; fi; }
-# hive_grill_pr <repo-slug> <pr>: 0 only when the PR's changed files are exactly docs/grill-decisions.md and its author is this
+# hive_grill_pr <repo-slug> <pr>: 0 only when the PR's changed files are exactly hive.conf GRILL_DOC and its author is this
 # account (the one review mark a control panel may set; docs/agents/hive.md "Grill results go to the repo at once").
 hive_grill_pr() {
-  [ "$PRIVATE" != 1 ] && [ "$(gh pr view "$2" -R "$1" --json files,author -q '"\(.author.login) \([.files[].path] | join(","))"' 2>/dev/null)" = "$HIVE_ACCOUNT docs/grill-decisions.md" ]
+  [ "$PRIVATE" != 1 ] && [ -n "${GRILL_DOC:-}" ] && [ "$(gh pr view "$2" -R "$1" --json files,author -q '"\(.author.login) \([.files[].path] | join(","))"' 2>/dev/null)" = "$HIVE_ACCOUNT $GRILL_DOC" ]
 }
 hive_mark_review() { # <repo-slug> <pr> passed|blocked|clear
   hive_grill_pr "$1" "$2" || hive_guard mark-review || return 1
