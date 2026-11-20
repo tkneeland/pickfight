@@ -1,5 +1,5 @@
 # Installed by claude-hive's install.sh. Do not edit hive files in this repo: change claude-hive and re-install.
-# claude-hive b98d66a
+# claude-hive 4fb5451
 8f34a1c41f572fbb4099c97a385292d7b683f38914f3dea94409e759b0b20e10 docs/agents/discord.md
 8acaea512b4b50bad46ba61799242036bcc4d9f262cf15aee08d8550a1299cc1 docs/agents/hive-debrief.md
 6d453ae251fc687d63bab027c1bd6108d69a5018226debce9a7dba5a82497d4a docs/agents/hive.md
@@ -71,7 +71,7 @@ eb1a0dd71ac97c6604de5e412a16454383e47be9cec2ecf7cdafe07e57614937 tools/agents/te
 4cac7d6520b5c51b025ac62aff2b142169daf95ac423ba5e8b00e11b1fe82204 tools/agents/tests/repo-paths.sh
 092b57e24ec613c08e4d37c6b30e4a344ab9ff8774a23fd5d23049242f679492 tools/agents/tests/reserve-cap.sh
 ef19d24876d195ece8752c9e70f6ab5a7a0747d127c8c287ef2f63bae13ca8c7 tools/agents/tests/triage-watch-in-progress.sh
-14a9ff36254da0c5acce5b63ceb2ad0e676a0b14c9eeccb8464764a2c9074f48 tools/agents/tests/voice-supervise.sh
+b095e5efa2a760e0fbd03d6785934916e22afa0bf925162c1c3b91c9b15f4517 tools/agents/tests/voice-supervise.sh
 def8c8b9208d8abb0a0b2b2d94112d7889dc6d9095b551d69394e592a47b7275 tools/agents/tests/voice.sh
 4cbf427805995c9e86dd268e165e3de144ef7691d867013c3b00e663d9153e73 tools/agents/tests/wake-pending.sh
 753efeec8378e63537337767813369750f4421733751471c58b9bcdf61ea5919 tools/agents/tests/wake.sh
@@ -81,5 +81,5 @@ c5c085877aad2c06bca6e37b6ae0359153430c8abb2145cd9a9f84267014c1db tools/agents/wi
 19491690a137d6952a7f2ebc911c52c1156f7a8f5f63a0330383bf8e1ddcf8d6 tools/agents/windows/hive-start.ps1
 98fc618a4e3ab030fc6318f991f8da3a255d407f72b8823a736cebcf0b7374bd tools/agents/windows/hive-status.ps1
 103dee340d78cca607002d1f1f1eef90af31ea309c89f75c0f20611bd533b578 tools/agents/windows/hive-stop.ps1
-c03f08403259deb993f50ff97d0717db68607d3ae448cf8ad4e0ffcea924c2d9 tools/agents/windows/hive-supervise.sh
+d364ae58205bca76cc54d7c63b389a695904f635ff90c59d0dc44ae3911d4c0d tools/agents/windows/hive-supervise.sh
 706913f0ad96f13fb2aab30e67903a7bc660825eb302eead83a2af1c9c7e3136 tools/agents/windows/README.md

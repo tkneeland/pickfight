@@ -10,6 +10,7 @@
 #                              refresh can stop, which froze the beacon at 0%.
 #   hive-supervise.sh msg        keeps `hive-msg.sh listen` alive (private ntfy channel) and runs `hive-msg.sh heartbeat` every 60 s.
 #                              Holds msg-run.pid (shared with `hive-msg.sh run`): a second channel supervisor exits at once.
+#                              The other kinds hold supervise-<kind>.pid the same way.
 #                              macOS: screen -dmS hive-msg-<repo>-<account> bash tools/agents/windows/hive-supervise.sh msg
 #   hive-supervise.sh voice      keeps the hub voice runner (hive-voice.mjs) alive and rewrites voice-status.json every 60 s.
 #                              Only on a machine whose $HIVE_STATE/hub.conf (or env) has HUB_URL and HUB_VOICE_TOKEN; it
@@ -21,6 +22,14 @@ status() {  # status <state> [line]
   jq -n --arg s "$1" --arg l "${2:-}" --arg t "$(now)" --arg a "$HIVE_ACCOUNT" '{account:$a,state:$s,line:$l,at:$t}' > "$HIVE_STATE/$KIND-status.json"
 }
 KIND=${1:-}
+# one supervisor per kind per state dir (msg uses hive-msg.sh's own lock below). A second copy, e.g. one started under
+# an older screen name, exits at once instead of looping beside the first.
+SLOCK=""
+case $KIND in triage|automerge|beacon|voice)
+  SLOCK=$HIVE_STATE/supervise-$KIND.pid
+  hive_pidlock "$SLOCK" || { echo "$KIND supervisor already running (pid $(cat "$SLOCK" 2>/dev/null)); not starting a second" >&2; exit 0; }
+  trap 'hive_pidunlock "$SLOCK"' EXIT;;
+esac
 case $KIND in
   state) echo "$HIVE_STATE"; exit 0;;
   triage)
@@ -79,7 +88,7 @@ case $KIND in
     vp=""
     stop_runner() { [ -n "$vp" ] && kill "$vp" 2>/dev/null; }
     trap 'stop_runner; exit 0' INT TERM
-    trap stop_runner EXIT
+    trap 'stop_runner; hive_pidunlock "$SLOCK"' EXIT
     while true; do
       if [ -z "$vp" ] || ! kill -0 "$vp" 2>/dev/null; then
         [ -n "$vp" ] && echo "$(now) runner exited; restarting" >> "$HIVE_STATE/voice-runner.log"
