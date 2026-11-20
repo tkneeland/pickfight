@@ -47,12 +47,12 @@ position = Vector2(580, 170)
 size = Vector2(200, 24)
 
 [node name="PadLeft" parent="." instance=ExtResource("pad")]
-position = Vector2(-200, 372)
-size = Vector2(100, 16)
+position = Vector2(-195, 372)
+size = Vector2(60, 16)
 
 [node name="PadRight" parent="." instance=ExtResource("pad")]
-position = Vector2(200, 372)
-size = Vector2(100, 16)
+position = Vector2(195, 372)
+size = Vector2(60, 16)
 
 ; Ice patch (issue #860): a slick strip on the left floor between the bounce pad and Spawn6, clear of every spawn drop line and pickup spot.
 [node name="FloorIce" parent="." instance=ExtResource("ice")]

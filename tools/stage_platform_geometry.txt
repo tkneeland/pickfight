@@ -945,8 +945,8 @@ Summit|poly|HighLeft/HighLeftVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2A
 Summit|body|HighRight|StaticBody2D|Transform2D(1, 0, 0, 1, 580, 170)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Summit|shape|HighRight/HighRightShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(200, 24)|oneway=false|disabled=false
 Summit|poly|HighRight/HighRightVisual|Transform2D(1, 0, 0, 1, 0, 0)|PackedVector2Array(-100, -12, 100, -12, 100, 12, -100, 12)|Color(0.35, 0.35, 0.4, 1)|z=0|visible=true|texture=false|offset=Vector2(0, 0)
-Summit|body|PadLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -200, 372)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
-Summit|body|PadRight|StaticBody2D|Transform2D(1, 0, 0, 1, 200, 372)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Summit|body|PadLeft|StaticBody2D|Transform2D(1, 0, 0, 1, -195, 372)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
+Summit|body|PadRight|StaticBody2D|Transform2D(1, 0, 0, 1, 195, 372)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Summit|body|FloorIce|StaticBody2D|Transform2D(1, 0, 0, 1, -340, 384)|layer=1|mask=1|z=0|zrel=true|visible=true|material=false|vel=Vector2(0, 0)|spin=0.0
 Summit|kill|KillZone|Area2D|Transform2D(1, 0, 0, 1, 0, 700)|layer=1|mask=1|z=0|zrel=true|visible=true|script=res://scripts/KillZone.gd|rise_warning_sec=4.0|surface_depth=2000.0
 Summit|shape|KillZone/KillZoneShape|Transform2D(1, 0, 0, 1, 0, 0)|RectangleShape2D|Vector2(8000, 40)|oneway=false|disabled=false
