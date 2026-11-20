@@ -6,7 +6,7 @@
 #       AHEAD   used5 > target + PACE_MARGIN (the tuned knob, 5..20, default 10; or the weekly guard below): start no new workers; prefer cheap work
 #       BEHIND  used5 < target - PACE_BEHIND_MARGIN (fixed, default 10), or no 5h window yet (r5 = 1970 / past): start another worker, up to MAX_WORKERS
 #       ON_PACE otherwise: keep the current number of workers
-#       Weekly guard (wins over the 5h pace): used7 > elapsed7 x 100 + 5, or 100 - used7 <= MIN_WEEKLY_REMAINING_FOR_TICKETS -> AHEAD.
+#       Weekly guard (wins over the 5h pace): used7 > elapsed7 x 100 + 5, or 100 - used7 <= MIN_WEEKLY_REMAINING_FOR_TICKETS outside the RESET_GRACE_HOURS before the reset -> AHEAD.
 #       Missing, unreadable or stale (> PACE_STALE_SECS, default 1800) snapshot -> ON_PACE (never start a burst on bad data).
 #   hive-pace.sh start     same output as state, but refused (exit 1) in a control-panel session (issue #300): run it before every worker start
 #   hive-pace.sh target    the 5h target percent now (elapsed5 x 100, rounded), empty when there is no window or no fresh snapshot
@@ -89,7 +89,7 @@ EOT
   # weekly guard: the weekly pace wins over the 5h pace
   if [ -n "$u7" ]; then
     [ "$wk" = 1 ] && state=AHEAD
-    [ $(( 100 - u7 )) -le "${MIN_WEEKLY_REMAINING_FOR_TICKETS:-0}" ] && state=AHEAD
+    hive_weekly_capped "$u7" "$r7" "${MIN_WEEKLY_REMAINING_FOR_TICKETS:-0}" && state=AHEAD   # not in the reset grace window
   fi
   return 0
 }

@@ -10,7 +10,7 @@
 - `TZ`: your timezone. Quiet hours and every printed time follow it.
 - `QUIET_START` / `QUIET_END`: your quiet hours (default 20 to 9), when the hive pings you only about p1. They never slow the work.
 - `AUTO_FILE`: `0` = your Claude asks for tickets instead of filing them. Set `1` only if the team agrees.
-- `MIN_WEEKLY_REMAINING_FOR_TICKETS`: your account gets no new tickets when its remaining weekly percent is at or below this (use 50 for a reserve account).
+- `MIN_WEEKLY_REMAINING_FOR_TICKETS`: your account gets no new tickets when its remaining weekly percent is at or below this (use 50 for a reserve account), except in the last 24h before your weekly reset. Set it, and your 5-hour stop, in the hive hub; the hub's values win over the conf.
 - `SUCCESSION_RANK`: who stands in as triagemaster when the current one runs low (2 is next, then 3).
 - `DISPLAY_NAME`: your name as the hive writes it (optional).
 - `RESERVE=1`: only for a spare account that should work only while the regular devs cannot (`accounts/example-reserve.conf`).

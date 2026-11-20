@@ -64,18 +64,13 @@ hive_usage_backfill
 hive_channel_fresh || { [ "$DRY" = 1 ] && echo "no fresh channel data: no decision"; log "no fresh USAGE beacons on the channel (msg.conf missing or listener down?); no decision"; exit 0; }
 # able: fresh beacon (< BEACON_FRESH_HOURS); under the weekly handoff % or inside its reset grace window (rule 3); 5h not
 # full with >1h to go. An unknown 7d ("?", e.g. just after a reset) counts as able but ranks last for hand-backs.
-# Hand-back target only (#226, rule 5): a peer at or under its own MIN_WEEKLY_REMAINING_FOR_TICKETS (account conf, else
-# _shared.conf, else 0), or with unknown 7d while that cap is above 0, is never chosen as $best. This does not affect $needed.
-peer_min() {   # peer_min <handle>: that dev's ticket floor, always a non-negative integer
-  local m; m=$(hive_conf_of "$1" MIN_WEEKLY_REMAINING_FOR_TICKETS)
-  case $m in ''|*[!0-9]*) m=$(sed -n 's/^MIN_WEEKLY_REMAINING_FOR_TICKETS=//p' "$HIVE_DIR/accounts/_shared.conf" 2>/dev/null | sed 's/[[:space:]]*#.*//; s/^"//; s/"$//' | head -n 1);; esac
-  case $m in ''|*[!0-9]*) m=0;; esac
-  echo "$m"
-}
-handback_ok() {   # handback_ok <handle>: may this able peer receive a hand-back? (uses b_used from hive_beacon)
-  local m; m=$(peer_min "$1")
+# Hand-back target only (#226, rule 5): a peer at or under its own MIN_WEEKLY_REMAINING_FOR_TICKETS (the hub's studio limit,
+# else account conf, else _shared.conf, else 0) outside its RESET_GRACE_HOURS window, or with unknown 7d while that cap is above 0, is never chosen as $best. This does not affect $needed.
+handback_ok() {   # handback_ok <handle>: may this able peer receive a hand-back? (uses b_used b_reset from hive_beacon)
+  local m r; hive_limits "$1"; m=$l_wmin   # hub studio limit, else account conf, else _shared.conf, else 0
   if [ -z "$b_used" ]; then [ "$m" -eq 0 ]; return; fi
-  [ $((100 - b_used)) -gt "$m" ]
+  r=$(hive_iso_to_epoch "$b_reset" 2>/dev/null) || r=""
+  ! hive_weekly_capped "$b_used" "$r" "$m"
 }
 able() {
   [ "$b_age" -lt $(( BEACON_FRESH_HOURS * 3600 )) ] || return 1
@@ -94,7 +89,7 @@ for h in $(hive_handles); do
 done
 # own budget: no new tickets at or below MIN_WEEKLY_REMAINING_FOR_TICKETS; nothing at all once hive_budget_ok says stop
 snap_age=$(( now - $(hive_mtime "$HIVE_STATE/usage-snapshot.json" || echo 0) ))
-take_new=$needed; [ $((100 - $(hive_weekly_used))) -le "$MIN_WEEKLY_REMAINING_FOR_TICKETS" ] && take_new=0
+take_new=$needed; hive_weekly_capped "$(hive_weekly_used)" "$(hive_weekly_reset)" "$MIN_WEEKLY_REMAINING_FOR_TICKETS" && take_new=0
 run_any=1; hive_budget_ok || { run_any=0; take_new=0; }
 [ "$DRY" = 0 ] && [ "$snap_age" -gt 1800 ] && log "own usage snapshot is $((snap_age / 60)) min old (hive-usage.sh failing?)"
 
