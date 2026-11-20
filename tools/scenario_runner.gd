@@ -1393,6 +1393,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_four_bots_finish_rounds_on_mill_1291",
 	"bot_four_bots_finish_rounds_on_updraft_1291",
 	"bot_four_bots_finish_rounds_on_vent_1291",
+	"bot_four_bots_finish_rounds_on_summit_1294",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4604,6 +4605,9 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _bot_rounds_1291_on("Updraft")
 		"bot_four_bots_finish_rounds_on_vent_1291":
 			return await _bot_rounds_1291_on("Vent")
+		"bot_four_bots_finish_rounds_on_summit_1294":
+			# King of the Hill only: Stock's pace on Summit is #1296.
+			return await _bot_rounds_1291_on("Summit", [GameModesType.KING_OF_THE_HILL] as Array[String])
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -38828,7 +38832,9 @@ func _scenario_announcer_calls_capture_the_flag() -> Array[String]:
 	return failures
 ## Issue #409, part 2: `_bot_round_409` on a named stage (scenes/stages/<stage>.tscn).
 func _bot_round_409_on(stage_name: String, mode: String, cap_sec: float, failures: Array[String]) -> float:
-	var stage: Node2D = _new_stage()
+	# No Arena fixture (#1294): its ground slab and platforms overlapped the round's
+	# stage, so the bots played a different map (on Summit the slab covered both pads).
+	var stage: Node2D = _new_empty_stage()
 	var container := Node2D.new()
 	container.name = "ModeContainer"
 	stage.add_child(container)
@@ -66197,8 +66203,8 @@ func _scenario_release_sets_steam_app_id_never_480_1289() -> Array[String]:
 
 ## Issue #1291: four bots finish a King of the Hill and a Stock round on a stage
 ## the #409 bullet in docs/FEATURES.md names. A stall names its stage and mode.
-## `modes` defaults to both. Summit is not covered here: four bots stall there in
-## both modes (#1294), and that fix adds its scenario with this helper.
+## `modes` defaults to both. Summit runs King of the Hill only (#1294): its Stock
+## round no longer stalls but runs past the cap (#1296).
 func _bot_rounds_1291_on(stage_name: String, modes: Array[String] = [GameModesType.KING_OF_THE_HILL, GameModesType.STOCK]) -> Array[String]:
 	var failures: Array[String] = []
 	# Every mode runs even after one fails, so a stall in one cannot hide another.
