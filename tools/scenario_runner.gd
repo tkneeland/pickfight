@@ -66204,7 +66204,7 @@ func _scenario_release_sets_steam_app_id_never_480_1289() -> Array[String]:
 ## Issue #1291: four bots finish a King of the Hill and a Stock round on a stage
 ## the #409 bullet in docs/FEATURES.md names. A stall names its stage and mode.
 ## `modes` defaults to both. Summit runs King of the Hill only (#1294): its Stock
-## round ends, but too slowly for the cap (#1296).
+## round no longer stalls but runs past the cap (#1296).
 func _bot_rounds_1291_on(stage_name: String, modes: Array[String] = [GameModesType.KING_OF_THE_HILL, GameModesType.STOCK]) -> Array[String]:
 	var failures: Array[String] = []
 	# Every mode runs even after one fails, so a stall in one cannot hide another.

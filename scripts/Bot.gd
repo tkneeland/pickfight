@@ -218,6 +218,8 @@ const PAD_FLOOR_SLACK: float = 40.0
 ## the step of the scan along the pad (#1294).
 const PAD_CLEAR_HEIGHT: float = 220.0
 const PAD_CLEAR_STEP: float = 5.0
+## The scan's rays start this far above the pad's top, so they never begin inside it.
+const PAD_CLEAR_LIFT: float = 2.0
 ## Near the launch spot the bot vaults short (PAD_SLOW_SCALE of its push), so
 ## it lands on the spot instead of sailing over the pad; over it, within
 ## PAD_DROP and slower across than PAD_DROP_SPEED, it holds its head up so its
@@ -1968,7 +1970,8 @@ func _escape_goal() -> Vector2:
 		return Vector2.INF
 	# Nor is a pad the bot was making for, or has waited at an edge to take
 	# (#1294): fleeing it turned a bot back at the pad it had walked to, and
-	# put one back on the step it had waited on.
+	# put one back on the step it had waited on. `_pad_route_was`, not
+	# `_pad_route`: this runs inside _choose_goal after `_pad_route` is reset.
 	if kind == FOOT_PAD and (_pad_route_was or _desperate()):
 		return Vector2.INF
 	# Over nothing (or ground giving way), or on ground that will not last:
@@ -2024,7 +2027,8 @@ func _pad_towards(high: Vector2) -> Vector2:
 		var at := Vector2(_pad_launch_x(pad), pad.global_position.y)
 		if absf(at.y - floor_y) > PAD_FLOOR_SLACK or absf(at.x - me.x) > PAD_SEARCH:
 			continue
-		if best != Vector2.INF and absf(at.x - me.x) + absf(high.x - at.x) >= absf(best.x - me.x) + absf(high.x - best.x):
+		var trip := func(x: float) -> float: return absf(x - me.x) + absf(high.x - x)
+		if best != Vector2.INF and trip.call(at.x) >= trip.call(best.x):
 			continue
 		_pad_route = true
 		var reachable: bool = _walkable_to(at.x)
@@ -2048,7 +2052,7 @@ func _pad_launch_x(pad: Node2D) -> float:
 		_pad_launch[id] = middle
 		return middle
 	var half: Vector2 = (size as Vector2) * pad.global_scale.abs() * 0.5
-	var top: float = pad.global_position.y - half.y - 2.0
+	var top: float = pad.global_position.y - half.y - PAD_CLEAR_LIFT
 	var run_from: float = NAN
 	var best_from: float = NAN
 	var best_width: float = 0.0
