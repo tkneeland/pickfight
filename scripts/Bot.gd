@@ -46,6 +46,7 @@ const RotatingPlatformScript: GDScript = preload("res://scripts/RotatingPlatform
 const IcePatchScript: GDScript = preload("res://scripts/IcePatch.gd")
 const ConveyorScript: GDScript = preload("res://scripts/Conveyor.gd")
 const BouncePadScript: GDScript = preload("res://scripts/BouncePad.gd")
+const BotRoutesScript: GDScript = preload("res://scripts/BotRoutes.gd")
 const FallingRockScript: GDScript = preload("res://scripts/FallingRock.gd")
 const MovingPlatformScript: GDScript = preload("res://scripts/MovingPlatform.gd")
 const BreakableWallScript: GDScript = preload("res://scripts/BreakableWall.gd")
@@ -446,6 +447,14 @@ var _pad_target_was: Node2D = null
 ## fixed terrain is over the pad at all (#1294).
 var _pad_launch: Dictionary = {}
 var _pad_tight: Dictionary = {}
+## The stage's map of surfaces and links between them (#1299).
+var _routes: RefCounted = BotRoutesScript.new()
+## A pad throws the bot no higher than this, for route planning (#1299).
+const ROUTE_LAUNCH_MAX: float = 350.0
+## Within this of a link's start (along x), the bot takes the link (#1299).
+const ROUTE_AT_START: float = 30.0
+## How long a route's leap lets the bot run off a ledge's end (#1299).
+const ROUTE_LEAP_SEC: float = 0.6
 ## Pad instance id -> whether floor goes on past both its ends (#1296).
 var _pad_flush: Dictionary = {}
 ## `_round_manager()` worked out once a physics tick (#1294).
@@ -903,6 +912,8 @@ func _choose_goal() -> void:
 		goal = wall.global_position
 	elif lava_close:
 		goal = Vector2(goal.x, minf(goal.y, me.y - 300.0))
+	elif _take_route():
+		pass
 	elif goal.y < me.y - PAD_CLIMB:
 		var pad: Vector2 = _pad_towards(goal)
 		if pad != Vector2.INF:
@@ -2605,6 +2616,48 @@ func _read_stage() -> void:
 			_saws.append(node as Node2D)
 		elif node is Node2D and node.has_method("is_warning") and node.has_method("gust_direction"):
 			_gusts.append(node as Node2D)
+	# The stage's map for getting between its levels (#1299).
+	_routes.build(_lava.get_parent(), [MovingPlatformScript, RotatingPlatformScript, BreakableWallScript, FallingRockScript,
+			CrumblingLedgeScript, CollapsingFloorScript], BouncePadScript, _pads, _pad_launch_x, _pad_launch_height)
+
+## How high (px) `pad` throws the bot (#1299): from its launch speed and the
+## body's gravity, capped at ROUTE_LAUNCH_MAX (air drag and the run carried
+## across take off a lot: Summit's 2000 px/s pads lift a body about 330 px).
+func _pad_launch_height(pad: Node2D) -> float:
+	var speed: float = float(pad.get("launch_speed")) if pad.get("launch_speed") != null else 0.0
+	var body := player as RigidBody2D
+	var gravity: float = float(ProjectSettings.get_setting("physics/2d/default_gravity", 980.0)) * (body.gravity_scale if body != null else 1.0)
+	return minf(speed * speed / (2.0 * maxf(gravity, 1.0)), ROUTE_LAUNCH_MAX)
+
+## Issue #1299: when the goal stands on another of the stage's surfaces, head
+## for the first link of the route there (`BotRoutes`): to the link's start,
+## then across it (off an end, a leap, a climb, or a pad's launch). True when
+## the route set the goal; false leaves the bot to its own rules.
+func _take_route() -> bool:
+	var me: Vector2 = player.global_position
+	var floor_y: float = _own_floor_y()
+	var goal_ground: float = _ground_below(goal)
+	if is_nan(floor_y) or is_nan(goal_ground):
+		return false
+	var from: int = _routes.surface_at(me.x, floor_y)
+	var to: int = _routes.surface_at(goal.x, goal_ground)
+	var hop: Dictionary = _routes.next_hop(from, me.x, to)
+	if hop.is_empty():
+		return false
+	var start: Vector2 = hop["start"]
+	if hop["kind"] == BotRoutesScript.PAD:
+		_pad_route = true
+		_pad_target = hop["pad"]
+		goal = start
+		return true
+	if absf(start.x - me.x) > ROUTE_AT_START:
+		goal = start
+		return true
+	goal = hop["land"]
+	if hop["kind"] == BotRoutesScript.LEAP:
+		# Off the end on purpose, at a run: the edge checks would hold it there.
+		_leap_left = maxf(_leap_left, ROUTE_LEAP_SEC)
+	return true
 
 ## A zone's rectangle shape in world space (unrotated, as stages place them).
 func _zone_rect(zone: Area2D) -> Rect2:
