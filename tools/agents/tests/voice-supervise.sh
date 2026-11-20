@@ -47,7 +47,7 @@ kill "$sp"; wait "$sp" 2>/dev/null; sp=""
 # hive-join.sh: restarts a stale voice supervisor only where hub.conf exists
 join() { bash "$AG/hive-join.sh"; }
 : > "$T/calls.log"; touch -t 202001010000 "$T/state/voice-status.json"
-out=$(join); grep -q "screen -dmS hive-voice-alice" "$T/calls.log"; ok "join: stale voice restarted in screen" $?
+out=$(join); grep -Eq "screen -dmS hive-voice-[^ ]+-alice" "$T/calls.log"; ok "join: stale voice restarted in screen" $?
 case $out in *"restarted dead voice"*) ok "join: restart announced" 0;; *) ok "join: restart announced" 1;; esac
 : > "$T/calls.log"; touch "$T/state/voice-status.json"
 join >/dev/null; ! grep -q hive-voice "$T/calls.log"; ok "join: fresh voice status left alone" $?

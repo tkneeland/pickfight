@@ -36,13 +36,14 @@ rmdir "$T/state/.hive-join.lock"
 [ ! -s "$T/calls.log" ]; ok "bare/keepalive hive-msg.sh listen running: no second listener" $?
 ! grep -q restarted "$T/o.txt"; ok "...and no false restarted line" $?
 out=$(run)
-grep -q "screen -dmS hive-msg-alice" "$T/calls.log"; ok "stale msg (unix): screen restart" $?
+grep -Eq "screen -dmS hive-msg-[^ ]+-alice" "$T/calls.log"; ok "stale msg (unix): screen restart, named per repo" $?
+sname=$(grep -Eo "hive-msg-[^ ]+-alice" "$T/calls.log" | head -n 1)
 case $out in *"restarted dead msg"*) ok "restart announced" 0;; *) ok "restart announced" 1;; esac
 
-: > "$T/calls.log"; echo "123.hive-msg-alice	(Detached)" > "$T/screenls"
+: > "$T/calls.log"; printf '123.%s\t(Detached)\n' "$sname" > "$T/screenls"
 run >/dev/null; ! grep -q "dmS" "$T/calls.log"; ok "live screen of that name: not duplicated" $?
-echo "124.hive-msg	(Detached)" > "$T/screenls"; : > "$T/calls.log"
-run >/dev/null; ! grep -q "dmS" "$T/calls.log"; ok "README-named hive-msg session recognised" $?
+printf '124.hive-msg-alice\t(Detached)\n125.hive-msg-othergame-alice\t(Detached)\n' > "$T/screenls"; : > "$T/calls.log"
+run >/dev/null; grep -q "dmS" "$T/calls.log"; ok "another game's (or a pre-repo-name) msg screen doesn't block this repo's" $?
 rm -f "$T/screenls"
 
 # Windows: one hive-start.ps1 call (no -Only) when anything is stale

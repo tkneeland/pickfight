@@ -28,15 +28,16 @@ powershell -ExecutionPolicy Bypass -File tools\agents\windows\hive-stop.ps1   -A
   share the topic out of band). It fills the inbox the other accounts' beacons are read from.
 - `hive-supervise.sh voice` keeps the hub voice runner (`hive-voice.mjs`) alive. It runs only when the state folder's
   `hub.conf` holds `HUB_URL` and `HUB_VOICE_TOKEN` (never commit that file), and exits at once otherwise.
-- `hive-stop.ps1` kills the supervisors and sweeps any leftover `hive-*.sh` watcher process on the machine.
+- `hive-stop.ps1` kills the supervisors and sweeps any leftover watcher started from this repo's scripts; another game's
+  hive on the same machine keeps running.
 - In `SINGLE_ACCOUNT` (and `PRIVATE`) mode the `beacon` and `msg` supervisors exit at once: there is no channel.
 
 ## Keep the watchers alive (Task Scheduler)
 
 Run once: `powershell -ExecutionPolicy Bypass -File tools\agents\windows\hive-install-task.ps1 -Account <handle>`. It
-registers a task named `hive AT watchers (<handle>)` with a logon trigger plus a 5-minute repeat, so a dead listener is
+registers a task named `hive AT watchers (<repo>, <handle>)` with a logon trigger plus a 5-minute repeat, so a dead listener is
 back within 5 minutes, and turns off sleep on AC power. It runs through `conhost --headless`, so no console window
-flashes. Remove it with `Unregister-ScheduledTask -TaskName "hive AT watchers (<handle>)" -Confirm:$false`.
+flashes. Remove it with `Unregister-ScheduledTask -TaskName "hive AT watchers (<repo>, <handle>)" -Confirm:$false`.
 
 The `SessionStart` hook (`hive-join.sh`) also restarts dead watchers through `hive-start.ps1` whenever a Claude
 session opens.
@@ -48,7 +49,7 @@ session opens.
 keeps ONE headless `claude -p` session running the AT prompt (the same one `hive-keepalive.sh --print-prompt` prints,
 rebuilt for every session). When a session ends, hits a usage limit or crashes, the next one starts after 60 s (10 min
 if it ended in under 2 min, so a limit or crash loop never spins). A second copy exits at once (`keepalive.pid`).
-`hive-install-task.ps1` (above) registers it as the task `hive AT session (<handle>)`, logon plus every 5 minutes, so
+`hive-install-task.ps1` (above) registers it as the task `hive AT session (<repo>, <handle>)`, logon plus every 5 minutes, so
 nobody has to keep a terminal open; `-NoSession` skips it (use it on a machine where you also run an interactive AT session: two sessions would act on the same account). `hive-stop.ps1` stops the keepalive and its claude, but the task restarts it within 5 minutes; to stop it for good run `Unregister-ScheduledTask -TaskName "hive AT session (<handle>)" -Confirm:$false`. `hive-status.ps1` shows it as `keepalive`; logs are
 `keepalive.log` and `keepalive-session.out/.err` in the state folder.
 

@@ -17,7 +17,7 @@ age() { local m; m=$(hive_mtime "$1" 2>/dev/null); [ -n "$m" ] && echo $(( $(dat
 case $(uname -s) in MINGW*|MSYS*|CYGWIN*) HIVE_WIN=1;; *) HIVE_WIN=0;; esac
 start_cmd() {  # how to (re)start one supervised watcher on this platform
   if [ "$HIVE_WIN" = 1 ]; then echo "run tools/agents/windows/hive-start.ps1"
-  else echo "screen -dmS hive-$1-$HIVE_ACCOUNT bash -c 'HIVE_ACCOUNT=$HIVE_ACCOUNT bash tools/agents/windows/hive-supervise.sh $1'"; fi; }
+  else echo "screen -dmS $(hive_screen "$1") bash -c 'HIVE_ACCOUNT=$HIVE_ACCOUNT bash tools/agents/windows/hive-supervise.sh $1'"; fi; }
 
 # 1. Role (rule 7). Every other check still runs, so a stand-in can verify itself before taking over.
 tm=$(hive_triagemaster)
