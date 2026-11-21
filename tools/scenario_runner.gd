@@ -1397,6 +1397,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_route_map_of_summit_1299",
 	"bot_leaves_summit_tower_by_a_step_1299",
 	"bot_swings_when_propped_on_its_axe_1299",
+	"bot_held_still_in_air_does_not_count_as_propped_1299",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4619,6 +4620,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _bot_leaves_summit_tower_by_a_step_1299()
 		"bot_swings_when_propped_on_its_axe_1299":
 			return await _scenario_bot_swings_when_propped_on_its_axe_1299()
+		"bot_held_still_in_air_does_not_count_as_propped_1299":
+			return await _scenario_bot_held_still_in_air_does_not_count_as_propped_1299()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -66378,5 +66381,35 @@ func _scenario_bot_swings_when_propped_on_its_axe_1299() -> Array[String]:
 		failures.append("a bot with the axe landed no hit on a still rival in 20 s")
 	elif propped_ticks == 0:
 		failures.append("the axe bot hit without ever being propped: the scenario no longer reaches the #1299 case")
+	await _teardown(stage)
+	return failures
+## Issue #1299 (review of #1308): only a head resting on terrain props a bot. A
+## bot held still in the air with nothing under its head (an updraft can hold a
+## body that still) keeps holding its head short and low, as #302 asks, and never
+## counts as propped. Here the body is frozen 94 px above the floor next to a
+## rival in reach, for 1.5 s.
+func _scenario_bot_held_still_in_air_does_not_count_as_propped_1299() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, 40.0, 0.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	player.spawn_protected = false
+	player.global_position = Vector2(40.0, 180.0)
+	player.linear_velocity = Vector2.ZERO
+	player.freeze = true
+	var attacked: int = 0
+	var latched: int = 0
+	for tick in 90:
+		await physics_frame
+		if bot.mode == "attack":
+			attacked += 1
+			if bot.get("_propped") == true:
+				latched += 1
+	print("      %d ticks in attack mode, %d of them counted as propped" % [attacked, latched])
+	if attacked == 0:
+		failures.append("the bot never went into attack mode, so the case was not reached")
+	if latched > 0:
+		failures.append("a bot held still in the air with no head on the ground counted as propped for %d ticks" % latched)
 	await _teardown(stage)
 	return failures

@@ -1331,19 +1331,23 @@ func _brake() -> Vector2:
 		return dir * AIR_LENGTH
 	return dir * (PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0)
 
-## Issue #1299: a bot held nearly still off the ground is not thrown. Most often
-## it is propped on its own planted head: a heavy head (the axe, the staff's long
-## pole) holds the body up past the AIRBORNE_GAP ray. Under this speed (px/s)...
+## Issue #1299: a bot held nearly still off the ground, its own weapon head
+## resting on terrain below it, is propped on that head, not thrown: a heavy head
+## (the axe, the staff's long pole) holds the body up past the AIRBORNE_GAP ray.
+## Under this speed (px/s)...
 const PROPPED_SPEED: float = 60.0
 ## ...for this long (s), the bot counts as propped and swings.
 const PROPPED_SEC: float = 0.25
 ## Over this speed (px/s) a propped bot is thrown again: its own swing jolts the
 ## body less than that, and a #302 head-plant throw is 500 px/s or more.
 const THROWN_SPEED: float = 300.0
-## Seconds the bot has been nearly still off the ground, towards PROPPED_SEC.
+## How far under the weapon head point (px) terrain counts as the head resting
+## on it. The point is the haft's anchor; the axe's blade reaches about 25 px past it.
+const PLANT_PROBE: float = 40.0
+## Seconds the bot has been propped and nearly still, towards PROPPED_SEC.
 var _still_in_air_sec: float = 0.0
-## True from PROPPED_SEC still off the ground until it lands, is thrown, dies
-## or stops attacking (#1299).
+## True from PROPPED_SEC propped and still until the head leaves the terrain,
+## the bot is thrown, dies or stops attacking (#1299). Rechecked every tick.
 var _propped: bool = false
 
 ## Issue #302: a bot thrown off the ground mid-fight, by its own swing or a
@@ -1351,27 +1355,49 @@ var _propped: bool = false
 ## only speeds it on its way over the rival. It holds the head short and low
 ## behind, ready to plant on landing. Issue #1299: unless it is propped (see
 ## PROPPED_SPEED): holding short and low kept a propped bot propped, and it
-## never swung again.
+## never swung again. Only a head resting on terrain props a bot: a body hanging
+## still in an updraft, or perched on a rival, still holds.
 func _hold_in_air(delta: float) -> Vector2:
 	var me: Vector2 = player.global_position
 	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
-		_clear_propped()
+		# On the ground: it swings anyway. The latch stays, so a chop that dips
+		# the body into the ray does not restart the wait (it is rechecked below).
 		return Vector2.ZERO
 	var body := player as RigidBody2D
-	if body != null:
-		var speed: float = body.linear_velocity.length()
-		if speed > THROWN_SPEED:
-			_propped = false
-		if speed < PROPPED_SPEED:
-			_still_in_air_sec += delta
-			if _still_in_air_sec >= PROPPED_SEC:
-				_propped = true
-		else:
-			_still_in_air_sec = 0.0
+	if body == null or not _head_props_body() or body.linear_velocity.length() > THROWN_SPEED:
+		_clear_propped()
+	elif body.linear_velocity.length() < PROPPED_SPEED:
+		_still_in_air_sec += delta
+		if _still_in_air_sec >= PROPPED_SEC:
+			_propped = true
+	elif not _propped:
+		_still_in_air_sec = 0.0
 	if _propped:
 		return Vector2.ZERO
+	# The swing's blocked-head check reads head speed from _last_head: keep it
+	# current, or the first swing after a long hold reads a huge speed (#1299).
+	if player.has_method("weapon_head_position"):
+		_last_head = player.weapon_head_position()
 	var side: float = signf(_target.global_position.x - me.x)
 	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
+
+## Issue #1299: whether the bot's weapon head rests on terrain below the body,
+## with no other fighter under the body (one perched on a rival is not propped:
+## a chop down from there vaults it over, #302).
+func _head_props_body() -> bool:
+	if not player.has_method("weapon_head_position"):
+		return false
+	var me: Vector2 = player.global_position
+	var head: Vector2 = player.weapon_head_position()
+	if head.y <= me.y or not _ray_hits(head, head + Vector2(0.0, PLANT_PROBE)):
+		return false
+	for other: Node in player.get_tree().get_nodes_in_group("players"):
+		if other == player or not (other is Node2D) or not _alive(other):
+			continue
+		var at: Vector2 = (other as Node2D).global_position - me
+		if absf(at.x) < BODY_RADIUS * 2.0 and at.y > 0.0 and at.y < BODY_RADIUS * 3.0:
+			return false
+	return true
 
 func _clear_propped() -> void:
 	_still_in_air_sec = 0.0
