@@ -1332,8 +1332,8 @@ func _brake() -> Vector2:
 	return dir * (PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0)
 
 ## Issue #1299: a bot held nearly still off the ground, its own weapon head
-## resting on terrain below it, is propped on that head, not thrown: a heavy head
-## (the axe, the staff's long pole) holds the body up past the AIRBORNE_GAP ray.
+## resting on terrain, is propped on that head, not thrown: a heavy head (the
+## axe, the staff's long pole) holds the body up past the AIRBORNE_GAP ray.
 ## Under this speed (px/s)...
 const PROPPED_SPEED: float = 60.0
 ## ...for this long (s), the bot counts as propped and swings.
@@ -1341,66 +1341,99 @@ const PROPPED_SEC: float = 0.25
 ## Over this speed (px/s) a propped bot is thrown again: its own swing jolts the
 ## body less than that, and a #302 head-plant throw is 500 px/s or more.
 const THROWN_SPEED: float = 300.0
-## How far under the weapon head point (px) terrain counts as the head resting
-## on it. The point is the haft's anchor; the axe's blade reaches about 25 px past it.
-const PLANT_PROBE: float = 40.0
-## Seconds the bot has been propped and nearly still, towards PROPPED_SEC.
-var _still_in_air_sec: float = 0.0
-## True from PROPPED_SEC propped and still until the head leaves the terrain,
-## the bot is thrown, dies or stops attacking (#1299). Rechecked every tick.
+## Radius (px) round the weapon head point within which terrain counts as the
+## head resting on it. The point is the haft's anchor; the axe's blade reaches
+## about 25 px past it, and a staff tip may lean on a wall's face.
+const PLANT_RADIUS: float = 30.0
+## A propped bot that moves this far (px) from where it was propped has been
+## knocked off its prop, however slowly, and holds again (#302).
+const PROP_DRIFT: float = 48.0
+## On the ground this long (s), a bot is no longer propped: a chop that dips the
+## body into the ground ray for a tick or two keeps the latch (#1299 review).
+const PROP_GROUNDED_SEC: float = 0.5
+## Slack (px) past two body radii for a fighter under the bot to count as one it
+## is perched on, not one it is merely propped above.
+const PERCH_SLACK: float = 6.0
+## Seconds the bot has been nearly still with its head planted, towards PROPPED_SEC.
+var _prop_wait_sec: float = 0.0
+## Seconds a propped bot has been on the ground, towards PROP_GROUNDED_SEC.
+var _prop_grounded_sec: float = 0.0
+## True from PROPPED_SEC still on a planted head until the bot drifts PROP_DRIFT
+## from `_prop_at`, is thrown, stays grounded, dies or stops attacking (#1299).
 var _propped: bool = false
+## Where the bot was when it latched `_propped`.
+var _prop_at: Vector2 = Vector2.ZERO
 
 ## Issue #302: a bot thrown off the ground mid-fight, by its own swing or a
 ## vault over the rival's head, stops swinging: every push it makes in the air
 ## only speeds it on its way over the rival. It holds the head short and low
 ## behind, ready to plant on landing. Issue #1299: unless it is propped (see
 ## PROPPED_SPEED): holding short and low kept a propped bot propped, and it
-## never swung again. Only a head resting on terrain props a bot: a body hanging
-## still in an updraft, or perched on a rival, still holds.
+## never swung again. Only a planted head props a bot: a body hanging still in
+## an updraft, or perched on a rival, still holds. Once propped, the bot's own
+## swing lifting the head does not end it; leaving the place it was propped does.
 func _hold_in_air(delta: float) -> Vector2:
 	var me: Vector2 = player.global_position
 	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
-		# On the ground: it swings anyway. The latch stays, so a chop that dips
-		# the body into the ray does not restart the wait (it is rechecked below).
+		_prop_wait_sec = 0.0
+		if _propped:
+			_prop_grounded_sec += delta
+			if _prop_grounded_sec >= PROP_GROUNDED_SEC:
+				_clear_propped()
 		return Vector2.ZERO
+	_prop_grounded_sec = 0.0
 	var body := player as RigidBody2D
-	if body == null or not _head_props_body() or body.linear_velocity.length() > THROWN_SPEED:
+	if body == null:
 		_clear_propped()
-	elif body.linear_velocity.length() < PROPPED_SPEED:
-		_still_in_air_sec += delta
-		if _still_in_air_sec >= PROPPED_SEC:
-			_propped = true
-	elif not _propped:
-		_still_in_air_sec = 0.0
+	else:
+		var speed: float = body.linear_velocity.length()
+		if _propped:
+			if speed > THROWN_SPEED or me.distance_to(_prop_at) > PROP_DRIFT:
+				_clear_propped()
+		elif speed < PROPPED_SPEED and _head_planted() and not _perched_on_fighter():
+			_prop_wait_sec += delta
+			if _prop_wait_sec >= PROPPED_SEC:
+				_propped = true
+				_prop_at = me
+		else:
+			_prop_wait_sec = 0.0
 	if _propped:
 		return Vector2.ZERO
-	# The swing's blocked-head check reads head speed from _last_head: keep it
-	# current, or the first swing after a long hold reads a huge speed (#1299).
-	if player.has_method("weapon_head_position"):
-		_last_head = player.weapon_head_position()
 	var side: float = signf(_target.global_position.x - me.x)
 	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
 
-## Issue #1299: whether the bot's weapon head rests on terrain below the body,
-## with no other fighter under the body (one perched on a rival is not propped:
-## a chop down from there vaults it over, #302).
-func _head_props_body() -> bool:
+## Issue #1299: whether terrain lies within PLANT_RADIUS of the bot's weapon head
+## point, the head no higher than the body.
+func _head_planted() -> bool:
 	if not player.has_method("weapon_head_position"):
 		return false
-	var me: Vector2 = player.global_position
 	var head: Vector2 = player.weapon_head_position()
-	if head.y <= me.y or not _ray_hits(head, head + Vector2(0.0, PLANT_PROBE)):
+	if head.y < player.global_position.y:
 		return false
+	var circle := CircleShape2D.new()
+	circle.radius = PLANT_RADIUS
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = circle
+	query.transform = Transform2D(0.0, head)
+	query.collision_mask = LAYER_WORLD
+	query.exclude = _player_rids()
+	return not player.get_world_2d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+## Issue #1299: whether another living fighter is right under the bot, touching
+## it: a bot perched there is not propped (a chop down from it vaults it over, #302).
+func _perched_on_fighter() -> bool:
+	var me: Vector2 = player.global_position
 	for other: Node in player.get_tree().get_nodes_in_group("players"):
 		if other == player or not (other is Node2D) or not _alive(other):
 			continue
 		var at: Vector2 = (other as Node2D).global_position - me
-		if absf(at.x) < BODY_RADIUS * 2.0 and at.y > 0.0 and at.y < BODY_RADIUS * 3.0:
-			return false
-	return true
+		if at.y > 0.0 and at.length() < BODY_RADIUS * 2.0 + PERCH_SLACK:
+			return true
+	return false
 
 func _clear_propped() -> void:
-	_still_in_air_sec = 0.0
+	_prop_wait_sec = 0.0
+	_prop_grounded_sec = 0.0
 	_propped = false
 
 ## Issue #915: a bot holding the umbrella, airborne with no ground in the
