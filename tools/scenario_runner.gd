@@ -1396,6 +1396,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_four_bots_finish_rounds_on_summit_1294",
 	"bot_route_map_of_summit_1299",
 	"bot_leaves_summit_tower_by_a_step_1299",
+	"bot_swings_when_propped_on_its_axe_1299",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4616,6 +4617,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _bot_route_map_of_summit_1299()
 		"bot_leaves_summit_tower_by_a_step_1299":
 			return await _bot_leaves_summit_tower_by_a_step_1299()
+		"bot_swings_when_propped_on_its_axe_1299":
+			return await _scenario_bot_swings_when_propped_on_its_axe_1299()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -66337,5 +66340,37 @@ func _bot_leaves_summit_tower_by_a_step_1299() -> Array[String]:
 			break
 	if not stepped:
 		failures.append("the bot did not get from the tower on to a step in 10 s (it was at %s)" % players[0].global_position)
+	await _teardown(stage)
+	return failures
+## Issue #1299: a bot propped on its own planted head swings again. A heavy
+## head (the axe here) held the body up past the airborne ray; holding short and
+## low as if thrown kept it there, and the bot never swung (0 damage in 61
+## attack-seconds over 48 Summit rounds). With the axe against a rival standing
+## still on the arena floor, it lands a hit within 20 s.
+func _scenario_bot_swings_when_propped_on_its_axe_1299() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, 160.0, -160.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	var rival: RigidBody2D = null
+	for node: Node in stage.get_children():
+		if node is RigidBody2D and node != player and node.has_method("set_input_vector"):
+			rival = node as RigidBody2D
+	player.spawn_protected = false
+	rival.spawn_protected = false
+	await _equip(player, "res://resources/axe.tres")
+	var propped_ticks: int = 0
+	var hit_at: float = -1.0
+	for tick in 1200:
+		await physics_frame
+		if bot.get("_propped") == true:
+			propped_ticks += 1
+		if rival.damage > 0.0:
+			hit_at = float(tick) / 60.0
+			break
+	print("      axe bot hit the rival at %.1f s (propped for %d ticks before it)" % [hit_at, propped_ticks])
+	if hit_at < 0.0:
+		failures.append("a bot with the axe landed no hit on a still rival in 20 s")
 	await _teardown(stage)
 	return failures

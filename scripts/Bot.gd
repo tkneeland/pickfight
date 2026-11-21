@@ -567,6 +567,8 @@ func think(delta: float) -> Vector2:
 		_flee_side = 0.0
 		_holdoff_since = -1.0
 		_chasing = null
+		_still_in_air = 0.0
+		_propped = false
 		return Vector2.ZERO
 	_clock += delta
 	_desperate_left = maxf(_desperate_left - delta, 0.0)
@@ -609,7 +611,7 @@ func think(delta: float) -> Vector2:
 		var brake: Vector2 = _brake()
 		if brake != Vector2.ZERO:
 			return brake
-		var air: Vector2 = _hold_in_air()
+		var air: Vector2 = _hold_in_air(delta)
 		if air != Vector2.ZERO:
 			return air
 		return _swing(delta)
@@ -1331,9 +1333,34 @@ func _brake() -> Vector2:
 ## vault over the rival's head, stops swinging: every push it makes in the air
 ## only speeds it on its way over the rival. It holds the head short and low
 ## behind, ready to plant on landing.
-func _hold_in_air() -> Vector2:
+## Issue #1299: a body held still above the ground is not thrown, it is propped
+## on its own planted head. A heavy head (the axe, the staff's long pole) holds
+## the body higher than the AIRBORNE_GAP ray reaches, and holding short and low
+## kept it there: the bot never swung again. Still for PROPPED_SEC, it counts as
+## propped and swings, until it lands or is really thrown (THROWN_SPEED): its
+## own swing jolts the body, and that is no throw.
+const PROPPED_SPEED: float = 60.0
+const PROPPED_SEC: float = 0.25
+const THROWN_SPEED: float = 300.0
+var _still_in_air: float = 0.0
+var _propped: bool = false
+func _hold_in_air(delta: float) -> Vector2:
 	var me: Vector2 = player.global_position
 	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
+		_still_in_air = 0.0
+		_propped = false
+		return Vector2.ZERO
+	var body := player as RigidBody2D
+	var speed: float = body.linear_velocity.length() if body != null else INF
+	if speed > THROWN_SPEED:
+		_propped = false
+	if speed < PROPPED_SPEED:
+		_still_in_air += delta
+		if _still_in_air >= PROPPED_SEC:
+			_propped = true
+	else:
+		_still_in_air = 0.0
+	if _propped:
 		return Vector2.ZERO
 	var side: float = signf(_target.global_position.x - me.x)
 	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
