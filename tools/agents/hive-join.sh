@@ -4,7 +4,7 @@
 #   1. reminds the agent to read docs/agents/team-memory.md
 #   2. restarts this machine's dead private-channel supervisor (listener + heartbeat), and on Windows the
 #      triage/automerge/beacon supervisors too (reusing windows/hive-start.ps1; macOS/Linux: `screen` +
-#      windows/hive-supervise.sh msg), and the hub voice runner (supervise.sh voice) where $HIVE_STATE/hub.conf exists. The account comes from HIVE_ACCOUNT or the cached `gh` login (hive-env.sh).
+#      windows/hive-supervise.sh msg), and the hub voice runner (supervise.sh voice) where hive.conf or $HIVE_STATE/hub.conf has HUB_URL. The account comes from HIVE_ACCOUNT or the cached `gh` login (hive-env.sh).
 #   3. prints `hive.sh status --short --cached` (the last status at once, refreshed in the background) when
 #      that script exists, else a one-line local status
 # Silent on success apart from the status. Never blocks or fails the session: the whole check runs under a watchdog
@@ -82,10 +82,10 @@ listener_running() { LC_ALL=C pgrep -f 'hive-msg.sh listen' >/dev/null 2>&1 || p
 need=""
 # msg: the listener + heartbeat supervisor rewrites msg-status.json every 60 s
 if [ "$SINGLE_ACCOUNT" != 1 ] && [ -f "$HIVE_STATE/msg.conf" ] && [ "$(age "$HIVE_STATE/msg-status.json")" -gt "${HIVE_JOIN_STALE:-180}" ] && ! listener_running; then need="$need msg"; fi
-# voice: the hub voice runner's supervisor rewrites voice-status.json every 60 s; only machines with a hub.conf run one
+# voice: the hub voice runner's supervisor rewrites voice-status.json every 60 s; runs where HUB_URL is set (hive.conf or hub.conf)
 voice_running() { LC_ALL=C pgrep -f 'hive-voice.mjs' >/dev/null 2>&1 || ps -ax -o command 2>/dev/null | grep -q '[h]ive-voice.mjs' \
   || ps -W 2>/dev/null | grep -q '[h]ive-voice.mjs'; }
-if [ -f "$HIVE_STATE/hub.conf" ] && [ "$(age "$HIVE_STATE/voice-status.json")" -gt "${HIVE_JOIN_STALE:-180}" ] && ! voice_running; then need="$need voice"; fi
+if { [ -n "${HUB_URL:-}" ] || grep -Eq "^[[:space:]]*(export[[:space:]]+)?HUB_URL=[^[:space:]]" "$HIVE_STATE/hub.conf" 2>/dev/null; } && [ "$(age "$HIVE_STATE/voice-status.json")" -gt "${HIVE_JOIN_STALE:-180}" ] && ! voice_running; then need="$need voice"; fi
 # Windows keeps every AT watcher under hive-start.ps1; same liveness signals as hive-tm-check.sh
 if [ "$WIN" = 1 ]; then
   [ -f "$HIVE_STATE/triage-status.json" ] && [ "$(age "$HIVE_STATE/.triage-watch-alive")" -gt 900 ] && need="$need triage"
