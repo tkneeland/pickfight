@@ -66357,6 +66357,10 @@ func _scenario_bot_swings_when_propped_on_its_axe_1299() -> Array[String]:
 	for node: Node in stage.get_children():
 		if node is RigidBody2D and node != player and node.has_method("set_input_vector"):
 			rival = node as RigidBody2D
+	if rival == null:
+		failures.append("the fixture has no rival player")
+		await _teardown(stage)
+		return failures
 	player.spawn_protected = false
 	rival.spawn_protected = false
 	await _equip(player, "res://resources/axe.tres")
@@ -66372,5 +66376,7 @@ func _scenario_bot_swings_when_propped_on_its_axe_1299() -> Array[String]:
 	print("      axe bot hit the rival at %.1f s (propped for %d ticks before it)" % [hit_at, propped_ticks])
 	if hit_at < 0.0:
 		failures.append("a bot with the axe landed no hit on a still rival in 20 s")
+	elif propped_ticks == 0:
+		failures.append("the axe bot hit without ever being propped: the scenario no longer reaches the #1299 case")
 	await _teardown(stage)
 	return failures

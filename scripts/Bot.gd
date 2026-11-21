@@ -567,8 +567,7 @@ func think(delta: float) -> Vector2:
 		_flee_side = 0.0
 		_holdoff_since = -1.0
 		_chasing = null
-		_still_in_air = 0.0
-		_propped = false
+		_clear_propped()
 		return Vector2.ZERO
 	_clock += delta
 	_desperate_left = maxf(_desperate_left - delta, 0.0)
@@ -615,6 +614,9 @@ func think(delta: float) -> Vector2:
 		if air != Vector2.ZERO:
 			return air
 		return _swing(delta)
+	# Out of a fight the bot no longer watches its footing for the propped latch
+	# (#1299): it starts the next fight unpropped.
+	_clear_propped()
 	var unhook: Vector2 = _unhook(delta)
 	if unhook != Vector2.ZERO:
 		return unhook
@@ -1329,41 +1331,51 @@ func _brake() -> Vector2:
 		return dir * AIR_LENGTH
 	return dir * (PICKAXE_PUSH_LENGTH if _holds_pickaxe() else 1.0)
 
+## Issue #1299: a bot held nearly still off the ground is not thrown. Most often
+## it is propped on its own planted head: a heavy head (the axe, the staff's long
+## pole) holds the body up past the AIRBORNE_GAP ray. Under this speed (px/s)...
+const PROPPED_SPEED: float = 60.0
+## ...for this long (s), the bot counts as propped and swings.
+const PROPPED_SEC: float = 0.25
+## Over this speed (px/s) a propped bot is thrown again: its own swing jolts the
+## body less than that, and a #302 head-plant throw is 500 px/s or more.
+const THROWN_SPEED: float = 300.0
+## Seconds the bot has been nearly still off the ground, towards PROPPED_SEC.
+var _still_in_air_sec: float = 0.0
+## True from PROPPED_SEC still off the ground until it lands, is thrown, dies
+## or stops attacking (#1299).
+var _propped: bool = false
+
 ## Issue #302: a bot thrown off the ground mid-fight, by its own swing or a
 ## vault over the rival's head, stops swinging: every push it makes in the air
 ## only speeds it on its way over the rival. It holds the head short and low
-## behind, ready to plant on landing.
-## Issue #1299: a body held still above the ground is not thrown, it is propped
-## on its own planted head. A heavy head (the axe, the staff's long pole) holds
-## the body higher than the AIRBORNE_GAP ray reaches, and holding short and low
-## kept it there: the bot never swung again. Still for PROPPED_SEC, it counts as
-## propped and swings, until it lands or is really thrown (THROWN_SPEED): its
-## own swing jolts the body, and that is no throw.
-const PROPPED_SPEED: float = 60.0
-const PROPPED_SEC: float = 0.25
-const THROWN_SPEED: float = 300.0
-var _still_in_air: float = 0.0
-var _propped: bool = false
+## behind, ready to plant on landing. Issue #1299: unless it is propped (see
+## PROPPED_SPEED): holding short and low kept a propped bot propped, and it
+## never swung again.
 func _hold_in_air(delta: float) -> Vector2:
 	var me: Vector2 = player.global_position
 	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
-		_still_in_air = 0.0
-		_propped = false
+		_clear_propped()
 		return Vector2.ZERO
 	var body := player as RigidBody2D
-	var speed: float = body.linear_velocity.length() if body != null else INF
-	if speed > THROWN_SPEED:
-		_propped = false
-	if speed < PROPPED_SPEED:
-		_still_in_air += delta
-		if _still_in_air >= PROPPED_SEC:
-			_propped = true
-	else:
-		_still_in_air = 0.0
+	if body != null:
+		var speed: float = body.linear_velocity.length()
+		if speed > THROWN_SPEED:
+			_propped = false
+		if speed < PROPPED_SPEED:
+			_still_in_air_sec += delta
+			if _still_in_air_sec >= PROPPED_SEC:
+				_propped = true
+		else:
+			_still_in_air_sec = 0.0
 	if _propped:
 		return Vector2.ZERO
 	var side: float = signf(_target.global_position.x - me.x)
 	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
+
+func _clear_propped() -> void:
+	_still_in_air_sec = 0.0
+	_propped = false
 
 ## Issue #915: a bot holding the umbrella, airborne with no ground in the
 ## AIRBORNE_GAP ray and falling faster than the open canopy allows, aims the
