@@ -243,22 +243,33 @@ hive_studio_sync() {
 }
 # hive_limits <handle>: sets l_5h (FIVE_H_STOP_USED), l_wmin (MIN_WEEKLY_REMAINING_FOR_TICKETS) and l_auto (AUTO_FILE, 0|1)
 # for that account. The hub's studio hive/account-limits.conf ("<handle> five_h=<used %> weekly=<used %> auto_file=0|1",
-# every key optional) wins; then the account conf, then _shared.conf, then 90, 0 and 0. weekly=W is stored as
-# l_wmin = 100 - W. No forks in the common case.
+# every key optional) wins: the handle's own line, then its "*" line (the studio default for everyone); then the account
+# conf, then _shared.conf, then 90, 0 and 0. weekly=W is stored as l_wmin = 100 - W. No forks in the common case.
 hive_limits() {
-  local h k v kv rest f=$HIVE_STUDIO_CACHE/account-limits.conf; l_5h=""; l_wmin=""; l_auto=""
+  local h k v kv rest d_5h="" d_wmin="" d_auto="" f=$HIVE_STUDIO_CACHE/account-limits.conf; l_5h=""; l_wmin=""; l_auto=""
   if [ -n "$STUDIO_REPO" ] && [ -s "$f" ]; then
     while read -r h rest; do
       case $h in ''|'#'*) continue;; esac
-      [ "$h" = "$1" ] || continue   # the hub writes the roster spelling, which is the conf name
-      for kv in $rest; do
-        k=${kv%%=*}; v=${kv#*=}
-        case $v in ''|*[!0-9]*) continue;; esac
-        [ "$k" = auto_file ] && { case $v in 0|1) l_auto=$v;; esac; continue; }
-        [ "$v" -ge 1 ] && [ "$v" -le 100 ] || continue
-        case $k in five_h) l_5h=$v;; weekly) l_wmin=$(( 100 - v ));; esac
-      done
+      # the hub writes the roster spelling, which is the conf name; "*" is the studio default
+      if [ "$h" = "$1" ]; then
+        for kv in $rest; do
+          k=${kv%%=*}; v=${kv#*=}
+          case $v in ''|*[!0-9]*) continue;; esac
+          [ "$k" = auto_file ] && { case $v in 0|1) l_auto=$v;; esac; continue; }
+          [ "$v" -ge 1 ] && [ "$v" -le 100 ] || continue
+          case $k in five_h) l_5h=$v;; weekly) l_wmin=$(( 100 - v ));; esac
+        done
+      elif [ "$h" = '*' ]; then
+        for kv in $rest; do
+          k=${kv%%=*}; v=${kv#*=}
+          case $v in ''|*[!0-9]*) continue;; esac
+          [ "$k" = auto_file ] && { case $v in 0|1) d_auto=$v;; esac; continue; }
+          [ "$v" -ge 1 ] && [ "$v" -le 100 ] || continue
+          case $k in five_h) d_5h=$v;; weekly) d_wmin=$(( 100 - v ));; esac
+        done
+      fi
     done < "$f"
+    [ -n "$l_5h" ] || l_5h=$d_5h; [ -n "$l_wmin" ] || l_wmin=$d_wmin; [ -n "$l_auto" ] || l_auto=$d_auto
   fi
   if [ "$1" = "$HIVE_ACCOUNT" ]; then
     [ -n "$l_5h" ] || l_5h=$FIVE_H_STOP_USED_CONF; [ -n "$l_wmin" ] || l_wmin=$MIN_WEEKLY_REMAINING_FOR_TICKETS_CONF
