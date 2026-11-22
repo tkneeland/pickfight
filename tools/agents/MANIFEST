@@ -1,5 +1,5 @@
 # Installed by claude-hive's install.sh. Do not edit hive files in this repo: change claude-hive and re-install.
-# claude-hive 54682f0
+# claude-hive fa1ef13
 8f34a1c41f572fbb4099c97a385292d7b683f38914f3dea94409e759b0b20e10 docs/agents/discord.md
 0ba919c2b12848aaf6c16534f9e19446537953378482b8b12516c7ade16f1c33 docs/agents/hive-debrief.md
 f5c4c8dc4bf3b393e2e82628a8cbfd8e58d7fbc743bb4ac34d00214c5d0b5c1a docs/agents/hive.md
@@ -36,7 +36,7 @@ ec945587a6f8f8e9423fdb0c40bfe8a0be803365f480bef96424f19b0e42064e tools/agents/hi
 c177eb718315f9bab6a4581fce0db19670f4b9ad3b6cac7d33de988541950164 tools/agents/hive-tm-check.sh
 aaa599c31cd89df8740f1d03f58299419bec8394981f5d7ec4a45c71a5049bee tools/agents/hive-triage-watch.sh
 b49d40c15ff655f6dd3bbb2b96b844bf6cd3e4bbbaa9328278a182301a1816fc tools/agents/hive-usage.sh
-1d8c7ddc9bde880940762b0ddcac0d641bbdc5819131b5ec444ab77ccfba9b33 tools/agents/hive-voice.mjs
+28587edb98afca0fdb967978c362d9ad89d6f4bc234d08ed1b5bb1590bdfaa30 tools/agents/hive-voice.mjs
 22448336920c8813808898017dd827e51a353b82152926d6c99dae52e55acdd5 tools/agents/hive-wake-pending.sh
 663b84f0cfdf132f58ef09bb849a1aaa429f1577eb95c9e2ae56fe73628f695c tools/agents/hive-wake.sh
 54a005f9bc089c391b911feb88df38c6ed5ac211828b6536ee9609e31563e1f2 tools/agents/hive-watch-guard.sh

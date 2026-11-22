@@ -341,7 +341,12 @@ function connect() {
     scheduleReconnect();
   };
   sock.onerror = (ev) => lost(`error${ev?.message ? `: ${ev.message}` : ""}`);
-  sock.onclose = (ev) => lost(`code ${ev.code}${ev.reason ? ` ${ev.reason}` : ""}`);
+  sock.onclose = (ev) => {
+    // 4000: another runner for this member (another game's supervisor, another machine) took the slot; stand by for
+    // 10 minutes instead of taking it back at once, so two runners don't knock each other off every few seconds
+    if (ev.code === 4000 && ws === sock) { backoff = 600000; log("another runner for this account took over the hub connection"); }
+    lost(`code ${ev.code}${ev.reason ? ` ${ev.reason}` : ""}`);
+  };
 }
 
 function scheduleReconnect() {
