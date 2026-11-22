@@ -51,6 +51,15 @@ check "hive.sh limits" "$(HIVE_ACCOUNT=alice bash "$AG/hive.sh" limits bob carol
 carol five_h_stop=90 weekly_stop=90 auto_file=0"
 check "hive.sh limits default: self" "$(HIVE_ACCOUNT=alice bash "$AG/hive.sh" limits)" "alice five_h_stop=90 weekly_stop=100 auto_file=0"
 
+# "*": the studio default for everyone, under each handle's own line
+printf '%s\n' "* five_h=95 weekly=90 auto_file=1" "bob five_h=60" "carol auto_file=0" > "$T/studio/account-limits.conf"
+check "studio default for a peer" "$(lim dave)" "95 10"
+check "own line beats default, rest from default" "$(lim bob)" "60 10"
+check "own auto_file=0 beats default 1" "$(auto carol)" "0"
+check "default auto_file" "$(auto bob)" "1"
+check "own from studio default" "$(own alice)" "95 10 70"
+check "own AUTO_FILE from studio default" "$(ownauto alice)" "1"
+
 # hive_weekly_capped <used7> <reset epoch> <min remaining>
 cap() { HIVE_ACCOUNT=alice bash -c '. "$1/hive-env.sh" || exit 1; hive_weekly_capped "$2" "$3" "$4" && echo capped || echo ok' _ "$AG" "$@"; }
 now=$(date +%s)
