@@ -1399,6 +1399,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_swings_when_propped_on_its_axe_1299",
 	"bot_held_still_in_air_does_not_count_as_propped_1299",
 	"bot_perched_on_a_rival_does_not_count_as_propped_1299",
+	"bot_knocked_off_its_prop_lets_go_1299",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4625,6 +4626,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_held_still_in_air_does_not_count_as_propped_1299()
 		"bot_perched_on_a_rival_does_not_count_as_propped_1299":
 			return await _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299()
+		"bot_knocked_off_its_prop_lets_go_1299":
+			return await _scenario_bot_knocked_off_its_prop_lets_go_1299()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -66402,16 +66405,21 @@ func _scenario_bot_held_still_in_air_does_not_count_as_propped_1299() -> Array[S
 	player.linear_velocity = Vector2.ZERO
 	player.freeze = true
 	var attacked: int = 0
+	var planted: int = 0
 	var latched: int = 0
-	for tick in 90:
+	for _tick in 90:
 		await physics_frame
 		if bot.mode == "attack":
 			attacked += 1
-			if bot.get("_propped") == true:
+			if bot._head_planted():
+				planted += 1
+			if bot._propped:
 				latched += 1
-	print("      %d ticks in attack mode, %d of them counted as propped" % [attacked, latched])
+	print("      %d ticks in attack mode, head near the floor in %d, counted as propped in %d" % [attacked, planted, latched])
 	if attacked == 0:
 		failures.append("the bot never went into attack mode, so the case was not reached")
+	if planted > 0:
+		failures.append("the held head came within reach of the floor in %d ticks, so the case was not the one meant" % planted)
 	if latched > 0:
 		failures.append("a bot held still in the air with no head on the ground counted as propped for %d ticks" % latched)
 	await _teardown(stage)
@@ -66423,7 +66431,8 @@ func _scenario_bot_held_still_in_air_does_not_count_as_propped_1299() -> Array[S
 ## never counts as propped.
 func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[String]:
 	var failures: Array[String] = []
-	var made: Array = _bot313(true, 0.0, 0.0)
+	# Spawned apart, so the rival settles where it stands; then the bot is put on it.
+	var made: Array = _bot313(true, 200.0, 0.0)
 	var stage: Node2D = made[0]
 	var player: RigidBody2D = made[1]
 	var bot: Node = made[2]
@@ -66437,13 +66446,14 @@ func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[
 		failures.append("the fixture has no rival player")
 		await _teardown(stage)
 		return failures
-	player.global_position = rival.global_position + Vector2(0.0, -49.0)
+	# Just clear of overlapping the rival, well inside the perch distance.
+	player.global_position = rival.global_position + Vector2(0.0, -(BotScript.BODY_RADIUS * 2.0 + 1.0))
 	player.linear_velocity = Vector2.ZERO
 	player.freeze = true
 	var attacked: int = 0
 	var planted: int = 0
 	var latched: int = 0
-	for tick in 90:
+	for _tick in 90:
 		await physics_frame
 		if bot.mode == "attack":
 			attacked += 1
@@ -66456,5 +66466,47 @@ func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[
 		failures.append("the bot's head never reached the floor, so the case was not reached")
 	if latched > 0:
 		failures.append("a bot perched on a rival counted as propped for %d ticks" % latched)
+	await _teardown(stage)
+	return failures
+## Issue #1299 (review of #1308): a propped bot knocked off its spot, however
+## slowly, is no longer propped and holds its head short and low again (#302).
+## The axe bot props itself against a still rival on the arena floor; then its
+## body is carried up at 200 px/s (under THROWN_SPEED) for a third of a second,
+## past PROP_DRIFT, and the latch must let go.
+func _scenario_bot_knocked_off_its_prop_lets_go_1299() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, 160.0, -160.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	player.spawn_protected = false
+	await _equip(player, "res://resources/axe.tres")
+	var propped_at: int = -1
+	for tick in 1200:
+		await physics_frame
+		if bot._propped:
+			propped_at = tick
+			break
+	if propped_at < 0:
+		failures.append("the axe bot never got propped in 20 s, so the case was not reached")
+		await _teardown(stage)
+		return failures
+	# Past the drift limit, with two ticks' carry for the order of think and move.
+	var past: float = BotScript.PROP_DRIFT + 200.0 * 2.0 / 60.0
+	var start: Vector2 = player.global_position
+	var reached: int = 0
+	var held: int = 0
+	for _tick in 20:
+		player.linear_velocity = Vector2(0.0, -200.0)
+		await physics_frame
+		if bot.mode == "attack" and player.global_position.distance_to(start) > past:
+			reached += 1
+			if bot._propped:
+				held += 1
+	print("      propped at tick %d; %d ticks attacking past the drift limit, still propped in %d" % [propped_at, reached, held])
+	if reached == 0:
+		failures.append("the bot was never still attacking past the drift limit, so the case was not reached")
+	if held > 0:
+		failures.append("carried past PROP_DRIFT under THROWN_SPEED, the bot still counted as propped for %d ticks" % held)
 	await _teardown(stage)
 	return failures

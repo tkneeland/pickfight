@@ -1348,21 +1348,29 @@ const PLANT_RADIUS: float = 30.0
 ## A propped bot that moves this far (px) from where it was propped has been
 ## knocked off its prop, however slowly, and holds again (#302).
 const PROP_DRIFT: float = 48.0
-## On the ground this long (s), a bot is no longer propped: a chop that dips the
-## body into the ground ray for a tick or two keeps the latch (#1299 review).
-const PROP_GROUNDED_SEC: float = 0.5
+## On the ground this long in a row (s), a bot is no longer propped: a chop that
+## dips the body into the ground ray for a tick or two keeps the latch, a landing
+## does not (#1299 review).
+const PROP_GROUNDED_SEC: float = 0.15
 ## Slack (px) past two body radii for a fighter under the bot to count as one it
-## is perched on, not one it is merely propped above.
+## is perched on, not one it is merely propped above. Under means its centre at
+## least a body radius lower: one touching from the side is not under.
 const PERCH_SLACK: float = 6.0
 ## Seconds the bot has been nearly still with its head planted, towards PROPPED_SEC.
 var _prop_wait_sec: float = 0.0
 ## Seconds a propped bot has been on the ground, towards PROP_GROUNDED_SEC.
 var _prop_grounded_sec: float = 0.0
 ## True from PROPPED_SEC still on a planted head until the bot drifts PROP_DRIFT
-## from `_prop_at`, is thrown, stays grounded, dies or stops attacking (#1299).
+## from `_prop_at`, is thrown, ends up perched on a fighter, stays grounded, dies
+## or stops attacking (#1299).
 var _propped: bool = false
 ## Where the bot was when it latched `_propped`.
 var _prop_at: Vector2 = Vector2.ZERO
+## The PLANT_RADIUS circle `_head_planted` queries with, made once.
+var _plant_shape: CircleShape2D = null
+## Physics frame `_hold_in_air` last ran on: a gap (an early return in `think`
+## took over) ends the latch and the wait, which must be unbroken (#1299 review).
+var _hold_frame: int = -1
 
 ## Issue #302: a bot thrown off the ground mid-fight, by its own swing or a
 ## vault over the rival's head, stops swinging: every push it makes in the air
@@ -1373,6 +1381,10 @@ var _prop_at: Vector2 = Vector2.ZERO
 ## an updraft, or perched on a rival, still holds. Once propped, the bot's own
 ## swing lifting the head does not end it; leaving the place it was propped does.
 func _hold_in_air(delta: float) -> Vector2:
+	var frame: int = Engine.get_physics_frames()
+	if _hold_frame != frame - 1:
+		_clear_propped()
+	_hold_frame = frame
 	var me: Vector2 = player.global_position
 	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
 		_prop_wait_sec = 0.0
@@ -1388,7 +1400,7 @@ func _hold_in_air(delta: float) -> Vector2:
 	else:
 		var speed: float = body.linear_velocity.length()
 		if _propped:
-			if speed > THROWN_SPEED or me.distance_to(_prop_at) > PROP_DRIFT:
+			if speed > THROWN_SPEED or me.distance_to(_prop_at) > PROP_DRIFT or _perched_on_fighter():
 				_clear_propped()
 		elif speed < PROPPED_SPEED and _head_planted() and not _perched_on_fighter():
 			_prop_wait_sec += delta
@@ -1402,22 +1414,28 @@ func _hold_in_air(delta: float) -> Vector2:
 	var side: float = signf(_target.global_position.x - me.x)
 	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
 
-## Issue #1299: whether terrain lies within PLANT_RADIUS of the bot's weapon head
-## point, the head no higher than the body.
+## Issue #1299: whether terrain (not a moving body) lies within PLANT_RADIUS of
+## the bot's weapon head point, the head no higher than the body.
 func _head_planted() -> bool:
 	if not player.has_method("weapon_head_position"):
 		return false
 	var head: Vector2 = player.weapon_head_position()
-	if head.y < player.global_position.y:
+	# Mid weapon swap the head point is the body's own centre: no head to plant.
+	if head.y < player.global_position.y or head.is_equal_approx(player.global_position):
 		return false
-	var circle := CircleShape2D.new()
-	circle.radius = PLANT_RADIUS
+	if _plant_shape == null:
+		_plant_shape = CircleShape2D.new()
+		_plant_shape.radius = PLANT_RADIUS
 	var query := PhysicsShapeQueryParameters2D.new()
-	query.shape = circle
+	query.shape = _plant_shape
 	query.transform = Transform2D(0.0, head)
 	query.collision_mask = LAYER_WORLD
 	query.exclude = _player_rids()
-	return not player.get_world_2d().direct_space_state.intersect_shape(query, 1).is_empty()
+	# Terrain only: a ball or a falling rock moves away under the head.
+	for hit: Dictionary in player.get_world_2d().direct_space_state.intersect_shape(query, 8):
+		if not (hit.get("collider") is RigidBody2D):
+			return true
+	return false
 
 ## Issue #1299: whether another living fighter is right under the bot, touching
 ## it: a bot perched there is not propped (a chop down from it vaults it over, #302).
@@ -1427,7 +1445,7 @@ func _perched_on_fighter() -> bool:
 		if other == player or not (other is Node2D) or not _alive(other):
 			continue
 		var at: Vector2 = (other as Node2D).global_position - me
-		if at.y > 0.0 and at.length() < BODY_RADIUS * 2.0 + PERCH_SLACK:
+		if at.y >= BODY_RADIUS and at.length() < BODY_RADIUS * 2.0 + PERCH_SLACK:
 			return true
 	return false
 
