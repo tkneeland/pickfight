@@ -15,12 +15,16 @@ Built with Godot 4.6.
 ## Status
 
 Early prototype, ready for playtesting. `scenes/Main.tscn` runs the endless
-round loop for up to eight players (phones or gamepads in a room, or PCs online) across 24 rotating
+round loop for up to eight players (phones or gamepads in a room, or PCs online) across 47 rotating
 stages, some built around moving platforms, crumbling ledges, falling rocks,
 wind and hazard walls; the largest stages only come up when enough players
-are in the round. Eleven weapons exist (pickaxe, staff, sword, axe, dagger,
-boomstick, grappling hook, flail, boomerang, spear, fishing rod and magnet); everything but the pickaxe
-is found as a pickup on the stage. Art is still flat placeholder shapes.
+are in the round. Fifteen weapons exist (pickaxe, staff, sword, axe, dagger,
+boomstick, grappling hook, flail, boomerang, fishing rod, magnet, shield,
+umbrella, spear and pogo); everyone starts with the pickaxe, twelve more are
+found as pickups on the stage, and the spear and pogo are retired from
+rotation. Art is still flat placeholder shapes.
+
+Where it is going next, milestone by milestone: [`ROADMAP.md`](./ROADMAP.md).
 
 ## How it plays
 
