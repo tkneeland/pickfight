@@ -66423,7 +66423,7 @@ func _scenario_bot_held_still_in_air_does_not_count_as_propped_1299() -> Array[S
 		failures.append("the bot never went into attack mode, so the case was not reached")
 	if planted > 0:
 		failures.append("the held head came within reach of the floor in %d ticks, so the case was not the one meant" % planted)
-	if attacked > 0 and held_low * 2 < attacked:
+	if attacked > 0 and held_low < attacked - 2:
 		failures.append("the bot held its head short and low on only %d of %d attack ticks" % [held_low, attacked])
 	if latched > 0:
 		failures.append("a bot held still in the air with no head on the ground counted as propped for %d ticks" % latched)
@@ -66452,7 +66452,7 @@ func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[
 		await _teardown(stage)
 		return failures
 	# Just clear of overlapping the rival, well inside the perch distance.
-	player.global_position = rival.global_position + Vector2(0.0, -(BotScript.BODY_RADIUS * 2.0 + 1.0))
+	player.global_position = rival.global_position + Vector2(0.0, -(BotScript.BODY_RADIUS * 2.0 + 4.0))
 	player.linear_velocity = Vector2.ZERO
 	player.freeze = true
 	# The rival is pinned too, so the bot's chops cannot knock it out from under.
@@ -66486,9 +66486,10 @@ func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[
 ## Issue #1299 (review of #1308): a propped bot knocked off its spot, however
 ## slowly, is no longer propped and holds its head short and low again (#302).
 ## Direct check on the latch: the body frozen in the air beside a rival in reach,
-## the latch set as if propped PROP_DRIFT + 10 px away. One `_hold_in_air` tick
-## must end it and return the hold; the same tick with the latch set right where
-## the body is (the control) must keep it, so drift alone did it.
+## the latch set as if propped PROP_DRIFT + 10 px away. One `_track_prop` tick
+## must end it and `_hold_in_air` return the hold; the same tick with the latch
+## set right where the body is (the control) must keep it, so drift alone did it.
+## A latch set against another target ends too.
 func _scenario_bot_knocked_off_its_prop_lets_go_1299() -> Array[String]:
 	var failures: Array[String] = []
 	var made: Array = _bot313(true, 40.0, 0.0)
@@ -66508,23 +66509,31 @@ func _scenario_bot_knocked_off_its_prop_lets_go_1299() -> Array[String]:
 		failures.append("the fixture has no rival player")
 		await _teardown(stage)
 		return failures
-	bot._target = rival
 	var delta: float = 1.0 / 60.0
+	# Each case sets the latch as if propped against this rival, then runs one
+	# `_track_prop` tick, as `think` would.
+	var case := func(prop_at: Vector2, prop_target: Node2D) -> bool:
+		bot.mode = "attack"
+		bot._target = rival
+		bot._prop_target = prop_target
+		bot._propped = true
+		bot._prop_at = prop_at
+		bot._track_prop(delta)
+		return bot._propped
 	# Control: propped right here, still, nobody under it: the latch holds.
-	bot._propped = true
-	bot._prop_at = player.global_position
-	bot._hold_frame = Engine.get_physics_frames() - 1
-	var kept: Vector2 = bot._hold_in_air(delta)
-	var control_ok: bool = bot._propped and kept == Vector2.ZERO
+	var control_kept: bool = case.call(player.global_position, rival)
+	var control_input: Vector2 = bot._hold_in_air()
 	# Drifted: propped PROP_DRIFT + 10 px from here: the latch ends.
-	bot._propped = true
-	bot._prop_at = player.global_position + Vector2(BotScript.PROP_DRIFT + 10.0, 0.0)
-	bot._hold_frame = Engine.get_physics_frames() - 1
-	var held: Vector2 = bot._hold_in_air(delta)
-	print("      control kept the latch: %s; after drifting, propped=%s, input=%s" % [control_ok, bot._propped, held])
-	if not control_ok:
-		failures.append("the control did not keep the latch (propped=%s, input=%s), so drift was not isolated" % [bot._propped, kept])
-	if bot._propped or held == Vector2.ZERO:
+	var drift_kept: bool = case.call(player.global_position + Vector2(BotScript.PROP_DRIFT + 10.0, 0.0), rival)
+	var drift_input: Vector2 = bot._hold_in_air()
+	# Turned to another target: a latch from the last fight ends.
+	var retarget_kept: bool = case.call(player.global_position, null)
+	print("      control kept=%s input=%s; drifted kept=%s input=%s; new target kept=%s" % [control_kept, control_input, drift_kept, drift_input, retarget_kept])
+	if not control_kept or control_input != Vector2.ZERO:
+		failures.append("the control did not keep the latch, so drift was not isolated")
+	if drift_kept or drift_input == Vector2.ZERO:
 		failures.append("a propped bot %.0f px from where it latched still counted as propped" % (BotScript.PROP_DRIFT + 10.0))
+	if retarget_kept:
+		failures.append("a latch set against another target carried into this fight")
 	await _teardown(stage)
 	return failures
