@@ -66649,19 +66649,21 @@ func _scenario_bot_comes_down_from_a_high_ledge_1309() -> Array[String]:
 	await _teardown(stage)
 	return failures
 ## Issue #1309: a desperate bot drops deep only onto wide ground. A ledge 300 px
-## up (x 0 to 240): under its left end a floor runs from x -600 to 200; past its
-## right end, across a 60 px gap, there is only a 60 px block (x 300 to 360) with
-## nothing beyond, and the rival stands on it. Dropping that way would land on
-## the block or miss it into the void; the bot goes off the left end instead and
-## lands on the floor within 20 s.
+## up (x 0 to 240): past its right end, across a 60 px gap over the void, a
+## 220 px block (x 300 to 520) with nothing beyond, the rival standing on it;
+## under the ledge a floor runs from x -600 to 200. The block passes the edge
+## lookahead, but not the landing check: a 300 px fall drifts about 180 px, so
+## the ground must run about 224 px either side of the landing, and the void at
+## x 200 to 300 is inside that. Desperate after 3 s, the bot does not drop
+## towards the block: for the 10 s before the #409 leap it stays on the ledge.
 func _scenario_bot_drops_only_onto_wide_ground_1309() -> Array[String]:
 	var failures: Array[String] = []
 	var stage: Node2D = _new_empty_stage()
 	_static_block_1299(stage, Rect2(0.0, 0.0, 240.0, 24.0))
 	_static_block_1299(stage, Rect2(-600.0, 300.0, 800.0, 40.0))
-	_static_block_1299(stage, Rect2(300.0, 300.0, 60.0, 40.0))
+	_static_block_1299(stage, Rect2(300.0, 300.0, 220.0, 40.0))
 	var player: RigidBody2D = _spawn_player(stage, Vector2(120.0, -PLAYER_RADIUS))
-	var rival: RigidBody2D = _spawn_player(stage, Vector2(330.0, 300.0 - PLAYER_RADIUS))
+	var rival: RigidBody2D = _spawn_player(stage, Vector2(420.0, 300.0 - PLAYER_RADIUS))
 	player.spawn_protected = false
 	rival.spawn_protected = false
 	rival.freeze = true
@@ -66675,20 +66677,16 @@ func _scenario_bot_drops_only_onto_wide_ground_1309() -> Array[String]:
 		failures.append("the bot did not start on the ledge (y=%.0f), so the case was not reached" % player.global_position.y)
 		await _teardown(stage)
 		return failures
-	var landed_at: float = -1.0
-	for tick in 1200:
+	var off_ledge: float = -1.0
+	for tick in 600:
 		await physics_frame
-		if player.global_position.y > 300.0 - PLAYER_RADIUS * 2.0:
-			landed_at = float(tick) / 60.0
+		if player.global_position.y > 0.0:
+			off_ledge = float(tick) / 60.0
 			break
-	# Settle, then see where it came down.
-	await _await_ticks(30)
-	var on_floor: bool = player.global_position.x < 200.0 and player.global_position.y < 300.0 \
-			and player.global_position.y > 300.0 - PLAYER_RADIUS * 2.0
-	print("      bot came down at %.1f s and is at %s (on the wide floor: %s)" % [landed_at, player.global_position, on_floor])
-	if landed_at < 0.0:
-		failures.append("the bot never came down from the ledge in 20 s")
-	elif not on_floor:
-		failures.append("the bot dropped towards the narrow block, not onto the wide floor (it is at %s)" % player.global_position)
+	print("      after 10 s the bot is at %s (left the ledge at %.1f s; desperate: %s)" % [player.global_position, off_ledge, bot._desperate()])
+	if not bot._desperate():
+		failures.append("the bot never became desperate in 10 s, so the case was not reached")
+	if off_ledge >= 0.0:
+		failures.append("a desperate bot dropped towards a narrow landing (it is at %s)" % player.global_position)
 	await _teardown(stage)
 	return failures
