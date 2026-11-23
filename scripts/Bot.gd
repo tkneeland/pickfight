@@ -268,6 +268,16 @@ const LIFT_TRAVEL: float = 150.0
 ## Ground further than this below a point is too far to drop to on purpose:
 ## a step off an edge onto it is a fall.
 const MAX_DROP: float = 240.0
+## Issue #1309: once desperate (EDGE_PATIENCE_SEC held at an edge), ground this
+## far below still counts. There is no fall damage; a bot thrown up onto a high
+## ledge (the arena's is about 246 px up) otherwise never came down; 18 of the
+## 46 stages have platform ends with such a drop. Hazards under the landing
+## still rule it out, and so does ground that does not reach DESPERATE_LANDING
+## either side: a long fall carries the bot sideways (about 160 px off the
+## arena's right platform), past a near edge and off the stage.
+const MAX_DROP_DESPERATE: float = 420.0
+## Issue #1309: ground at a deep drop's landing must run this far (px) either side.
+const DESPERATE_LANDING: float = 200.0
 ## How far the bot's own speed carries it: the edge check looks this many
 ## seconds of its speed further ahead.
 const MOMENTUM_SEC: float = 0.3
@@ -374,6 +384,13 @@ var _wiggle_left: float = 0.0
 var _held_at_edge: bool = false
 ## Seconds spent held at an edge this stretch (#409).
 var _edge_wait: float = 0.0
+## Issue #1309: the way a desperate bot turned to when its own way off was
+## blocked, kept while it stays desperate on the same ground (0: none).
+var _desperate_way: float = 0.0
+## Height of the ground `_desperate_way` was chosen on.
+var _desperate_way_ground: float = NAN
+## Issue #1309: a deep drop's landing ground counts as one floor within this (px).
+const LANDING_SAME_HEIGHT: float = 20.0
 ## Seconds left of the desperate stretch (#409): see DESPERATE_HOLD_SEC.
 var _desperate_left: float = 0.0
 ## Seconds held at an edge near `_wait_place`, kept through a crossing that
@@ -557,6 +574,7 @@ func think(delta: float) -> Vector2:
 		_pad_target = null
 		_pad_target_was = null
 		_edge_wait = 0.0
+		_desperate_way = 0.0
 		_desperate_left = 0.0
 		_wait_total = 0.0
 		_leap_left = 0.0
@@ -2006,6 +2024,21 @@ func _travel_side() -> float:
 	if gust != 0.0:
 		side = gust
 	var safe: float = _safe_side(side)
+	# Issue #1309: desperate and blocked this way (a drop too deep, or onto too
+	# little ground), it tries the other way off before waiting on, and keeps to
+	# that way until it is off the ledge: turning back as soon as the blocked
+	# end is out of its lookahead again paced it to and fro on the ledge.
+	if _desperate_way != 0.0:
+		var ground_now: float = _ground_below(me)
+		if not _desperate() or is_nan(ground_now) or absf(ground_now - _desperate_way_ground) > LANDING_SAME_HEIGHT:
+			_desperate_way = 0.0
+	if side != 0.0 and _desperate():
+		if _desperate_way != 0.0 and _desperate_way != side and _safe_side(_desperate_way) != 0.0:
+			safe = _desperate_way
+		elif safe == 0.0:
+			safe = _safe_side(-side)
+			_desperate_way = safe
+			_desperate_way_ground = _ground_below(me)
 	_held_at_edge = side != 0.0 and safe == 0.0
 	if safe == 0.0:
 		# Stopped by an edge or a hazard (issue #176): not right at it,
@@ -2074,6 +2107,17 @@ func _gap_limit() -> float:
 ## at first: ground that moves, spikes and saws, wider gaps (#409).
 func _desperate() -> bool:
 	return _edge_wait >= EDGE_PATIENCE_SEC or _desperate_left > 0.0
+
+## Issue #1309: whether the ground at `ground_y` under `point` runs at least
+## DESPERATE_LANDING either side, at about the same height (a deep drop's landing).
+func _wide_landing(point: Vector2, ground_y: float) -> bool:
+	for dx: float in [-DESPERATE_LANDING, DESPERATE_LANDING]:
+		# From just above the landing, so the ledge the bot is on is not what
+		# the probe finds.
+		var there: float = _ground_below(Vector2(point.x + dx, ground_y - BODY_RADIUS))
+		if is_nan(there) or absf(there - ground_y) > LANDING_SAME_HEIGHT:
+			return false
+	return true
 
 ## Whether the bot could walk to `x` on ground it trusts, at its own
 ## height, stepping over narrow gaps only (issue #176). Checked coarsely:
@@ -2160,8 +2204,10 @@ func _footing_uncached(point: Vector2, past_danger: bool) -> int:
 	if hit.is_empty():
 		return FOOT_NONE
 	var ground_y: float = (hit["position"] as Vector2).y
-	if ground_y - point.y > MAX_DROP:
-		return FOOT_NONE
+	var drop: float = ground_y - point.y
+	if drop > MAX_DROP:
+		if drop > MAX_DROP_DESPERATE or not _desperate() or not _wide_landing(point, ground_y):
+			return FOOT_NONE
 	for rect: Rect2 in ([] as Array[Rect2]) if past_danger else _danger_rects():
 		if point.x >= rect.position.x and point.x <= rect.end.x \
 				and rect.position.y <= ground_y + BODY_RADIUS and rect.end.y >= point.y:
