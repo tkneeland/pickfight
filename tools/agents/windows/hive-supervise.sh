@@ -13,6 +13,7 @@
 #                              The other kinds hold supervise-<kind>.pid the same way.
 #                              macOS: screen -dmS hive-msg-<repo>-<account> bash tools/agents/windows/hive-supervise.sh msg
 #   hive-supervise.sh voice      keeps the hub voice runner (hive-voice.mjs) alive and rewrites voice-status.json every 60 s.
+#                              Runs where hive.conf (or hub.conf) has HUB_URL; signs in with the member's gh login.
 #                              Only on a machine whose $HIVE_STATE/hub.conf (or env) has HUB_URL and HUB_VOICE_TOKEN; it
 #                              exits at once otherwise. Node 20.10-21 gets --experimental-websocket. Runner log: voice.log.
 # Needs HIVE_ACCOUNT in the environment (windows/hive-start.ps1 sets it). Output goes to $HIVE_STATE/*.log.
@@ -76,11 +77,13 @@ case $KIND in
       sleep 60 & wait $!   # interruptible, so a stop signal is handled at once
     done;;
   voice)
-    if [ -z "${HUB_URL:-}" ] || [ -z "${HUB_VOICE_TOKEN:-}" ]; then
-      for k in HUB_URL HUB_VOICE_TOKEN; do   # presence only: the token is never read into this script or printed
-        grep -Eq "^[[:space:]]*(export[[:space:]]+)?$k=[^[:space:]]" "$HIVE_STATE/hub.conf" 2>/dev/null \
-          || { echo "no hub.conf with HUB_URL and HUB_VOICE_TOKEN: no voice runner" >&2; status off "no hub.conf"; exit 0; }
-      done
+    # HUB_URL: env or hive.conf (hive-env.sh loaded it), else hub.conf. Sign-in: HUB_VOICE_TOKEN (env or hub.conf), else
+    # the member's own gh login. Presence only: no token is read into this script or printed.
+    [ -n "${HUB_URL:-}" ] || grep -Eq '^[[:space:]]*(export[[:space:]]+)?HUB_URL=[^[:space:]]' "$HIVE_STATE/hub.conf" 2>/dev/null \
+      || { echo "no HUB_URL in hive.conf or hub.conf: no voice runner" >&2; status off "no HUB_URL"; exit 0; }
+    [ -n "${HUB_URL:-}" ] && export HUB_URL
+    if [ -z "${HUB_VOICE_TOKEN:-}" ] && ! grep -Eq '^[[:space:]]*(export[[:space:]]+)?HUB_VOICE_TOKEN=[^[:space:]]' "$HIVE_STATE/hub.conf" 2>/dev/null; then
+      gh auth token >/dev/null 2>&1 || { echo "not logged in to gh: no voice runner" >&2; status off "no gh login"; exit 0; }
     fi
     command -v node >/dev/null 2>&1 || { echo "node not found: no voice runner" >&2; status failed "node not found"; exit 1; }
     major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null)

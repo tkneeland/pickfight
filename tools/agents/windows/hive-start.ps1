@@ -4,7 +4,7 @@
 .PARAMETER Account
   GitHub handle (HIVE_ACCOUNT); tools\agents\accounts\<Account>.conf must exist.
 .PARAMETER Only
-  triage, automerge, beacon, msg, voice, or both (default: all five; voice exits at once without hub.conf).
+  triage, automerge, beacon, msg, voice, or both (default: all five; voice exits at once without HUB_URL).
 .NOTES
   State, pid files and logs live in the folder hive-env.sh calls HIVE_STATE (%USERPROFILE%\.claude\hive\<repo>\<Account>).
   Safe to re-run: a watcher that is already running is left alone. In SINGLE_ACCOUNT mode beacon and msg exit at once.

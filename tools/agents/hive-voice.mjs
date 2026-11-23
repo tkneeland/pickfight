@@ -2,14 +2,17 @@
 // hive-voice.mjs: the voice runner (docs/hub/voice-protocol.md, "The runner"). Connects out to the hub's /voice/ws,
 // says hello, and answers each `ask` with a one-shot `claude -p` run in a scratch dir, streaming deltas back.
 //   node --experimental-websocket tools/agents/hive-voice.mjs     (Node 20.10-21; plain `node` from Node 22)
-// Config: HUB_URL and HUB_VOICE_TOKEN from env, else $HIVE_STATE/hub.conf (KEY=value). Handle: HIVE_HANDLE, else
+// Config: HUB_URL from env, else $HIVE_STATE/hub.conf (KEY=value), else hive.conf. Sign-in: HUB_VOICE_TOKEN (env or
+// hub.conf) if set, else the member's own `gh auth token` (the hub checks it with GitHub and drops it). After hello it
+// reports this machine's game channel topics (each ~/.claude/hive/<owner>__<game>/<handle>/msg.conf), so nobody copies a
+// topic to the hub by hand. Handle: HIVE_HANDLE, else
 // HIVE_ACCOUNT, else `gh api user -q .login`. HIVE_STATE: env HIVE_STATE / HIVE_STATE_DIR, else resolved by hive-env.sh.
 // Knobs: HIVE_VOICE_CLAUDE (claude binary, default claude), HIVE_VOICE_MODEL (default sonnet), HIVE_VOICE_TIMEOUT
 // (seconds per ask, default 180). Logs to $HIVE_STATE/voice.log (and stderr on a TTY). The token is never logged.
 // No npm dependencies.
 import { spawn, execFile, execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -54,18 +57,41 @@ function readConf(file) {
   return out;
 }
 const conf = readConf(join(state, "hub.conf"));
-const hubUrl = process.env.HUB_URL || conf.HUB_URL || "";
-const token = process.env.HUB_VOICE_TOKEN || conf.HUB_VOICE_TOKEN || "";
-if (!hubUrl || !token) { console.error(`hive-voice: HUB_URL and HUB_VOICE_TOKEN are needed (env or ${join(state, "hub.conf")})`); process.exit(1); }
+const hubUrl = process.env.HUB_URL || conf.HUB_URL ||
+  sh("bash", ["-c", '. "$1/hive-env.sh" >/dev/null 2>&1 && printf %s "${HUB_URL:-}"', "hive-voice", HERE], { ...process.env, HIVE_ACCOUNT: handle });
+const shared = process.env.HUB_VOICE_TOKEN || conf.HUB_VOICE_TOKEN || "";
+const token = shared || sh("gh", ["auth", "token"]);
+const authHeader = shared ? `Bearer ${shared}` : `GitHub ${token}`;
+if (!hubUrl) { console.error(`hive-voice: no HUB_URL (hive.conf, ${join(state, "hub.conf")} or env)`); process.exit(1); }
+if (!token) { console.error("hive-voice: no sign-in: log in with `gh auth login` (or set HUB_VOICE_TOKEN)"); process.exit(1); }
 const wsUrl = hubUrl.replace(/^http(s?):\/\//i, "ws$1://").replace(/\/+$/, "") + "/voice/ws";
 const claudeBin = process.env.HIVE_VOICE_CLAUDE || "claude";
 const model = process.env.HIVE_VOICE_MODEL || "sonnet";
 const timeoutSec = Number(process.env.HIVE_VOICE_TIMEOUT) > 0 ? Number(process.env.HIVE_VOICE_TIMEOUT) : 180;
 
+// ---- this machine's channel topics, repo -> topic (secrets: sent to the hub only, never logged) -----------------
+let topicCache = null;
+function topics() {
+  if (topicCache) return topicCache;
+  const out = {};
+  const root = join(homedir(), ".claude", "hive");
+  let slugs = [];
+  try { slugs = readdirSync(root); } catch {}
+  for (const slug of slugs) {
+    const m = slug.match(/^([\w.-]+)__([\w.-]+)$/);
+    if (!m) continue;
+    const t = readConf(join(root, slug, handle, "msg.conf")).HIVE_MSG_TOPIC || "";
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(t)) out[`${m[1]}/${m[2]}`] = t;
+  }
+  return (topicCache = out);
+}
+
 // ---- log -----------------------------------------------------------------------------------------------------
 const logFile = join(state, "voice.log");
 function log(msg) {
-  const line = `${new Date().toISOString()} ${String(msg).split(token).join("[token]")}\n`;
+  let text = String(msg).split(token).join("[token]");
+  for (const t of Object.values(topics())) text = text.split(t).join("[topic]");
+  const line = `${new Date().toISOString()} ${text}\n`;
   try { appendFileSync(logFile, line); } catch {}
   if (process.stderr.isTTY) process.stderr.write(line);
 }
@@ -274,13 +300,19 @@ function connect() {
   if (stopping) return;
   log(`connecting to ${wsUrl} as ${handle}`);
   let sock;
-  try { sock = new WebSocket(wsUrl, { headers: { Authorization: `Bearer ${token}` } }); }
+  try { sock = new WebSocket(wsUrl, { headers: { Authorization: authHeader } }); }
   catch (e) { log(`connect failed: ${e.message}`); return scheduleReconnect(); }
   ws = sock;
   sock.onopen = () => {
     backoff = 1000;
     log("connected; hello");
     sock.send(JSON.stringify({ type: "hello", handle, version: VERSION }));
+    topicCache = null;
+    const t = topics();
+    if (Object.keys(t).length) {
+      sock.send(JSON.stringify({ type: "topics", topics: t }));
+      log(`reported channel topics for ${Object.keys(t).join(", ")}`);
+    }
   };
   sock.onmessage = (ev) => {
     let msg;
@@ -309,7 +341,12 @@ function connect() {
     scheduleReconnect();
   };
   sock.onerror = (ev) => lost(`error${ev?.message ? `: ${ev.message}` : ""}`);
-  sock.onclose = (ev) => lost(`code ${ev.code}${ev.reason ? ` ${ev.reason}` : ""}`);
+  sock.onclose = (ev) => {
+    // 4000: another runner for this member (another game's supervisor, another machine) took the slot; stand by for
+    // 10 minutes instead of taking it back at once, so two runners don't knock each other off every few seconds
+    if (ev.code === 4000 && ws === sock) { backoff = 600000; log("another runner for this account took over the hub connection"); }
+    lost(`code ${ev.code}${ev.reason ? ` ${ev.reason}` : ""}`);
+  };
 }
 
 function scheduleReconnect() {

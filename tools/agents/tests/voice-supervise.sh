@@ -12,6 +12,8 @@ cat > "$T/bin/node" <<'S'
 echo "node $*" >> "$HIVE_TEST_LOG"; exec sleep 30
 S
 printf '#!/bin/bash\necho "screen $*" >> "$HIVE_TEST_LOG"\nexit 0\n' > "$T/bin/screen"
+# gh stub: `gh auth token` succeeds only when HIVE_TEST_GH=1 (a logged-in member)
+printf '#!/bin/bash\n[ "$1 $2" = "auth token" ] && [ "${HIVE_TEST_GH:-0}" = 1 ] && { echo gho_test; exit 0; }\nexit 1\n' > "$T/bin/gh"
 printf '#!/bin/bash\nexit 1\n' > "$T/bin/pgrep"; printf '#!/bin/bash\nexit 0\n' > "$T/bin/ps"
 chmod +x "$T/bin/"*
 export PATH="$T/bin:$PATH" HIVE_STATE_DIR=$T/state HIVE_ACCOUNT=alice HIVE_TEST_LOG=$T/calls.log HIVE_DRY_RUN=1
@@ -28,7 +30,13 @@ sup 2>/dev/null; ok "no hub.conf: exits 0" $?
 grep -q '"off"' "$T/state/voice-status.json"; ok "no hub.conf: status off" $?
 
 printf 'HUB_URL=http://hub.test\n' > "$T/state/hub.conf"
-sup 2>/dev/null; [ ! -s "$T/calls.log" ]; ok "hub.conf without a token: no runner" $?
+sup 2>/dev/null; [ ! -s "$T/calls.log" ]; ok "HUB_URL, no token and no gh login: no runner" $?
+
+# the default path: HUB_URL from hive.conf (here env) and the member's gh login, no hub.conf at all
+rm -f "$T/state/hub.conf"
+HUB_URL=http://hub.test HIVE_TEST_GH=1 bash "$AG/windows/hive-supervise.sh" voice 2>/dev/null & sp=$!
+waitfor hive-voice.mjs "$T/calls.log"; ok "HUB_URL + gh login, no hub.conf: runner started" $?
+kill "$sp"; wait "$sp" 2>/dev/null; sp=""; : > "$T/calls.log"
 
 printf 'HUB_URL=http://hub.test\nHUB_VOICE_TOKEN=s3cret-token\n' > "$T/state/hub.conf"
 bash "$AG/windows/hive-supervise.sh" voice 2>"$T/sup.err" & sp=$!
@@ -55,5 +63,7 @@ case $out in *"restarted dead voice"*) ok "join: restart announced" 0;; *) ok "j
 : > "$T/calls.log"; touch "$T/state/voice-status.json"
 join >/dev/null; ! grep -q hive-voice "$T/calls.log"; ok "join: fresh voice status left alone" $?
 : > "$T/calls.log"; rm -f "$T/state/hub.conf"; touch -t 202001010000 "$T/state/voice-status.json"
-join >/dev/null; ! grep -q hive-voice "$T/calls.log"; ok "join: no hub.conf, no voice" $?
+join >/dev/null; ! grep -q hive-voice "$T/calls.log"; ok "join: no HUB_URL, no voice" $?
+: > "$T/calls.log"
+HUB_URL=http://hub.test join >/dev/null; grep -q hive-voice "$T/calls.log"; ok "join: HUB_URL from hive.conf/env starts voice" $?
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }
