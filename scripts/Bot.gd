@@ -1343,10 +1343,10 @@ const PROPPED_SEC: float = 0.25
 ## Over this speed (px/s) a propped bot is thrown again: its own swing jolts the
 ## body less than that, and a #302 head-plant throw is 500 px/s or more.
 const THROWN_SPEED: float = 300.0
-## Radius (px) round the weapon head point within which terrain counts as the
-## head resting on it. The point is the haft's anchor; the axe's blade reaches
-## about 25 px past it.
-const PLANT_RADIUS: float = 30.0
+## How far under the weapon head point (px) terrain counts as the head resting
+## on it. The point is the haft's anchor; the axe's blade reaches about 25 px
+## past it. Straight down only: a wall beside the head is no prop.
+const PLANT_PROBE: float = 40.0
 ## A propped bot that moves this far (px) from where it was propped has been
 ## knocked off its prop, however slowly, and holds again (#302).
 const PROP_DRIFT: float = 48.0
@@ -1363,15 +1363,12 @@ var _prop_wait_sec: float = 0.0
 ## Seconds a propped bot has been on the ground, towards PROP_GROUNDED_SEC.
 var _prop_grounded_sec: float = 0.0
 ## True from PROPPED_SEC still on a planted head until the bot drifts PROP_DRIFT
-## from `_prop_at`, is thrown, ends up perched on a fighter, stays grounded, turns
-## to another target, stops attacking or dies (#1299). Kept by `_track_prop`.
+## from `_prop_at`, is thrown, ends up perched on a fighter, stays grounded,
+## stops attacking or dies (#1299). Kept by `_track_prop`. A new target does not
+## end it: the prop is the bot's own body on its head, whoever it fights.
 var _propped: bool = false
 ## Where the bot was when it latched `_propped`.
 var _prop_at: Vector2 = Vector2.ZERO
-## The target the latch (or the wait for it) belongs to.
-var _prop_target: Node2D = null
-## The PLANT_RADIUS circle `_head_planted` queries with, made once.
-var _plant_shape: CircleShape2D = null
 
 ## Issue #1299: keeps the propped latch every tick, before any drive in `think`
 ## can return early, so a landing, a throw or a new target is never missed while
@@ -1383,11 +1380,7 @@ func _track_prop(delta: float) -> void:
 	var body := player as RigidBody2D
 	if mode != "attack" or not _alive(_target) or body == null:
 		_clear_propped()
-		_prop_target = null
 		return
-	if _target != _prop_target:
-		_clear_propped()
-		_prop_target = _target
 	var me: Vector2 = player.global_position
 	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
 		_prop_wait_sec = 0.0
@@ -1412,7 +1405,7 @@ func _track_prop(delta: float) -> void:
 	# (the latch was just set, or another drive took the tick), start the reading
 	# from here, so the first push on the planted head is eased off, not a
 	# full-length vault on it (#302, #1299 review).
-	if _propped and _swing_frame != Engine.get_physics_frames() - 1:
+	if _propped and _swing_frame != Engine.get_physics_frames() - 1 and player.has_method("weapon_head_position"):
 		_last_head = player.weapon_head_position()
 
 ## Issue #302: a bot thrown off the ground mid-fight, by its own swing or a
@@ -1429,8 +1422,8 @@ func _hold_in_air() -> Vector2:
 	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
 
 ## Issue #1299: whether terrain (not a rigid body: the ball, a falling rock) lies
-## within PLANT_RADIUS of the bot's weapon head point, the head no higher than the
-## body (a head at body height would find any wall the body leans on).
+## within PLANT_PROBE straight under the bot's weapon head point, the head no
+## higher than the body. The ray counts a head already sunk into the terrain.
 func _head_planted() -> bool:
 	if not player.has_method("weapon_head_position"):
 		return false
@@ -1438,19 +1431,10 @@ func _head_planted() -> bool:
 	# Mid weapon swap the head point is the body's own centre: no head to plant.
 	if head.y < player.global_position.y or head.is_equal_approx(player.global_position):
 		return false
-	if _plant_shape == null:
-		_plant_shape = CircleShape2D.new()
-		_plant_shape.radius = PLANT_RADIUS
-	var query := PhysicsShapeQueryParameters2D.new()
-	query.shape = _plant_shape
-	query.transform = Transform2D(0.0, head)
-	query.collision_mask = LAYER_WORLD
-	query.exclude = _player_rids()
-	# Terrain only: a ball or a falling rock moves away under the head.
-	for hit: Dictionary in player.get_world_2d().direct_space_state.intersect_shape(query, 8):
-		if not (hit.get("collider") is RigidBody2D):
-			return true
-	return false
+	var query := PhysicsRayQueryParameters2D.create(head, head + Vector2(0.0, PLANT_PROBE), LAYER_WORLD, _player_rids())
+	query.hit_from_inside = true
+	var hit: Dictionary = player.get_world_2d().direct_space_state.intersect_ray(query)
+	return not hit.is_empty() and not (hit.get("collider") is RigidBody2D)
 
 ## Issue #1299: whether another living fighter is right under the bot, touching
 ## it: a bot perched there is not propped (a chop down from it vaults it over, #302).

@@ -66489,7 +66489,6 @@ func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[
 ## the latch set as if propped PROP_DRIFT + 10 px away. One `_track_prop` tick
 ## must end it and `_hold_in_air` return the hold; the same tick with the latch
 ## set right where the body is (the control) must keep it, so drift alone did it.
-## A latch set against another target ends too.
 func _scenario_bot_knocked_off_its_prop_lets_go_1299() -> Array[String]:
 	var failures: Array[String] = []
 	var made: Array = _bot313(true, 40.0, 0.0)
@@ -66512,28 +66511,23 @@ func _scenario_bot_knocked_off_its_prop_lets_go_1299() -> Array[String]:
 	var delta: float = 1.0 / 60.0
 	# Each case sets the latch as if propped against this rival, then runs one
 	# `_track_prop` tick, as `think` would.
-	var case := func(prop_at: Vector2, prop_target: Node2D) -> bool:
+	var case := func(prop_at: Vector2) -> bool:
 		bot.mode = "attack"
 		bot._target = rival
-		bot._prop_target = prop_target
 		bot._propped = true
 		bot._prop_at = prop_at
 		bot._track_prop(delta)
 		return bot._propped
 	# Control: propped right here, still, nobody under it: the latch holds.
-	var control_kept: bool = case.call(player.global_position, rival)
+	var control_kept: bool = case.call(player.global_position)
 	var control_input: Vector2 = bot._hold_in_air()
 	# Drifted: propped PROP_DRIFT + 10 px from here: the latch ends.
-	var drift_kept: bool = case.call(player.global_position + Vector2(BotScript.PROP_DRIFT + 10.0, 0.0), rival)
+	var drift_kept: bool = case.call(player.global_position + Vector2(BotScript.PROP_DRIFT + 10.0, 0.0))
 	var drift_input: Vector2 = bot._hold_in_air()
-	# Turned to another target: a latch from the last fight ends.
-	var retarget_kept: bool = case.call(player.global_position, null)
-	print("      control kept=%s input=%s; drifted kept=%s input=%s; new target kept=%s" % [control_kept, control_input, drift_kept, drift_input, retarget_kept])
+	print("      control kept=%s input=%s; drifted kept=%s input=%s" % [control_kept, control_input, drift_kept, drift_input])
 	if not control_kept or control_input != Vector2.ZERO:
 		failures.append("the control did not keep the latch, so drift was not isolated")
 	if drift_kept or drift_input == Vector2.ZERO:
 		failures.append("a propped bot %.0f px from where it latched still counted as propped" % (BotScript.PROP_DRIFT + 10.0))
-	if retarget_kept:
-		failures.append("a latch set against another target carried into this fight")
 	await _teardown(stage)
 	return failures
