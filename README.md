@@ -22,6 +22,8 @@ are in the round. Eleven weapons exist (pickaxe, staff, sword, axe, dagger,
 boomstick, grappling hook, flail, boomerang, spear, fishing rod and magnet); everything but the pickaxe
 is found as a pickup on the stage. Art is still flat placeholder shapes.
 
+Where it is going next, milestone by milestone: [`ROADMAP.md`](./ROADMAP.md).
+
 ## How it plays
 
 A session is an endless run of rounds on rotating stages. A round ends
