@@ -1343,10 +1343,14 @@ const PROPPED_SEC: float = 0.25
 ## Over this speed (px/s) a propped bot is thrown again: its own swing jolts the
 ## body less than that, and a #302 head-plant throw is 500 px/s or more.
 const THROWN_SPEED: float = 300.0
-## How far under the weapon head point (px) terrain counts as the head resting
-## on it. The point is the haft's anchor; the axe's blade reaches about 25 px
-## past it. Straight down only: a wall beside the head is no prop.
-const PLANT_PROBE: float = 40.0
+## Radius (px) round the weapon head point within which terrain counts as the
+## head resting on it. The point is the haft's anchor; the axe's blade reaches
+## about 25 px past it, so a blade hooked over a ledge's corner still counts.
+const PLANT_RADIUS: float = 30.0
+## How far the contact's surface must face up for the head to rest on it: the
+## normal's upward part at least this (0.5: within 60 degrees of straight up).
+## Floors, ledge tops and corners count; a wall beside the head does not.
+const PLANT_FACING_UP: float = 0.5
 ## A propped bot that moves this far (px) from where it was propped has been
 ## knocked off its prop, however slowly, and holds again (#302).
 const PROP_DRIFT: float = 48.0
@@ -1369,9 +1373,11 @@ var _prop_grounded_sec: float = 0.0
 var _propped: bool = false
 ## Where the bot was when it latched `_propped`.
 var _prop_at: Vector2 = Vector2.ZERO
+## The PLANT_RADIUS circle `_head_planted` queries with, made once.
+var _plant_shape: CircleShape2D = null
 
 ## Issue #1299: keeps the propped latch every tick, before any drive in `think`
-## can return early, so a landing, a throw or a new target is never missed while
+## can return early, so a landing or a throw is never missed while
 ## the shield, brake or a dodge takes a tick. Only a planted head props a bot: a
 ## body hanging still in an updraft, or perched on a rival, is not propped. Once
 ## propped, the bot's own swing lifting the head does not end it; leaving the
@@ -1421,9 +1427,10 @@ func _hold_in_air() -> Vector2:
 	var side: float = signf(_target.global_position.x - me.x)
 	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
 
-## Issue #1299: whether terrain (not a rigid body: the ball, a falling rock) lies
-## within PLANT_PROBE straight under the bot's weapon head point, the head no
-## higher than the body. The ray counts a head already sunk into the terrain.
+## Issue #1299: whether the bot's weapon head rests on terrain: within
+## PLANT_RADIUS of the head point there is terrain whose surface there faces up
+## (PLANT_FACING_UP), the head no higher than the body. A rigid body in the way
+## (the ball, a falling rock) is skipped, and the terrain behind it is looked at.
 func _head_planted() -> bool:
 	if not player.has_method("weapon_head_position"):
 		return false
@@ -1431,10 +1438,25 @@ func _head_planted() -> bool:
 	# Mid weapon swap the head point is the body's own centre: no head to plant.
 	if head.y < player.global_position.y or head.is_equal_approx(player.global_position):
 		return false
-	var query := PhysicsRayQueryParameters2D.create(head, head + Vector2(0.0, PLANT_PROBE), LAYER_WORLD, _player_rids())
-	query.hit_from_inside = true
-	var hit: Dictionary = player.get_world_2d().direct_space_state.intersect_ray(query)
-	return not hit.is_empty() and not (hit.get("collider") is RigidBody2D)
+	if _plant_shape == null:
+		_plant_shape = CircleShape2D.new()
+		_plant_shape.radius = PLANT_RADIUS
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = _plant_shape
+	query.transform = Transform2D(0.0, head)
+	query.collision_mask = LAYER_WORLD
+	var exclude: Array[RID] = _player_rids().duplicate()
+	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
+	for _try in 3:
+		query.exclude = exclude
+		var info: Dictionary = space.get_rest_info(query)
+		if info.is_empty():
+			return false
+		if instance_from_id(int(info.get("collider_id", 0))) is RigidBody2D:
+			exclude.append(info.get("rid"))
+			continue
+		return (info.get("normal", Vector2.ZERO) as Vector2).y <= -PLANT_FACING_UP
+	return false
 
 ## Issue #1299: whether another living fighter is right under the bot, touching
 ## it: a bot perched there is not propped (a chop down from it vaults it over, #302).

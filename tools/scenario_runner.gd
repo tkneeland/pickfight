@@ -1400,6 +1400,7 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_held_still_in_air_does_not_count_as_propped_1299",
 	"bot_perched_on_a_rival_does_not_count_as_propped_1299",
 	"bot_knocked_off_its_prop_lets_go_1299",
+	"bot_head_beside_a_wall_is_not_planted_1299",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4628,6 +4629,8 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299()
 		"bot_knocked_off_its_prop_lets_go_1299":
 			return await _scenario_bot_knocked_off_its_prop_lets_go_1299()
+		"bot_head_beside_a_wall_is_not_planted_1299":
+			return await _scenario_bot_head_beside_a_wall_is_not_planted_1299()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -66489,6 +66492,7 @@ func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[
 ## the latch set as if propped PROP_DRIFT + 10 px away. One `_track_prop` tick
 ## must end it and `_hold_in_air` return the hold; the same tick with the latch
 ## set right where the body is (the control) must keep it, so drift alone did it.
+## Turning to another rival keeps it.
 func _scenario_bot_knocked_off_its_prop_lets_go_1299() -> Array[String]:
 	var failures: Array[String] = []
 	var made: Array = _bot313(true, 40.0, 0.0)
@@ -66524,10 +66528,71 @@ func _scenario_bot_knocked_off_its_prop_lets_go_1299() -> Array[String]:
 	# Drifted: propped PROP_DRIFT + 10 px from here: the latch ends.
 	var drift_kept: bool = case.call(player.global_position + Vector2(BotScript.PROP_DRIFT + 10.0, 0.0))
 	var drift_input: Vector2 = bot._hold_in_air()
-	print("      control kept=%s input=%s; drifted kept=%s input=%s" % [control_kept, control_input, drift_kept, drift_input])
+	# Turned to another live rival: the prop is the bot's own body on its head,
+	# so the latch holds whoever it fights (#1311 review).
+	var second: RigidBody2D = _spawn_player(stage, Vector2(-200.0, 274.0))
+	second.spawn_protected = false
+	bot.mode = "attack"
+	bot._target = rival
+	bot._propped = true
+	bot._prop_at = player.global_position
+	bot._target = second
+	bot._track_prop(delta)
+	var retarget_kept: bool = bot._propped
+	print("      control kept=%s input=%s; drifted kept=%s input=%s; new target kept=%s" % [control_kept, control_input, drift_kept, drift_input, retarget_kept])
 	if not control_kept or control_input != Vector2.ZERO:
 		failures.append("the control did not keep the latch, so drift was not isolated")
 	if drift_kept or drift_input == Vector2.ZERO:
 		failures.append("a propped bot %.0f px from where it latched still counted as propped" % (BotScript.PROP_DRIFT + 10.0))
+	if not retarget_kept:
+		failures.append("turning to another rival ended a prop the bot was still on")
+	await _teardown(stage)
+	return failures
+## A world-layer static rectangle `rect` (global coordinates) added to `stage`.
+func _static_block_1299(stage: Node2D, rect: Rect2) -> StaticBody2D:
+	var body := StaticBody2D.new()
+	body.collision_layer = 1
+	var shape := CollisionShape2D.new()
+	var box := RectangleShape2D.new()
+	box.size = rect.size
+	shape.shape = box
+	body.add_child(shape)
+	stage.add_child(body)
+	body.global_position = rect.get_center()
+	return body
+## Issue #1299 (review of #1311): only terrain the head rests on plants it. The
+## bot's body is frozen in the air beside a rival, its head held short and low;
+## a wall is put right beside the head (its face 6 px away, its foot well above
+## the floor): the head is not planted. A slab put just under the head instead
+## (6 px below it): the head is planted.
+func _scenario_bot_head_beside_a_wall_is_not_planted_1299() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, 40.0, 0.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	player.spawn_protected = false
+	player.global_position = Vector2(40.0, 180.0)
+	player.linear_velocity = Vector2.ZERO
+	player.freeze = true
+	await _await_ticks(30)
+	var head: Vector2 = player.weapon_head_position()
+	var before: bool = bot._head_planted()
+	var wall := _static_block_1299(stage, Rect2(head.x + 6.0, head.y - 60.0, 40.0, 80.0))
+	await physics_frame
+	head = player.weapon_head_position()
+	var beside_wall: bool = bot._head_planted()
+	wall.queue_free()
+	var slab := _static_block_1299(stage, Rect2(head.x - 40.0, head.y + 6.0, 80.0, 20.0))
+	await physics_frame
+	var on_slab: bool = bot._head_planted()
+	slab.queue_free()
+	print("      head planted: in the open %s, beside a wall %s, over a slab %s" % [before, beside_wall, on_slab])
+	if before:
+		failures.append("the head counted as planted in the open air, so the case was not reached")
+	if beside_wall:
+		failures.append("a head beside a wall's face counted as planted on it")
+	if not on_slab:
+		failures.append("a head just over a slab did not count as planted (the control)")
 	await _teardown(stage)
 	return failures
