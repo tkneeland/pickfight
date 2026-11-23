@@ -270,7 +270,7 @@ const LIFT_TRAVEL: float = 150.0
 const MAX_DROP: float = 240.0
 ## Issue #1309: once desperate (EDGE_PATIENCE_SEC held at an edge), ground this
 ## far below still counts. There is no fall damage; a bot thrown up onto a high
-## ledge (the arena's is about 246 px up) otherwise never came down; 18 of the
+## ledge (the arena's right platform is 252 px up) otherwise never came down; 18 of the
 ## 46 stages have platform ends with such a drop. Hazards under the landing
 ## still rule it out, and so does ground that does not reach DESPERATE_LANDING
 ## either side: a long fall carries the bot sideways (about 160 px off the
@@ -278,6 +278,11 @@ const MAX_DROP: float = 240.0
 const MAX_DROP_DESPERATE: float = 420.0
 ## Issue #1309: ground at a deep drop's landing must run this far (px) either side.
 const DESPERATE_LANDING: float = 200.0
+## Issue #1309: ground this close (px) in height to a deep drop's landing counts
+## as the same floor.
+const LANDING_SAME_HEIGHT: float = 20.0
+## Issue #1309: a deep drop's landing span is checked for ground every this (px).
+const LANDING_SAMPLE: float = 50.0
 ## How far the bot's own speed carries it: the edge check looks this many
 ## seconds of its speed further ahead.
 const MOMENTUM_SEC: float = 0.3
@@ -385,12 +390,17 @@ var _held_at_edge: bool = false
 ## Seconds spent held at an edge this stretch (#409).
 var _edge_wait: float = 0.0
 ## Issue #1309: the way a desperate bot turned to when its own way off was
-## blocked, kept while it stays desperate on the same ground (0: none).
+## blocked, kept while it stays desperate on the same ground (0: none). Once that
+## way is blocked too, BOTH_WAYS_BLOCKED: the turn is spent and it goes its own
+## way again, waiting at that edge as before (so the #409 leap still comes),
+## rather than pacing between the two blocked ends. Holding it still instead
+## stalled Stock rounds on Updraft, Springboard and Mill.
 var _desperate_way: float = 0.0
+const BOTH_WAYS_BLOCKED: float = 2.0
+## The target `_desperate_way` was chosen against: a new one drops it.
+var _desperate_way_target: Node2D = null
 ## Height of the ground `_desperate_way` was chosen on.
 var _desperate_way_ground: float = NAN
-## Issue #1309: a deep drop's landing ground counts as one floor within this (px).
-const LANDING_SAME_HEIGHT: float = 20.0
 ## Seconds left of the desperate stretch (#409): see DESPERATE_HOLD_SEC.
 var _desperate_left: float = 0.0
 ## Seconds held at an edge near `_wait_place`, kept through a crossing that
@@ -530,10 +540,13 @@ var _rids_frame: int = -1
 var _lava_top_frame: int = -1
 var _lava_top_value: float = INF
 ## `_footing()` answers for `_footing_frame`, by exact point (one dictionary
-## per `past_danger`): the scans ask about the same points many times a tick.
+## per `past_danger` and `deep`): the scans ask about the same points many times
+## a tick.
 var _footing_frame: int = -1
 var _footing_memo: Dictionary = {}
 var _footing_memo_past: Dictionary = {}
+var _footing_memo_deep: Dictionary = {}
+var _footing_memo_past_deep: Dictionary = {}
 
 func _init() -> void:
 	rng.randomize()
@@ -2027,18 +2040,26 @@ func _travel_side() -> float:
 	# Issue #1309: desperate and blocked this way (a drop too deep, or onto too
 	# little ground), it tries the other way off before waiting on, and keeps to
 	# that way until it is off the ledge: turning back as soon as the blocked
-	# end is out of its lookahead again paced it to and fro on the ledge.
+	# end is out of its lookahead again paced it to and fro on the ledge. Both
+	# ways blocked, the turn is spent (see BOTH_WAYS_BLOCKED).
 	if _desperate_way != 0.0:
 		var ground_now: float = _ground_below(me)
-		if not _desperate() or is_nan(ground_now) or absf(ground_now - _desperate_way_ground) > LANDING_SAME_HEIGHT:
+		if not _desperate() or is_nan(ground_now) or absf(ground_now - _desperate_way_ground) > LANDING_SAME_HEIGHT \
+				or _target != _desperate_way_target:
 			_desperate_way = 0.0
-	if side != 0.0 and _desperate():
-		if _desperate_way != 0.0 and _desperate_way != side and _safe_side(_desperate_way) != 0.0:
-			safe = _desperate_way
+	# Not over a gust's upwind side or a flee: those ways are about safety.
+	if side != 0.0 and _desperate() and gust == 0.0 and mode != "flee":
+		if _desperate_way == BOTH_WAYS_BLOCKED:
+			pass
+		elif _desperate_way != 0.0 and _desperate_way != side:
+			safe = _safe_side(_desperate_way)
+			if safe == 0.0:
+				_desperate_way = BOTH_WAYS_BLOCKED
 		elif safe == 0.0:
 			safe = _safe_side(-side)
-			_desperate_way = safe
+			_desperate_way = safe if safe != 0.0 else BOTH_WAYS_BLOCKED
 			_desperate_way_ground = _ground_below(me)
+			_desperate_way_target = _target
 	_held_at_edge = side != 0.0 and safe == 0.0
 	if safe == 0.0:
 		# Stopped by an edge or a hazard (issue #176): not right at it,
@@ -2056,7 +2077,7 @@ func _safe_side(side: float) -> float:
 	if _leap_left > 0.0:
 		return side
 	var ahead: float = EDGE_LOOKAHEAD + _momentum(side)
-	return side if _edge_room(side, ahead) >= ahead else 0.0
+	return side if _edge_room(side, ahead, false, _desperate()) >= ahead else 0.0
 
 ## How far the body's speed along `side` carries it on its own.
 func _momentum(side: float) -> float:
@@ -2079,16 +2100,19 @@ func _step_back_from_edges() -> float:
 
 ## How far the bot can go along `side` on ground it trusts, up to `limit`,
 ## stepping over any gap of up to GAP_STEP_MAX.
-func _edge_room(side: float, limit: float, past_danger: bool = false) -> float:
+## `deep` (Issue #1309): count ground down to MAX_DROP_DESPERATE (see `_footing`).
+## Only `_safe_side`, choosing a desperate bot's way off, asks for it: the swing,
+## brake and hold-off checks keep MAX_DROP.
+func _edge_room(side: float, limit: float, past_danger: bool = false, deep: bool = false) -> float:
 	var me: Vector2 = player.global_position
 	var from: int = _standing_on()
 	var d: float = SCAN_STEP
 	while d <= limit:
-		if not _can_step(_footing(me + Vector2(side * d, 0.0), past_danger), from):
+		if not _can_step(_footing(me + Vector2(side * d, 0.0), past_danger, deep), from):
 			var gap_end: float = d + SCAN_STEP
 			var crossed: bool = false
 			while gap_end <= d + _gap_limit():
-				if _can_step(_footing(me + Vector2(side * gap_end, 0.0), past_danger), from):
+				if _can_step(_footing(me + Vector2(side * gap_end, 0.0), past_danger, deep), from):
 					crossed = true
 					break
 				gap_end += SCAN_STEP
@@ -2109,14 +2133,23 @@ func _desperate() -> bool:
 	return _edge_wait >= EDGE_PATIENCE_SEC or _desperate_left > 0.0
 
 ## Issue #1309: whether the ground at `ground_y` under `point` runs at least
-## DESPERATE_LANDING either side, at about the same height (a deep drop's landing).
+## DESPERATE_LANDING either side, at about the same height, with no hazard over
+## that span and above any lava (a deep drop's landing: the fall drifts sideways).
 func _wide_landing(point: Vector2, ground_y: float) -> bool:
-	for dx: float in [-DESPERATE_LANDING, DESPERATE_LANDING]:
-		# From just above the landing, so the ledge the bot is on is not what
-		# the probe finds.
+	if ground_y >= _lava_top():
+		return false
+	var span := Rect2(point.x - DESPERATE_LANDING, ground_y - BODY_RADIUS * 2.0, DESPERATE_LANDING * 2.0, BODY_RADIUS * 3.0)
+	for rect: Rect2 in _danger_rects():
+		if rect.intersects(span):
+			return false
+	# Unbroken across the span: a pit inside it is where the drift may land. From
+	# just above the landing, so the ledge the bot is on is not what is found.
+	var dx: float = -DESPERATE_LANDING
+	while dx <= DESPERATE_LANDING:
 		var there: float = _ground_below(Vector2(point.x + dx, ground_y - BODY_RADIUS))
 		if is_nan(there) or absf(there - ground_y) > LANDING_SAME_HEIGHT:
 			return false
+		dx += LANDING_SAMPLE
 	return true
 
 ## Whether the bot could walk to `x` on ground it trusts, at its own
@@ -2178,22 +2211,31 @@ func _standing_on() -> int:
 ## What the ground under `point` is (FOOT_*): the first terrain straight
 ## below it, above the lava, with no hazard (or falling rock's column) in
 ## between. A point inside terrain counts as that terrain.
-func _footing(point: Vector2, past_danger: bool = false) -> int:
+## `deep` (Issue #1309): a desperate bot's way off an edge, where ground down
+## to MAX_DROP_DESPERATE counts if `_wide_landing`. Only the edge scan asks for
+## it; target and pickup choice keep MAX_DROP.
+func _footing(point: Vector2, past_danger: bool = false, deep: bool = false) -> int:
 	var frame: int = Engine.get_physics_frames()
 	if frame != _footing_frame:
 		_footing_frame = frame
 		_footing_memo.clear()
 		_footing_memo_past.clear()
-	var memo: Dictionary = _footing_memo_past if past_danger else _footing_memo
+		_footing_memo_deep.clear()
+		_footing_memo_past_deep.clear()
+	var memo: Dictionary
+	if deep:
+		memo = _footing_memo_past_deep if past_danger else _footing_memo_deep
+	else:
+		memo = _footing_memo_past if past_danger else _footing_memo
 	if memo.has(point):
 		return memo[point]
-	var kind: int = _footing_uncached(point, past_danger)
+	var kind: int = _footing_uncached(point, past_danger, deep)
 	# The lookup inside may have re-read the stage, which resets the memo.
 	if _footing_frame == frame:
 		memo[point] = kind
 	return kind
 
-func _footing_uncached(point: Vector2, past_danger: bool) -> int:
+func _footing_uncached(point: Vector2, past_danger: bool, deep: bool = false) -> int:
 	var bottom: float = minf(point.y + GROUND_PROBE, _lava_top())
 	if bottom <= point.y:
 		return FOOT_NONE
@@ -2206,7 +2248,7 @@ func _footing_uncached(point: Vector2, past_danger: bool) -> int:
 	var ground_y: float = (hit["position"] as Vector2).y
 	var drop: float = ground_y - point.y
 	if drop > MAX_DROP:
-		if drop > MAX_DROP_DESPERATE or not _desperate() or not _wide_landing(point, ground_y):
+		if not deep or drop > MAX_DROP_DESPERATE or not _wide_landing(point, ground_y):
 			return FOOT_NONE
 	for rect: Rect2 in ([] as Array[Rect2]) if past_danger else _danger_rects():
 		if point.x >= rect.position.x and point.x <= rect.end.x \

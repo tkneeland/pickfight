@@ -66604,11 +66604,9 @@ func _scenario_bot_head_beside_a_wall_is_not_planted_1299() -> Array[String]:
 	return failures
 ## Issue #1309: a bot stranded on a high ledge comes down to a rival below. The
 ## arena's right platform (top y=48, x 200 to 440) is 252 px above the floor,
-## past MAX_DROP, and the rival on the floor moves from one side under it to the
-## other every half second, which
-## turned the bot between the ledge's two ends and restarted its edge patience
-## each time. Patience now counts per ledge, and a desperate bot may drop up to
-## MAX_DROP_DESPERATE: it reaches the floor within 15 s.
+## past MAX_DROP, with the rival on the floor moving from one side under it to
+## the other every half second. A desperate bot may drop up to MAX_DROP_DESPERATE
+## onto wide ground: it reaches the floor, alive and on the arena, within 15 s.
 func _scenario_bot_comes_down_from_a_high_ledge_1309() -> Array[String]:
 	var failures: Array[String] = []
 	var ledge_top: float = 48.0
@@ -66616,7 +66614,6 @@ func _scenario_bot_comes_down_from_a_high_ledge_1309() -> Array[String]:
 	var made: Array = _bot313(true, 320.0, 320.0)
 	var stage: Node2D = made[0]
 	var player: RigidBody2D = made[1]
-	var bot: Node = made[2]
 	var rival: RigidBody2D = null
 	for node: Node in stage.get_children():
 		if node is RigidBody2D and node != player and node.has_method("set_input_vector"):
@@ -66642,7 +66639,8 @@ func _scenario_bot_comes_down_from_a_high_ledge_1309() -> Array[String]:
 			rival.linear_velocity = Vector2.ZERO
 		await physics_frame
 		# On the arena floor (its ground spans x -600 to 600), standing, alive.
-		if player.alive and player.global_position.y > GROUND_TOP - PLAYER_RADIUS * 2.0 				and player.global_position.y < GROUND_TOP and absf(player.global_position.x) < 590.0:
+		if player.alive and player.global_position.y > GROUND_TOP - PLAYER_RADIUS * 2.0 \
+				and player.global_position.y < GROUND_TOP and absf(player.global_position.x) < 590.0:
 			down_at = float(tick) / 60.0
 			break
 	print("      bot reached the floor at %.1f s (it was at %s, alive=%s)" % [down_at, player.global_position, player.alive])
