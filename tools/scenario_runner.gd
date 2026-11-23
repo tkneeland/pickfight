@@ -66407,6 +66407,7 @@ func _scenario_bot_held_still_in_air_does_not_count_as_propped_1299() -> Array[S
 	var attacked: int = 0
 	var planted: int = 0
 	var latched: int = 0
+	var held_low: int = 0
 	for _tick in 90:
 		await physics_frame
 		if bot.mode == "attack":
@@ -66415,11 +66416,15 @@ func _scenario_bot_held_still_in_air_does_not_count_as_propped_1299() -> Array[S
 				planted += 1
 			if bot._propped:
 				latched += 1
-	print("      %d ticks in attack mode, head near the floor in %d, counted as propped in %d" % [attacked, planted, latched])
+			if is_equal_approx(bot.last_input.length(), BotScript.AIR_LENGTH) and bot.last_input.y > 0.0:
+				held_low += 1
+	print("      %d ticks in attack mode, head near the floor in %d, counted as propped in %d, head held short and low in %d" % [attacked, planted, latched, held_low])
 	if attacked == 0:
 		failures.append("the bot never went into attack mode, so the case was not reached")
 	if planted > 0:
 		failures.append("the held head came within reach of the floor in %d ticks, so the case was not the one meant" % planted)
+	if attacked > 0 and held_low * 2 < attacked:
+		failures.append("the bot held its head short and low on only %d of %d attack ticks" % [held_low, attacked])
 	if latched > 0:
 		failures.append("a bot held still in the air with no head on the ground counted as propped for %d ticks" % latched)
 	await _teardown(stage)
@@ -66450,9 +66455,12 @@ func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[
 	player.global_position = rival.global_position + Vector2(0.0, -(BotScript.BODY_RADIUS * 2.0 + 1.0))
 	player.linear_velocity = Vector2.ZERO
 	player.freeze = true
+	# The rival is pinned too, so the bot's chops cannot knock it out from under.
+	rival.freeze = true
 	var attacked: int = 0
 	var planted: int = 0
 	var latched: int = 0
+	var perched_in_air: int = 0
 	for _tick in 90:
 		await physics_frame
 		if bot.mode == "attack":
@@ -66461,7 +66469,14 @@ func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[
 				planted += 1
 			if bot._propped:
 				latched += 1
-	print("      %d ticks in attack mode, head on the floor in %d, counted as propped in %d" % [attacked, planted, latched])
+			var me: Vector2 = player.global_position
+			if bot._perched_on_fighter() and not bot._ray_hits(me, me + Vector2(0.0, BotScript.BODY_RADIUS + BotScript.AIRBORNE_GAP)):
+				perched_in_air += 1
+	print("      %d ticks in attack mode, head on the floor in %d, perched off the ground in %d, counted as propped in %d" % [attacked, planted, perched_in_air, latched])
+	if attacked == 0:
+		failures.append("the bot never went into attack mode, so the case was not reached")
+	if perched_in_air == 0:
+		failures.append("the bot was never perched off the ground, so the case was not reached")
 	if planted == 0:
 		failures.append("the bot's head never reached the floor, so the case was not reached")
 	if latched > 0:
@@ -66470,43 +66485,46 @@ func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[
 	return failures
 ## Issue #1299 (review of #1308): a propped bot knocked off its spot, however
 ## slowly, is no longer propped and holds its head short and low again (#302).
-## The axe bot props itself against a still rival on the arena floor; then its
-## body is carried up at 200 px/s (under THROWN_SPEED) for a third of a second,
-## past PROP_DRIFT, and the latch must let go.
+## Direct check on the latch: the body frozen in the air beside a rival in reach,
+## the latch set as if propped PROP_DRIFT + 10 px away. One `_hold_in_air` tick
+## must end it and return the hold; the same tick with the latch set right where
+## the body is (the control) must keep it, so drift alone did it.
 func _scenario_bot_knocked_off_its_prop_lets_go_1299() -> Array[String]:
 	var failures: Array[String] = []
-	var made: Array = _bot313(true, 160.0, -160.0)
+	var made: Array = _bot313(true, 40.0, 0.0)
 	var stage: Node2D = made[0]
 	var player: RigidBody2D = made[1]
 	var bot: Node = made[2]
 	player.spawn_protected = false
-	await _equip(player, "res://resources/axe.tres")
-	var propped_at: int = -1
-	for tick in 1200:
-		await physics_frame
-		if bot._propped:
-			propped_at = tick
-			break
-	if propped_at < 0:
-		failures.append("the axe bot never got propped in 20 s, so the case was not reached")
+	player.global_position = Vector2(40.0, 180.0)
+	player.linear_velocity = Vector2.ZERO
+	player.freeze = true
+	await _await_ticks(30)
+	var rival: Node2D = null
+	for node: Node in stage.get_children():
+		if node is RigidBody2D and node != player and node.has_method("set_input_vector"):
+			rival = node as Node2D
+	if rival == null:
+		failures.append("the fixture has no rival player")
 		await _teardown(stage)
 		return failures
-	# Past the drift limit, with two ticks' carry for the order of think and move.
-	var past: float = BotScript.PROP_DRIFT + 200.0 * 2.0 / 60.0
-	var start: Vector2 = player.global_position
-	var reached: int = 0
-	var held: int = 0
-	for _tick in 20:
-		player.linear_velocity = Vector2(0.0, -200.0)
-		await physics_frame
-		if bot.mode == "attack" and player.global_position.distance_to(start) > past:
-			reached += 1
-			if bot._propped:
-				held += 1
-	print("      propped at tick %d; %d ticks attacking past the drift limit, still propped in %d" % [propped_at, reached, held])
-	if reached == 0:
-		failures.append("the bot was never still attacking past the drift limit, so the case was not reached")
-	if held > 0:
-		failures.append("carried past PROP_DRIFT under THROWN_SPEED, the bot still counted as propped for %d ticks" % held)
+	bot._target = rival
+	var delta: float = 1.0 / 60.0
+	# Control: propped right here, still, nobody under it: the latch holds.
+	bot._propped = true
+	bot._prop_at = player.global_position
+	bot._hold_frame = Engine.get_physics_frames() - 1
+	var kept: Vector2 = bot._hold_in_air(delta)
+	var control_ok: bool = bot._propped and kept == Vector2.ZERO
+	# Drifted: propped PROP_DRIFT + 10 px from here: the latch ends.
+	bot._propped = true
+	bot._prop_at = player.global_position + Vector2(BotScript.PROP_DRIFT + 10.0, 0.0)
+	bot._hold_frame = Engine.get_physics_frames() - 1
+	var held: Vector2 = bot._hold_in_air(delta)
+	print("      control kept the latch: %s; after drifting, propped=%s, input=%s" % [control_ok, bot._propped, held])
+	if not control_ok:
+		failures.append("the control did not keep the latch (propped=%s, input=%s), so drift was not isolated" % [bot._propped, kept])
+	if bot._propped or held == Vector2.ZERO:
+		failures.append("a propped bot %.0f px from where it latched still counted as propped" % (BotScript.PROP_DRIFT + 10.0))
 	await _teardown(stage)
 	return failures

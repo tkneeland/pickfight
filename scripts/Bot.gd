@@ -1368,9 +1368,13 @@ var _propped: bool = false
 var _prop_at: Vector2 = Vector2.ZERO
 ## The PLANT_RADIUS circle `_head_planted` queries with, made once.
 var _plant_shape: CircleShape2D = null
-## Physics frame `_hold_in_air` last ran on: a gap (an early return in `think`
-## took over) ends the latch and the wait, which must be unbroken (#1299 review).
+## Physics frame `_hold_in_air` last ran on. Any gap (an early return in `think`
+## took over) restarts the entry wait, which must be unbroken; a gap longer than
+## PROP_GAP_FRAMES ends the latch too (the shield, brake and dodge drives take a
+## tick here and there in a fight without the bot leaving its prop, #1299 review).
 var _hold_frame: int = -1
+## Physics frames `_hold_in_air` may miss before a propped bot is no longer propped.
+const PROP_GAP_FRAMES: int = 12
 
 ## Issue #302: a bot thrown off the ground mid-fight, by its own swing or a
 ## vault over the rival's head, stops swinging: every push it makes in the air
@@ -1383,7 +1387,9 @@ var _hold_frame: int = -1
 func _hold_in_air(delta: float) -> Vector2:
 	var frame: int = Engine.get_physics_frames()
 	if _hold_frame != frame - 1:
-		_clear_propped()
+		_prop_wait_sec = 0.0
+		if frame - _hold_frame > PROP_GAP_FRAMES + 1:
+			_clear_propped()
 	_hold_frame = frame
 	var me: Vector2 = player.global_position
 	if _ray_hits(me, me + Vector2(0.0, BODY_RADIUS + AIRBORNE_GAP)):
@@ -1407,6 +1413,10 @@ func _hold_in_air(delta: float) -> Vector2:
 			if _prop_wait_sec >= PROPPED_SEC:
 				_propped = true
 				_prop_at = me
+				# The swing reads head speed from _last_head, last set before this
+				# wait: start it from here, so the first push on the planted head is
+				# eased off, not a full-length vault on it (#302, #1299 review).
+				_last_head = player.weapon_head_position()
 		else:
 			_prop_wait_sec = 0.0
 	if _propped:
@@ -1414,14 +1424,15 @@ func _hold_in_air(delta: float) -> Vector2:
 	var side: float = signf(_target.global_position.x - me.x)
 	return Vector2(-side * 0.5, 1.0).normalized() * AIR_LENGTH
 
-## Issue #1299: whether terrain (not a moving body) lies within PLANT_RADIUS of
-## the bot's weapon head point, the head no higher than the body.
+## Issue #1299: whether terrain (not a rigid body: the ball, a falling rock) lies
+## within PLANT_RADIUS of the bot's weapon head point, the head no more than a
+## body radius above the body's centre (a staff tip leaning on a wall's face).
 func _head_planted() -> bool:
 	if not player.has_method("weapon_head_position"):
 		return false
 	var head: Vector2 = player.weapon_head_position()
 	# Mid weapon swap the head point is the body's own centre: no head to plant.
-	if head.y < player.global_position.y or head.is_equal_approx(player.global_position):
+	if head.y < player.global_position.y - BODY_RADIUS or head.is_equal_approx(player.global_position):
 		return false
 	if _plant_shape == null:
 		_plant_shape = CircleShape2D.new()
