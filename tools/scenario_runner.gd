@@ -66606,7 +66606,8 @@ func _scenario_bot_head_beside_a_wall_is_not_planted_1299() -> Array[String]:
 ## arena's right platform (top y=48, x 200 to 440) is 252 px above the floor,
 ## past MAX_DROP, with the rival on the floor moving from one side under it to
 ## the other every half second. A desperate bot may drop up to MAX_DROP_DESPERATE
-## onto wide ground: it reaches the floor, alive and on the arena, within 15 s.
+## onto wide ground: it reaches the floor, alive and on the arena, within 11 s
+## (before the #409 leap at 12 s).
 func _scenario_bot_comes_down_from_a_high_ledge_1309() -> Array[String]:
 	var failures: Array[String] = []
 	var ledge_top: float = 48.0
@@ -66632,7 +66633,8 @@ func _scenario_bot_comes_down_from_a_high_ledge_1309() -> Array[String]:
 		await _teardown(stage)
 		return failures
 	var down_at: float = -1.0
-	for tick in 900:
+	# Under the #409 leap's 12 s, so a leap cannot be what brings it down.
+	for tick in 660:
 		if tick % 30 == 0:
 			var under: float = ledge.get_center().x + (70.0 if (tick / 30) % 2 == 0 else -70.0)
 			rival.global_position = Vector2(under, GROUND_TOP - PLAYER_RADIUS)
@@ -66645,7 +66647,7 @@ func _scenario_bot_comes_down_from_a_high_ledge_1309() -> Array[String]:
 			break
 	print("      bot reached the floor at %.1f s (it was at %s, alive=%s)" % [down_at, player.global_position, player.alive])
 	if down_at < 0.0:
-		failures.append("a bot on a ledge 252 px up, its rival moving below, never came down in 15 s")
+		failures.append("a bot on a ledge 252 px up, its rival moving below, never came down in 11 s")
 	await _teardown(stage)
 	return failures
 ## Issue #1309: a desperate bot drops deep only onto wide ground. A ledge 300 px

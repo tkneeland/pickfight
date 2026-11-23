@@ -268,7 +268,8 @@ const LIFT_TRAVEL: float = 150.0
 ## Ground further than this below a point is too far to drop to on purpose:
 ## a step off an edge onto it is a fall.
 const MAX_DROP: float = 240.0
-## Issue #1309: once desperate (EDGE_PATIENCE_SEC held at an edge), ground this
+## Issue #1309: while desperate (EDGE_PATIENCE_SEC held at an edge, then for
+## DESPERATE_HOLD_SEC), ground this
 ## far below still counts. There is no fall damage; a bot thrown up onto a high
 ## ledge (the arena's right platform is 252 px up) otherwise never came down; 18 of the
 ## 46 stages have platform ends with such a drop. Up to this (px). Hazards in the
@@ -1326,7 +1327,9 @@ func _edge_swing_scale(target_distance: float) -> float:
 		return 1.0
 	var side: float = signf(body.linear_velocity.x)
 	var carry: float = absf(body.linear_velocity.x) * MOMENTUM_SEC
-	var room: float = _edge_room(side, EDGE_SWING_ROOM + carry) - carry
+	# Issue #1309: an edge a desperate bot may drop off (see `_safe_way_off`) is
+	# no cliff to soften the swing for.
+	var room: float = _edge_room(side, EDGE_SWING_ROOM + carry, false, _desperate()) - carry
 	return clampf(room / EDGE_SWING_ROOM, EDGE_SWING_MIN, 1.0)
 
 ## Issue #302: a swing's head-plant can throw the bot over its rival and on
@@ -1344,7 +1347,8 @@ func _brake() -> Vector2:
 	var to_rival: float = (_target.global_position.x - player.global_position.x) * side
 	var overshooting: bool = to_rival > -BODY_RADIUS and to_rival < absf(body.linear_velocity.x) * MOMENTUM_SEC \
 			and absf(body.linear_velocity.x) > BRAKE_SPEED
-	if not overshooting and _edge_room(side, ahead) >= ahead:
+	# Issue #1309: nor brake for an edge a desperate bot may drop off.
+	if not overshooting and _edge_room(side, ahead, false, _desperate()) >= ahead:
 		return Vector2.ZERO
 	var dir := Vector2(side * 0.5, 0.87).normalized()
 	if not _floor_hit(player.global_position, player.global_position + dir * (_reach() + ANCHOR_SLACK)):
@@ -2023,7 +2027,10 @@ func _travel_side() -> float:
 	var gust: float = _gust_side()
 	if gust != 0.0:
 		side = gust
-	var safe: float = _safe_way_off(side)
+	# Issue #1309: only travel to the goal may take a desperate deep drop; a
+	# gust's upwind side or a flee keeps MAX_DROP (a gust in a long fall carries
+	# the bot past the landing that was checked).
+	var safe: float = _safe_side(side) if gust != 0.0 or mode == "flee" else _safe_way_off(side)
 	_held_at_edge = side != 0.0 and safe == 0.0
 	if safe == 0.0:
 		# Stopped by an edge or a hazard (issue #176): not right at it,
@@ -2112,23 +2119,36 @@ func _landing_reach(drop: float) -> float:
 	return DESPERATE_LANDING * sqrt(maxf(drop, MAX_DROP) / MAX_DROP)
 
 ## Issue #1309: whether a deep drop from `point` onto `ground_y` lands safely:
-## no hazard anywhere in the fall's drift envelope, and ground at about the same
-## height every LANDING_SAMPLE across `_landing_reach` either side. A sample that
-## starts inside terrain is a wall or a tower beside the landing, not a pit.
+## above any lava; no hazard in the fall's drift envelope (from below the bot's
+## own ledge down to the landing, `_landing_reach` either side); and ground at
+## about the same height, above the lava, every LANDING_SAMPLE out to
+## `_landing_reach` either side, counting out from the landing. A sample that
+## starts inside terrain is a wall or a tower beside the landing, which stops the
+## drift that way: the samples past it are not needed.
 func _wide_landing(point: Vector2, ground_y: float) -> bool:
+	var lava: float = _lava_top()
+	if ground_y >= lava:
+		return false
 	var reach: float = _landing_reach(ground_y - point.y)
-	var envelope := Rect2(point.x - reach, point.y, reach * 2.0, ground_y - point.y + BODY_RADIUS)
+	# Below the bot's own ledge (the point is at the bot's height), so a hazard
+	# on the ledge it is leaving does not count.
+	var top: float = point.y + BODY_RADIUS * 3.0
+	var envelope := Rect2(point.x - reach, top, reach * 2.0, maxf(ground_y + BODY_RADIUS - top, 0.0))
 	for rect: Rect2 in _danger_rects():
 		if rect.intersects(envelope):
 			return false
 	var from_y: float = ground_y - BODY_RADIUS
-	var dx: float = -reach
-	while dx <= reach:
-		var there: float = _ground_below(Vector2(point.x + dx, from_y))
-		var in_terrain: bool = not is_nan(there) and there <= from_y + 1.0
-		if not in_terrain and (is_nan(there) or absf(there - ground_y) > LANDING_SAME_HEIGHT):
-			return false
-		dx += LANDING_SAMPLE
+	for way: float in [-1.0, 1.0]:
+		var dx: float = 0.0
+		while true:
+			var there: float = _ground_below(Vector2(point.x + way * dx, from_y))
+			if not is_nan(there) and there <= from_y + 1.0:
+				break
+			if is_nan(there) or there >= lava or absf(there - ground_y) > LANDING_SAME_HEIGHT:
+				return false
+			if dx >= reach:
+				break
+			dx = minf(dx + LANDING_SAMPLE, reach)
 	return true
 
 ## Whether the bot could walk to `x` on ground it trusts, at its own
