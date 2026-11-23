@@ -1397,6 +1397,10 @@ const SCENARIO_NAMES: PackedStringArray = [
 	"bot_route_map_of_summit_1299",
 	"bot_leaves_summit_tower_by_a_step_1299",
 	"bot_swings_when_propped_on_its_axe_1299",
+	"bot_held_still_in_air_does_not_count_as_propped_1299",
+	"bot_perched_on_a_rival_does_not_count_as_propped_1299",
+	"bot_knocked_off_its_prop_lets_go_1299",
+	"bot_head_beside_a_wall_is_not_planted_1299",
 ]
 const ANGLE_TOLERANCE: float = 0.01
 const ROTATION_TOLERANCE: float = 0.001
@@ -4619,6 +4623,14 @@ func _run_scenario(name: String) -> Array[String]:
 			return await _bot_leaves_summit_tower_by_a_step_1299()
 		"bot_swings_when_propped_on_its_axe_1299":
 			return await _scenario_bot_swings_when_propped_on_its_axe_1299()
+		"bot_held_still_in_air_does_not_count_as_propped_1299":
+			return await _scenario_bot_held_still_in_air_does_not_count_as_propped_1299()
+		"bot_perched_on_a_rival_does_not_count_as_propped_1299":
+			return await _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299()
+		"bot_knocked_off_its_prop_lets_go_1299":
+			return await _scenario_bot_knocked_off_its_prop_lets_go_1299()
+		"bot_head_beside_a_wall_is_not_planted_1299":
+			return await _scenario_bot_head_beside_a_wall_is_not_planted_1299()
 		_:
 			return ["unknown scenario '%s'" % name]
 ## AC-1: for a spread of input vectors, the weapon's world angle equals the
@@ -66378,5 +66390,209 @@ func _scenario_bot_swings_when_propped_on_its_axe_1299() -> Array[String]:
 		failures.append("a bot with the axe landed no hit on a still rival in 20 s")
 	elif propped_ticks == 0:
 		failures.append("the axe bot hit without ever being propped: the scenario no longer reaches the #1299 case")
+	await _teardown(stage)
+	return failures
+## Issue #1299 (review of #1308): only a head resting on terrain props a bot. A
+## bot held still in the air with nothing under its head (an updraft can hold a
+## body that still) keeps holding its head short and low, as #302 asks, and never
+## counts as propped. Here the body is frozen 94 px above where it would stand,
+## its held head well clear of the floor, next to a rival in reach, for 1.5 s.
+func _scenario_bot_held_still_in_air_does_not_count_as_propped_1299() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, 40.0, 0.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	player.spawn_protected = false
+	player.global_position = Vector2(40.0, 180.0)
+	player.linear_velocity = Vector2.ZERO
+	player.freeze = true
+	var attacked: int = 0
+	var planted: int = 0
+	var latched: int = 0
+	var held_low: int = 0
+	for _tick in 90:
+		await physics_frame
+		if bot.mode == "attack":
+			attacked += 1
+			if bot._head_planted():
+				planted += 1
+			if bot._propped:
+				latched += 1
+			if is_equal_approx(bot.last_input.length(), BotScript.AIR_LENGTH) and bot.last_input.y > 0.0:
+				held_low += 1
+	print("      %d ticks in attack mode, head near the floor in %d, counted as propped in %d, head held short and low in %d" % [attacked, planted, latched, held_low])
+	if attacked == 0:
+		failures.append("the bot never went into attack mode, so the case was not reached")
+	if planted > 0:
+		failures.append("the held head came within reach of the floor in %d ticks, so the case was not the one meant" % planted)
+	if attacked > 0 and held_low < attacked - 2:
+		failures.append("the bot held its head short and low on only %d of %d attack ticks" % [held_low, attacked])
+	if latched > 0:
+		failures.append("a bot held still in the air with no head on the ground counted as propped for %d ticks" % latched)
+	await _teardown(stage)
+	return failures
+## Issue #1299 (review of #1308): a bot perched on a rival is not propped, even
+## with its head resting on the floor beside the rival: a chop down from there
+## vaults it over (#302). Here the bot's body is frozen right on top of a rival
+## standing on the arena floor, for 1.5 s; its head reaches the floor, and it
+## never counts as propped.
+func _scenario_bot_perched_on_a_rival_does_not_count_as_propped_1299() -> Array[String]:
+	var failures: Array[String] = []
+	# Spawned apart, so the rival settles where it stands; then the bot is put on it.
+	var made: Array = _bot313(true, 200.0, 0.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	player.spawn_protected = false
+	await _await_ticks(2)
+	var rival: RigidBody2D = null
+	for node: Node in stage.get_children():
+		if node is RigidBody2D and node != player and node.has_method("set_input_vector"):
+			rival = node as RigidBody2D
+	if rival == null:
+		failures.append("the fixture has no rival player")
+		await _teardown(stage)
+		return failures
+	# Just clear of overlapping the rival, well inside the perch distance.
+	player.global_position = rival.global_position + Vector2(0.0, -(BotScript.BODY_RADIUS * 2.0 + 4.0))
+	player.linear_velocity = Vector2.ZERO
+	player.freeze = true
+	# The rival is pinned too, so the bot's chops cannot knock it out from under.
+	rival.freeze = true
+	var attacked: int = 0
+	var planted: int = 0
+	var latched: int = 0
+	var perched_in_air: int = 0
+	for _tick in 90:
+		await physics_frame
+		if bot.mode == "attack":
+			attacked += 1
+			if bot._head_planted():
+				planted += 1
+			if bot._propped:
+				latched += 1
+			var me: Vector2 = player.global_position
+			if bot._perched_on_fighter() and not bot._ray_hits(me, me + Vector2(0.0, BotScript.BODY_RADIUS + BotScript.AIRBORNE_GAP)):
+				perched_in_air += 1
+	print("      %d ticks in attack mode, head on the floor in %d, perched off the ground in %d, counted as propped in %d" % [attacked, planted, perched_in_air, latched])
+	if attacked == 0:
+		failures.append("the bot never went into attack mode, so the case was not reached")
+	if perched_in_air == 0:
+		failures.append("the bot was never perched off the ground, so the case was not reached")
+	if planted == 0:
+		failures.append("the bot's head never reached the floor, so the case was not reached")
+	if latched > 0:
+		failures.append("a bot perched on a rival counted as propped for %d ticks" % latched)
+	await _teardown(stage)
+	return failures
+## Issue #1299 (review of #1308): a propped bot knocked off its spot, however
+## slowly, is no longer propped and holds its head short and low again (#302).
+## Direct check on the latch: the body frozen in the air beside a rival in reach,
+## the latch set as if propped PROP_DRIFT + 10 px away. One `_track_prop` tick
+## must end it and `_hold_in_air` return the hold; the same tick with the latch
+## set right where the body is (the control) must keep it, so drift alone did it.
+## Turning to another rival keeps it.
+func _scenario_bot_knocked_off_its_prop_lets_go_1299() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, 40.0, 0.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	player.spawn_protected = false
+	player.global_position = Vector2(40.0, 180.0)
+	player.linear_velocity = Vector2.ZERO
+	player.freeze = true
+	await _await_ticks(30)
+	var rival: Node2D = null
+	for node: Node in stage.get_children():
+		if node is RigidBody2D and node != player and node.has_method("set_input_vector"):
+			rival = node as Node2D
+	if rival == null:
+		failures.append("the fixture has no rival player")
+		await _teardown(stage)
+		return failures
+	var delta: float = 1.0 / 60.0
+	# Each case sets the latch as if propped against this rival, then runs one
+	# `_track_prop` tick, as `think` would.
+	var case := func(prop_at: Vector2) -> bool:
+		bot.mode = "attack"
+		bot._target = rival
+		bot._propped = true
+		bot._prop_at = prop_at
+		bot._track_prop(delta)
+		return bot._propped
+	# Control: propped right here, still, nobody under it: the latch holds.
+	var control_kept: bool = case.call(player.global_position)
+	var control_input: Vector2 = bot._hold_in_air()
+	# Drifted: propped PROP_DRIFT + 10 px from here: the latch ends.
+	var drift_kept: bool = case.call(player.global_position + Vector2(BotScript.PROP_DRIFT + 10.0, 0.0))
+	var drift_input: Vector2 = bot._hold_in_air()
+	# Turned to another live rival: the prop is the bot's own body on its head,
+	# so the latch holds whoever it fights (#1311 review).
+	var second: RigidBody2D = _spawn_player(stage, Vector2(-200.0, 274.0))
+	second.spawn_protected = false
+	bot.mode = "attack"
+	bot._target = rival
+	bot._propped = true
+	bot._prop_at = player.global_position
+	bot._target = second
+	bot._track_prop(delta)
+	var retarget_kept: bool = bot._propped
+	print("      control kept=%s input=%s; drifted kept=%s input=%s; new target kept=%s" % [control_kept, control_input, drift_kept, drift_input, retarget_kept])
+	if not control_kept or control_input != Vector2.ZERO:
+		failures.append("the control did not keep the latch, so drift was not isolated")
+	if drift_kept or drift_input == Vector2.ZERO:
+		failures.append("a propped bot %.0f px from where it latched still counted as propped" % (BotScript.PROP_DRIFT + 10.0))
+	if not retarget_kept:
+		failures.append("turning to another rival ended a prop the bot was still on")
+	await _teardown(stage)
+	return failures
+## A world-layer static rectangle `rect` (global coordinates) added to `stage`.
+func _static_block_1299(stage: Node2D, rect: Rect2) -> StaticBody2D:
+	var body := StaticBody2D.new()
+	body.collision_layer = 1
+	var shape := CollisionShape2D.new()
+	var box := RectangleShape2D.new()
+	box.size = rect.size
+	shape.shape = box
+	body.add_child(shape)
+	stage.add_child(body)
+	body.global_position = rect.get_center()
+	return body
+## Issue #1299 (review of #1311): only terrain the head rests on plants it. The
+## bot's body is frozen in the air beside a rival, its head held short and low;
+## a wall is put right beside the head (its face 6 px away, its foot well above
+## the floor): the head is not planted. A slab put just under the head instead
+## (6 px below it): the head is planted.
+func _scenario_bot_head_beside_a_wall_is_not_planted_1299() -> Array[String]:
+	var failures: Array[String] = []
+	var made: Array = _bot313(true, 40.0, 0.0)
+	var stage: Node2D = made[0]
+	var player: RigidBody2D = made[1]
+	var bot: Node = made[2]
+	player.spawn_protected = false
+	player.global_position = Vector2(40.0, 180.0)
+	player.linear_velocity = Vector2.ZERO
+	player.freeze = true
+	await _await_ticks(30)
+	var head: Vector2 = player.weapon_head_position()
+	var before: bool = bot._head_planted()
+	var wall := _static_block_1299(stage, Rect2(head.x + 6.0, head.y - 60.0, 40.0, 80.0))
+	await physics_frame
+	head = player.weapon_head_position()
+	var beside_wall: bool = bot._head_planted()
+	wall.queue_free()
+	var slab := _static_block_1299(stage, Rect2(head.x - 40.0, head.y + 6.0, 80.0, 20.0))
+	await physics_frame
+	var on_slab: bool = bot._head_planted()
+	slab.queue_free()
+	print("      head planted: in the open %s, beside a wall %s, over a slab %s" % [before, beside_wall, on_slab])
+	if before:
+		failures.append("the head counted as planted in the open air, so the case was not reached")
+	if beside_wall:
+		failures.append("a head beside a wall's face counted as planted on it")
+	if not on_slab:
+		failures.append("a head just over a slab did not count as planted (the control)")
 	await _teardown(stage)
 	return failures
