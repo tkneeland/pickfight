@@ -6,12 +6,15 @@
 #       AHEAD   used5 > target + PACE_MARGIN (the tuned knob, 5..20, default 10; or the weekly guard below): start no new workers; prefer cheap work
 #       BEHIND  used5 < target - PACE_BEHIND_MARGIN (fixed, default 10), or no 5h window yet (r5 = 1970 / past): start another worker, up to MAX_WORKERS
 #       ON_PACE otherwise: keep the current number of workers
-#       Weekly guard (wins over the 5h pace): used7 > elapsed7 x 100 + 5, or 100 - used7 <= MIN_WEEKLY_REMAINING_FOR_TICKETS outside the RESET_GRACE_HOURS before the reset -> AHEAD.
+#       Weekly guard (wins over the 5h pace), with stop = the account's weekly stop % (100 - MIN_WEEKLY_REMAINING_FOR_TICKETS, set in
+#       the hub): used7 > elapsed7 x stop + 5, or used7 at the stop, outside the RESET_GRACE_HOURS before the reset -> AHEAD; and
+#       used7 at 100% before the reset -> AHEAD even inside that window (hive_weekly_stopped).
 #       Missing, unreadable or stale (> PACE_STALE_SECS, default 1800) snapshot -> ON_PACE (never start a burst on bad data).
 #   hive-pace.sh start     same output as state, but refused (exit 1) in a control-panel session (issue #300): run it before every worker start
 #   hive-pace.sh target    the 5h target percent now (elapsed5 x 100, rounded), empty when there is no window or no fresh snapshot
 #   hive-pace.sh explain   one line with every number behind the state
-#   hive-pace.sh max       the effective MAX_WORKERS (account conf, overridden by pace-tuning.conf), within 1..4
+#   hive-pace.sh max       the effective max workers: this account's max_workers (hive/account-limits.conf, set in the hub; else the conf's
+#                          MAX_WORKERS, default 3) is the ceiling, and pace-tuning.conf may only lower it
 #   hive-pace.sh log       one beacon tick: appends a row to $HIVE_STATE/pace-log.csv (epoch,used5,elapsed5,used7,elapsed7,agents,
 #                          pace_state,ready_tickets; header row first; rows older than 60 days pruned on write; at most one row per
 #                          minute), and when the 5h window has rolled over closes it with one row in $HIVE_STATE/pace-windows.csv
@@ -19,13 +22,13 @@
 #                          Args: <agents> [ready_tickets]; ready_tickets defaults to the status cache (no GitHub poll).
 #   hive-pace.sh tune      once per window close, from the last 10 windows (needs 3+): if most hit 100% before minute 270, tighten
 #                          one knob (max_workers -1, else margin -5); if most closed under 90% while ready work sat idle (idle_min > 0),
-#                          loosen one knob (max_workers +1, else margin +5). One change per window, margin 5..20, max_workers 1..4,
+#                          loosen one knob (max_workers +1, else margin +5). One change per window, margin 5..20, max_workers 1..ceiling,
 #                          written to $HIVE_STATE/pace-tuning.conf (local, never committed).
 #   hive-pace.sh lastwin   "<final_used5> <idle_min>" of the newest closed window (for the beacon); empty when none
 #   hive-pace.sh statewin  `state` then `lastwin` (one line each) from one process; hive-beacon.sh calls it to save two spawns
 #   hive-pace.sh report    per-account table (5h used, pace, last window final used5 and idle minutes, beacon age) from the newest
 #                          USAGE line of each account in the channel inbox
-# Settings: PACE_MARGIN (default 10), MAX_WORKERS (default WORKER_TARGET), PACE_STALE_SECS. HIVE_NOW overrides now (tests).
+# Settings: PACE_MARGIN (default 10), MAX_WORKERS (the ceiling, default 3), PACE_STALE_SECS. HIVE_NOW overrides now (tests).
 _s=$0; case $_s in */*) _s=${_s%/*}; [ -n "$_s" ] || _s=/;; *) _s=.;; esac
 # HIVE_PACE_LIB=1: sourced by hive-beacon.sh in a subshell (hive-env.sh is already loaded there): only the functions are defined, so
 # a beacon tick does not start two more bash processes (issue #338)
@@ -35,18 +38,21 @@ snap=$HIVE_STATE/usage-snapshot.json
 PLOG=$HIVE_STATE/pace-log.csv; PWIN=$HIVE_STATE/pace-windows.csv; PTUNE=$HIVE_STATE/pace-tuning.conf; PCUR=$HIVE_STATE/.pace-window
 WIN5=18000; WIN7=604800
 : "${PACE_MARGIN:=10}" "${PACE_BEHIND_MARGIN:=10}" "${PACE_STALE_SECS:=1800}"
-: "${MAX_WORKERS:=${WORKER_TARGET:-${DAY_AGENTS:-3}}}"
+: "${MAX_WORKERS:=3}"
 isnum() { case $1 in ''|*[!0-9]*) return 1;; esac; return 0; }
 # the local tuning override: only the two known keys, numbers only (never sourced)
 # tv <KEY>: sets TVV to the key's last numeric value (no subshell, no sed|tail; issue #338); fails when there is none
 tv() { local l; TVV=""
   [ -r "$PTUNE" ] && while IFS= read -r l || [ -n "$l" ]; do case $l in "$1="[0-9]*) TVV=${l#*=}; TVV=${TVV%%[!0-9]*};; esac; done < "$PTUNE"
   [ -n "$TVV" ]; }
+# MAX_CEIL: the studio's (or the conf's) max workers, 1..6; the tuned value may only lower it
+isnum "$MAX_WORKERS" || MAX_WORKERS=3
+[ "$MAX_WORKERS" -lt 1 ] && MAX_WORKERS=1; [ "$MAX_WORKERS" -gt 6 ] && MAX_WORKERS=6
+MAX_CEIL=$MAX_WORKERS
+tuned_max() { tv MAX_WORKERS && [ "$TVV" -ge 1 ] && { MAX_WORKERS=$TVV; [ "$MAX_WORKERS" -gt "$MAX_CEIL" ] && MAX_WORKERS=$MAX_CEIL; }; return 0; }
 tv PACE_MARGIN && PACE_MARGIN=$TVV
-tv MAX_WORKERS && MAX_WORKERS=$TVV
+tuned_max
 isnum "$PACE_MARGIN" || PACE_MARGIN=10
-isnum "$MAX_WORKERS" || MAX_WORKERS=${WORKER_TARGET:-${DAY_AGENTS:-3}}
-[ "$MAX_WORKERS" -lt 1 ] && MAX_WORKERS=1; [ "$MAX_WORKERS" -gt 4 ] && MAX_WORKERS=4
 
 # read_snap: sets s_ok (1 = fresh and readable), u5 r5 u7 r7 (integers, empty when unknown) and s_age
 read_snap() {
@@ -76,20 +82,22 @@ compute() {
   # (the weekly guard below still applies). PACE_MARGIN is the AHEAD margin (the knob the tuner moves); BEHIND uses its own fixed margin.
   local wk
   read -r e5 e7 tgt state wk <<EOT
-$(awk -v r5="$r5" -v r7="$r7" -v n="$now" -v u5="$u5" -v u7="$u7" -v m="$PACE_MARGIN" -v b="$PACE_BEHIND_MARGIN" -v w5=$WIN5 -v w7=$WIN7 '
+$(awk -v r5="$r5" -v r7="$r7" -v n="$now" -v u5="$u5" -v u7="$u7" -v m="$PACE_MARGIN" -v b="$PACE_BEHIND_MARGIN" -v w5=$WIN5 -v w7=$WIN7 \
+      -v ws=$(( 100 - ${MIN_WEEKLY_REMAINING_FOR_TICKETS:-0} )) -v g=$(( ${RESET_GRACE_HOURS:-24} * 3600 )) '
   function el(r, w,   e) { if (r == "" || r + 0 <= n + 0) return ""; e = (w - (r - n)) / w; if (e < 0) e = 0; if (e > 1) e = 1; return sprintf("%.3f", e) }
   BEGIN { e5 = el(r5, w5); e7 = el(r7, w7); tgt = ""; st = "ON_PACE"
     if (e5 == "") st = "BEHIND"
     else { tgt = sprintf("%d", e5 * 100 + 0.5)
       if (u5 != "") { t = e5 * 100; if (u5 + 0 > t + m) st = "AHEAD"; else if (u5 + 0 < t - b) st = "BEHIND"; else st = "ON_PACE" } }
-    wk = (u7 != "" && e7 != "" && u7 + 0 > e7 * 100 + 5) ? 1 : 0
+    wk = (u7 != "" && e7 != "" && r7 - n > g && u7 + 0 > e7 * ws + 5) ? 1 : 0
     print (e5 == "" ? "-" : e5), (e7 == "" ? "-" : e7), (tgt == "" ? "-" : tgt), st, wk }')
 EOT
   [ "$e5" = - ] && e5=""; [ "$e7" = - ] && e7=""; [ "$tgt" = - ] && tgt=""
-  # weekly guard: the weekly pace wins over the 5h pace
+  # weekly guard: the weekly pace wins over the 5h pace. The on-pace line is elapsed7 x the weekly stop (+5), and neither it nor
+  # the stop applies in the reset grace window (that window spends what is left); 100% always does.
   if [ -n "$u7" ]; then
     [ "$wk" = 1 ] && state=AHEAD
-    hive_weekly_capped "$u7" "$r7" "${MIN_WEEKLY_REMAINING_FOR_TICKETS:-0}" && state=AHEAD   # not in the reset grace window
+    hive_weekly_stopped "$u7" "$r7" "${MIN_WEEKLY_REMAINING_FOR_TICKETS:-0}" && state=AHEAD
   fi
   return 0
 }
@@ -133,7 +141,7 @@ EOT
     if [ $(( hit * 2 )) -gt "$n" ]; then          # most windows hit 100% early: tighten one knob
       if [ "$mw" -gt 1 ]; then mw=$(( mw - 1 )); what="max_workers-1"; elif [ "$mg" -gt 5 ]; then mg=$(( mg - 5 )); what="margin-5"; fi
     elif [ $(( under * 2 )) -gt "$n" ]; then      # most closed under 90% with ready work idle: loosen one knob
-      if [ "$mw" -lt 4 ]; then mw=$(( mw + 1 )); what="max_workers+1"; elif [ "$mg" -lt 20 ]; then mg=$(( mg + 5 )); what="margin+5"; fi
+      if [ "$mw" -lt "$MAX_CEIL" ]; then mw=$(( mw + 1 )); what="max_workers+1"; elif [ "$mg" -lt 20 ]; then mg=$(( mg + 5 )); what="margin+5"; fi
     fi
   fi
   [ "$mg" -lt 5 ] && mg=5; [ "$mg" -gt 20 ] && mg=20
@@ -154,7 +162,7 @@ cmd_log() {
     if [ "$d" -gt 300 ] && [ "$now" -ge $(( sr5 - 300 )) ]; then
       close_window $(( sr5 - WIN5 )) "$sr5" "${smg:-$PACE_MARGIN}" "${smw:-$MAX_WORKERS}"
       rm -f "$PCUR"; cmd_tune >/dev/null
-      tv PACE_MARGIN && PACE_MARGIN=$TVV; tv MAX_WORKERS && MAX_WORKERS=$TVV
+      tv PACE_MARGIN && PACE_MARGIN=$TVV; tuned_max
     fi
   fi
   [ -f "$PCUR" ] || { [ "$cur" -gt "$now" ] && echo "$cur $PACE_MARGIN $MAX_WORKERS" > "$PCUR"; }

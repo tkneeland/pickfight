@@ -4,13 +4,13 @@
 
 ## For your human
 
-**What changed.** The team's autonomous triage setup (the hive) now lives in the repo (`tools/agents/`), so every account can use it. In AT mode your Claude watches GitHub, keeps a few worker agents busy on your tickets, and merges your green, reviewed PRs on its own. It runs a fixed number of workers, `WORKER_TARGET` (3 by default), never more, and drops to one while it is ahead of pace (spending its weekly budget faster than the week allows). Past 70% of the 5-hour window it runs one at a time, and past 90% it starts none until the window resets. It stops dispatching at `HANDOFF_WEEKLY_USED` (85%) of your weekly limit, except in the last `RESET_GRACE_HOURS` (24) before the weekly reset, when it spends what is left.
+**What changed.** The team's autonomous triage setup (the hive) now lives in the repo (`tools/agents/`), so every account can use it. In AT mode your Claude watches GitHub, keeps a few worker agents busy on your tickets, and merges your green, reviewed PRs on its own. It runs up to the max workers (your `max_workers` in the hive hub, 3 by default), never more, and starts none while the pace governor says it is ahead of pace. At your 5h stop it starts none until the window resets, and at your weekly stop it starts nothing at all, except in the last `reset_spend_hours` (24) before the weekly reset, when it spends what is left. You set both stops in the hive hub.
 
 **Your settings** live in `tools/agents/accounts/<your-handle>.conf`. Edit it and commit it like any file:
 - `TZ`: your timezone. Quiet hours and every printed time follow it.
 - `QUIET_START` / `QUIET_END`: your quiet hours (default 20 to 9), when the hive pings you only about p1. They never slow the work.
 - `AUTO_FILE`: `0` = your Claude asks for tickets instead of filing them. Set `1` only if the team agrees.
-- `MIN_WEEKLY_REMAINING_FOR_TICKETS`: your account gets no new tickets when its remaining weekly percent is at or below this (use 50 for a reserve account), except in the last 24h before your weekly reset. Set it, and your 5-hour stop, in the hive hub; the hub's values win over the conf.
+- `MIN_WEEKLY_REMAINING_FOR_TICKETS`: your account takes no new tickets and starts no work when its remaining weekly percent is at or below this (use 50 for a reserve account), except in the last 24h before your weekly reset (100% always stops). Set it, and your 5-hour stop, in the hive hub; the hub's values win over the conf.
 - `SUCCESSION_RANK`: who stands in as triagemaster when the current one runs low (2 is next, then 3). With a studio, the hive hub's members list sets this order instead.
 - `DISPLAY_NAME`: your name as the hive writes it (optional).
 - `RESERVE=1`: only for a spare account that should work only while the regular devs cannot (`accounts/example-reserve.conf`).

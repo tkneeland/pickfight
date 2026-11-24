@@ -71,8 +71,8 @@ export HIVE_ACCOUNT HIVE_DIR
 . "$HIVE_CONF"
 [ -f "$HIVE_DIR/accounts/_shared.conf" ] && . "$HIVE_DIR/accounts/_shared.conf"
 . "$HIVE_DIR/accounts/$HIVE_ACCOUNT.conf"
-: "${HANDOFF_WEEKLY_USED:=85}" "${HANDOFF_HARD_WEEKLY_USED:=95}" "${RESET_GRACE_HOURS:=24}" "${WORKER_TARGET:=${DAY_AGENTS:-3}}" "${PACE_SLACK:=10}" "${FIVE_H_SLOW_USED:=70}" "${FIVE_H_STOP_USED:=90}"
-: "${PEER_QUEUE_MIN:=5}" "${BEACON_FRESH_HOURS:=6}" "${DIGEST_HOUR:=9}" "${QUIET_START:=${NIGHT_START:-20}}" "${QUIET_END:=${NIGHT_END:-9}}"   # NIGHT_*/DAY_AGENTS: pre-pace confs
+: "${RESET_GRACE_HOURS:=24}" "${MAX_WORKERS:=3}" "${FIVE_H_STOP_USED:=90}"   # the hub wins: settings.conf (hive_studio_settings), max_workers per account (hive_limits)
+: "${PEER_QUEUE_MIN:=5}" "${BEACON_FRESH_HOURS:=6}" "${DIGEST_HOUR:=9}" "${QUIET_START:=${NIGHT_START:-20}}" "${QUIET_END:=${NIGHT_END:-9}}"   # NIGHT_*: pre-pace confs
 : "${MAIN_BRANCH:=main}" "${MERGE_METHOD:=merge}" "${DISCORD:=0}" "${MIN_WEEKLY_REMAINING_FOR_TICKETS:=0}" "${SUCCESSION_RANK:=9}"
 : "${STUDIO_REPO:=}" "${HIVE_STUDIO_CACHE:=$HOME/.claude/hive/studio}"
 : "${TRACKER:=github}" "${PRIVATE:=0}" "${SINGLE_ACCOUNT:=0}" "${SCOPE_FILTER:=}" "${WATCH_HOOKS:=}" "${CLOSEOUT_STATUS:=ready-for-human}"
@@ -221,7 +221,7 @@ hive_slug_of() { git -C "$1" remote get-url origin 2>/dev/null | sed -E 's#^.*[:
 
 # ---- studio-wide settings (STUDIO_REPO, edited from the hive hub) ----------------------------------------
 # The cache is $HIVE_STUDIO_CACHE (~/.claude/hive/studio), shared by every game on this machine. Reads never call GitHub.
-HIVE_STUDIO_FILES="hive/account-limits.conf hive/accounts-active.conf"
+HIVE_STUDIO_FILES="hive/account-limits.conf hive/accounts-active.conf hive/settings.conf"
 # hive_studio_sync: refresh the cached studio files from GitHub at most every 5 min (hive-beacon.sh calls it). A failed
 # fetch keeps the last copy; a file the studio does not have is cached empty.
 hive_studio_sync() {
@@ -241,12 +241,34 @@ hive_studio_sync() {
   done
   return 0
 }
-# hive_limits <handle>: sets l_5h (FIVE_H_STOP_USED), l_wmin (MIN_WEEKLY_REMAINING_FOR_TICKETS) and l_auto (AUTO_FILE, 0|1)
-# for that account. The hub's studio hive/account-limits.conf ("<handle> five_h=<used %> weekly=<used %> auto_file=0|1",
-# every key optional) wins: the handle's own line, then its "*" line (the studio default for everyone); then the account
+# hive_studio_settings: the studio-wide settings from the hub (hive/settings.conf: "key=value" lines, "#" comments) replace
+# the conf values: reset_spend_hours (0-72) -> RESET_GRACE_HOURS, offline_hours (1-48) ->
+# BEACON_FRESH_HOURS, ready_ticket_min (0-50) -> PEER_QUEUE_MIN. Other keys (chat_switch_margin is the hub's own), and values
+# that are not whole numbers in range, are ignored. Runs at load, so no forks.
+hive_studio_settings() {
+  local l k v f=$HIVE_STUDIO_CACHE/settings.conf
+  [ -n "$STUDIO_REPO" ] && [ -s "$f" ] || return 0
+  while IFS= read -r l || [ -n "$l" ]; do
+    l=${l%%#*}; l=${l//[[:space:]]/}
+    case $l in *=*) ;; *) continue;; esac
+    k=${l%%=*}; v=${l#*=}
+    case $v in ''|*[!0-9]*) continue;; esac
+    [ ${#v} -le 3 ] || continue
+    v=$((10#$v))
+    case $k in
+      reset_spend_hours) [ "$v" -le 72 ] && RESET_GRACE_HOURS=$v;;
+      offline_hours) [ "$v" -ge 1 ] && [ "$v" -le 48 ] && BEACON_FRESH_HOURS=$v;;
+      ready_ticket_min) [ "$v" -le 50 ] && PEER_QUEUE_MIN=$v;;
+    esac
+  done < "$f"
+  return 0
+}
+# hive_limits <handle>: sets l_5h (FIVE_H_STOP_USED), l_wmin (MIN_WEEKLY_REMAINING_FOR_TICKETS), l_auto (AUTO_FILE, 0|1)
+# and l_max (MAX_WORKERS, 1-6, empty when the studio file sets none) for that account. The hub's studio
+# hive/account-limits.conf ("<handle> five_h=<used %> weekly=<used %> auto_file=0|1 max_workers=<1-6>", every key optional) wins: the handle's own line, then its "*" line (the studio default for everyone); then the account
 # conf, then _shared.conf, then 90, 0 and 0. weekly=W is stored as l_wmin = 100 - W. No forks in the common case.
 hive_limits() {
-  local h k v kv rest d_5h="" d_wmin="" d_auto="" f=$HIVE_STUDIO_CACHE/account-limits.conf; l_5h=""; l_wmin=""; l_auto=""
+  local h k v kv rest d_5h="" d_wmin="" d_auto="" d_max="" f=$HIVE_STUDIO_CACHE/account-limits.conf; l_5h=""; l_wmin=""; l_auto=""; l_max=""
   if [ -n "$STUDIO_REPO" ] && [ -s "$f" ]; then
     while read -r h rest; do
       case $h in ''|'#'*) continue;; esac
@@ -256,6 +278,7 @@ hive_limits() {
           k=${kv%%=*}; v=${kv#*=}
           case $v in ''|*[!0-9]*) continue;; esac
           [ "$k" = auto_file ] && { case $v in 0|1) l_auto=$v;; esac; continue; }
+          [ "$k" = max_workers ] && { case $v in [1-6]) l_max=$v;; esac; continue; }
           [ "$v" -ge 1 ] && [ "$v" -le 100 ] || continue
           case $k in five_h) l_5h=$v;; weekly) l_wmin=$(( 100 - v ));; esac
         done
@@ -264,12 +287,14 @@ hive_limits() {
           k=${kv%%=*}; v=${kv#*=}
           case $v in ''|*[!0-9]*) continue;; esac
           [ "$k" = auto_file ] && { case $v in 0|1) d_auto=$v;; esac; continue; }
+          [ "$k" = max_workers ] && { case $v in [1-6]) d_max=$v;; esac; continue; }
           [ "$v" -ge 1 ] && [ "$v" -le 100 ] || continue
           case $k in five_h) d_5h=$v;; weekly) d_wmin=$(( 100 - v ));; esac
         done
       fi
     done < "$f"
     [ -n "$l_5h" ] || l_5h=$d_5h; [ -n "$l_wmin" ] || l_wmin=$d_wmin; [ -n "$l_auto" ] || l_auto=$d_auto
+    [ -n "$l_max" ] || l_max=$d_max
   fi
   if [ "$1" = "$HIVE_ACCOUNT" ]; then
     [ -n "$l_5h" ] || l_5h=$FIVE_H_STOP_USED_CONF; [ -n "$l_wmin" ] || l_wmin=$MIN_WEEKLY_REMAINING_FOR_TICKETS_CONF
@@ -295,17 +320,25 @@ hive_weekly_capped() {
   case $2 in ''|*[!0-9]*|0) return 0;; esac
   [ $(( $2 - $(date +%s) )) -gt $(( RESET_GRACE_HOURS * 3600 )) ]
 }
+# hive_weekly_stopped <used7> <weekly reset epoch> <min remaining>: 0 when the account starts no work at all: at its weekly stop
+# (hive_weekly_capped, so not in the last RESET_GRACE_HOURS), or at 100% with the reset ahead (or unknown), grace or not.
+hive_weekly_stopped() {
+  case $1 in ''|*[!0-9]*) return 1;; esac
+  if [ "$1" -ge 100 ]; then
+    case $2 in ''|*[!0-9]*|0) return 0;; esac
+    [ "$2" -gt "$(date +%s)" ] && return 0
+  fi
+  hive_weekly_capped "$@"
+}
 # hive_dev_throttled <handle>: the beacon in hive_beacon's b_* vars shows an account that must sit idle (rules 2, 3, 5): 5h at
-# its own stop (hive_limits) with the window still open, weekly at the handoff level or at its own weekly ticket limit with the
-# reset more than RESET_GRACE_HOURS away. Unknown numbers do not exempt. Also sets v_free: the epoch the last of those stops
-# lifts (0 when none applies).
+# its own stop (hive_limits) with the window still open, or weekly at its own weekly stop with the reset more than
+# RESET_GRACE_HOURS away, or at 100% with the reset ahead. Unknown numbers do not exempt. Also sets v_free: the epoch the last
+# of those stops lifts (0 when none applies).
 hive_dev_throttled() {
   local r now t=1; now=$(date +%s); v_free=0; hive_limits "$1"
   if [ -n "$b_used" ] && [ -n "$b_reset" ] && r=$(hive_iso_to_epoch "$b_reset"); then
-    if hive_weekly_capped "$b_used" "$r" "$l_wmin" ||
-       { [ "$b_used" -ge "${HANDOFF_WEEKLY_USED:-85}" ] && [ $(( r - now )) -gt $(( ${RESET_GRACE_HOURS:-24} * 3600 )) ]; }; then
-      t=0; v_free=$(( r - ${RESET_GRACE_HOURS:-24} * 3600 ))
-    fi
+    if [ "$b_used" -ge 100 ] && [ "$r" -gt "$now" ]; then t=0; v_free=$r
+    elif hive_weekly_capped "$b_used" "$r" "$l_wmin"; then t=0; v_free=$(( r - RESET_GRACE_HOURS * 3600 )); fi
   fi
   if [ -n "$b_p5" ] && [ "$b_p5" -ge "$l_5h" ] && [ -n "$b_r5" ] && r=$(hive_iso_to_epoch "$b_r5") && [ "$r" -gt "$now" ]; then
     t=0; [ "$r" -gt "$v_free" ] && v_free=$r
@@ -313,16 +346,21 @@ hive_dev_throttled() {
   return $t
 }
 # hive_viable <handle>: may the account hold the triagemaster role right now? Its beacon (hive_beacon; this account's own
-# usage snapshot) is under BEACON_FRESH_HOURS old, hive_dev_throttled names no stop, and its weekly is under
-# HANDOFF_HARD_WEEKLY_USED. Leaves the b_* vars set, and v_free: the epoch it should become viable again (0 = unknown,
-# e.g. a stale beacon: the machine is offline).
+# usage snapshot) is under BEACON_FRESH_HOURS old, and the account would take tickets: not at its own 5h stop with the
+# window open, and not at its own weekly ticket limit (hive_weekly_capped with hive_limits' l_wmin; ignored in the last
+# RESET_GRACE_HOURS, like tickets). Whatever the limits, weekly at 100% with the reset ahead is never viable. Leaves the
+# b_* vars set, and v_free: the epoch it should become viable again (0 = unknown, e.g. a stale beacon: the machine is offline).
 hive_viable() {
-  local t=1 r
+  local t=1 r now; now=$(date +%s); v_free=0
   hive_beacon "$1"
-  [ "$b_age" -lt $(( BEACON_FRESH_HOURS * 3600 )) ] || { v_free=0; return 1; }
-  hive_dev_throttled "$1" && t=0
-  if [ -n "$b_used" ] && [ "$b_used" -ge "${HANDOFF_HARD_WEEKLY_USED:-95}" ]; then
-    t=0; r=$(hive_iso_to_epoch "$b_reset" 2>/dev/null) || r=0; [ "${r:-0}" -gt "$v_free" ] && v_free=$r
+  [ "$b_age" -lt $(( BEACON_FRESH_HOURS * 3600 )) ] || return 1
+  hive_limits "$1"
+  if [ -n "$b_used" ] && [ -n "$b_reset" ] && r=$(hive_iso_to_epoch "$b_reset" 2>/dev/null) && [ "$r" -gt "$now" ]; then
+    if [ "$b_used" -ge 100 ]; then t=0; v_free=$r
+    elif hive_weekly_capped "$b_used" "$r" "$l_wmin"; then t=0; v_free=$(( r - ${RESET_GRACE_HOURS:-24} * 3600 )); fi
+  fi
+  if [ -n "$b_p5" ] && [ "$b_p5" -ge "$l_5h" ] && [ -n "$b_r5" ] && r=$(hive_iso_to_epoch "$b_r5") && [ "$r" -gt "$now" ]; then
+    t=0; [ "$r" -gt "$v_free" ] && v_free=$r
   fi
   [ "$t" = 1 ]
 }
@@ -383,20 +421,19 @@ hive_queue() {
 # hive_queue_top: who holds the role before succession has run: the top of the studio queue, else SUCCESSION_RANK=1
 hive_queue_top() { if hive_studio_on; then hive_queue | head -n 1; else hive_rank1; fi; }
 
-# this account's own limits: the hub's values replace the conf's (a 5h slow-down above the stop is pulled down to it)
+# this account's own limits and the studio settings: the hub's values replace the conf's
 case ${AUTO_FILE:-0} in 1) ;; *) AUTO_FILE=0;; esac
 FIVE_H_STOP_USED_CONF=$FIVE_H_STOP_USED MIN_WEEKLY_REMAINING_FOR_TICKETS_CONF=$MIN_WEEKLY_REMAINING_FOR_TICKETS AUTO_FILE_CONF=$AUTO_FILE
 hive_limits "$HIVE_ACCOUNT"; FIVE_H_STOP_USED=$l_5h MIN_WEEKLY_REMAINING_FOR_TICKETS=$l_wmin AUTO_FILE=$l_auto
-[ "$FIVE_H_SLOW_USED" -gt "$FIVE_H_STOP_USED" ] 2>/dev/null && FIVE_H_SLOW_USED=$FIVE_H_STOP_USED
+[ -n "$l_max" ] && MAX_WORKERS=$l_max
+hive_studio_settings
 
 # ---- budget, pace ----------------------------------------------------------------------------------------
 hive_weekly_used()  { jq -r '.rate_limits.seven_day.used_percentage // 0 | floor' "$HIVE_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
 hive_weekly_reset() { jq -r '.rate_limits.seven_day.resets_at // 0 | floor' "$HIVE_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
-# 0 when dispatching is allowed: under HANDOFF_WEEKLY_USED, or inside the last RESET_GRACE_HOURS before the weekly reset
-hive_budget_ok() {
-  [ "$(hive_weekly_used)" -lt "$HANDOFF_WEEKLY_USED" ] && return 0
-  r=$(hive_weekly_reset); [ "$r" -gt 0 ] && [ $(( r - $(date +%s) )) -le $(( RESET_GRACE_HOURS * 3600 )) ]
-}
+# hive_budget_ok: 0 when this account may start work: under its own weekly stop (the hub's, MIN_WEEKLY_REMAINING_FOR_TICKETS)
+# or inside the last RESET_GRACE_HOURS before the weekly reset, and never at 100% before the reset (hive_weekly_stopped)
+hive_budget_ok() { ! hive_weekly_stopped "$(hive_weekly_used)" "$(hive_weekly_reset)" "$MIN_WEEKLY_REMAINING_FOR_TICKETS"; }
 # hive_live_agents: issue numbers (one per line, deduped) of this checkout's worktrees on an issue branch (issue-N or
 # <type>/N-) whose issue is still open and that something wrote to in the last 30 min. Idle leftovers don't count.
 hive_live_agents() {   # optional $1: the open issue numbers (space separated) when the caller already has them
@@ -425,24 +462,26 @@ hive_live_agents() {   # optional $1: the open issue numbers (space separated) w
   return 0
 }
 hive_five_h_used() { jq -r '.rate_limits.five_hour.used_percentage // 0 | floor' "$HIVE_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
-# prints "ahead" when weekly use is more than PACE_SLACK points above the on-pace line (the share of the 7-day window elapsed
-# x HANDOFF_WEEKLY_USED), else "on pace". No usage snapshot yet, or inside the last RESET_GRACE_HOURS: "on pace".
-hive_pace() {
-  local u r n; u=$(hive_weekly_used); r=$(hive_weekly_reset); n=$(date +%s)
-  [ "$r" -gt "$n" ] 2>/dev/null || { echo "on pace"; return; }
-  [ $(( r - n )) -le $(( RESET_GRACE_HOURS * 3600 )) ] && { echo "on pace"; return; }   # the reset grace window spends what is left
-  awk -v u="$u" -v r="$r" -v n="$n" -v h="$HANDOFF_WEEKLY_USED" -v s="$PACE_SLACK" \
-    'BEGIN{e=1-(r-n)/604800; if (e<0) e=0; print (u > e*h + s) ? "ahead" : "on pace"}'
+hive_five_h_reset() { jq -r '.rate_limits.five_hour.resets_at // 0 | floor' "$HIVE_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
+# hive_pace_now: sets p_state (AHEAD | ON_PACE | BEHIND, hive-pace.sh state) and p_max (the effective max workers, hive-pace.sh
+# max) from the pace governor, loaded as a library in a subshell (no second bash). Anything unreadable: ON_PACE.
+hive_pace_now() {
+  local o; o=$( HIVE_PACE_LIB=1; . "$HIVE_DIR/hive-pace.sh" >/dev/null 2>&1 && compute >/dev/null 2>&1 && echo "$state $MAX_WORKERS" )
+  p_state=${o%% *}; p_max=${o#* }
+  case $p_state in AHEAD|ON_PACE|BEHIND) ;; *) p_state=ON_PACE;; esac
+  case $p_max in ''|*[!0-9]*) p_max=$MAX_WORKERS;; esac
 }
-# worker target right now: WORKER_TARGET while on pace, 1 while ahead of pace or once the 5h window reaches FIVE_H_SLOW_USED,
-# 0 at FIVE_H_STOP_USED, when the weekly budget says stop, or while the account is switched out in the hub (hive_is_out).
-# Start workers only while running < target; never above it.
+# hive_worker_target: how many workers this account may run now. 0 while it is switched out in the hub (hive_is_out), at its
+# weekly stop (hive_budget_ok), at its 5h stop (FIVE_H_STOP_USED) with the window open (an unknown reset counts as open), or
+# while the pace governor says AHEAD; otherwise the effective max workers (hive-pace.sh max). Start workers only while
+# running < target; never above it.
 hive_worker_target() {
   hive_is_out && { echo 0; return; }   # out: start nothing; running work finishes or is handed back
   hive_budget_ok || { echo 0; return; }
-  local f; f=$(hive_five_h_used)
-  if [ "$f" -ge "$FIVE_H_STOP_USED" ]; then echo 0; elif [ "$f" -ge "$FIVE_H_SLOW_USED" ]; then echo 1
-  elif [ "$(hive_pace)" = ahead ]; then echo 1; else echo "$WORKER_TARGET"; fi
+  local f r; f=$(hive_five_h_used); r=$(hive_five_h_reset)
+  if [ "$f" -ge "$FIVE_H_STOP_USED" ] && { [ "$r" -le 0 ] || [ "$r" -gt "$(date +%s)" ]; }; then echo 0; return; fi
+  hive_pace_now
+  if [ "$p_state" = AHEAD ]; then echo 0; else echo "$p_max"; fi
 }
 # 0 inside an account's quiet hours (QUIET_START..QUIET_END in its TZ), when the hive pings that person only about p1. Work is
 # unaffected. Optional $1: another account's handle (its conf's TZ and hours; NIGHT_* in a pre-pace conf); default this account.

@@ -2,7 +2,7 @@
 # Offline test for the hub's in/out switch and triagemaster queue (issue #58): the studio's hive/accounts-active.conf, cached
 # in HIVE_STUDIO_CACHE, read by hive-env.sh (hive_is_out, hive_queue, hive_peers, hive_worker_target, hive_mt), the triage
 # watcher (no MYTICKET or IDLE_SLOTS while out) and hive-succession.sh (first account in the file's order that is in and
-# viable; down the list and back; the all-non-viable fallback, said once). Without the file, SUCCESSION_RANK as before.
+# viable; down the list and back; the all-non-viable fallback, said once). Without the file, the same by SUCCESSION_RANK.
 # Stub gh and curl, scratch state. No network.   bash tools/agents/tests/studio-active.sh
 . "$(dirname "$0")/lib.sh"
 T=$(mktemp -d "${TMPDIR:-/tmp}/hive-studio-test.XXXXXX") || exit 1
@@ -37,6 +37,9 @@ check "unlisted is in" "$(env_do alice 'hive_is_out dave && echo out || echo in'
 # --- out: worker target 0, never a peer, MT label
 check "out: worker target 0" "$(env_do bob 'hive_worker_target')" 0
 check "in: worker target" "$(env_do alice 'hive_worker_target')" 3
+echo "alice max_workers=2" > "$T/studio/account-limits.conf"
+check "in: worker target is the account's hub max_workers" "$(env_do alice 'hive_worker_target')" 2
+rm -f "$T/studio/account-limits.conf"
 check "out: not a peer" "$(env_do alice 'hive_peers | tr "\n" " "')" "carol dave "
 check "out: hive_mt" "$(env_do bob 'hive_mt && echo MT || echo AT')" MT
 check "out: at-mode label" "$(HIVE_ACCOUNT=bob bash "$AG/hive-at-mode.sh")" MT
@@ -79,8 +82,21 @@ printf 'carol=on\nbob=on\nalice=on\n' > "$ACT"
 check "non-viable: 5h stop skips to the next" "$(tm)" bob
 { usage $fresh alice 10 20 "$far"; usage $fresh bob 10 20 "$far"; usage $stale carol 10 20 "$far"; } > "$INBOX"
 check "non-viable: offline skips to the next" "$(tm)" bob
+# the weekly stop is the hub's (the studio default here: 90% used)
+printf '* five_h=95 weekly=90 auto_file=1\n' > "$T/studio/account-limits.conf"
+soon=$(iso $((now + 3600)))
 { usage $fresh alice 10 20 "$far"; usage $fresh bob 10 90 "$far"; usage $stale carol 10 20 "$far"; } > "$INBOX"
-check "non-viable: weekly handoff skips again" "$(tm)" alice
+check "non-viable: weekly ticket stop skips again" "$(tm)" alice
+{ usage $fresh alice 10 20 "$far"; usage $fresh bob 10 89 "$far"; usage $stale carol 10 20 "$far"; } > "$INBOX"
+check "viable: under its weekly ticket stop, over the 85% handoff" "$(tm)" bob
+{ usage $fresh alice 10 20 "$far"; usage $fresh bob 10 96 "$soon"; usage $stale carol 10 20 "$far"; } > "$INBOX"
+check "viable: stop ignored in the last day, like tickets" "$(tm)" bob
+{ usage $fresh alice 10 20 "$far"; usage $fresh bob 10 100 "$soon"; usage $stale carol 10 20 "$far"; } > "$INBOX"
+check "non-viable: 100% weekly even in the last day" "$(tm)" alice
+printf 'bob five_h=95 weekly=80\n* five_h=95 weekly=90\n' > "$T/studio/account-limits.conf"
+{ usage $fresh alice 10 20 "$far"; usage $fresh bob 10 85 "$far"; usage $stale carol 10 20 "$far"; } > "$INBOX"
+check "non-viable: its own weekly stop wins over the default" "$(tm)" alice
+rm -f "$T/studio/account-limits.conf"
 { usage $fresh alice 10 20 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 10 20 "$far"; } > "$INBOX"
 check "returns to the higher account" "$(tm)" carol
 check "...and the file says so" "$(cat "$T/state/triagemaster")" carol
@@ -100,14 +116,18 @@ rm -f "$T/state/usage-snapshot.json"
 printf 'alice=on\nbob=on\ncarol=off\n' > "$ACT"
 check "fallback: nobody fresh, the top holds it" "$(tm)" alice
 
-# --- no studio file (or an empty one, the studio's 404; or no STUDIO_REPO): SUCCESSION_RANK exactly as before
+# --- no studio file (or an empty one, the studio's 404; or no STUDIO_REPO): the same rules over SUCCESSION_RANK
 rm -f "$ACT" "$T/state/triagemaster"
-{ usage $stale alice 10 99 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 10 20 "$far"; } > "$INBOX"
-check "no file: rank 1 stale keeps the role" "$(tm)" alice
 { usage $fresh alice 10 85 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 10 20 "$far"; } > "$INBOX"
-check "no file: handoff to rank 2" "$(tm)" bob
-{ usage $fresh alice 95 20 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 10 20 "$far"; } > "$INBOX"
-check "no file: 5h stop does not pass the role" "$(tm)" alice
+check "no file: rank 1 under its weekly stop keeps the role" "$(tm)" alice
+{ usage $stale alice 10 20 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 10 20 "$far"; } > "$INBOX"
+check "no file: rank 1 offline, rank 2" "$(tm)" bob
+{ usage $fresh alice 10 100 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 10 20 "$far"; } > "$INBOX"
+check "no file: rank 1 at 100% weekly, rank 2" "$(tm)" bob
+{ usage $fresh alice 95 20 "$far"; usage $fresh bob 95 20 "$far"; usage $fresh carol 10 20 "$far"; } > "$INBOX"
+check "no file: 5h stops pass the role down" "$(tm)" carol
+{ usage $fresh alice 10 20 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 10 20 "$far"; } > "$INBOX"
+check "no file: back to rank 1" "$(tm)" alice
 : > "$ACT"
 check "empty file: SUCCESSION_RANK" "$(tm)" alice
 check "empty file: nobody out" "$(env_do alice 'hive_peers | tr "\n" " "')" "bob carol dave "

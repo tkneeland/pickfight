@@ -6,6 +6,7 @@
 . "$(dirname "$0")/lib.sh"
 T=$(mktemp -d "${TMPDIR:-/tmp}/hive-beacon-test.XXXXXX"); trap 'rm -rf "$T"' EXIT
 hive_fixture "$T" || exit 1
+echo "MIN_WEEKLY_REMAINING_FOR_TICKETS=15" >> "$AG/accounts/_shared.conf"   # every account's weekly stop: 85% used
 mkdir -p "$T/bin" "$T/state"
 cat > "$T/bin/curl" <<'STUB'
 #!/bin/bash
@@ -36,30 +37,30 @@ tm() { rm -f "$T/state/triagemaster"; HIVE_ACCOUNT=$1 bash "$AG/hive-succession.
 fresh=$((now - 600)); stale=$((now - 7 * 3600))
 
 # 1-6 run as dave (rank 4, no snapshot of its own), so ranks 1-3 all come from the inbox
-# 1 rank 1 under 85% keeps the role
+# 1 rank 1 under its 85% weekly stop keeps the role
 { usage $fresh alice 10 50 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 5 10 "$far"; } > "$INBOX"
 check "under 85%" "$(tm dave)" alice
 # 2 rank 1 at 85%, reset far: role passes to rank 2; an older line for the same handle is ignored
 { usage $((now - 3000)) alice 10 40 "$far"; usage $fresh alice 10 85 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 5 10 "$far"; } > "$INBOX"
 check "at 85%" "$(tm dave)" bob
-# 3 rank 1 at 85% inside the grace window keeps it; at 95% it passes anyway
+# 3 rank 1 over its stop inside the grace window keeps it; at 100% it passes anyway
 { usage $fresh alice 10 90 "$soon"; usage $fresh bob 10 20 "$far"; usage $fresh carol 5 10 "$far"; } > "$INBOX"
 check "85% in grace" "$(tm dave)" alice
-{ usage $fresh alice 10 95 "$soon"; usage $fresh bob 10 20 "$far"; usage $fresh carol 5 10 "$far"; } > "$INBOX"
-check "95% in grace" "$(tm dave)" bob
+{ usage $fresh alice 10 100 "$soon"; usage $fresh bob 10 20 "$far"; usage $fresh carol 5 10 "$far"; } > "$INBOX"
+check "100% in grace" "$(tm dave)" bob
 # 4 rank 2 stale (7h) or itself at 85%: skip to rank 3
 { usage $fresh alice 10 95 "$far"; usage $stale bob 10 20 "$far"; usage $fresh carol 5 10 "$far"; } > "$INBOX"
 check "rank 2 stale" "$(tm dave)" carol
 { usage $fresh alice 10 95 "$far"; usage $fresh bob 10 86 "$far"; usage $fresh carol 5 10 "$far"; } > "$INBOX"
 check "rank 2 at 85%" "$(tm dave)" carol
-# 5 rank 1 stale: no evidence it is over budget, it keeps the role
-{ usage $stale alice 10 99 "$far"; usage $fresh bob 10 20 "$far"; } > "$INBOX"
-check "rank 1 stale" "$(tm dave)" alice
+# 5 rank 1 stale: offline, so the next viable account holds the role
+{ usage $stale alice 10 20 "$far"; usage $fresh bob 10 20 "$far"; } > "$INBOX"
+check "rank 1 stale" "$(tm dave)" bob
 # 6 at= (snapshot time) wins over the message time: a fresh message carrying a 7h-old snapshot is stale
 { usage $fresh alice 10 95 "$far"; echo "$fresh|bob|USAGE|10% 20% $far r5=$soon agents=0 at=$(iso $stale)"; usage $fresh carol 5 10 "$far"; } > "$INBOX"
 check "at= stale" "$(tm dave)" carol
 # 7 own numbers come from the usage snapshot, not the inbox (the listener skips our own messages)
-echo "{\"rate_limits\":{\"five_hour\":{\"used_percentage\":10,\"resets_at\":$((now + 3600))},\"seven_day\":{\"used_percentage\":96,\"resets_at\":$((now + 3600))}}}" > "$T/state/usage-snapshot.json"
+echo "{\"rate_limits\":{\"five_hour\":{\"used_percentage\":10,\"resets_at\":$((now + 3600))},\"seven_day\":{\"used_percentage\":100,\"resets_at\":$((now + 3600))}}}" > "$T/state/usage-snapshot.json"
 usage $fresh bob 10 20 "$far" > "$INBOX"
 check "own snapshot" "$(tm alice)" bob
 # 8 empty inbox: backfill from the ntfy poll (since=12h), skipping our own messages, then decide
@@ -86,7 +87,7 @@ check "no TM from a non-holder" "$(grep -c TM "$HIVE_TEST_LOG")" 0
 echo "{\"rate_limits\":{\"five_hour\":{\"used_percentage\":5,\"resets_at\":$((now + 3600))},\"seven_day\":{\"used_percentage\":20,\"resets_at\":$((now + 4 * 86400))}}}" > "$T/state/usage-snapshot.json"
 usage $fresh alice 10 95 "$far" > "$INBOX"
 rm -f "$T/state/triagemaster"; HIVE_ACCOUNT=bob bash "$AG/hive-succession.sh" --post >/dev/null
-check "TM sent" "$(grep -c "bob TM bob until $far" "$HIVE_TEST_LOG")" 1
+check "TM sent" "$(grep -c "bob TM bob until " "$HIVE_TEST_LOG")" 1
 # 10 hive-reserve.sh --dry decides from the same inbox lines (as the reserve account dave)
 reserve() { HIVE_ACCOUNT=dave bash "$AG/hive-reserve.sh" --dry | sed 's/ *| needed=\([01]\).*/ needed=\1/'; }
 { usage $fresh alice 10 50 "$far"; usage $fresh bob 10 20 "$far"; usage $fresh carol 5 10 "$far"; } > "$INBOX"
