@@ -9,14 +9,15 @@
 #                      PR, or a review-blocked PR with no fix since) and its USAGE claude_at is 45+ min old; in its quiet hours only p1;
 #                      never for an account at its 5h/weekly stop; once per 2 h, plus one wake at 120 min (docs/agents/hive.md rule 21)
 #   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than hive_worker_target (the max workers, 0 when the pace governor says
-#                      AHEAD or at the 5h or weekly stop). Ticket-maker off: only if a ready ticket is startable
-#   PEER_QUEUE_LOW <n> <peer>  (triagemaster only, ticket-maker on) hourly: a peer has fewer than PEER_QUEUE_MIN ready dev tickets
+#                      AHEAD or at the 5h or weekly stop). Ticket-maker not full: only if a ready ticket is startable
+#   PEER_QUEUE_LOW <n> <peer>  (triagemaster only, ticket-maker full) hourly: a peer has fewer than PEER_QUEUE_MIN ready dev tickets
 #   <hook line>        the first non-empty stdout line of any WATCH_HOOKS command (run every poll, zero tokens)
 #   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line (or a late hive-ask.sh ANSWER) from hive-msg.sh listen (msg-wake.txt); checked every
 #                      HIVE_TICK (10) s while idle
 #   DISCORD_BUG <n> new in #<DISCORD_BUGS_NAME>  (triagemaster only, DISCORD=1 with a bot token) people posted in the public channel;
 #                      checked once a minute while idle; Claude reads them with hive-discord-bugs.sh read
 #   DISCORD_DEV <n> new in #<DISCORD_DEV_NAME>  the same for the private dev channel (hive-discord-bugs.sh --dev read): pre-approved
+#                      Neither wakes while the ticket-maker is off (hive_tm_mode, rule 11): reports stay unread until it changes
 #   HIVE_TAKEOVER <msg id>  (not the triagemaster, DISCORD=1) a dev message in the dev channel has had no answer for 10 min and this
 #                      account is the next live one in succession order (rule 21): run hive-failover.sh takeover <id>, then answer
 #   DISCORD_APPROVED <issue> <user>  every 5 min: a dev reacted ✅ to the Discord source of a needs-triage issue
@@ -97,7 +98,6 @@ run_hooks() {  # WATCH_HOOKS: ';'-separated commands, run from the install root
     out=$(cd "$HIVE_ROOT" && bash -c "$h" 2>/dev/null | sed '/^[[:space:]]*$/d' | head -1)
     [ -n "$out" ] && { echo "$out"; return 0; }
   done; return 1; }
-ticketmaker() { bash "$HIVE_DIR/hive-ticketmaker.sh" 2>/dev/null || echo on; }
 while true; do
   : > "$HIVE_STATE/.triage-watch-alive"   # heartbeat for hive-tm-check.sh (rule 19), every poll and tick
   # in/out (the hub's studio file, re-read every poll): out starts nothing new, so no MYTICKET and no IDLE_SLOTS (its worker
@@ -177,9 +177,9 @@ while true; do
         hive_ticket_in_progress "$n" "$pr_tickets" && active=$((active+1))
       done
     fi
-    # ticket-maker off (rule 11): fewer workers is expected, so wake only if a ready ticket I could start exists
-    startable=1
-    if [ "$active" -lt "$min" ] && [ -n "$issues" ] && [ "$(ticketmaker)" = off ]; then
+    # ticket-maker suggestions or off (rule 11): fewer workers is expected, so wake only if a ready ticket I could start exists
+    startable=1; hive_tm_mode
+    if [ "$active" -lt "$min" ] && [ -n "$issues" ] && [ "$tm_mode" != full ]; then
       startable=0
       for n in $(echo "$issues" | jq -r --arg me "$HIVE_ACCOUNT" '.[] | select(.pull_request==null) | select(any(.labels[]; .name=="ready-for-agent")) | select((.assignees|length)==0 or any(.assignees[]; .login==$me)) | "\(.number)|\(any(.labels[]; .name=="conflict-risk"))"'); do
         cr=${n#*|}; n=${n%%|*}
@@ -188,8 +188,8 @@ while true; do
       done
     fi
     if [ "$out" = 0 ] && [ "$active" -lt "$min" ] && [ "$startable" = 1 ]; then echo "IDLE_SLOTS $active/$min active work packages"; exit 0; fi
-    # peers' queues (no refill while the ticket-maker is off, rule 11; meta and skip tickets excluded)
-    if [ -n "$issues" ] && [ "$SINGLE_ACCOUNT" != 1 ] && hive_is_triagemaster && hive_budget_ok && [ "$(ticketmaker)" = on ]; then
+    # peers' queues (refilled only while the ticket-maker is full, rule 11; meta and skip tickets excluded)
+    if [ -n "$issues" ] && [ "$SINGLE_ACCOUNT" != 1 ] && [ "$tm_mode" = full ] && hive_is_triagemaster && hive_budget_ok; then
       for peer in $(hive_peers); do
         aq=$(echo "$issues" | jq --arg p "$peer" --arg m "$SKIP_NUMS" '[.[] | select(.pull_request==null and (.number|IN($m|split(" ")|map(select(length>0)|tonumber)[])|not)) | select(any(.assignees[]; .login==$p)) | select(any(.labels[]; .name=="ready-for-agent"))] | length' 2>/dev/null || echo 99)
         [ "${aq:-99}" -lt "$PEER_QUEUE_MIN" ] && { echo "PEER_QUEUE_LOW $aq $peer"; exit 0; }
@@ -212,11 +212,15 @@ while true; do
     if [ $((tick % 6)) = 3 ] && ! hive_is_triagemaster; then
       hv=$(bash "$HIVE_DIR/hive-failover.sh" check 2>/dev/null) && { echo "$hv"; exit 0; }
     fi
-    # Discord channels (rule 18): once a minute, triagemaster only, once the bot token is set up
+    # Discord channels (rule 18): once a minute, triagemaster only, once the bot token is set up. Ticket-maker off (rule 11):
+    # the reports are left unread, so no DISCORD_BUG or DISCORD_DEV until the mode changes
     if [ $((tick % 6)) = 0 ] && discord_on && hive_is_triagemaster; then
-      n=$(bash "$HIVE_DIR/hive-discord-bugs.sh" check 2>"$HIVE_STATE/discord-check.err"); rc=$?
-      [ "$rc" = 0 ] && { echo "DISCORD_BUG $n new in #$DISCORD_BUGS_NAME"; exit 0; }
-      [ -n "${DISCORD_DEV_CHANNEL:-}" ] && n=$(bash "$HIVE_DIR/hive-discord-bugs.sh" --dev check 2>/dev/null) && { echo "DISCORD_DEV $n new in #$DISCORD_DEV_NAME"; exit 0; }
+      hive_tm_mode; rc=1
+      if [ "$tm_mode" != off ]; then
+        n=$(bash "$HIVE_DIR/hive-discord-bugs.sh" check 2>"$HIVE_STATE/discord-check.err"); rc=$?
+        [ "$rc" = 0 ] && { echo "DISCORD_BUG $n new in #$DISCORD_BUGS_NAME"; exit 0; }
+        [ -n "${DISCORD_DEV_CHANNEL:-}" ] && n=$(bash "$HIVE_DIR/hive-discord-bugs.sh" --dev check 2>/dev/null) && { echo "DISCORD_DEV $n new in #$DISCORD_DEV_NAME"; exit 0; }
+      fi
       if [ $((tick % 30)) = 0 ]; then
         a=$(bash "$HIVE_DIR/hive-discord-bugs.sh" approvals 2>/dev/null | head -n 1)
         [ -n "$a" ] && { echo "DISCORD_APPROVED $a"; exit 0; }

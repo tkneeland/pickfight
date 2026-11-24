@@ -221,7 +221,7 @@ hive_slug_of() { git -C "$1" remote get-url origin 2>/dev/null | sed -E 's#^.*[:
 
 # ---- studio-wide settings (STUDIO_REPO, edited from the hive hub) ----------------------------------------
 # The cache is $HIVE_STUDIO_CACHE (~/.claude/hive/studio), shared by every game on this machine. Reads never call GitHub.
-HIVE_STUDIO_FILES="hive/account-limits.conf hive/accounts-active.conf hive/settings.conf"
+HIVE_STUDIO_FILES="hive/account-limits.conf hive/accounts-active.conf hive/settings.conf hive/ticket-maker.conf"
 # hive_studio_sync: refresh the cached studio files from GitHub at most every 5 min (hive-beacon.sh calls it). A failed
 # fetch keeps the last copy; a file the studio does not have is cached empty.
 hive_studio_sync() {
@@ -261,6 +261,28 @@ hive_studio_settings() {
       ready_ticket_min) [ "$v" -le 50 ] && PEER_QUEUE_MIN=$v;;
     esac
   done < "$f"
+  return 0
+}
+# hive_tm_mode: sets tm_mode to this game's ticket-maker mode, full|suggestions|off (docs/agents/hive.md rule 11). The hub's
+# studio hive/ticket-maker.conf ("<owner/repo>=full|suggestions|off" lines, "#" comments) wins: the line for $REPO (any case;
+# the last one if repeated; bad values ignored). Without one, the local $HIVE_STATE/ticketmaker (hive-ticketmaker.sh; the old
+# on -> full, off -> suggestions), default full. No forks: the status line and the watcher call it.
+hive_tm_mode() {
+  local l k v nc f=$HIVE_STUDIO_CACHE/ticket-maker.conf; tm_mode=""
+  if [ -n "$STUDIO_REPO" ] && [ -n "$REPO" ] && [ -s "$f" ]; then
+    nc=0; shopt -q nocasematch && nc=1; shopt -s nocasematch
+    while IFS= read -r l || [ -n "$l" ]; do
+      l=${l%%#*}; l=${l//[[:space:]]/}
+      case $l in *=*) ;; *) continue;; esac
+      k=${l%%=*}; v=${l#*=}
+      [[ $k == "$REPO" ]] || continue
+      case $v in full) tm_mode=full;; suggestions) tm_mode=suggestions;; off) tm_mode=off;; esac
+    done < "$f"
+    [ "$nc" = 1 ] || shopt -u nocasematch
+  fi
+  [ -n "$tm_mode" ] && return 0
+  l=""; read -r l 2>/dev/null < "$HIVE_STATE/ticketmaker"; l=${l//[[:space:]]/}
+  case $l in off|suggestions) tm_mode=suggestions;; *) tm_mode=full;; esac
   return 0
 }
 # hive_limits <handle>: sets l_5h (FIVE_H_STOP_USED), l_wmin (MIN_WEEKLY_REMAINING_FOR_TICKETS), l_auto (AUTO_FILE, 0|1)

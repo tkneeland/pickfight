@@ -236,7 +236,8 @@ function abortCurrent() {
 // ---- controls (the hub's buttons) ---------------------------------------------------------------------------
 // Only these verbs and values run, through hive-control.sh in the checkout of the project the button was pressed for:
 // this runner's own, or the one hive-join.sh recorded in that project's state folder (<hive dir>/<owner__repo>/<handle>/checkout).
-const CONTROLS = { ticketmaker: ["on", "off"] };
+// None today: the ticket-maker mode moved to the studio's hive/ticket-maker.conf, so every control frame is refused.
+const CONTROLS = new Map();
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 function checkoutFor(repo) {
   const slug = repo.replace("/", "__");
@@ -249,7 +250,7 @@ function checkoutFor(repo) {
 }
 function runControl(msg, send) {
   const reply = (ok, extra) => send({ type: "control-result", id: msg.id, ok, ...extra });
-  if (!CONTROLS[msg.action]?.includes(msg.value) || !REPO_RE.test(msg.repo ?? "")) {
+  if (!CONTROLS.get(msg.action)?.includes(msg.value) || !REPO_RE.test(msg.repo ?? "")) {
     log(`control ${msg.id}: refused (${String(msg.action).slice(0, 20)} ${String(msg.value).slice(0, 20)})`);
     return reply(false, { error: "not an allowed control" });
   }
