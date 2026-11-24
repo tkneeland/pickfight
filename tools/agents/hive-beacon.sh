@@ -3,7 +3,7 @@
 # the only usage beacon (nothing is posted on GitHub). Built from $HIVE_STATE/usage-snapshot.json (saved by statusline.sh or
 # hive-usage.sh). Format: "<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> at=<snapshot ISO> [claude_at=<ISO>]".
 # pace=<AHEAD|ON_PACE|BEHIND> [win5=<last window's final 5h %> idle=<its idle minutes with ready work>] come from hive-pace.sh (issue #274).
-# tmaker=on|off from hive-ticketmaker.sh (the hub shows it). The old mode=AT|MT field is retired (issue #58): whether an
+# tmaker=full|suggestions|off from hive_tm_mode (the hub shows it). The old mode=AT|MT field is retired (issue #58): whether an
 # account works on its own is the studio's in/out switch, which the hub reads itself.
 # claude_at = newest Claude transcript write on this account (hive_claude_at), omitted when unknown; the triagemaster wakes
 # DEV_IDLE when it is old while work waits.
@@ -69,7 +69,7 @@ msg="$msg pace=${ps:-ON_PACE}"
 [ -n "$lw" ] && msg="$msg win5=${lw% *} idle=${lw#* }"
 ca=$(hive_claude_at)
 [ -n "$ca" ] && msg="$msg claude_at=$(TZ=UTC hive_fmt "$ca" +%Y-%m-%dT%H:%M:%SZ)"
-msg="$msg tmaker=$(bash "$HIVE_DIR/hive-ticketmaker.sh")"
+hive_tm_mode; msg="$msg tmaker=$tm_mode"
 # hive-msg.sh logs its own failures (budget drop, 429 backoff, HTTP code) to beacon.log
 bash "$HIVE_DIR/hive-msg.sh" send USAGE "$msg" >/dev/null 2>>"$HIVE_STATE/beacon.log" || exit 1
 echo "$t $p5 $p7 $r5 $agents" > "$last"

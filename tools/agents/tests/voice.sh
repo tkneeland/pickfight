@@ -63,7 +63,8 @@ server.on("upgrade", (req, sock) => {
     if (m.type === "hello" && n === 2) {
       send({ type: "control", id: "c1", repo: "example/other", action: "ticketmaker", value: "off" });
       send({ type: "control", id: "c2", repo: "example/other", action: "shell", value: "rm -rf /" });
-      send({ type: "control", id: "c3", repo: "example/nowhere", action: "ticketmaker", value: "off" });
+      send({ type: "control", id: "c3", repo: "example/other", action: "toString", value: "x" });
+      send({ type: "control", id: "c4", repo: "example/other", action: "__proto__", value: "x" });
     }
     if (m.type === "done" || m.type === "error") answered.add(m.id);
     if (n === 1 && answered.size === 3) { log("CLOSING 1"); sock.end(frame(8, Buffer.from([0x03, 0xe8]))); }
@@ -159,12 +160,13 @@ check "token not in claude env" "$(cat "$T/fake/tokenenv.1")" 0
 check "voice.log written" "$(grep -c 'role: active' "$ST/voice.log")" 1
 check "token not logged" "$(grep -c 's3cret-voice-token' "$ST/voice.log" "$T/runner.err" | awk -F: '{s+=$2} END {print s}')" 0
 check "reconnect logged" "$(grep -c 'reconnecting in 1s' "$ST/voice.log")" 2
-# 7b controls: the allowlisted one runs hive-control.sh in the recorded checkout, the rest are refused
-wait_for 'control-result.*c3' "$HL" 50
-check "control ran" "$(cat "$T/fake/control.log" 2>/dev/null)" "tester ticketmaker off token=none"
-check "control result" "$(grep -c '"type":"control-result","id":"c1","ok":true,"state":{"ticketmaker":"off"}' "$HL")" 1
-check "control refused" "$(grep -c '"id":"c2","ok":false,"error":"not an allowed control"' "$HL")" 1
-check "control no checkout" "$(grep -c '"id":"c3","ok":false,"error":"no example/nowhere checkout on this machine"' "$HL")" 1
+# 7b controls: none is allowlisted any more (the ticket-maker mode is the studio's hive/ticket-maker.conf), so every frame,
+# including the old ticketmaker one and prototype names, is refused cleanly and hive-control.sh never runs
+wait_for 'control-result.*c4' "$HL" 50
+for c in c1 c2 c3 c4; do
+  check "control $c refused" "$(grep -c "\"type\":\"control-result\",\"id\":\"$c\",\"ok\":false,\"error\":\"not an allowed control\"" "$HL")" 1
+done
+check "control never ran" "$(cat "$T/fake/control.log" 2>/dev/null)" ""
 # 8 SIGTERM stops it cleanly
 kill -TERM $RP; for _ in $(seq 1 30); do kill -0 $RP 2>/dev/null || break; sleep 0.1; done
 check "sigterm exit" "$(kill -0 $RP 2>/dev/null && echo running || { wait $RP; echo "exit $?"; })" "exit 0"

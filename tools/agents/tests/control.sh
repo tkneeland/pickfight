@@ -10,16 +10,17 @@ fails=0
 ok() { if [ "$2" = 0 ]; then echo "ok   $1"; else echo "FAIL $1"; fails=$((fails + 1)); fi; }
 ctl() { bash "$AG/hive-control.sh" "$@"; }
 
-[ "$(ctl state)" = '{"ticketmaker":"on"}' ]; ok "state: defaults" $?
-[ "$(ctl ticketmaker off)" = '{"ticketmaker":"off"}' ]; ok "ticketmaker off" $?
-[ "$(cat "$T/state/ticketmaker")" = off ]; ok "...through hive-ticketmaker.sh's file" $?
-ctl ticketmaker on >/dev/null
-for bad in "mode MT" "mode AT" "ticketmaker maybe" "shell ls" "mode" "" "state extra"; do
+[ "$(ctl state)" = '{"ticketmaker":"full"}' ]; ok "state: defaults" $?
+echo off > "$T/state/ticketmaker"
+[ "$(ctl state)" = '{"ticketmaker":"suggestions"}' ]; ok "state: the mode from hive_tm_mode" $?
+rm -f "$T/state/ticketmaker"
+for bad in "ticketmaker off" "ticketmaker on" "ticketmaker full" "mode MT" "mode AT" "ticketmaker maybe" "shell ls" "mode" "" "state extra"; do
   # shellcheck disable=SC2086
   ctl $bad >/dev/null 2>&1; rc=$?
   [ "$rc" = 2 ]; ok "refused: '$bad'" $?
 done
-[ "$(ctl state)" = '{"ticketmaker":"on"}' ]; ok "refusals changed nothing" $?
+[ "$(ctl state)" = '{"ticketmaker":"full"}' ]; ok "refusals changed nothing" $?
+[ ! -e "$T/state/ticketmaker" ]; ok "...and never wrote the ticket-maker file" $?
 [ ! -e "$T/state/at-mode" ]; ok "...and never touched at-mode" $?
 
 # hive-join.sh records where this project's scripts are
@@ -32,8 +33,8 @@ mkdir -p "$T/bin"; printf '#!/bin/bash\n[ "$1" = send ] && echo "$3" >> "%s/sent
 cp "$T/bin/msg" "$AG/hive-msg.sh"
 echo '{"rate_limits":{"five_hour":{"used_percentage":12,"resets_at":1800000000},"seven_day":{"used_percentage":34,"resets_at":1800000000}}}' > "$T/state/usage-snapshot.json"
 echo HIVE_MSG_TOPIC=x > "$T/state/msg.conf"
-ctl ticketmaker off >/dev/null; bash "$AG/hive-at-mode.sh" MT >/dev/null
+echo off > "$T/state/ticketmaker"; bash "$AG/hive-at-mode.sh" MT >/dev/null
 bash "$AG/hive-beacon.sh" 2>/dev/null
-grep -q " tmaker=off$" "$T/sent"; ok "beacon: tmaker=off" $?
+grep -q " tmaker=suggestions$" "$T/sent"; ok "beacon: tmaker=<mode>" $?
 ! grep -q " mode=" "$T/sent"; ok "beacon: the retired mode= field is gone" $?
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

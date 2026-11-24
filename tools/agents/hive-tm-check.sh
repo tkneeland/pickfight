@@ -24,13 +24,14 @@ tm=$(hive_triagemaster)
 if hive_is_triagemaster; then say PASS "triagemaster is $HIVE_ACCOUNT"
 else say INFO "triagemaster is $tm, not $HIVE_ACCOUNT (checks below are for whoever holds the role)"; fi
 
-# 2. AT mode (rule 1), ticket-maker switch (rule 11), worker target (rule 2).
+# 2. AT mode (rule 1), ticket-maker mode (rule 11), worker target (rule 2).
 mode=$(bash "$HIVE_DIR/hive-at-mode.sh" 2>/dev/null)
 case $mode in AT*) say PASS "mode $mode";;
   *) if hive_studio_on; then say WARN "mode is ${mode:-unknown}: this account is switched out in the hub, so it does no autonomous work and cannot hold the role (switch it back in on the hub's members tab)"
      else say WARN "mode is ${mode:-unknown}: in MT the triagemaster does nothing on its own (owner turns AT back on)"; fi;;
 esac
-say INFO "ticket-maker $(bash "$HIVE_DIR/hive-ticketmaker.sh" 2>/dev/null), worker target $(hive_worker_target 2>/dev/null), live agents $(hive_live_agents 2>/dev/null | grep -c .)"
+hive_tm_mode
+say INFO "ticket-maker $tm_mode, worker target $(hive_worker_target 2>/dev/null), live agents $(hive_live_agents 2>/dev/null | grep -c .)"
 
 # 3. GitHub access (filing, labels, merges).
 if login=$(gh api user -q .login 2>/dev/null) && [ -n "$login" ]; then say PASS "gh signed in as $login"
