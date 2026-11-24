@@ -17,12 +17,7 @@ hive_fixture() {
   cp "$HIVE_TEST_SRC"/*.sh "$HIVE_TEST_SRC"/*.md "$d/tools/agents/" 2>/dev/null
   [ -d "$HIVE_TEST_SRC/windows" ] && cp -R "$HIVE_TEST_SRC/windows" "$d/tools/agents/"
   cat > "$d/tools/agents/accounts/_shared.conf" <<'EOF'
-HANDOFF_WEEKLY_USED=85
-HANDOFF_HARD_WEEKLY_USED=95
 RESET_GRACE_HOURS=24
-WORKER_TARGET=3
-PACE_SLACK=10
-FIVE_H_SLOW_USED=70
 FIVE_H_STOP_USED=90
 PEER_QUEUE_MIN=5
 BEACON_FRESH_HOURS=6

@@ -8,8 +8,8 @@
 #   DEV_IDLE <account> <minutes>  (triagemaster only) a peer with live heartbeats has ready work (ready-for-agent ticket without a
 #                      PR, or a review-blocked PR with no fix since) and its USAGE claude_at is 45+ min old; in its quiet hours only p1;
 #                      never for an account at its 5h/weekly stop; once per 2 h, plus one wake at 120 min (docs/agents/hive.md rule 21)
-#   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than hive_worker_target (WORKER_TARGET on pace, 1 ahead of pace or past
-#                      FIVE_H_SLOW_USED, 0 past FIVE_H_STOP_USED or the weekly stop). Ticket-maker off: only if a ready ticket is startable
+#   IDLE_SLOTS <n>/<target>  hourly: fewer active work packages than hive_worker_target (the max workers, 0 when the pace governor says
+#                      AHEAD or at the 5h or weekly stop). Ticket-maker off: only if a ready ticket is startable
 #   PEER_QUEUE_LOW <n> <peer>  (triagemaster only, ticket-maker on) hourly: a peer has fewer than PEER_QUEUE_MIN ready dev tickets
 #   <hook line>        the first non-empty stdout line of any WATCH_HOOKS command (run every poll, zero tokens)
 #   MSG <TYPE> ...     a new CLAIM/ASK/FIRE line (or a late hive-ask.sh ANSWER) from hive-msg.sh listen (msg-wake.txt); checked every

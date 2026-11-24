@@ -2,8 +2,8 @@
 # Reserve-account supervisor (docs/agents/hive.md rule 5), one pass; launchd (or cron) runs it every 10 min (see --install).
 # For an account with RESERVE=1 in its accounts/<handle>.conf. Zero tokens unless it starts Claude.
 # While every non-reserve dev can work normally, it hands this account's unstarted ready-for-agent tickets back with a
-# [TRIAGE] comment, and also when a regular dev is down but this account's own weekly is at or below
-# MIN_WEEKLY_REMAINING_FOR_TICKETS. It starts a headless AT session (screen hive-reserve-<repo>-<handle>) when this account has
+# [TRIAGE] comment, and also when a regular dev is down but this account is at its own weekly stop (set in the hub;
+# hive_budget_ok). It starts a headless AT session (screen hive-reserve-<repo>-<handle>) when this account has
 # in-flight tickets that need work, or is needed and has ready tickets. Log: $HIVE_STATE/reserve.log
 # The headless session runs with every permission and reads ticket text, so only tickets whose author and last editor are
 # in TRUSTED_TICKET_AUTHORS (hive.conf or _shared.conf; empty = none) go in.
@@ -62,8 +62,9 @@ hive_usage_backfill
 # no fresh beacon from any other account (no channel configured, listener down and backfill failed): no evidence that
 # the devs cannot work, so make no decision rather than treat them all as unable
 hive_channel_fresh || { [ "$DRY" = 1 ] && echo "no fresh channel data: no decision"; log "no fresh USAGE beacons on the channel (msg.conf missing or listener down?); no decision"; exit 0; }
-# able: fresh beacon (< BEACON_FRESH_HOURS); under the weekly handoff % or inside its reset grace window (rule 3); 5h not
-# full with >1h to go. An unknown 7d ("?", e.g. just after a reset) counts as able but ranks last for hand-backs.
+# able: fresh beacon (< BEACON_FRESH_HOURS); not at its own weekly stop (the hub's, hive_limits) outside its reset grace
+# window, and not at 100% weekly before the reset (rule 3); 5h not full with >1h to go. An unknown 7d ("?", e.g. just after a
+# reset) counts as able but ranks last for hand-backs.
 # Hand-back target only (#226, rule 5): a peer at or under its own MIN_WEEKLY_REMAINING_FOR_TICKETS (the hub's studio limit,
 # else account conf, else _shared.conf, else 0) outside its RESET_GRACE_HOURS window, or with unknown 7d while that cap is above 0, is never chosen as $best. This does not affect $needed.
 handback_ok() {   # handback_ok <handle>: may this able peer receive a hand-back? (uses b_used b_reset from hive_beacon)
@@ -74,8 +75,9 @@ handback_ok() {   # handback_ok <handle>: may this able peer receive a hand-back
 }
 able() {
   [ "$b_age" -lt $(( BEACON_FRESH_HOURS * 3600 )) ] || return 1
-  if [ -n "$b_used" ] && [ "$b_used" -ge "$HANDOFF_WEEKLY_USED" ]; then
-    r=$(hive_iso_to_epoch "$b_reset") || return 1; [ $((r - now)) -le $((RESET_GRACE_HOURS * 3600)) ] || return 1
+  if [ -n "$b_used" ]; then
+    hive_limits "$1"; r=$(hive_iso_to_epoch "$b_reset" 2>/dev/null) || r=""
+    hive_weekly_stopped "$b_used" "$r" "$l_wmin" && return 1
   fi
   [ -z "$b_p5" ] || [ "$b_p5" -lt 100 ] && return 0
   r=$(hive_iso_to_epoch "$b_r5") || return 1; [ $((r - now)) -le 3600 ]
@@ -87,10 +89,9 @@ for h in $(hive_handles); do
   if able "$h"; then p=${b_used:-100}; handback_ok "$h" && [ "$p" -lt "$bestp" ] && { best=$h; bestp=$p; }; who+="$h:able "
   else needed=1; who+="$h:unable "; fi
 done
-# own budget: no new tickets at or below MIN_WEEKLY_REMAINING_FOR_TICKETS; nothing at all once hive_budget_ok says stop
+# own budget: at its own weekly stop (hive_budget_ok) no new tickets and no work at all
 snap_age=$(( now - $(hive_mtime "$HIVE_STATE/usage-snapshot.json" || echo 0) ))
-take_new=$needed; hive_weekly_capped "$(hive_weekly_used)" "$(hive_weekly_reset)" "$MIN_WEEKLY_REMAINING_FOR_TICKETS" && take_new=0
-run_any=1; hive_budget_ok || { run_any=0; take_new=0; }
+take_new=$needed; run_any=1; hive_budget_ok || { run_any=0; take_new=0; }
 [ "$DRY" = 0 ] && [ "$snap_age" -gt 1800 ] && log "own usage snapshot is $((snap_age / 60)) min old (hive-usage.sh failing?)"
 
 remote=$(git -C "$ROOT" ls-remote --heads origin) || { log "ls-remote failed"; exit 0; }

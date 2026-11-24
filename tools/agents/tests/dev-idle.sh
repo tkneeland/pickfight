@@ -127,9 +127,15 @@ check "T8 heartbeat 2h old" "$(run "$ISS_READY")" ""
 reset_state; hello 120; beacon 95 20 "$far" 3000
 check "T8 5h at stop" "$(run "$ISS_READY")" ""
 reset_state; hello 120; beacon 10 90 "$(iso $((now + 3 * 86400)))" 3000
-check "T8 weekly stop, reset 3 days away" "$(run "$ISS_READY")" ""
+check "T8 weekly 90%, no weekly stop set (stop is 100%)" "$(run "$ISS_READY")" "DEV_IDLE bob 50"
+reset_state; hello 120; beacon 10 100 "$(iso $((now + 3 * 86400)))" 3000
+check "T8 weekly 100%, reset 3 days away" "$(run "$ISS_READY")" ""
+echo "MIN_WEEKLY_REMAINING_FOR_TICKETS=15" >> "$AG/accounts/bob.conf"
+reset_state; hello 120; beacon 10 90 "$(iso $((now + 3 * 86400)))" 3000
+check "T8 weekly stop (bob stop 85%), reset 3 days away" "$(run "$ISS_READY")" ""
 reset_state; hello 120; beacon 10 90 "$(iso $((now + 12 * 3600)))" 3000
-check "T8 control: weekly 90% reset 12h away" "$(run "$ISS_READY")" "DEV_IDLE bob 50"
+check "T8 control: weekly 90% over stop, reset 12h away (grace)" "$(run "$ISS_READY")" "DEV_IDLE bob 50"
+sed -i.bak '/^MIN_WEEKLY_REMAINING_FOR_TICKETS=15$/d' "$AG/accounts/bob.conf"; rm -f "$AG/accounts/bob.conf.bak"
 reset_state; echo "$((now - 300))|alice|USAGE|10% 20% $far r5=$r5 agents=1 at=$(iso $((now - 300))) claude_at=$(iso $((now - 3000)))" >> "$INBOX"
 check "T8 this account itself" "$(run '[{"number":900,"labels":[{"name":"ready-for-agent"}],"assignees":[{"login":"alice"}],"pull_request":null}]')" ""
 # --- T10: the #hive alert text (hive-dev-idle-alert.sh): <@id> from the local conf only, name otherwise; 120 min offers reassignment

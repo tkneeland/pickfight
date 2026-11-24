@@ -7,7 +7,7 @@ T=$(mktemp -d "${TMPDIR:-/tmp}/hive-failover-test.XXXXXX") || exit 1; hive_test_
 hive_fixture "$T" || exit 1
 mkdir -p "$T/bin" "$T/acc"
 for p in "alice 1" "bob 2" "carol 3" "dave 4"; do set -- $p; echo "SUCCESSION_RANK=$2" > "$T/acc/$1.conf"; done
-echo "HANDOFF=1" > "$T/acc/_shared.conf"
+echo "DIGEST_HOUR=9" > "$T/acc/_shared.conf"
 export HIVE_NOW=1800000000 HIVE_ACCOUNTS_DIR=$T/acc
 echo 1 > "$T/counter"
 # stub curl: token on stdin config; GET /messages?limit=50 -> msgs.json; POST /messages appends (race-inject first adds a rival
@@ -146,7 +146,7 @@ check "and posted no new notice" "$(jq '[.[] | select(.author.bot)] | length' "$
 # hive-succession.sh keeps its own args (--post) when a (here expired) failover marker is in the inbox: the weekly handoff still sends TM
 acct carol; rt=$(date +%s); : > "$T/ntfy.log"; rm -f "$HIVE_STATE_DIR/takeover" "$HIVE_STATE_DIR/triagemaster"
 printf '%s|bob|TM|bob until failover %s\n' "$rt" $((rt - 5)) > "$HIVE_STATE_DIR/msg-inbox.log"
-printf '%s|alice|USAGE|10%% 96%% 2099-01-01T00:00:00Z r5=2099-01-01T00:00:00Z at=%s\n' "$rt" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$HIVE_STATE_DIR/msg-inbox.log"
+printf '%s|alice|USAGE|10%% 100%% 2099-01-01T00:00:00Z r5=2099-01-01T00:00:00Z at=%s\n' "$rt" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$HIVE_STATE_DIR/msg-inbox.log"
 echo '{"rate_limits":{"seven_day":{"used_percentage":10,"resets_at":4102444800},"five_hour":{"used_percentage":5,"resets_at":4102444800}}}' > "$HIVE_STATE_DIR/usage-snapshot.json"
 check "handoff picks the stand-in" "$(HIVE_ACCOUNTS_DIR= bash "$AG/hive-succession.sh" --post 2>/dev/null)" carol
 check "handoff TM still sent with --post" "$(grep -c 'TM carol until' "$T/ntfy.log")" 1

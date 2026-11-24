@@ -70,9 +70,15 @@ snap 20 9000 56 $HALFWK; check "weekly 56 at 50% of the week: AHEAD wins over 5h
 snap 0 0 90 $HALFWK;     check "weekly AHEAD even with no 5h window" "$(st)" AHEAD
 snap 20 9000 "?" 0;      check "weekly unknown: 5h pace only" "$(st)" BEHIND
 snap 20 9000 90 0;       check "weekly reset unknown: pace not judged" "$(st)" BEHIND
-( export MIN_WEEKLY_REMAINING_FOR_TICKETS=29; snap 20 9000 70 $((WK / 10)); check "min-remaining 29 at used7 70: ok" "$(st)" BEHIND
-  snap 20 9000 71 $((WK / 10)); check "min-remaining 29 at used7 71: AHEAD" "$(st)" AHEAD )
-( export MIN_WEEKLY_REMAINING_FOR_TICKETS=100; snap 0 0 0 0; check "min-remaining 100: always AHEAD" "$(st)" AHEAD )
+# the weekly stop (100 - MIN_WEEKLY_REMAINING_FOR_TICKETS, the hub's) scales the on-pace line: stop 80 at half the week is 45
+export MIN_WEEKLY_REMAINING_FOR_TICKETS=20
+snap 20 9000 45 $HALFWK; check "stop 80: weekly 45 at 50% of the week: not ahead" "$(st)" BEHIND
+snap 20 9000 46 $HALFWK; check "stop 80: weekly 46 at 50% of the week: AHEAD" "$(st)" AHEAD
+snap 20 9000 80 $((2 * 86400)); check "stop 80: at the stop 2 days out: AHEAD" "$(st)" AHEAD
+snap 20 9000 95 36000;   check "stop 80: in the reset grace window, line and stop ignored" "$(st)" BEHIND
+snap 20 9000 100 36000;  check "100% in the reset grace window: AHEAD" "$(st)" AHEAD
+export MIN_WEEKLY_REMAINING_FOR_TICKETS=100; snap 0 0 0 0; check "min-remaining 100: always AHEAD" "$(st)" AHEAD
+unset MIN_WEEKLY_REMAINING_FOR_TICKETS
 # 6 missing, unreadable or stale snapshot: ON_PACE, never a burst
 rm -f "$SNAP";      check "missing snapshot ON_PACE" "$(st)" ON_PACE
 echo "not json" > "$SNAP"; check "garbage snapshot ON_PACE" "$(st)" ON_PACE
@@ -88,8 +94,14 @@ snap 40 9000 $W7; check "AHEAD margin does not move the BEHIND edge" "$(PACE_MAR
 printf 'PACE_MARGIN=5\nMAX_WORKERS=2\n' > "$S/pace-tuning.conf"
 snap 56 9000 $W7; check "pace-tuning.conf overrides margin" "$(st)" AHEAD; check "pace-tuning.conf overrides max" "$(bash "$PACE" max)" 2
 rm -f "$S/pace-tuning.conf"
-check "max defaults to DAY_AGENTS" "$(bash "$PACE" max)" 3
-check "max clamped to 4" "$(MAX_WORKERS=9 bash "$PACE" max)" 4
+check "max defaults to 3" "$(bash "$PACE" max)" 3
+check "max clamped to 6" "$(MAX_WORKERS=9 bash "$PACE" max)" 6
+printf 'MAX_WORKERS=5\n' > "$S/pace-tuning.conf"
+check "the tuner never exceeds the ceiling" "$(bash "$PACE" max)" 3
+check "...a higher ceiling lets it through" "$(MAX_WORKERS=6 bash "$PACE" max)" 5
+mkdir -p "$T/studio"; echo "* max_workers=2" > "$T/studio/account-limits.conf"
+check "the account's hub max_workers is the ceiling over the tuner" "$(STUDIO_REPO=x/studio HIVE_STUDIO_CACHE=$T/studio bash "$PACE" max)" 2
+rm -f "$S/pace-tuning.conf"
 # 8 target for the status line
 snap 34 10800 $W7; check "target 40" "$(bash "$PACE" target)" 40
 snap 0 0 $W7;      check "target empty without a window" "$(bash "$PACE" target)" ""
@@ -159,11 +171,14 @@ check "both at the floor: margin stays 5" "$(tuned PACE_MARGIN)" 5; check "max_w
 rm -f "$S/pace-tuning.conf"
 winfile 1000,60,,40 2000,70,,30 3000,85,,20 4000,100,200,0
 printf 'MAX_WORKERS=3\nPACE_MARGIN=10\n' > "$S/pace-tuning.conf"
+bash "$PACE" tune >/dev/null; check "under-used at the ceiling (3): margin 10 -> 15, workers stay" "$(tuned PACE_MARGIN)/$(tuned MAX_WORKERS)" 15/3
+printf 'MAX_WORKERS=3\nPACE_MARGIN=10\n' > "$S/pace-tuning.conf"; export MAX_WORKERS=4   # ceiling 4 from here
 bash "$PACE" tune >/dev/null; check "under-used: max_workers 3 -> 4" "$(tuned MAX_WORKERS)" 4; check "margin untouched on loosen" "$(tuned PACE_MARGIN)" 10
 echo "5000,60,,40,10,4" >> "$S/pace-windows.csv"; bash "$PACE" tune >/dev/null
 check "workers at 4: margin 10 -> 15" "$(tuned PACE_MARGIN)" 15; check "workers cap 4" "$(tuned MAX_WORKERS)" 4
 echo "6000,60,,40,15,4" >> "$S/pace-windows.csv"; bash "$PACE" tune >/dev/null; check "margin 15 -> 20" "$(tuned PACE_MARGIN)" 20
 echo "7000,60,,40,20,4" >> "$S/pace-windows.csv"; bash "$PACE" tune >/dev/null; check "margin capped at 20" "$(tuned PACE_MARGIN)" 20
+unset MAX_WORKERS
 # under 90% but no ready work idle: not a reason to loosen; mixed history: no change
 rm -f "$S/pace-tuning.conf"; winfile 1000,60,,0 2000,60,,0 3000,60,,0
 bash "$PACE" tune >/dev/null; check "under-used but never idle with work: no change" "$(sed -n 's/^# last change: //p' "$S/pace-tuning.conf")" none
