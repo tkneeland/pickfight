@@ -59,6 +59,7 @@ server.on("upgrade", (req, sock) => {
       send({ type: "ask", id: "a1", from: "alice", tab: "game1", text: "how is this game going?", context: context() });
       send({ type: "ask", id: "a2", from: "bob", tab: "game1", text: "PLEASE FAIL", context: context() });
       send({ type: "ask", id: "a3", from: "bob", tab: "studio", text: "PLEASE HANG", context: context() });
+      send({ type: "ask", id: "a4", from: "bob", tab: "studio", text: "HOOK FAILS", context: context() });
     }
     if (m.type === "hello" && n === 2) {
       send({ type: "control", id: "c1", repo: "example/other", action: "ticketmaker", value: "off" });
@@ -67,7 +68,7 @@ server.on("upgrade", (req, sock) => {
       send({ type: "control", id: "c4", repo: "example/other", action: "__proto__", value: "x" });
     }
     if (m.type === "done" || m.type === "error") answered.add(m.id);
-    if (n === 1 && answered.size === 3) { log("CLOSING 1"); sock.end(frame(8, Buffer.from([0x03, 0xe8]))); }
+    if (n === 1 && answered.size === 4) { log("CLOSING 1"); sock.end(frame(8, Buffer.from([0x03, 0xe8]))); }
   };
   sock.on("data", (d) => {
     buf = Buffer.concat([buf, d]);
@@ -104,6 +105,7 @@ echo 'not json at all'
 echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world"}}}'
 echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Hello world"}]}}'
 echo '{"type":"result","subtype":"success","is_error":false,"result":"Hello world"}'
+if grep -q 'HOOK FAILS' "$FAKE_DIR/stdin.$n"; then echo 'SessionEnd hook failed: Hook cancelled' >&2; exit 1; fi
 EOF
 chmod +x "$T/claude"
 ST=$T/hive/example__game1/tester   # a state folder laid out like the real one (<hive>/<owner__repo>/<handle>)
@@ -136,6 +138,8 @@ check "a2 after a1" "$([ -n "$l1" ] && [ -n "$l2" ] && [ "$l1" -lt "$l2" ] && ec
 check "no deltas for a2" "$(grep -c '^DELTA 1 a2' "$HL")" 0
 # 4b a hung claude is killed after HIVE_VOICE_TIMEOUT and gives error
 check "a3 timeout" "$(grep -c '^ERROR 1 a3 timed out after 2s$' "$HL")" 1
+# 4c a finished answer stands when claude then exits non-zero (a SessionEnd hook failed after the result)
+check "a4 done despite exit 1" "$(grep -c '^DONE 1 a4 Hello world$' "$HL")" 1
 # 5 ping answered (undici replies at protocol level)
 check "pong" "$(grep -c '^PONG 1 are-you-there$' "$HL")" 1
 # 6 the claude run: flags, scratch cwd (removed after), prompt content, trimmed stream, no token in its env

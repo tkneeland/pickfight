@@ -1,5 +1,5 @@
 # Installed by claude-hive's install.sh. Do not edit hive files in this repo: change claude-hive and re-install.
-# claude-hive d0e5468
+# claude-hive 0ea5b69
 8f34a1c41f572fbb4099c97a385292d7b683f38914f3dea94409e759b0b20e10 docs/agents/discord.md
 bcdf5d0bed52563315751429e8a46bc99426be9264adc9586da2afaead85262b docs/agents/hive-debrief.md
 47747a6d35c5c9b479fe87d4cc0cd4805b87ba9632d90c547dd51c5dee0c632c docs/agents/hive.md
@@ -36,7 +36,7 @@ cadfa9dd452171c92c43e834e95a4920ce36b0ce2336b9c5a37226768b1cc625 tools/agents/hi
 d891ef01cfa515c6b0c9cd3d84be79288b2b4ec6c2253a89f183dc56dfc927ae tools/agents/hive-tm-check.sh
 7ecb1918ad737fb852190afa4c71b1fff36ff74b7e5736b68107662dc99fe828 tools/agents/hive-triage-watch.sh
 b49d40c15ff655f6dd3bbb2b96b844bf6cd3e4bbbaa9328278a182301a1816fc tools/agents/hive-usage.sh
-9f6c046257a12af6651034fc7a3f7628098ead0c1ab151398cb3d006c0cceac0 tools/agents/hive-voice.mjs
+de3b31ae905934d56c1ec18ecce555c6b4d5b2c69e63357a205391d62c6dc351 tools/agents/hive-voice.mjs
 22448336920c8813808898017dd827e51a353b82152926d6c99dae52e55acdd5 tools/agents/hive-wake-pending.sh
 663b84f0cfdf132f58ef09bb849a1aaa429f1577eb95c9e2ae56fe73628f695c tools/agents/hive-wake.sh
 54a005f9bc089c391b911feb88df38c6ed5ac211828b6536ee9609e31563e1f2 tools/agents/hive-watch-guard.sh
@@ -75,7 +75,7 @@ e6cf951b177ee5d100ab53e9bbea1db4dd1917fd3a19af94a47ef562aca3ba19 tools/agents/te
 bdd9ad8e758fe9cca5cf4150ccb67cd52eba80dbf251a50999fbd7a07a71d3bb tools/agents/tests/ticket-maker.sh
 ef19d24876d195ece8752c9e70f6ab5a7a0747d127c8c287ef2f63bae13ca8c7 tools/agents/tests/triage-watch-in-progress.sh
 91f4b8e4b61acff44d8e6a76913f85fa5bedb228e4e51d73f4448739a26ce32a tools/agents/tests/voice-supervise.sh
-5980d0f54d89ff015e9dad2c03500bb2c5d1cfdea64440aff9e4d45c16a80dfb tools/agents/tests/voice.sh
+4f9ac5499b4deac2cdfe05b3d0e6cd6a0a0ac7fb288fad47fee519bbdff40b5c tools/agents/tests/voice.sh
 4cbf427805995c9e86dd268e165e3de144ef7691d867013c3b00e663d9153e73 tools/agents/tests/wake-pending.sh
 753efeec8378e63537337767813369750f4421733751471c58b9bcdf61ea5919 tools/agents/tests/wake.sh
 7dad398049a533ed82cb67e4506ebe92a6e9f810eeea39226d9dd97d04cc84cd tools/agents/windows/hive-common.ps1

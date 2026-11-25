@@ -208,7 +208,9 @@ function runAsk(ask, send) {
       if (buf) onLine(buf);
       if (job.finished) return;
       if (timedOut) return finish({ type: "error", id: ask.id, error: `timed out after ${timeoutSec}s` });
-      if (code !== 0 || resultError) {
+      // a finished answer stands even when claude then exits non-zero (e.g. a SessionEnd hook failed after the result)
+      const answered = result !== null && !resultError;
+      if (!answered && (code !== 0 || resultError)) {
         const why = stderr.trim().split("\n").slice(-3).join(" ") || (resultError && result) || "";
         log(`ask ${ask.id}: claude exited ${code ?? signal}${why ? `: ${why}` : ""}`);
         return finish({ type: "error", id: ask.id, error: `claude exited ${code ?? signal}${why ? `: ${why.slice(0, 300)}` : ""}` });
