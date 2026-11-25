@@ -58,6 +58,7 @@ Per-account state and secrets live in `$HIVE_STATE` = `~/.claude/hive/<repo>/<ha
 - `hive-outbox-wait.sh`: main terminal; blocks until the outbox grows, prints the new lines, exits.
 - `hive-atlas.sh`: Atlas bookkeeping (`accept`, `closeout`).
 - `hive-dupe-check.sh "<keywords>"`: run before filing a ticket; exit 1 means something plausible already exists.
+- `hive-stack.sh list|next|triage|claim <repo> <n>|checkout <repo>`: the studio's project priority stack (hive.md rule 28, the studio's `hive/projects.conf`, cached by `hive_studio_sync`). `next` names the first ready ticket this account may take in a repo ranked above this game (the hive's own repo first); `claim` takes a self-serve one (a repo with no `hive.conf`: assigns and comments `[CLAIM]`); `checkout` keeps a clone under `~/.claude/hive/checkouts/`; `triage` lists the self-serve repos' untriaged issues on the top game's triagemaster only.
 - `launchd/hive-keepalive.plist.template`, `systemd/hive-keepalive.service.template`: run the keepalive at login.
 - `windows/`: Git Bash and PowerShell supervisors that replace `screen` (`hive-start.ps1`, `hive-status.ps1`, `hive-stop.ps1`, `hive-install-task.ps1`, `hive-keepalive.ps1` (the always-on headless AT session, the Windows hive-keepalive.sh), `hive-supervise.sh`); see `windows/README.md`.
 

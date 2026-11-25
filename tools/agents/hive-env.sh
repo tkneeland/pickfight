@@ -221,7 +221,7 @@ hive_slug_of() { git -C "$1" remote get-url origin 2>/dev/null | sed -E 's#^.*[:
 
 # ---- studio-wide settings (STUDIO_REPO, edited from the hive hub) ----------------------------------------
 # The cache is $HIVE_STUDIO_CACHE (~/.claude/hive/studio), shared by every game on this machine. Reads never call GitHub.
-HIVE_STUDIO_FILES="hive/account-limits.conf hive/accounts-active.conf hive/settings.conf hive/ticket-maker.conf"
+HIVE_STUDIO_FILES="hive/account-limits.conf hive/accounts-active.conf hive/settings.conf hive/ticket-maker.conf hive/projects.conf"
 # hive_studio_sync: refresh the cached studio files from GitHub at most every 5 min (hive-beacon.sh calls it). A failed
 # fetch keeps the last copy; a file the studio does not have is cached empty.
 hive_studio_sync() {
