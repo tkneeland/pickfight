@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: hive-stack.sh list | next | triage | claim <owner/repo> <n> | checkout <owner/repo>
+# Usage: hive-stack.sh list | next | triage | review | claim <owner/repo> <n> | checkout <owner/repo>
 # The studio's project priority stack (hive.md rule 28): the studio repo's hive/projects.conf, edited from the hub, top line
 # first. Workers take tickets by project rank first, then p1/p2/p3, so work on a repo ranked above this game comes first.
 #   list               the stack, one repo per line (this game's REPO appended when the stack doesn't list it)
@@ -12,6 +12,9 @@
 #                      triagemaster of the highest-ranked hive game. On that machine it prints "<repo> <n> <title>" for each
 #                      open issue there that is not triaged yet (no ready-for-agent, ready-for-human, needs-info or wontfix
 #                      label, so needs-triage and unlabelled ones), exit 0; on any other machine, or with none, exit 1.
+#   review             on that same machine: "<repo> <n> <title>" for each open, non-draft PR in those repos that is not
+#                      marked review-passed or review-blocked yet (the triagemaster reviews and merges them, rule 28),
+#                      exit 0; on any other machine, or with none, exit 1.
 #   claim <repo> <n>   take such a self-serve ticket: refuses one already assigned or claimed; assigns this account and
 #                      comments "[CLAIM] <account>". Exit 1 when someone else has it.
 #   checkout <repo>    a clone of the repo for working its tickets, under ~/.claude/hive/checkouts/<owner__repo>, fetched
@@ -75,7 +78,7 @@ claimed_by_other() {
 
 case $cmd in
   list) hive_studio_sync; stack ;;
-  triage)
+  triage|review)
     hive_studio_sync
     hive_is_triagemaster || exit 1
     top=""; selfserve=()
@@ -86,8 +89,13 @@ case $cmd in
     [ "$(lc "$top")" = "$(lc "${REPO:-}")" ] && [ ${#selfserve[@]} -gt 0 ] || exit 1
     out=""
     for repo in "${selfserve[@]}"; do
-      out+=$(gh issue list -R "$repo" -s open -L 100 --json number,title,labels \
-        -q '.[] | select([.labels[].name] | any(. == "ready-for-agent" or . == "ready-for-human" or . == "needs-info" or . == "wontfix") | not) | "'"$repo"' \(.number) \(.title)"' 2>/dev/null)
+      if [ "$cmd" = triage ]; then
+        out+=$(gh issue list -R "$repo" -s open -L 100 --json number,title,labels \
+          -q '.[] | select([.labels[].name] | any(. == "ready-for-agent" or . == "ready-for-human" or . == "needs-info" or . == "wontfix") | not) | "'"$repo"' \(.number) \(.title)"' 2>/dev/null)
+      else
+        out+=$(gh pr list -R "$repo" -s open -L 100 --json number,title,labels,isDraft \
+          -q '.[] | select((.isDraft | not) and ([.labels[].name] | any(. == "review-passed" or . == "review-blocked") | not)) | "'"$repo"' \(.number) \(.title)"' 2>/dev/null)
+      fi
       out+=$'\n'
     done
     out=$(printf '%s' "$out" | sed '/^$/d')

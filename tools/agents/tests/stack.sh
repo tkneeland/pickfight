@@ -28,6 +28,7 @@ case "$1 $2" in
     esac;;
   "issue list") f="$GHD/$(slug "$repo").json"; [ -f "$f" ] || echo '[]' > "$f"
     if [ -n "$label" ]; then jq --arg l "$label" '[.[] | select([.labels[].name] | index($l))]' "$f" | jq -r "$q"; else jq -r "$q" "$f"; fi;;
+  "pr list") f="$GHD/$(slug "$repo").prs.json"; [ -f "$f" ] || echo '[]' > "$f"; jq -r "$q" "$f";;
   "issue view") jq --argjson n "$3" '.[] | select(.number == $n)' "$GHD/$(slug "$repo").json" | jq -r "$q";;
   "issue edit"|"issue comment") echo "$*" >> "$GHD/writes.log";;
   *) exit 1;;
@@ -86,6 +87,12 @@ check "triage: top game's triagemaster" "$(stk triage | tr '\n' '|')" "example/h
 check "triage: anyone else: exit 1" "$(ACCT=bob stk triage; echo "exit $?")" "exit 1"
 printf 'example/hive\nexample/game2\nexample/project\n' > "$T/studio/projects.conf"
 check "triage: not the top game: exit 1" "$(stk triage; echo "exit $?")" "exit 1"
+
+# --- review: the same machine lists the self-serve repos' PRs waiting for review
+printf 'example/hive\nexample/project\n' > "$T/studio/projects.conf"
+echo '[{"number":40,"title":"waiting","isDraft":false,"labels":[]},{"number":41,"title":"draft","isDraft":true,"labels":[]},{"number":42,"title":"passed","isDraft":false,"labels":[{"name":"review-passed"}]},{"number":43,"title":"blocked","isDraft":false,"labels":[{"name":"review-blocked"}]}]' > "$T/gh/example__hive.prs.json"
+check "review: top game's triagemaster" "$(stk review | tr '\n' '|')" "example/hive 40 waiting|"
+check "review: anyone else: exit 1" "$(ACCT=bob stk review; echo "exit $?")" "exit 1"
 
 echo "stack: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

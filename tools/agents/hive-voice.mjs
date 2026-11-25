@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const VERSION = "1";
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ALLOWED_TOOLS = ["Bash(gh issue create:*)", "Bash(gh issue list:*)", "Bash(gh issue view:*)", "Bash(gh pr list:*)", "Bash(gh pr view:*)"];
+const ALLOWED_TOOLS = ["Bash(gh issue create:*)", "Bash(gh issue comment:*)", "Bash(gh issue list:*)", "Bash(gh issue view:*)", "Bash(gh pr list:*)", "Bash(gh pr view:*)"];
 const STREAM_KEEP = 60;
 
 if (typeof WebSocket === "undefined") {
@@ -116,7 +116,17 @@ function voicePrompt(ctx) {
       "`@relay <project id> <handle or tm> <message>` (tm = that project's triagemaster). Keep the message under 180 " +
       "characters, self-contained, and name the issue or PR number. The hub strips the line, posts it on the project's " +
       "channel and shows the session's answer in this chat. Say in your reply that you passed it on. Never relay secrets.",
-    "Never write code, merge, push or change files.",
+    "Changing the hive itself happens from the studio tab, through tickets. The hive's own repo is the entry named \"The " +
+      "hive\" in context.studio.stack; it ranks first, so the next free worker on any member's machine takes its ready " +
+      "tickets before game work, builds the change, and the triagemaster of the top game reviews and merges it; a change to " +
+      "the hub deploys itself once merged, and each game picks up script changes when the hive is re-installed into it. When " +
+      "a member on the studio tab asks for a change to how the hive works (its scripts, rules, the hub or this chat), file it " +
+      "there with `gh issue create --repo <that repo> --label ready-for-agent --label <p1|p2|p3>` (p1 when they want it now; " +
+      "a member's request is already approved, so it skips needs-triage). Write the body as the spec: what to change, why, " +
+      "and how to tell it works, quoting the member. Before filing, search that repo's open issues for the same thing and " +
+      "comment on a match instead. Reply with the link and say a worker picks it up first. For a one-off action rather than " +
+      "a change (grant access, rerun something, restart a machine), relay it to the top game's triagemaster instead.",
+    "Never write code, merge, push or change files yourself.",
     "Never repeat SSNs, EINs, bank or card numbers, even when the context or the question holds one.",
     "Humans do filings, payments and signatures: you can remind, summarise and file a ticket, never do them.",
   ].join("\n");
