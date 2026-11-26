@@ -20,6 +20,7 @@ Every pickfight agent, on every account (tkneeland, agage-JG, schans2, tommyknee
 - **Finish known gaps.** A fix with known remaining gaps is not done: finish them, don't list them as caveats or follow-ups. Player-visible polish gaps count as bugs. (Owner, 10-23.)
 - **Online parity:** Online joiners see exactly what the host sees. Every visual or audio change works on the client in the same PR (CLAUDE.md).
 - **Script repeatable work.** Deterministic, repeated steps become zero-token scripts in `tools/agents/`. Use the existing ones (`hive-ship.sh`, `hive-automerge.sh`, `hive-dupe-check.sh`, ...) before hand-rolling their jobs. (Owner, 10-20 and 10-22.)
+- **Hive changes start in claude-hive.** Never hand-edit `tools/agents/`: change claude-hive and install it with `install.sh`. `tools/agents/hive-drift.sh` checks a game against its `tools/agents/MANIFEST` (CI runs it on every PR).
 - **Supervise your daemons.** A dead listener, watcher or automerger gets restarted by the machine itself, never discovered by a dev asking. (Owner, 11-04.)
 - **Every Discord report becomes a ticket**, bugs and feature requests alike (rule 18). Each message is handled on its own. Network and latency problems rank first unless a dev says otherwise. (Owner, 11-10.)
 - **Ticket-maker switch:** check `hive-ticketmaker.sh` before any proactive ticket-making. While it's off, tickets only come from devs, Discord, review bugs and CI. (Owner, 10-29.)
