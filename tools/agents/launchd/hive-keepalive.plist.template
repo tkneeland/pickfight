@@ -19,6 +19,7 @@
   <key>WorkingDirectory</key><string>{{REPO_PATH}}</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <key>AbandonProcessGroup</key><true/>
   <key>StandardOutPath</key><string>{{HOME}}/.claude/hive/keepalive.log</string>
   <key>StandardErrorPath</key><string>{{HOME}}/.claude/hive/keepalive.log</string>
 </dict>

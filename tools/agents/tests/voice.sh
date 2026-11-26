@@ -59,6 +59,7 @@ server.on("upgrade", (req, sock) => {
       send({ type: "ask", id: "a1", from: "alice", tab: "game1", text: "how is this game going?", context: context() });
       send({ type: "ask", id: "a2", from: "bob", tab: "game1", text: "PLEASE FAIL", context: context() });
       send({ type: "ask", id: "a3", from: "bob", tab: "studio", text: "PLEASE HANG", context: context() });
+      send({ type: "ask", id: "a4", from: "bob", tab: "studio", text: "HOOK FAILS", context: context() });
     }
     if (m.type === "hello" && n === 2) {
       send({ type: "control", id: "c1", repo: "example/other", action: "ticketmaker", value: "off" });
@@ -67,7 +68,7 @@ server.on("upgrade", (req, sock) => {
       send({ type: "control", id: "c4", repo: "example/other", action: "__proto__", value: "x" });
     }
     if (m.type === "done" || m.type === "error") answered.add(m.id);
-    if (n === 1 && answered.size === 3) { log("CLOSING 1"); sock.end(frame(8, Buffer.from([0x03, 0xe8]))); }
+    if (n === 1 && answered.size === 4) { log("CLOSING 1"); sock.end(frame(8, Buffer.from([0x03, 0xe8]))); }
   };
   sock.on("data", (d) => {
     buf = Buffer.concat([buf, d]);
@@ -93,7 +94,7 @@ EOF
 # ---- the fake claude: saves its args and stdin, streams "Hello" + " world", or fails on PLEASE FAIL --------------
 cat > "$T/claude" <<'EOF'
 #!/bin/bash
-n=$(ls "$FAKE_DIR" | grep -c '^stdin') ; n=$((n+1))
+n=1; until mkdir "$FAKE_DIR/slot.$n" 2>/dev/null; do n=$((n+1)); done   # atomic: asks on different tabs run at once
 printf '%s\n' "$@" > "$FAKE_DIR/args.$n"; pwd > "$FAKE_DIR/cwd.$n"; cat > "$FAKE_DIR/stdin.$n"
 env | grep -c HUB_VOICE_TOKEN > "$FAKE_DIR/tokenenv.$n"
 if grep -q 'PLEASE FAIL' "$FAKE_DIR/stdin.$n"; then echo "fake claude: boom" >&2; exit 3; fi
@@ -104,6 +105,7 @@ echo 'not json at all'
 echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world"}}}'
 echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Hello world"}]}}'
 echo '{"type":"result","subtype":"success","is_error":false,"result":"Hello world"}'
+if grep -q 'HOOK FAILS' "$FAKE_DIR/stdin.$n"; then echo 'SessionEnd hook failed: Hook cancelled' >&2; exit 1; fi
 EOF
 chmod +x "$T/claude"
 ST=$T/hive/example__game1/tester   # a state folder laid out like the real one (<hive>/<owner__repo>/<handle>)
@@ -136,10 +138,16 @@ check "a2 after a1" "$([ -n "$l1" ] && [ -n "$l2" ] && [ "$l1" -lt "$l2" ] && ec
 check "no deltas for a2" "$(grep -c '^DELTA 1 a2' "$HL")" 0
 # 4b a hung claude is killed after HIVE_VOICE_TIMEOUT and gives error
 check "a3 timeout" "$(grep -c '^ERROR 1 a3 timed out after 2s$' "$HL")" 1
+# 4b2 tabs run in parallel: a3 (studio) started before a1 (game1) finished
+s3=$(grep -n 'ask a3 from' "$ST/voice.log" | head -n 1 | cut -d: -f1); d1=$(grep -n 'ask a1: done' "$ST/voice.log" | head -n 1 | cut -d: -f1)
+check "tabs in parallel" "$([ -n "$s3" ] && [ -n "$d1" ] && [ "$s3" -lt "$d1" ] && echo yes)" yes
+# 4c a finished answer stands when claude then exits non-zero (a SessionEnd hook failed after the result)
+check "a4 done despite exit 1" "$(grep -c '^DONE 1 a4 Hello world$' "$HL")" 1
 # 5 ping answered (undici replies at protocol level)
 check "pong" "$(grep -c '^PONG 1 are-you-there$' "$HL")" 1
 # 6 the claude run: flags, scratch cwd (removed after), prompt content, trimmed stream, no token in its env
-A=$T/fake/args.1
+N=$(grep -l 'how is this game going' "$T"/fake/stdin.* 2>/dev/null | head -n 1 | sed 's/.*\.//')   # a1's run (tabs start in any order)
+A=$T/fake/args.$N
 check "model flag" "$(grep -A1 -x -- '--model' "$A" | tail -n 1)" sonnet
 check "stream-json" "$(grep -A1 -x -- '--output-format' "$A" | tail -n 1)" stream-json
 check "partial msgs" "$(grep -cx -- '--include-partial-messages' "$A")" 1
@@ -147,15 +155,15 @@ check "allowed tools" "$(grep -cx 'Bash(gh issue create:\*)' "$A")" 1
 check "voice prompt names the hive" "$(grep -c 'You are Hivey, the one voice of the Test Studio hive' "$A")" 1
 check "voice prompt open tab" "$(grep -c 'open tab tells you which game' "$A")" 1
 check "voice prompt never code" "$(grep -c 'Never write code, merge, push or change files' "$A")" 1
-case $(cat "$T/fake/cwd.1") in "$PWD"|"$AG"*) check "scratch cwd" repo scratch;; *) check "scratch cwd" scratch scratch;; esac
-check "scratch dir removed" "$([ -d "$(cat "$T/fake/cwd.1")" ] && echo kept || echo removed)" removed
-S=$T/fake/stdin.1
+case $(cat "$T/fake/cwd.$N") in "$PWD"|"$AG"*) check "scratch cwd" repo scratch;; *) check "scratch cwd" scratch scratch;; esac
+check "scratch dir removed" "$([ -d "$(cat "$T/fake/cwd.$N")" ] && echo kept || echo removed)" removed
+S=$T/fake/stdin.$N
 check "prompt who and tab" "$(grep -c '^alice asked this with the Game One tab (project id game1, repo example/game1) open\.$' "$S")" 1
 check "prompt question" "$(grep -c '^how is this game going?$' "$S")" 1
 check "stream trimmed to 60" "$(grep -o 'STREAM-ENTRY-[0-9]*\.' "$S" | wc -l | tr -d ' ')" 60
 check "oldest dropped" "$(grep -c 'STREAM-ENTRY-9\.' "$S")" 0
 check "newest kept" "$(grep -c 'STREAM-ENTRY-69\.' "$S")" 1
-check "token not in claude env" "$(cat "$T/fake/tokenenv.1")" 0
+check "token not in claude env" "$(cat "$T/fake/tokenenv.$N")" 0
 # 7 the token never reaches the log; the log exists and records the role
 check "voice.log written" "$(grep -c 'role: active' "$ST/voice.log")" 1
 check "token not logged" "$(grep -c 's3cret-voice-token' "$ST/voice.log" "$T/runner.err" | awk -F: '{s+=$2} END {print s}')" 0

@@ -63,7 +63,7 @@ check "out: no IDLE_SLOTS" "$(watch bob)" SENTINEL
 
 # --- succession by the file's order. Beacons: alice, bob, carol from the inbox; run as dave (no snapshot of its own).
 now=$(date +%s)
-iso() { env_do alice "TZ=UTC hive_epoch_fmt $1 +%Y-%m-%dT%H:%M:%SZ"; }   # via hive-env.sh: portable (no date -r)
+iso() { env_do alice "TZ=UTC hive_epoch_fmt $1 +%Y-%m-%dT%H:%M:%SZ"; }   # via hive-env.sh: portable (BSD-safe)
 far=$(iso $((now + 4 * 86400))); r5=$(iso $((now + 3600))); r5b=$(iso $((now + 7200)))
 fresh=$((now - 600)); stale=$((now - 7 * 3600))
 usage() { echo "$1|$2|USAGE|$3% $4% $5 r5=${6:-$r5} agents=1"; }   # usage <epoch> <handle> <5h> <7d> <7d reset> [5h reset]

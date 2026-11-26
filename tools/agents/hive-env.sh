@@ -98,7 +98,7 @@ if [ -z "${HIVE_TZ_LABEL:-}" ]; then   # same zone as TZ, whose label was just r
 fi; export HIVE_TZ HIVE_TZ_LABEL
 hive_tzfmt() { TZ=${HIVE_TZ:-${TZ:-}} hive_fmt "$@"; }   # hive_tzfmt <epoch> <+format>: a time in HIVE_TZ
 # PROJECT_NAME: the hive's voice (Discord posts, notifications); default the repo name
-[ -n "$PROJECT_NAME" ] || { PROJECT_NAME=${REPO#*/}; PROJECT_NAME=${PROJECT_NAME:-${HIVE_ROOT##*/}}; }
+[ -n "$PROJECT_NAME" ] || { PROJECT_NAME=${REPO:-}; PROJECT_NAME=${PROJECT_NAME#*/}; PROJECT_NAME=${PROJECT_NAME:-${HIVE_ROOT##*/}}; }
 ROOT=${REPO_PATH:-$HIVE_ROOT}
 # REPO_PATHS: every checkout AT ships to (private installs can drive several client repos); default the one ROOT
 REPO_PATHS=${REPO_PATHS:-$ROOT}
@@ -221,7 +221,7 @@ hive_slug_of() { git -C "$1" remote get-url origin 2>/dev/null | sed -E 's#^.*[:
 
 # ---- studio-wide settings (STUDIO_REPO, edited from the hive hub) ----------------------------------------
 # The cache is $HIVE_STUDIO_CACHE (~/.claude/hive/studio), shared by every game on this machine. Reads never call GitHub.
-HIVE_STUDIO_FILES="hive/account-limits.conf hive/accounts-active.conf hive/settings.conf hive/ticket-maker.conf"
+HIVE_STUDIO_FILES="hive/account-limits.conf hive/accounts-active.conf hive/settings.conf hive/ticket-maker.conf hive/projects.conf"
 # hive_studio_sync: refresh the cached studio files from GitHub at most every 5 min (hive-beacon.sh calls it). A failed
 # fetch keeps the last copy; a file the studio does not have is cached empty.
 hive_studio_sync() {

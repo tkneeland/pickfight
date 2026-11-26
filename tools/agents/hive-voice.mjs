@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const VERSION = "1";
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ALLOWED_TOOLS = ["Bash(gh issue create:*)", "Bash(gh issue list:*)", "Bash(gh issue view:*)", "Bash(gh pr list:*)", "Bash(gh pr view:*)"];
+const ALLOWED_TOOLS = ["Bash(gh issue create:*)", "Bash(gh issue comment:*)", "Bash(gh issue list:*)", "Bash(gh issue view:*)", "Bash(gh pr list:*)", "Bash(gh pr view:*)"];
 const STREAM_KEEP = 60;
 
 if (typeof WebSocket === "undefined") {
@@ -101,8 +101,10 @@ function voicePrompt(ctx) {
   const hive = ctx?.hiveName || "the hive";
   const studio = ctx?.studioName || "the studio";
   return [
-    `You are ${hive}, the one voice of the ${studio} hive. Members of the studio talk to you in a shared chat on the hive hub.`,
-    "Answer from the context you are given (the hub's live state of the projects, the studio and the recent chat); be brief.",
+    `You are ${hive}, the one voice of the ${studio} hive. Members of the studio talk to you on the hive hub, where every game ` +
+      "has its own chat tab and the studio tab is for the hive itself and the company as a whole.",
+    "Answer from the context you are given (the hub's live state of the open game, or on the studio tab every game in " +
+      "context.projects, plus the studio and this tab's recent chat); be brief.",
     "Say so plainly when the context does not hold the answer; do not guess.",
     'The open tab tells you which game "this game" or "this project" means: context.tab is a project id, or "studio".',
     "You may file tickets with `gh issue create --label needs-triage` (and read issues and PRs with gh). A ticket goes to the open " +
@@ -114,7 +116,17 @@ function voicePrompt(ctx) {
       "`@relay <project id> <handle or tm> <message>` (tm = that project's triagemaster). Keep the message under 180 " +
       "characters, self-contained, and name the issue or PR number. The hub strips the line, posts it on the project's " +
       "channel and shows the session's answer in this chat. Say in your reply that you passed it on. Never relay secrets.",
-    "Never write code, merge, push or change files.",
+    "Changing the hive itself happens from the studio tab, through tickets. The hive's own repo is the entry named \"The " +
+      "hive\" in context.studio.stack; it ranks first, so the next free worker on any member's machine takes its ready " +
+      "tickets before game work, builds the change, and the triagemaster of the top game reviews and merges it; a change to " +
+      "the hub deploys itself once merged, and each game picks up script changes when the hive is re-installed into it. When " +
+      "a member on the studio tab asks for a change to how the hive works (its scripts, rules, the hub or this chat), file it " +
+      "there with `gh issue create --repo <that repo> --label ready-for-agent --label <p1|p2|p3>` (p1 when they want it now; " +
+      "a member's request is already approved, so it skips needs-triage). Write the body as the spec: what to change, why, " +
+      "and how to tell it works, quoting the member. Before filing, search that repo's open issues for the same thing and " +
+      "comment on a match instead. Reply with the link and say a worker picks it up first. For a one-off action rather than " +
+      "a change (grant access, rerun something, restart a machine), relay it to the top game's triagemaster instead.",
+    "Never write code, merge, push or change files yourself.",
     "Never repeat SSNs, EINs, bank or card numbers, even when the context or the question holds one.",
     "Humans do filings, payments and signatures: you can remind, summarise and file a ticket, never do them.",
   ].join("\n");
@@ -123,6 +135,8 @@ function voicePrompt(ctx) {
 function trimContext(ctx) {
   const c = structuredClone(ctx ?? {});
   if (Array.isArray(c.project?.stream) && c.project.stream.length > STREAM_KEEP) c.project.stream = c.project.stream.slice(-STREAM_KEEP);
+  for (const p of Array.isArray(c.projects) ? c.projects : [])
+    if (Array.isArray(p?.stream) && p.stream.length > STREAM_KEEP) p.stream = p.stream.slice(-STREAM_KEEP);
   if (Array.isArray(c.studio?.activity) && c.studio.activity.length > STREAM_KEEP) c.studio.activity = c.studio.activity.slice(-STREAM_KEEP);
   return c;
 }
@@ -146,15 +160,16 @@ function askPrompt(ask) {
   ].join("\n");
 }
 
-// ---- one ask -------------------------------------------------------------------------------------------------
-let current = null; // {id, child, dir, finished}
-const queue = [];
+// ---- asks: one at a time per tab, tabs in parallel ------------------------------------------------------------
+const jobs = new Map(); // ask id -> {id, child, dir, finished, timer, resolve}
+const queues = new Map(); // tab -> asks waiting behind that tab's running one
+const busyTabs = new Set();
 
 function runAsk(ask, send) {
   return new Promise((resolve) => {
     const dir = mkdtempSync(join(tmpdir(), "hive-voice-"));
     const job = { id: ask.id, child: null, dir, finished: false, timer: null, resolve };
-    current = job;
+    jobs.set(ask.id, job);
     let full = "", result = null, resultError = false, stderr = "", buf = "", timedOut = false;
     const finish = (msg) => {
       if (job.finished) return;
@@ -162,7 +177,7 @@ function runAsk(ask, send) {
       clearTimeout(job.timer);
       try { rmSync(dir, { recursive: true, force: true }); } catch {}
       if (msg) send(msg);
-      current = null;
+      jobs.delete(ask.id);
       resolve();
     };
     const env = { ...process.env };
@@ -208,7 +223,9 @@ function runAsk(ask, send) {
       if (buf) onLine(buf);
       if (job.finished) return;
       if (timedOut) return finish({ type: "error", id: ask.id, error: `timed out after ${timeoutSec}s` });
-      if (code !== 0 || resultError) {
+      // a finished answer stands even when claude then exits non-zero (e.g. a SessionEnd hook failed after the result)
+      const answered = result !== null && !resultError;
+      if (!answered && (code !== 0 || resultError)) {
         const why = stderr.trim().split("\n").slice(-3).join(" ") || (resultError && result) || "";
         log(`ask ${ask.id}: claude exited ${code ?? signal}${why ? `: ${why}` : ""}`);
         return finish({ type: "error", id: ask.id, error: `claude exited ${code ?? signal}${why ? `: ${why.slice(0, 300)}` : ""}` });
@@ -221,16 +238,17 @@ function runAsk(ask, send) {
   });
 }
 
-// abort the running ask (connection lost or shutting down): its reply is re-queued by the hub, so nothing is sent
-function abortCurrent() {
-  const job = current;
-  if (!job) return;
-  job.finished = true;
-  clearTimeout(job.timer);
-  if (job.child && job.child.exitCode === null && job.child.signalCode === null) job.child.kill("SIGTERM");
-  try { rmSync(job.dir, { recursive: true, force: true }); } catch {}
-  current = null;
-  job.resolve();
+// abort every running ask (connection lost or shutting down): the hub re-queues their replies, so nothing is sent
+function abortAll() {
+  queues.clear();
+  for (const job of [...jobs.values()]) {
+    job.finished = true;
+    clearTimeout(job.timer);
+    if (job.child && job.child.exitCode === null && job.child.signalCode === null) job.child.kill("SIGTERM");
+    try { rmSync(job.dir, { recursive: true, force: true }); } catch {}
+    jobs.delete(job.id);
+    job.resolve();
+  }
 }
 
 // ---- controls (the hub's buttons) ---------------------------------------------------------------------------
@@ -276,24 +294,25 @@ function runControl(msg, send) {
 }
 
 // ---- the connection ------------------------------------------------------------------------------------------
-let ws = null, backoff = 1000, reconnectTimer = null, stopping = false, pumping = false;
+let ws = null, backoff = 1000, reconnectTimer = null, stopping = false;
 
 function send(msg) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   else log(`dropped ${msg.type}${msg.id ? ` for ${msg.id}` : ""}: not connected`);
 }
 
-async function pump() {
-  if (pumping) return;
-  pumping = true;
+// run the tab's next ask unless one is already running there
+async function pump(tab) {
+  if (busyTabs.has(tab)) return;
   const conn = ws;
-  while (queue.length && !stopping && ws === conn) {
-    const ask = queue.shift();
-    log(`ask ${ask.id} from ${ask.from} (tab ${ask.tab})`);
-    await runAsk(ask, send);
-  }
-  pumping = false;
-  if (queue.length && !stopping) pump();
+  const q = queues.get(tab);
+  if (!q?.length || stopping || ws !== conn) return;
+  busyTabs.add(tab);
+  const ask = q.shift();
+  if (!q.length) queues.delete(tab);
+  log(`ask ${ask.id} from ${ask.from} (tab ${tab})`);
+  try { await runAsk(ask, send); } finally { busyTabs.delete(tab); }
+  if (!stopping && ws === conn) pump(tab);
 }
 
 function connect() {
@@ -324,9 +343,12 @@ function connect() {
     } else if (msg.type === "control" && msg.id) {
       runControl(msg, send);
     } else if (msg.type === "ask" && msg.id) {
-      if (current || queue.length) log(`ask ${msg.id} queued behind ${current?.id ?? queue[0].id}`);
-      queue.push(msg);
-      pump();
+      const tab = typeof msg.tab === "string" && msg.tab ? msg.tab : "studio";
+      const q = queues.get(tab) ?? [];
+      if (busyTabs.has(tab) || q.length) log(`ask ${msg.id} queued behind another on tab ${tab}`);
+      q.push(msg);
+      queues.set(tab, q);
+      pump(tab);
     } else {
       log(`ignored message type ${msg.type}`);
     }
@@ -337,8 +359,7 @@ function connect() {
     ws = null;
     log(`disconnected (${why})`);
     try { sock.close(); } catch {}
-    queue.length = 0;
-    abortCurrent();
+    abortAll();
     scheduleReconnect();
   };
   sock.onerror = (ev) => lost(`error${ev?.message ? `: ${ev.message}` : ""}`);
@@ -362,8 +383,7 @@ function shutdown(sig) {
   stopping = true;
   log(`${sig}: stopping`);
   clearTimeout(reconnectTimer);
-  queue.length = 0;
-  abortCurrent();
+  abortAll();
   try { ws?.close(1000, "runner stopping"); } catch {}
   setTimeout(() => process.exit(0), 300).unref();
 }

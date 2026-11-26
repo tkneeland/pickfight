@@ -29,6 +29,16 @@ S=$T/state; PACE="$AG/hive-pace.sh"; SNAP=$S/usage-snapshot.json
 now=$(date -u +%s); export HIVE_NOW=$now
 pass=0; fail=0
 fmt_e() { ( . "$AG/hive-env.sh" && hive_fmt "$1" "$2" ); }
+# set_mtime <file> <epoch>: exact mtime. hive-env.sh re-exports TZ from the account conf, so formatting through fmt_e and handing
+# the stamp to `touch -t` (which reads it in THIS shell's TZ) shifts the age by the zone difference on a runner whose TZ differs.
+# GNU touch takes an epoch (-d @N); BSD touch has no epoch form, so format with this shell's own TZ via hive_fmt (portable
+# date), restoring the TZ that hive-env.sh overwrote.
+if date --version >/dev/null 2>&1; then set_mtime() { touch -d "@${2%.*}" "$1"; }
+else set_mtime() {
+  local tz=${TZ-} had=${TZ+1} stamp
+  stamp=$( . "$AG/hive-env.sh"; if [ -n "$had" ]; then TZ=$tz; else unset TZ; fi; hive_fmt "${2%.*}" +%Y%m%d%H%M.%S )
+  touch -t "$stamp" "$1"
+}; fi
 check() { if [ "$2" = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $1: got '$2', want '$3'"; fi; }
 # snap <used5> <secs left in the 5h window | 0 = none> <used7|?> <secs left in the week | 0 = none>; fresh unless a 5th arg (age s)
 snap() {
@@ -36,7 +46,7 @@ snap() {
   [ "$2" -gt 0 ] && r5=$((now + $2)); [ "$4" -gt 0 ] && r7=$((now + $4))
   [ "$u7" = "?" ] && u7=null
   printf '{"rate_limits":{"five_hour":{"used_percentage":%s,"resets_at":%s},"seven_day":{"used_percentage":%s,"resets_at":%s}}}' "$1" "$r5" "$u7" "$r7" > "$SNAP"
-  [ -n "${5:-}" ] && touch -t "$(fmt_e $((now - $5)) +%Y%m%d%H%M.%S)" "$SNAP"
+  [ -n "${5:-}" ] && set_mtime "$SNAP" $((now - $5))
   return 0
 }
 st() { bash "$PACE" state; }
@@ -86,7 +96,7 @@ echo "{\"model\":{\"display_name\":\"x\"}}" > "$SNAP"; check "snapshot without r
 printf '{"rate_limits":{"five_hour":{"resets_at":%s},"seven_day":{"used_percentage":99,"resets_at":%s}}}' $((now + 9000)) $((now + HALFWK)) > "$SNAP"; check "5h used unknown: weekly guard still AHEAD" "$(st)" AHEAD
 snap 0 0 $W7 7200;  check "stale snapshot (2h, would be BEHIND) ON_PACE" "$(st)" ON_PACE
 snap 0 0 $W7 600;   check "10 min old snapshot still counts" "$(st)" BEHIND
-snap 0 0 $W7 0; touch -t "$(fmt_e $((now + 600)) +%Y%m%d%H%M.%S)" "$SNAP"; check "future mtime is fresh" "$(st)" BEHIND
+snap 0 0 $W7 0; set_mtime "$SNAP" $((now + 600)); check "future mtime is fresh" "$(st)" BEHIND
 # 7 margin: PACE_MARGIN and the tuning override
 snap 56 9000 $W7; check "margin 10 mid 56 ON_PACE" "$(st)" ON_PACE
 check "AHEAD margin 5 mid 56 AHEAD" "$(PACE_MARGIN=5 st)" AHEAD
@@ -132,7 +142,7 @@ ws=$((now - 3600)); we=$((ws + 18000))      # window A started an hour ago
 tick() { # tick <epoch> <used5> <agents> <ready> [reset epoch]
   HIVE_NOW=$1; export HIVE_NOW
   printf '{"rate_limits":{"five_hour":{"used_percentage":%s,"resets_at":%s},"seven_day":{"used_percentage":20,"resets_at":%s}}}' "$2" "${5:-$we}" "$((now + HALFWK))" > "$SNAP"
-  touch -t "$(fmt_e "$1" +%Y%m%d%H%M.%S)" "$SNAP"
+  set_mtime "$SNAP" "$1"
   bash "$PACE" log "$3" "$4" >/dev/null
 }
 tick $((ws + 60))   10 0 3     # idle with ready work: 5 min until the next row
