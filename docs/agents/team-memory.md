@@ -35,6 +35,8 @@ Every pickfight agent, on every account (tkneeland, agage-JG, schans2, tommyknee
 - **Status** means every ticket's substance and state (running, PR open, blocked on what), grouped, never just "#N title". (Tommy, 10-22.)
 - **PR bodies** end with a Resource Usage section: 5h rate, weekly projection, and both reset times in ET (`hive-ship.sh` fills it).
 
+- **`hive.conf` TEST_CMD and INSTALL_CMD are empty on purpose** (claude-hive#104): the old `pf-ship.sh` ran no test suite (only a boot check after a conflict auto-resolve) and CI (`scenarios.yml`) is the gate. The full scenario suite is ~1,300 scenarios, 20+ minutes serial (CI runs 4 shards), too slow to run in every ship. `BOOT_CHECK_CMD` mirrors CI's import + boot check. The local app rebuild is per machine: `INSTALL_CMD` lives in `accounts/tkneeland.conf` (the old `INSTALL_SCRIPT`).
+
 ## Per dev
 - **Tommy (tkneeland, owner):** commit, push, merge your own green and reviewed PRs without asking. He never wants a manual permission prompt.
 - **Daily digest paused (Tommy, 11-13):** while development is slow, skip the 9 AM digest. On `DIGEST_DUE`, mark it sent (`hive-triage-watch.sh --digest-sent`) without posting. The devs bring updates to #hive as LLC and Steamworks steps finish. Fires still post right away. Resume only when Tommy asks.
