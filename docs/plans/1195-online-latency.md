@@ -213,8 +213,8 @@ only simulation and the client predicts nothing).
 
 Before the claim: write the Touches list (section 2) into #1195, claim with
 `gh issue edit 1195 --add-assignee @me` (already assigned to `agage-JG`),
-post a `[CLAIM]` comment, then `tools/agents/pf-msg.sh claim 1195`
-(`collaboration.md`).
+post a `[CLAIM]` comment, then `tools/agents/hive-msg.sh claim 1195`
+(`collaboration.md`; `pf-msg.sh` is retired, use `hive-msg.sh`).
 
 PR A: branch `feat/issue-1195-ping-readout` from `origin/main`.
 
@@ -427,7 +427,7 @@ scenario. This is the number behind D4; PR B re-measures it (V5).
 
 - Issue #1195 body: append the **Touches** section from section 2 (no other
   change to the contract).
-- A `[CLAIM]` comment and `tools/agents/pf-msg.sh claim 1195` after the claim.
+- A `[CLAIM]` comment and `tools/agents/hive-msg.sh claim 1195` after the claim.
 - Decisions D1–D8 (section 3); D8 needs a recorded owner answer before PR A
   step 4.
 - **D9 (owner):** if step 3 is triggered by the numbers, build it as a
