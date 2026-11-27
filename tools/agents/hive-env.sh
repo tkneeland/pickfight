@@ -201,7 +201,7 @@ hive_pr_author_flag() { [ "$PRIVATE" = 1 ] && echo "--author @me"; }
 hive_review_blocked() { # <repo-slug> <pr>
   if [ "$PRIVATE" = 1 ]; then [ -f "$HIVE_STATE/review-blocked/${1//\//__}-$2" ]; else gh pr view "$2" -R "$1" --json labels -q '.labels[].name' 2>/dev/null | grep -qx review-blocked; fi; }
 # review-passed marker (REQUIRE_REVIEW_PASS=1: hive-automerge.sh and hive-ship.sh merge only PRs that carry it): the
-# review-passed label normally; a local file in private mode. hive_mark_review <slug> <pr> passed|blocked|clear sets it.
+# review-passed label normally; a local file in private mode. hive_mark_review <slug> <pr> passed|blocked|clear [findings-file] sets it.
 hive_review_passed() { # <repo-slug> <pr>
   [ "$REQUIRE_REVIEW_PASS" = 1 ] || return 0
   if [ "$PRIVATE" = 1 ]; then [ -f "$HIVE_STATE/review-passed/${1//\//__}-$2" ]; else gh pr view "$2" -R "$1" --json labels -q '.labels[].name' 2>/dev/null | grep -qx review-passed; fi; }
@@ -210,7 +210,16 @@ hive_review_passed() { # <repo-slug> <pr>
 hive_grill_pr() {
   [ "$PRIVATE" != 1 ] && [ -n "${GRILL_DOC:-}" ] && [ "$(gh pr view "$2" -R "$1" --json files,author -q '"\(.author.login) \([.files[].path] | join(","))"' 2>/dev/null)" = "$HIVE_ACCOUNT $GRILL_DOC" ]
 }
-hive_mark_review() { # <repo-slug> <pr> passed|blocked|clear
+# hive_mark_review <repo-slug> <pr> passed|blocked|clear [findings-file]: with `passed` and a findings file (non-private
+# mode), the file is first posted as a PR comment whose first line is HIVE_REVIEW_MARKER (prepended if missing), the audit
+# trail rule 12 needs for a triagemaster-authored conflict-risk PR. Without a file, `passed` is refused on a conflict-risk PR
+# authored by this account unless that comment already exists.
+hive_review_findings_missing() { # <slug> <pr>: 0 when the PR is this account's own conflict-risk PR with no findings comment
+  [ "$(gh pr view "$2" -R "$1" --json author -q .author.login 2>/dev/null)" = "${HIVE_ACCOUNT:-}" ] || return 1
+  hive_pr_conflict_risk "$1" "$2" || return 1
+  ! hive_review_findings_posted "$1" "$2"
+}
+hive_mark_review() {
   hive_grill_pr "$1" "$2" || hive_guard mark-review || return 1
   local k=${1//\//__}-$2 d
   if [ "$PRIVATE" = 1 ]; then
@@ -218,7 +227,17 @@ hive_mark_review() { # <repo-slug> <pr> passed|blocked|clear
     case $3 in passed|blocked) d=$HIVE_STATE/review-$3; mkdir -p "$d"; date +%s > "$d/$k";; esac; return 0
   fi
   case $3 in
-    passed) gh pr edit "$2" -R "$1" --add-label review-passed --remove-label review-blocked >/dev/null;;
+    passed)
+      if [ -n "${4:-}" ]; then
+        [ -r "$4" ] || { echo "hive_mark_review: findings file $4 not readable" >&2; return 1; }
+        local f; f=$(mktemp "${TMPDIR:-/tmp}/hive-review.XXXXXX") || return 1
+        { [ "$(head -n 1 "$4")" = "$HIVE_REVIEW_MARKER" ] || echo "$HIVE_REVIEW_MARKER"; cat "$4"; } > "$f"
+        gh pr comment "$2" -R "$1" --body-file "$f" >/dev/null; local rc=$?; rm -f "$f"
+        [ $rc = 0 ] || { echo "hive_mark_review: posting the findings comment failed" >&2; return 1; }
+      elif hive_review_findings_missing "$1" "$2"; then
+        echo "hive_mark_review: refused: conflict-risk PR authored by this account needs the reviewer's findings as a $HIVE_REVIEW_MARKER comment; pass a findings file: hive_mark_review $1 $2 passed <file>" >&2; return 1
+      fi
+      gh pr edit "$2" -R "$1" --add-label review-passed --remove-label review-blocked >/dev/null;;
     blocked) gh pr edit "$2" -R "$1" --add-label review-blocked --remove-label review-passed >/dev/null;;
     *) gh pr edit "$2" -R "$1" --remove-label review-passed --remove-label review-blocked >/dev/null;;
   esac
@@ -571,6 +590,9 @@ hive_merge_gated() { [ "$PRIVATE" != 1 ] || return 1; hive_is_triagemaster && re
 # PR's own author does not count; only the label's latest adder differing from the author does. 0 = counts, 1 = does not.
 # Only the triagemaster gets past hive_merge_gated on a conflict-risk PR, so any other account (and private mode, which
 # has no labels) returns 0 at once; the one events call is made only for a triagemaster PR that is conflict-risk.
+# Exception (grill R2 Q6, #118): a PR authored by the current triagemaster's own account (author == HIVE_ACCOUNT) may be
+# passed by the TM's own reviewer subagent, provided a PR comment whose first line is HIVE_REVIEW_MARKER carries the findings.
+HIVE_REVIEW_MARKER='[HIVE-REVIEW]'
 hive_review_pass_ok() {
   [ "$PRIVATE" != 1 ] && [ "${REQUIRE_REVIEW_PASS:-1}" = 1 ] || return 0
   hive_is_triagemaster || return 0
@@ -578,7 +600,14 @@ hive_review_pass_ok() {
   local author by
   author=$(gh pr view "$2" -R "$1" --json author -q .author.login 2>/dev/null)
   by=$(gh api "repos/$1/issues/$2/events" --paginate --jq '.[] | select(.event == "labeled" and .label.name == "review-passed") | .actor.login' 2>/dev/null | tail -1)
-  [ -n "$author" ] && [ -n "$by" ] && [ "$by" != "$author" ]
+  [ -n "$author" ] && [ -n "$by" ] || return 1
+  [ "$by" != "$author" ] || { [ "$author" = "${HIVE_ACCOUNT:-}" ] && hive_review_findings_posted "$1" "$2"; }
+}
+# hive_review_findings_posted <slug> <pr>: 0 when the PR has a comment whose first line is HIVE_REVIEW_MARKER (the audit trail).
+hive_review_findings_posted() {
+  local n
+  n=$(gh api "repos/$1/issues/$2/comments" --paginate --arg m "$HIVE_REVIEW_MARKER" --jq '.[] | select((.body | split("\n")[0] | rtrimstr("\r")) == $m) | .id' 2>/dev/null | grep -c .)
+  [ "${n:-0}" -gt 0 ]
 }
 # hive_screen <kind>: this repo's screen session name for a watcher, hive-<kind>-<repo>-<account>. The repo is in the
 # name so one machine can run several games' hives side by side (a bare hive-<kind>-<account> was one game's only).
