@@ -72,6 +72,10 @@ export HIVE_ACCOUNT HIVE_DIR
 [ -f "$HIVE_DIR/accounts/_shared.conf" ] && . "$HIVE_DIR/accounts/_shared.conf"
 . "$HIVE_DIR/accounts/$HIVE_ACCOUNT.conf"
 : "${RESET_GRACE_HOURS:=24}" "${MAX_WORKERS:=3}" "${FIVE_H_STOP_USED:=90}"   # the hub wins: settings.conf (hive_studio_settings), max_workers per account (hive_limits)
+# Beacon resend gate and staleness (issue #77): hive-beacon.sh resends USAGE at least this often even when nothing moved, so a
+# beacon is stale only when older than the resend interval plus a margin (default 60 + 15 = 75 min). Every "is this beacon
+# stale" check uses BEACON_STALE_SECS; the hub mirrors it (BEACON_STALE_SEC in hub/src/shared/types.ts). Override in hive.conf.
+: "${BEACON_RESEND_SECS:=3600}" "${BEACON_STALE_MARGIN_SECS:=900}"; : "${BEACON_STALE_SECS:=$(( BEACON_RESEND_SECS + BEACON_STALE_MARGIN_SECS ))}"
 : "${PEER_QUEUE_MIN:=5}" "${BEACON_FRESH_HOURS:=6}" "${DIGEST_HOUR:=9}" "${QUIET_START:=${NIGHT_START:-20}}" "${QUIET_END:=${NIGHT_END:-9}}"   # NIGHT_*: pre-pace confs
 : "${MAIN_BRANCH:=main}" "${MERGE_METHOD:=merge}" "${DISCORD:=0}" "${MIN_WEEKLY_REMAINING_FOR_TICKETS:=0}" "${SUCCESSION_RANK:=9}"
 : "${STUDIO_REPO:=}" "${HIVE_STUDIO_CACHE:=$HOME/.claude/hive/studio}"
@@ -100,6 +104,8 @@ hive_tzfmt() { TZ=${HIVE_TZ:-${TZ:-}} hive_fmt "$@"; }   # hive_tzfmt <epoch> <+
 # PROJECT_NAME: the hive's voice (Discord posts, notifications); default the repo name
 [ -n "$PROJECT_NAME" ] || { PROJECT_NAME=${REPO:-}; PROJECT_NAME=${PROJECT_NAME#*/}; PROJECT_NAME=${PROJECT_NAME:-${HIVE_ROOT##*/}}; }
 ROOT=${REPO_PATH:-$HIVE_ROOT}
+# HIVE_CHECKOUT_DIR: the folder holding self-serve repo clones (hive-stack.sh checkout), outside ~/.claude; default: beside the game checkout
+HIVE_CHECKOUT_DIR=${HIVE_CHECKOUT_DIR:-$(dirname "$ROOT")}; export HIVE_CHECKOUT_DIR
 # REPO_PATHS: every checkout AT ships to (private installs can drive several client repos); default the one ROOT
 REPO_PATHS=${REPO_PATHS:-$ROOT}
 _rp=""; for _p in $REPO_PATHS; do case $_p in /*|[A-Za-z]:/*|[A-Za-z]:\\*) _rp+="$_p ";; *) _rp+="$HIVE_ROOT/$_p ";; esac; done; REPO_PATHS=${_rp% }; export REPO_PATHS
@@ -243,7 +249,7 @@ hive_studio_sync() {
 }
 # hive_studio_settings: the studio-wide settings from the hub (hive/settings.conf: "key=value" lines, "#" comments) replace
 # the conf values: reset_spend_hours (0-72) -> RESET_GRACE_HOURS, offline_hours (1-48) ->
-# BEACON_FRESH_HOURS, ready_ticket_min (0-50) -> PEER_QUEUE_MIN. Other keys (chat_switch_margin is the hub's own), and values
+# BEACON_FRESH_HOURS, ready_ticket_min (0-50) -> PEER_QUEUE_MIN. Other keys, and values
 # that are not whole numbers in range, are ignored. Runs at load, so no forks.
 hive_studio_settings() {
   local l k v f=$HIVE_STUDIO_CACHE/settings.conf
@@ -485,13 +491,21 @@ hive_live_agents() {   # optional $1: the open issue numbers (space separated) w
 }
 hive_five_h_used() { jq -r '.rate_limits.five_hour.used_percentage // 0 | floor' "$HIVE_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
 hive_five_h_reset() { jq -r '.rate_limits.five_hour.resets_at // 0 | floor' "$HIVE_STATE/usage-snapshot.json" 2>/dev/null || echo 0; }
-# hive_pace_now: sets p_state (AHEAD | ON_PACE | BEHIND, hive-pace.sh state) and p_max (the effective max workers, hive-pace.sh
+# hive_pace_now: sets p_state (AHEAD | ON_PACE | BEHIND | BURN, hive-pace.sh state) and p_max (the effective max workers, hive-pace.sh
 # max) from the pace governor, loaded as a library in a subshell (no second bash). Anything unreadable: ON_PACE.
 hive_pace_now() {
-  local o; o=$( HIVE_PACE_LIB=1; . "$HIVE_DIR/hive-pace.sh" >/dev/null 2>&1 && compute >/dev/null 2>&1 && echo "$state $MAX_WORKERS" )
+  local o; o=$( HIVE_PACE_LIB=1; . "$HIVE_DIR/hive-pace.sh" >/dev/null 2>&1 && compute >/dev/null 2>&1 && echo "$state $eff_max" )
   p_state=${o%% *}; p_max=${o#* }
-  case $p_state in AHEAD|ON_PACE|BEHIND) ;; *) p_state=ON_PACE;; esac
+  case $p_state in AHEAD|ON_PACE|BEHIND|BURN) ;; *) p_state=ON_PACE;; esac
   case $p_max in ''|*[!0-9]*) p_max=$MAX_WORKERS;; esac
+}
+# hive_usage_stale: 0 when this account's usage-snapshot.json exists but is older than USAGE_STALE_HOURS (hive.conf, default 6),
+# so budget gates would decide on stale numbers. A missing snapshot is not stale (fresh installs, no usage source yet).
+# hive-keepalive.sh refreshes it every USAGE_REFRESH_MINUTES (default 15) via hive-usage.sh.
+: "${USAGE_STALE_HOURS:=6}" "${USAGE_REFRESH_MINUTES:=15}"
+hive_usage_stale() {
+  local m; m=$(hive_mtime "$HIVE_STATE/usage-snapshot.json") || return 1
+  [ $(( $(date +%s) - m )) -gt $(( USAGE_STALE_HOURS * 3600 )) ]
 }
 # hive_worker_target: how many workers this account may run now. 0 while it is switched out in the hub (hive_is_out), at its
 # weekly stop (hive_budget_ok), at its 5h stop (FIVE_H_STOP_USED) with the window open (an unknown reset counts as open), or
@@ -499,6 +513,7 @@ hive_pace_now() {
 # running < target; never above it.
 hive_worker_target() {
   hive_is_out && { echo 0; return; }   # out: start nothing; running work finishes or is handed back
+  hive_usage_stale && { echo "hive: usage snapshot is over ${USAGE_STALE_HOURS}h old; not starting new workers until it refreshes (hive-usage.sh)" >&2; echo 0; return; }
   hive_budget_ok || { echo 0; return; }
   local f r; f=$(hive_five_h_used); r=$(hive_five_h_reset)
   if [ "$f" -ge "$FIVE_H_STOP_USED" ] && { [ "$r" -le 0 ] || [ "$r" -gt "$(date +%s)" ]; }; then echo 0; return; fi
@@ -552,6 +567,19 @@ hive_pr_conflict_risk() {
 # hive_merge_gated <slug> <pr> [ticket]: 0 when this account must not merge the PR (conflict-risk, or unknown, and not
 # the triagemaster). Private mode has no labels, so never gated.
 hive_merge_gated() { [ "$PRIVATE" != 1 ] || return 1; hive_is_triagemaster && return 1; hive_pr_conflict_risk "$@"; [ $? != 1 ]; }
+# hive_review_pass_ok <slug> <pr> [ticket]: rule 12 provenance. On a conflict-risk PR a review-passed label added by the
+# PR's own author does not count; only the label's latest adder differing from the author does. 0 = counts, 1 = does not.
+# Only the triagemaster gets past hive_merge_gated on a conflict-risk PR, so any other account (and private mode, which
+# has no labels) returns 0 at once; the one events call is made only for a triagemaster PR that is conflict-risk.
+hive_review_pass_ok() {
+  [ "$PRIVATE" != 1 ] && [ "${REQUIRE_REVIEW_PASS:-1}" = 1 ] || return 0
+  hive_is_triagemaster || return 0
+  hive_pr_conflict_risk "$@"; case $? in 1) return 0;; esac
+  local author by
+  author=$(gh pr view "$2" -R "$1" --json author -q .author.login 2>/dev/null)
+  by=$(gh api "repos/$1/issues/$2/events" --paginate --jq '.[] | select(.event == "labeled" and .label.name == "review-passed") | .actor.login' 2>/dev/null | tail -1)
+  [ -n "$author" ] && [ -n "$by" ] && [ "$by" != "$author" ]
+}
 # hive_screen <kind>: this repo's screen session name for a watcher, hive-<kind>-<repo>-<account>. The repo is in the
 # name so one machine can run several games' hives side by side (a bare hive-<kind>-<account> was one game's only).
 hive_screen() { printf 'hive-%s-%s-%s' "$1" "${HIVE_SLUG#*__}" "$HIVE_ACCOUNT"; }
@@ -648,7 +676,7 @@ hive_pidlock() {
   return 1
 }
 hive_pidunlock() { [ "$(tr -d '\r ' 2>/dev/null < "$1")" = "$$" ] && rm -f "$1"; return 0; }
-# hive_beacon <handle>: sets b_pace (AHEAD/ON_PACE/BEHIND from pace=, empty if absent) b_age (s, 999999 if none) b_p5 b_r5 b_used b_reset (7d) b_at (ISO stamp) from the handle's newest
+# hive_beacon <handle>: sets b_pace (AHEAD/ON_PACE/BEHIND/BURN from pace=, empty if absent) b_age (s, 999999 if none) b_p5 b_r5 b_used b_reset (7d) b_at (ISO stamp) from the handle's newest
 # USAGE line, or from this account's own usage-snapshot.json. Percent values are floored and empty when unknown ("?", or a
 # 1970 reset). The age is from at= (when the snapshot was taken) when present. Run hive_usage_backfill first so a machine
 # that was off does not decide on an empty or stale inbox.
@@ -676,6 +704,70 @@ EOT
   case $p7 in ''|*[!0-9]*) p7="";; esac
   case $r7 in 1970-01-01*|'') p7=""; r7="";; esac
   b_used=$p7; b_reset=$r7
+}
+# hive_send_count <handle>: "<n> <max>", the newest daily send count of the account (issue #34). This account: .msg-count (UTC
+# day) and HIVE_MSG_DAILY_MAX; a peer: the suffix its last message carried (hive-msg.sh strip_sends, .msg-sends-<handle>).
+# Empty when unknown or recorded on an earlier UTC day (the count restarts every day).
+hive_send_count() {
+  local t n mx day today; today=$(TZ=UTC hive_fmt "$(date -u +%s)" +%Y-%m-%d)
+  if [ "$1" = "$HIVE_ACCOUNT" ]; then
+    { read -r day n; } 2>/dev/null < "$HIVE_STATE/.msg-count"; mx=${HIVE_MSG_DAILY_MAX:-100}
+    [ "${day//$'\r'/}" = "$today" ] || return 0
+  else
+    { read -r t n mx; } 2>/dev/null < "$HIVE_STATE/.msg-sends-$1"; t=${t//$'\r'/}
+    case $t in ''|*[!0-9]*) return 0;; esac
+    [ "$(TZ=UTC hive_fmt "$t" +%Y-%m-%d)" = "$today" ] || return 0
+  fi
+  case $n$mx in ''|*[!0-9]*) return 0;; esac
+  echo "$n $mx"
+}
+# hive_peer_agents <handle>: agents= of the handle's newest USAGE line; "?" when none
+hive_peer_agents() {
+  local a; a=$(awk -F'|' -v p="$1" '$2 == p && $3 == "USAGE" && $1 + 0 >= m { m = $1 + 0; l = $4 } END { print l }' "$HIVE_INBOX" 2>/dev/null |
+    sed -n 's/.*agents=\([0-9]*\).*/\1/p'); echo "${a:-?}"
+}
+# hive_idle_reason <handle> <agents> <ready: a count or ?>: why the account runs no workers or has a stale beacon, in plain words
+# from data the triagemaster already has (issue #34); empty when it needs no reason (it has agents and a fresh beacon) or when
+# nothing explains it (an unexplained stall: ASK it, rule 27). Leaves hive_beacon's b_* set (and b_pace, this account's from the
+# pace governor). Reasons: "beacon held: send cap n/max ...", "session down? ...", "held: switched out in the hub",
+# "held: weekly floor (u% of s%)", "held: 5h stop (p% of s%)", "held: AHEAD (5h p%, target t%)", "held: weekly guard",
+# "no ready tickets".
+hive_idle_reason() {
+  local h=$1 ag=$2 rd=${3:-?} now stale=0 n mx heard r r5 el tgt stop; now=$(date +%s)
+  hive_beacon "$h"
+  if [ "$h" = "$HIVE_ACCOUNT" ] && [ "$b_age" -lt 999999 ] && [ -z "$b_pace" ]; then hive_pace_now; b_pace=$p_state; fi
+  [ "$b_age" -ge "$BEACON_STALE_SECS" ] && stale=1
+  [ "$ag" = 0 ] || [ "$stale" = 1 ] || return 0
+  if [ "$stale" = 1 ]; then
+    read -r n mx <<EOT
+$(hive_send_count "$h")
+EOT
+    if [ -n "$n" ] && [ $(( n * 100 )) -ge $(( mx * 70 )) ]; then
+      echo "beacon held: send cap $n/$mx (alive; check its CLAIMs/messages)"; return 0; fi
+    if [ "$h" = "$HIVE_ACCOUNT" ]; then heard=$(hive_mtime "$HIVE_STATE/msg-status.json" 2>/dev/null || echo 0); else heard=$(hive_peer_heard "$h"); fi
+    if [ "${heard:-0}" -le 0 ] || [ $(( now - heard )) -gt 1800 ]; then
+      if [ "${heard:-0}" -le 0 ]; then echo "session down? (never heard)"; else echo "session down? (no message in $(( (now - heard) / 60 )) min)"; fi
+      return 0; fi
+    return 0   # alive, not capped, yet no fresh beacon: nothing explains it
+  fi
+  hive_is_out "$h" && { echo "held: switched out in the hub"; return 0; }
+  hive_limits "$h"; stop=$(( 100 - ${l_wmin:-0} ))
+  if [ -n "$b_used" ] && [ -n "$b_reset" ] && r=$(hive_iso_to_epoch "$b_reset") && [ -n "$r" ]; then
+    if { [ "$b_used" -ge 100 ] && [ "$r" -gt "$now" ]; } || hive_weekly_capped "$b_used" "$r" "${l_wmin:-0}"; then
+      echo "held: weekly floor ($b_used% of $stop%)"; return 0; fi
+  fi
+  r5=""; [ -n "$b_r5" ] && r5=$(hive_iso_to_epoch "$b_r5")
+  if [ -n "$b_p5" ] && [ -n "$r5" ] && [ "$r5" -gt "$now" ] && [ "$b_p5" -ge "${l_5h:-90}" ]; then
+    echo "held: 5h stop ($b_p5% of ${l_5h:-90}%)"; return 0; fi
+  if [ "$b_pace" = AHEAD ]; then
+    if [ -n "$b_p5" ] && [ -n "$r5" ] && [ "$r5" -gt "$now" ]; then
+      el=$(( 18000 - (r5 - now) )); [ "$el" -lt 0 ] && el=0; tgt=$(( (el * 100 + 9000) / 18000 ))
+      [ "$b_p5" -gt $(( tgt + ${PACE_MARGIN:-10} )) ] && { echo "held: AHEAD (5h $b_p5%, target $tgt%)"; return 0; }
+    fi
+    echo "held: weekly guard"; return 0
+  fi
+  [ "$rd" = 0 ] && echo "no ready tickets"
+  return 0
 }
 # hive_usage_backfill: when the inbox's newest USAGE line is missing or 30+ min old (listener down, machine was off; a live
 # listener gets one every 15 min per account), fills it from the channel's cache (hive-msg.sh backfill: ntfy poll of the

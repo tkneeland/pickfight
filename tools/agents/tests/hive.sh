@@ -87,7 +87,7 @@ has "aj offline" "$l" "offline 3h"; has "aj role" "$l" "· dev ·"; has "aj stal
 has "aj 5h ET" "$l" "5h 50% (r 1:30p)"; has "aj 7d ET" "$l" "7d 80% (r Sat 10a)"; has "aj agents" "$l" "agents 0"; has "aj claude unknown" "$l" "agents 0 · claude ?"
 has "aj none" "$l2" "claimed none · ready 0 · PRs none"
 l=$(line "$out" carol); l2=$(line "$out" carol 2)
-has "me online" "$l" "online (this machine)"; has "me usage" "$l" "5h 7% (r 3a) · 7d 30% (r Thu 12p)"; has "me agents" "$l" "agents 1"; has "me claude unknown (no transcript_path)" "$l" "agents 1 · claude ?"
+has "me online" "$l" "online (this machine)"; has "me usage" "$l" "5h 7% BEHIND (r 3a) · 7d 30% (r Thu 12p)"; has "me agents" "$l" "agents 1"; has "me claude unknown (no transcript_path)" "$l" "agents 1 · claude ?"
 has "me claimed" "$l2" "claimed #901"; has "me ready" "$l2" "ready 1"; has "me PRs" "$l2" "PRs #910 passed, #911 blocked"
 l=$(line "$out" dave)
 has "reserve" "$l" "offline (never heard) · reserve · usage ? · agents ? · claude ?"

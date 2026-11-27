@@ -24,6 +24,7 @@
 # Conf $HIVE_STATE/msg.conf: HIVE_MSG_TOPIC=..., optional HIVE_MSG_SERVER (default https://ntfy.sh), optional HIVE_MSG_TOKEN
 # (an ntfy access token, sent as Authorization: Bearer through the curl config on stdin, for a paid tier or a self-hosted
 # server). Off in SINGLE_ACCOUNT (and so PRIVATE) mode: nothing is sent or read.
+# Every line sent ends with " [s<n>/<max>]" (this account's daily send count); the receiver strips it and records it.
 # Env: HIVE_NOW (epoch override for tests), HIVE_MSG_NOSEND=1 (heartbeat sends nothing), HIVE_MSG_DAILY_MAX.
 _s=$0; case $_s in */*) _s=${_s%/*}; [ -n "$_s" ] || _s=/;; *) _s=.;; esac
 . "$_s/hive-env.sh" || exit 1
@@ -69,6 +70,21 @@ topic_url_conf() {
   printf 'url = "%s/%s%s"\n' "$HIVE_MSG_SERVER" "$HIVE_MSG_TOPIC" "${1:-}"
   [ -z "$HIVE_MSG_TOKEN" ] || printf 'header = "Authorization: Bearer %s"\n' "$HIVE_MSG_TOKEN"
 }
+# Send count suffix (issue #34): every line carries this account's daily send count, " [s<n>/<max>]" (short: the ntfy message
+# limit is ~250 chars). The receiver (listen, backfill) strips it before anything reads the text and records the newest count per
+# account in $HIVE_STATE/.msg-sends-<account> ("<epoch> <n> <max>"; hive.sh status reads it to say "beacon held: send cap").
+# strip_sends <from> <epoch> <text>: sets SENDS_REST to the text without the suffix and records the count when it is newer.
+strip_sends() {
+  local suf=${3##* } n mx; SENDS_REST=$3
+  case $suf in "[s"[0-9]*/[0-9]*"]") ;; *) return 0;; esac
+  n=${suf#"[s"}; n=${n%%/*}; mx=${suf#*/}; mx=${mx%"]"}
+  case $n$mx in *[!0-9]*) return 0;; esac
+  if [ "$suf" = "$3" ]; then SENDS_REST=""; else SENDS_REST=${3% *}; fi
+  local f=$HIVE_STATE/.msg-sends-$1 old=0; { read -r old _; } 2>/dev/null < "$f"; old=${old%.*}
+  case $old in ''|*[!0-9]*) old=0;; esac
+  [ "${2%.*}" -ge "$old" ] 2>/dev/null && echo "${2%.*} $n $mx" > "$f"
+  return 0
+}
 send() {  # send <TYPE> <text...>   exit 0 sent, 1 failed or refused, 2 bad type, 3 quota backoff (429), 4 over the budget
   local type=$1 t day n code hdr ra u max=${HIVE_MSG_DAILY_MAX:-100}; shift
   case $type in CLAIM|RELEASE|USAGE|ASK|ANSWER|INFO|FIRE|HELLO|TM) ;; *) echo "hive-msg: bad type '$type'" >&2; return 2;; esac
@@ -84,7 +100,7 @@ send() {  # send <TYPE> <text...>   exit 0 sent, 1 failed or refused, 2 bad type
   case $type in USAGE|HELLO|INFO)
     if [ $((n * 100)) -ge $((max * 70)) ]; then log "dropped $type: $n of $max daily sends used (USAGE/HELLO/INFO stop at 70%)"; return 4; fi;; esac
   hdr=$HIVE_STATE/.msg-hdr.$$
-  code=$(topic_url_conf | curl -s -m 5 -K - -D "$hdr" -o /dev/null -w '%{http_code}' -d "$HIVE_ACCOUNT $type $*" 2>/dev/null)
+  code=$(topic_url_conf | curl -s -m 5 -K - -D "$hdr" -o /dev/null -w '%{http_code}' -d "$HIVE_ACCOUNT $type $* [s$((n + 1))/$max]" 2>/dev/null)
   ra=$(tr -d '\r' 2>/dev/null < "$hdr" | sed -n 's/^[Rr][Ee][Tt][Rr][Yy]-[Aa][Ff][Tt][Ee][Rr]:[[:space:]]*//p' | tail -n 1); rm -f "$hdr"
   case $code in
     2[0-9][0-9]) ;;
@@ -142,6 +158,7 @@ EOT
           echo "$id" > "$HIVE_STATE/.msg-last-id"
           from=${msg%% *}; rest=${msg#* }; type=${rest%% *}; rest=${rest#"$type"}; rest=${rest# }
           [ "$from" = "$HIVE_ACCOUNT" ] && continue
+          strip_sends "$from" "$t" "$rest"; rest=$SENDS_REST
           echo "$t|$from|$type|$rest" >> "$INBOX"
           # wake only for fresh events: a reconnect replaying older history must not re-wake the triage watcher
           case $type in
@@ -165,7 +182,10 @@ EOT
     printf '%s\n' "$got" | jq -r --arg me "$HIVE_ACCOUNT" 'select(.event=="message") | (.message|gsub("[[:cntrl:]]";" ")|.[0:300]) as $m
       | ($m|split(" ")) as $w | select($w[0] != $me and ($w|length) >= 2)
       | "\(.time)|\($w[0])|\($w[1])|\($w[2:]|join(" "))"' 2>/dev/null |
-      while IFS= read -r l; do grep -qxF -- "$l" "$INBOX" || echo "$l" >> "$INBOX.new"; done
+      while IFS='|' read -r bt bf bty brest; do
+        strip_sends "$bf" "$bt" "$brest"; l="$bt|$bf|$bty|$SENDS_REST"
+        grep -qxF -- "$l" "$INBOX" || echo "$l" >> "$INBOX.new"
+      done
     # merge keeping the inbox time-ordered (claimed/heartbeat read it in file order); stable, so ties keep their order
     if [ -s "$INBOX.new" ]; then
       cat "$INBOX" "$INBOX.new" | sort -s -t'|' -k1,1n > "$INBOX.tmp" && mv "$INBOX.tmp" "$INBOX"

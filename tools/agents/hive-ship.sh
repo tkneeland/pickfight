@@ -112,6 +112,7 @@ if echo "$s" | grep -qE "[[:space:]]fail[[:space:]]"; then echo "CI FAILED $n"; 
 echo "$s" | grep -v pass
 if hive_review_blocked "$slug" "$n"; then echo "REVIEW-BLOCKED $n: a confirmed reviewer finding must be fixed first. Not merging."; exit 1; fi
 if ! hive_review_passed "$slug" "$n"; then echo "AWAITING REVIEW $n: CI green; hive-automerge.sh merges it once the reviewer marks it review-passed."; exit 0; fi
+if ! hive_review_pass_ok "$slug" "$n" "$i"; then echo "AWAITING REVIEW $n: conflict-risk PR whose review-passed was added by its own author; another account must review it."; exit 0; fi
 gh pr merge "$n" -R "$slug" "$(hive_merge_flag)" --delete-branch 2>&1 | tail -1; st=$(gh pr view "$n" -R "$slug" --json state -q .state); echo "$n $st"; [ "$st" = MERGED ] || { echo "MERGE FAILED $n"; exit 1; }
 # Never move a human's checkout: fast-forward and install only when it is already on MAIN_BRANCH.
 if [ "$(git -C "$checkout" branch --show-current 2>/dev/null)" = "$MAIN_BRANCH" ]; then

@@ -54,6 +54,26 @@ if [ "$SINGLE_ACCOUNT" = 1 ]; then say INFO "single-account mode: no private cha
 elif hive_channel_fresh 2>/dev/null; then say PASS "peer beacons fresh on the private channel"
 else say WARN "no peer USAGE beacon under ${BEACON_FRESH_HOURS}h old: peers may be offline, or this listener is deaf (check msg.conf)"; fi
 
+# 4b. Peers (rule 27, issue #34): a peer with agents 0 or a stale beacon is ASKed only when nothing explains it. Its reason
+#     (hive.sh status prints the same words: held: AHEAD / weekly floor / 5h stop / weekly guard, beacon held: send cap,
+#     session down?, no ready tickets) makes it an INFO line, not a WARN; reserve accounts sit idle by design.
+if [ "$SINGLE_ACCOUNT" != 1 ]; then
+  for p in $(hive_peers); do
+    hive_is_reserve "$p" && continue
+    ag=$(hive_peer_agents "$p"); rsn=$(hive_idle_reason "$p" "$ag" "?")
+    if [ -z "$rsn" ] && [ "$ag" = 0 ] && [ "$TRACKER" = github ] && [ "$PRIVATE" != 1 ]; then
+      # the one reason that needs GitHub: no ready ticket assigned to it
+      rn=$(gh issue list --repo "$REPO" --label ready-for-agent --assignee "$p" --state open -L 100 --json number -q length 2>/dev/null)
+      [ "$rn" = 0 ] && rsn="no ready tickets"
+    fi
+    hive_beacon "$p"   # (hive_idle_reason ran in a subshell)
+    if [ -n "$rsn" ]; then say INFO "peer $p: $rsn"
+    elif [ "$ag" = 0 ] || [ "$b_age" -ge "$BEACON_STALE_SECS" ]; then
+      say WARN "peer $p: agents $ag, beacon $(( b_age / 60 )) min old, and no reason on its line: hive-ask.sh $p \"why?\" (rule 27)"
+    fi
+  done
+fi
+
 # 5. Discord bug channel (rule 18): token, channel, history, message text, permissions. Only with DISCORD=1.
 if [ "$DISCORD" != 1 ]; then say INFO "Discord off (DISCORD=0): reports come from GitHub only"
 elif [ ! -f "$HIVE_STATE/discord.conf" ]; then

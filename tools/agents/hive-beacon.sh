@@ -2,14 +2,14 @@
 # Sends this account's usage beacon, in the foreground, when it is due: a USAGE message on the private channel (hive-msg.sh),
 # the only usage beacon (nothing is posted on GitHub). Built from $HIVE_STATE/usage-snapshot.json (saved by statusline.sh or
 # hive-usage.sh). Format: "<5h>% <7d>% <7d reset ISO> r5=<5h reset ISO> agents=<n> at=<snapshot ISO> [claude_at=<ISO>]".
-# pace=<AHEAD|ON_PACE|BEHIND> [win5=<last window's final 5h %> idle=<its idle minutes with ready work>] come from hive-pace.sh (issue #274).
+# pace=<AHEAD|ON_PACE|BEHIND|BURN> [win5=<last window's final 5h %> idle=<its idle minutes with ready work>] come from hive-pace.sh (issue #274).
 # tmaker=full|suggestions|off from hive_tm_mode (the hub shows it). The old mode=AT|MT field is retired (issue #58): whether an
 # account works on its own is the studio's in/out switch, which the hub reads itself.
 # claude_at = newest Claude transcript write on this account (hive_claude_at), omitted when unknown; the triagemaster wakes
 # DEV_IDLE when it is old while work waits.
 # Change-only gate (issue #111, the ntfy daily quota): due when the 5h % or the 7d % moved 5 points or more, the 5h reset
 # moved (by over 5 min; the status line and the usage endpoint disagree by seconds), or agents= changed since the last USAGE
-# sent; else hourly as a keepalive; never within 10 min of the last one. The last sent values are in .usage-last-sent
+# sent; else hourly as a keepalive (BEACON_RESEND_SECS; stale past BEACON_STALE_SECS = resend + 15 min); never within 10 min of the last one. The last sent values are in .usage-last-sent
 # ("<epoch> <5h> <7d> <5h reset> <agents>"). Not due: exit 0, sends nothing. HIVE_NOW overrides now (tests).
 # Errors go to $HIVE_STATE/beacon.log; exit 1 when a due beacon was not sent. A no-op in SINGLE_ACCOUNT (and PRIVATE) mode.
 # Run by statusline.sh, hive-usage.sh, and `windows/hive-supervise.sh beacon`, which outlives the status line: all go
@@ -50,7 +50,7 @@ absdiff() { D=$(( $1 - $2 )); [ $D -lt 0 ] && D=$(( -D )); return 0; }
 age=$(( t - lt ))
 [ "$age" -ge 600 ] || exit 0
 due=0
-[ "$age" -ge 3600 ] && due=1
+[ "$age" -ge "$BEACON_RESEND_SECS" ] && due=1
 [ "$agents" != "$la" ] && due=1
 if [ $due = 0 ]; then
   absdiff "$p5" "$l5"; [ "$D" -ge 5 ] && due=1

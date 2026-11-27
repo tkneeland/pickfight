@@ -1,7 +1,7 @@
 #!/bin/bash
 # Pace governor (issue #274), zero tokens: plain shell/awk/jq over the usage snapshot, never an LLM call.
 # Goal: use this machine's 5h window in exactly 5 hours (not 1-2 h and then dead, not under budget), without blowing the 7d cap.
-#   hive-pace.sh [state]   prints AHEAD | ON_PACE | BEHIND
+#   hive-pace.sh [state]   prints AHEAD | ON_PACE | BEHIND | BURN
 #       elapsed5 = (5h - (r5 - now)) / 5h; the target is used5 ~= elapsed5 x 100
 #       AHEAD   used5 > target + PACE_MARGIN (the tuned knob, 5..20, default 10; or the weekly guard below): start no new workers; prefer cheap work
 #       BEHIND  used5 < target - PACE_BEHIND_MARGIN (fixed, default 10), or no 5h window yet (r5 = 1970 / past): start another worker, up to MAX_WORKERS
@@ -9,11 +9,14 @@
 #       Weekly guard (wins over the 5h pace), with stop = the account's weekly stop % (100 - MIN_WEEKLY_REMAINING_FOR_TICKETS, set in
 #       the hub): used7 > elapsed7 x stop + 5, or used7 at the stop, outside the RESET_GRACE_HOURS before the reset -> AHEAD; and
 #       used7 at 100% before the reset -> AHEAD even inside that window (hive_weekly_stopped).
+#       BURN    the 7d reset is <= PACE_BURN_HOURS (default 24) away and 100 - used7 > (1 - elapsed7) x 100 + PACE_BURN_MARGIN (default 5):
+#               the week is under-used, so spend it before the reset. Replaces any 5h state (never AHEAD on the 5h pace), starts workers
+#               like BEHIND, and `max` is max + 1 (cap 4). The weekly floor / 100% stop below still force AHEAD. `tune` ignores windows that saw BURN.
 #       Missing, unreadable or stale (> PACE_STALE_SECS, default 1800) snapshot -> ON_PACE (never start a burst on bad data).
 #   hive-pace.sh start     same output as state, but refused (exit 1) in a control-panel session (issue #300): run it before every worker start
 #   hive-pace.sh target    the 5h target percent now (elapsed5 x 100, rounded), empty when there is no window or no fresh snapshot
 #   hive-pace.sh explain   one line with every number behind the state
-#   hive-pace.sh max       the effective max workers: this account's max_workers (hive/account-limits.conf, set in the hub; else the conf's
+#   hive-pace.sh max       (max + 1, cap 4, during BURN) the effective max workers: this account's max_workers (hive/account-limits.conf, set in the hub; else the conf's
 #                          MAX_WORKERS, default 3) is the ceiling, and pace-tuning.conf may only lower it
 #   hive-pace.sh log       one beacon tick: appends a row to $HIVE_STATE/pace-log.csv (epoch,used5,elapsed5,used7,elapsed7,agents,
 #                          pace_state,ready_tickets; header row first; rows older than 60 days pruned on write; at most one row per
@@ -28,7 +31,7 @@
 #   hive-pace.sh statewin  `state` then `lastwin` (one line each) from one process; hive-beacon.sh calls it to save two spawns
 #   hive-pace.sh report    per-account table (5h used, pace, last window final used5 and idle minutes, beacon age) from the newest
 #                          USAGE line of each account in the channel inbox
-# Settings: PACE_MARGIN (default 10), MAX_WORKERS (the ceiling, default 3), PACE_STALE_SECS. HIVE_NOW overrides now (tests).
+# Settings: PACE_MARGIN (default 10), PACE_BURN_HOURS (24), PACE_BURN_MARGIN (5), MAX_WORKERS (the ceiling, default 3), PACE_STALE_SECS. HIVE_NOW overrides now (tests).
 _s=$0; case $_s in */*) _s=${_s%/*}; [ -n "$_s" ] || _s=/;; *) _s=.;; esac
 # HIVE_PACE_LIB=1: sourced by hive-beacon.sh in a subshell (hive-env.sh is already loaded there): only the functions are defined, so
 # a beacon tick does not start two more bash processes (issue #338)
@@ -39,6 +42,7 @@ PLOG=$HIVE_STATE/pace-log.csv; PWIN=$HIVE_STATE/pace-windows.csv; PTUNE=$HIVE_ST
 WIN5=18000; WIN7=604800
 : "${PACE_MARGIN:=10}" "${PACE_BEHIND_MARGIN:=10}" "${PACE_STALE_SECS:=1800}"
 : "${MAX_WORKERS:=3}"
+: "${PACE_BURN_HOURS:=24}" "${PACE_BURN_MARGIN:=5}"
 isnum() { case $1 in ''|*[!0-9]*) return 1;; esac; return 0; }
 # the local tuning override: only the two known keys, numbers only (never sourced)
 # tv <KEY>: sets TVV to the key's last numeric value (no subshell, no sed|tail; issue #338); fails when there is none
@@ -53,6 +57,7 @@ tuned_max() { tv MAX_WORKERS && [ "$TVV" -ge 1 ] && { MAX_WORKERS=$TVV; [ "$MAX_
 tv PACE_MARGIN && PACE_MARGIN=$TVV
 tuned_max
 isnum "$PACE_MARGIN" || PACE_MARGIN=10
+isnum "$PACE_BURN_HOURS" || PACE_BURN_HOURS=24; isnum "$PACE_BURN_MARGIN" || PACE_BURN_MARGIN=5
 
 # read_snap: sets s_ok (1 = fresh and readable), u5 r5 u7 r7 (integers, empty when unknown) and s_age
 read_snap() {
@@ -76,20 +81,23 @@ EOT
 # compute: sets state, e5 e7 (3-decimal fractions of the 5h / 7d window gone, or empty when the reset is unknown or past), tgt
 # (integer target % or empty). One awk call does the arithmetic of what used to be five (issue #338): same formulas and rounding.
 compute() {
-  state=ON_PACE; e5=""; e7=""; tgt=""
+  state=ON_PACE; e5=""; e7=""; tgt=""; eff_max=$MAX_WORKERS
   read_snap; [ "$s_ok" = 1 ] || return 0
   # no 5h window yet, or it is over: BEHIND (nothing used, so catch up). Window but no percentage: the 5h pace cannot be judged
   # (the weekly guard below still applies). PACE_MARGIN is the AHEAD margin (the knob the tuner moves); BEHIND uses its own fixed margin.
   local wk
   read -r e5 e7 tgt state wk <<EOT
 $(awk -v r5="$r5" -v r7="$r7" -v n="$now" -v u5="$u5" -v u7="$u7" -v m="$PACE_MARGIN" -v b="$PACE_BEHIND_MARGIN" -v w5=$WIN5 -v w7=$WIN7 \
-      -v ws=$(( 100 - ${MIN_WEEKLY_REMAINING_FOR_TICKETS:-0} )) -v g=$(( ${RESET_GRACE_HOURS:-24} * 3600 )) '
+      -v ws=$(( 100 - ${MIN_WEEKLY_REMAINING_FOR_TICKETS:-0} )) -v g=$(( ${RESET_GRACE_HOURS:-24} * 3600 )) \
+      -v bh=$(( PACE_BURN_HOURS * 3600 )) -v bm="$PACE_BURN_MARGIN" '
   function el(r, w,   e) { if (r == "" || r + 0 <= n + 0) return ""; e = (w - (r - n)) / w; if (e < 0) e = 0; if (e > 1) e = 1; return sprintf("%.3f", e) }
   BEGIN { e5 = el(r5, w5); e7 = el(r7, w7); tgt = ""; st = "ON_PACE"
     if (e5 == "") st = "BEHIND"
     else { tgt = sprintf("%d", e5 * 100 + 0.5)
       if (u5 != "") { t = e5 * 100; if (u5 + 0 > t + m) st = "AHEAD"; else if (u5 + 0 < t - b) st = "BEHIND"; else st = "ON_PACE" } }
     wk = (u7 != "" && e7 != "" && r7 - n > g && u7 + 0 > e7 * ws + 5) ? 1 : 0
+    # BURN: the 7d reset is near and the week is under-used by more than bm points (issue #31): spend it, never hold on the 5h pace
+    if (u7 != "" && e7 != "" && r7 - n <= bh && 100 - u7 > (1 - e7) * 100 + bm) st = "BURN"
     print (e5 == "" ? "-" : e5), (e7 == "" ? "-" : e7), (tgt == "" ? "-" : tgt), st, wk }')
 EOT
   [ "$e5" = - ] && e5=""; [ "$e7" = - ] && e7=""; [ "$tgt" = - ] && tgt=""
@@ -99,6 +107,8 @@ EOT
     [ "$wk" = 1 ] && state=AHEAD
     hive_weekly_stopped "$u7" "$r7" "${MIN_WEEKLY_REMAINING_FOR_TICKETS:-0}" && state=AHEAD
   fi
+  # BURN gets one more worker than the max (capped at 4, never below the max itself)
+  [ "$state" = BURN ] && [ "$MAX_WORKERS" -lt 4 ] && eff_max=$(( MAX_WORKERS + 1 ))
   return 0
 }
 
@@ -123,10 +133,12 @@ close_window() {
       if ($2 != "" && $2 + 0 > fin) fin = $2 + 0
       if ($2 != "" && $2 + 0 >= 100 && !hit) hit = $1 + 0
       if (have) { d = $1 - pe; if (d > 900) d = 900; if (pa == 0 && pr > 0) idle += d }
+      if ($7 == "BURN") burn = 1
       have = 1; pe = $1 + 0; pa = $6 + 0; pr = $8 + 0 }
-    END { printf "%d,%s,%d", fin, (hit ? int((hit - ws) / 60) : ""), int(idle / 60 + 0.5) }' "$PLOG" 2>/dev/null) || return 0
+    END { printf "%d,%s,%d", fin, (hit ? int((hit - ws) / 60) : ""), int(idle / 60 + 0.5); if (burn) printf "|1" }' "$PLOG" 2>/dev/null) || return 0
   [ -n "$res" ] || return 0
-  echo "$ws,$res,$mg,$mw" >> "$PWIN"
+  # a window that saw BURN gets a 7th column (1) so tune ignores it; other rows keep six columns
+  case $res in *"|1") echo "$ws,${res%|1},$mg,$mw,1" >> "$PWIN";; *) echo "$ws,$res,$mg,$mw" >> "$PWIN";; esac
 }
 cmd_tune() {
   [ -s "$PWIN" ] || return 0
@@ -134,7 +146,7 @@ cmd_tune() {
   last=$(tail -n 1 "$PWIN" | cut -d, -f1); isnum "$last" || return 0
   tv PACE_TUNED_WINDOW; [ "$TVV" = "$last" ] && return 0     # one change per window
   read -r n hit under <<EOT
-$(tail -n 10 "$PWIN" | awk -F, '$1 ~ /^[0-9]+$/ { n++; if ($3 != "" && $3 + 0 < 270) hit++; if ($2 + 0 < 90 && $4 + 0 > 0) under++ } END { print n + 0, hit + 0, under + 0 }')
+$(tail -n 10 "$PWIN" | awk -F, '$1 ~ /^[0-9]+$/ && $7 != 1 { n++; if ($3 != "" && $3 + 0 < 270) hit++; if ($2 + 0 < 90 && $4 + 0 > 0) under++ } END { print n + 0, hit + 0, under + 0 }')
 EOT
   mg=$PACE_MARGIN; mw=$MAX_WORKERS; what=none
   if [ "$n" -ge 3 ]; then
@@ -182,7 +194,7 @@ cmd_report() {
     p5=${rest%%%*}; ps=$(echo "$rest" | sed -n 's/.* pace=\([A-Z_]*\).*/\1/p')
     fw=$(echo "$rest" | sed -n 's/.* win5=\([0-9]*\).*/\1/p'); im=$(echo "$rest" | sed -n 's/.* idle=\([0-9]*\).*/\1/p')
     ag=$(( now - ${e%.*} ))
-    printf '%-18s %6s %-8s %10s %9s %s\n' "$a" "${p5:-?}%" "${ps:--}" "${fw:--}" "${im:--}" "$([ "$ag" -ge 3600 ] && echo "$((ag / 3600))h old" || echo "$((ag / 60))m old")"
+    printf '%-18s %6s %-8s %10s %9s %s\n' "$a" "${p5:-?}%" "${ps:--}" "${fw:--}" "${im:--}" "$([ "$ag" -ge 3600 ] && echo "$((ag / 3600))h old" || echo "$((ag / 60))m old")$([ "$ag" -ge "$BEACON_STALE_SECS" ] && echo " STALE")"
   done
 }
 cmd_statewin() {   # state, then lastwin (one line each)
@@ -193,8 +205,8 @@ case ${1:-state} in
   state) compute; echo "$state";;
   start) hive_guard worker-start || exit 1; compute; echo "$state";;
   target) compute; echo "$tgt";;
-  explain) compute; echo "$state used5=${u5:-?} target=${tgt:-?} margin=$PACE_MARGIN used7=${u7:-?} elapsed7=${e7:-?} max_workers=$MAX_WORKERS snapshot=$([ "$s_ok" = 1 ] && echo fresh || echo "missing-or-stale")";;
-  max) echo "$MAX_WORKERS";;
+  explain) compute; echo "$state used5=${u5:-?} target=${tgt:-?} margin=$PACE_MARGIN used7=${u7:-?} elapsed7=${e7:-?} max_workers=$MAX_WORKERS eff_max=$eff_max burn_hours=$PACE_BURN_HOURS burn_margin=$PACE_BURN_MARGIN snapshot=$([ "$s_ok" = 1 ] && echo fresh || echo "missing-or-stale")";;
+  max) compute; echo "$eff_max";;
   log) shift; cmd_log "$@";;
   tune) cmd_tune;;
   statewin) cmd_statewin;;   # state, then lastwin: one call for the beacon (issue #338)

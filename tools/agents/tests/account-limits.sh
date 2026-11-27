@@ -83,7 +83,7 @@ check "stopped: 100% after the reset" "$(stp 100 $((now - 60)) 0)" "ok"
 # hive/settings.conf: the studio-wide settings replace the conf values; bad or out-of-range values and unknown keys are ignored
 set_() { HIVE_ACCOUNT=alice bash -c '. "$1/hive-env.sh" || exit 1; echo "$RESET_GRACE_HOURS $MAX_WORKERS $BEACON_FRESH_HOURS $PEER_QUEUE_MIN"' _ "$AG"; }
 check "settings: defaults without the file" "$(set_)" "24 3 6 5"
-printf '%s\r\n' "# studio settings" "reset_spend_hours=12" " offline_hours = 3 # comment" "max_workers=5" "ready_ticket_min=0" "chat_switch_margin=7" > "$T/studio/settings.conf"
+printf '%s\r\n' "# studio settings" "reset_spend_hours=12" " offline_hours = 3 # comment" "max_workers=5" "ready_ticket_min=0" > "$T/studio/settings.conf"
 check "settings: every key (CRLF, spaces, comments); max_workers is per account, not here" "$(set_)" "12 3 3 0"
 printf '%s\n' "reset_spend_hours=73" "max_workers=7" "offline_hours=0" "ready_ticket_min=51" > "$T/studio/settings.conf"
 check "settings: out of range ignored" "$(set_)" "24 3 6 5"

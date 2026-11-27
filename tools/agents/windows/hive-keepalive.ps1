@@ -92,6 +92,9 @@ while ($true) {
     if (Test-Path $argFile) { $argList += @(Get-Content $argFile | Where-Object { $_.Trim() -ne "" -and -not $_.TrimStart().StartsWith("#") } | ForEach-Object { $_.Trim() }) }
     # Start-Process joins the array with spaces and no quoting: quote an argument that contains whitespace
     $argList = @($argList | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } })
+    # the self-serve repo clones live outside ~/.claude (hive-env.sh HIVE_CHECKOUT_DIR, hive.conf / account conf overridable): add that folder
+    $ckDir = ((& $bash --login -c ". '$($keep.Replace('hive-keepalive.sh','hive-env.sh'))' >/dev/null 2>&1; printf %s ""`$HIVE_CHECKOUT_DIR""" 2>$null) -join "").Trim()
+    if ($ckDir) { $argList += @("--add-dir", $(if ($ckDir -match '\s') { "`"$ckDir`"" } else { $ckDir })) }
     if ($SkipPermissions) { $argList += "--dangerously-skip-permissions" }
     $started = Get-Date
     Write-Log "session starting"

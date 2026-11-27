@@ -51,7 +51,7 @@ answer_when_asked bob "yes, the listener is up"
 out=$(ask bob "is your listener up?" 60); rc=$?; wait
 check "answered: exit" "$rc" 0
 check "answered: text" "$out" "yes, the listener is up"
-check "ask format" "$(grep -c '^SEND carol ASK @bob \[q[0-9]\{11,\}\] is your listener up?$' "$HIVE_TEST_LOG")" 1
+check "ask format" "$(grep -c '^SEND carol ASK @bob \[q[0-9]\{11,\}\] is your listener up? \[s[0-9]*/[0-9]*\]$' "$HIVE_TEST_LOG")" 1
 check "answered: nothing left open" "$(cat "$OPEN" 2>/dev/null | wc -l | tr -d ' ')" 0
 
 # 2 not crossed: another question's answer, the same id from the wrong account, and an untagged ANSWER are ignored

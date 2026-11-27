@@ -1,6 +1,6 @@
 #!/bin/bash
 # Claude Code statusLine command. Put HIVE_ACCOUNT=<handle> in the command (see docs/agents/hive-debrief.md).
-# Line 1: <model> · 5h N% (r <time>) / T% pace (hive-pace.sh target; omitted without a window) · 7d N% (r <day time>) · AT·on pace|AT·ahead|MT
+# Line 1: <model> · 5h N% (r <time>) / T% pace (hive-pace.sh target; omitted without a window) · 7d N% (r <day time>) · AT·on pace|AT·ahead|AT·behind|AT·burn|MT
 # Lines 2+: cached by hive-status-refresh.sh (agents/ready/PRs/last merge/triagemaster, then one line per running agent).
 # Also saves the statusline JSON ($HIVE_STATE/usage-snapshot.json) and keeps this account's USAGE beacon (private channel)
 # current. Line 1 ends with "msg:quota til HH:MM" while the channel is blocked by ntfy's daily quota. Windows: run it from Git Bash (tools/agents/windows/README.md).

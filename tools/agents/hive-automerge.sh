@@ -3,7 +3,8 @@
 # (if set). Conflicting PRs get one comment asking to rebase. Covers every checkout in REPO_PATHS. Leaves alone:
 #   - PRs labelled conflict-risk, unless this account is the current triagemaster
 #   - review-blocked PRs (the reviewer found a confirmed correctness or spec issue; rule 12)
-#   - REQUIRE_REVIEW_PASS=1 (default): PRs without the review-passed marker (no merge before a reviewer pass; rule 12)
+#   - REQUIRE_REVIEW_PASS=1 (default): PRs without the review-passed marker (no merge before a reviewer pass; rule 12);
+#     on a conflict-risk PR the marker must not have been added by the PR's own author
 #   - PRs that edit hive files (tools/agents/ outside accounts/, docs/agents/hive*.md, discord.md) without the
 #     hive-install label: hive changes are made in claude-hive and installed (install.sh), never edited in a game
 # Never moves a human's checkout: it fast-forwards and installs only when the checkout is already on MAIN_BRANCH.
@@ -45,6 +46,7 @@ while true; do
       hive_review_blocked "$slug" "$P" && continue   # rule 12: confirmed reviewer finding
       hive_review_passed "$slug" "$P" || continue    # rule 12: no merge before a reviewer pass
       hive_merge_gated "$slug" "$P" && continue   # rule 6: conflict-risk (PR or its ticket) is the triagemaster's
+      hive_review_pass_ok "$slug" "$P" || continue   # rule 12: on a conflict-risk PR the author's own review-passed is ignored
       if [ "$PRIVATE" != 1 ] && [ "$(gh pr view "$P" --repo "$slug" --json files,labels --jq "$HIVE_EDIT_JQ" 2>/dev/null)" = true ]; then
         [ -e "$HIVE_STATE/held/$sk-$P" ] || { mkdir -p "$HIVE_STATE/held"; : > "$HIVE_STATE/held/$sk-$P"; echo "$(date '+%F %T') HELD $slug#$P edits hive files (make the change in claude-hive and re-install)"; }
         continue

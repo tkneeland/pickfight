@@ -17,8 +17,10 @@
 #                      exit 0; on any other machine, or with none, exit 1.
 #   claim <repo> <n>   take such a self-serve ticket: refuses one already assigned or claimed; assigns this account and
 #                      comments "[CLAIM] <account>". Exit 1 when someone else has it.
-#   checkout <repo>    a clone of the repo for working its tickets, under ~/.claude/hive/checkouts/<owner__repo>, fetched
-#                      and on its default branch; prints the path. Work there in a worktree, never on its default branch.
+#   checkout <repo>    a clone of the repo for working its tickets, in $HIVE_CHECKOUT_DIR/<repo-name> (default: beside this
+#                      game's checkout; never under ~/.claude, where headless sessions cannot edit), fetched
+#                      and on its default branch; prints the path. An old clone under ~/.claude/hive/checkouts is moved
+#                      when clean, else left alone with a note. Work there in a worktree, never on its default branch.
 # Without STUDIO_REPO (or an empty stack) nothing ranks above this game: next exits 1.
 . "$(dirname "$0")/hive-env.sh" || exit 2
 cmd=${1:-}
@@ -122,12 +124,21 @@ case $cmd in
   checkout)
     repo=${2:-}
     case $repo in */*) ;; *) echo "usage: hive-stack.sh checkout <owner/repo>" >&2; exit 2;; esac
-    dir=$HOME/.claude/hive/checkouts/${repo/\//__}
+    dir=$HIVE_CHECKOUT_DIR/${repo#*/}
+    # migrate a clone from the old home, ~/.claude/hive/checkouts/<owner__repo> (headless sessions cannot edit under ~/.claude)
+    old=$HOME/.claude/hive/checkouts/${repo/\//__}
+    if [ -d "$old/.git" ] && [ "$old" != "$dir" ]; then
+      if [ -e "$dir" ]; then echo "note: old clone $old left in place ($dir exists); remove it by hand once nothing needs it" >&2
+      elif [ -n "$(git -C "$old" status --porcelain 2>/dev/null)" ] || [ -n "$(git -C "$old" log --branches --not --remotes -n 1 2>/dev/null)" ] \
+        || [ "$(git -C "$old" worktree list 2>/dev/null | wc -l)" -gt 1 ]; then
+        echo "note: old clone $old has uncommitted changes, unpushed commits or worktrees; left in place, using a fresh clone at $dir" >&2
+      else mkdir -p "$HIVE_CHECKOUT_DIR" && mv "$old" "$dir" && echo "note: moved clone $old -> $dir" >&2; fi
+    fi
     if [ -d "$dir/.git" ]; then
       git -C "$dir" fetch -q origin && git -C "$dir" checkout -q "$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD | sed 's#^origin/##')" \
         && git -C "$dir" merge -q --ff-only "$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD)" || { echo "cannot update $dir" >&2; exit 2; }
     else
-      mkdir -p "${dir%/*}" && gh repo clone "$repo" "$dir" -- -q || { echo "cannot clone $repo" >&2; exit 2; }
+      mkdir -p "$HIVE_CHECKOUT_DIR" && gh repo clone "$repo" "$dir" -- -q || { echo "cannot clone $repo" >&2; exit 2; }
     fi
     echo "$dir" ;;
   *) sed -n '2,/^[^#]/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 2 ;;
