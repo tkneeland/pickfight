@@ -15,3 +15,4 @@ Talking to the main terminal: it is a control panel that watches {{OUTBOX}}. App
   DONE    #N <title> (PR #M)         when a ticket merges
   FILED   #N <title> -> <assignee>   when a ticket is filed
 Write nothing else there. If `bash tools/agents/hive-at-mode.sh` prints MT (or the account is switched out in the hub), do no triage: finish or hand back what you hold, start nothing new, and act only when asked.
+**Tooling gaps go upstream.** When owner feedback or your own failure traces to the hive tooling or its docs (not the project), file it with `hive-tool-issue.sh "<title>" "<body>"` without asking (it dupe-checks, and refuses in PRIVATE mode), and tell your human in one line. Not subject to `AUTO_FILE`, which governs project tickets only.

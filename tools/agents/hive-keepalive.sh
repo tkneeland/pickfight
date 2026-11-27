@@ -71,12 +71,25 @@ nudge() {
 start_session() {
   local cl pf; cl=$(command -v claude) || { hive_outbox FIRE "$SESSION not started: claude not found on PATH"; echo "$(date '+%F %T %Z') claude not found; not launching"; return 0; }
   pf=$HIVE_STATE/session-prompt.txt; build_prompt > "$pf"
-  screen -dmS "$SESSION" bash -c "export HIVE_ACCOUNT=$(printf '%q' "$HIVE_ACCOUNT") HIVE_SESSION=always-on PATH=$(printf '%q' "$PATH"); cd $(printf '%q' "$ROOT") && $(printf '%q' "$cl") \"\$(cat $(printf '%q' "$pf"))\""
+  screen -dmS "$SESSION" bash -c "export HIVE_ACCOUNT=$(printf '%q' "$HIVE_ACCOUNT") HIVE_SESSION=always-on PATH=$(printf '%q' "$PATH"); cd $(printf '%q' "$ROOT") && $(printf '%q' "$cl") \"\$(cat $(printf '%q' "$pf"))\" --add-dir $(printf '%q' "$HIVE_CHECKOUT_DIR")"
   sleep 10   # smoke check: a session that died at launch is reported, not silently relaunched
   session_up || { hive_outbox FIRE "$SESSION failed to start (screen session gone 10s after launch)"; echo "$(date '+%F %T %Z') FIRE session failed to start"; }
 }
+# The session runs in screen, so its status line never renders and nothing else writes usage-snapshot.json on macOS/Linux.
+# Refresh it from hive-usage.sh (zero tokens, posts nothing to GitHub; hive-beacon.sh gates sends) when it is older than
+# USAGE_REFRESH_MINUTES. Runs in the background so a slow endpoint never delays nudges; one line in the log on failure only.
+usage_pid=""; usage_try=0
+refresh_usage() {
+  [ -n "$usage_pid" ] && kill -0 "$usage_pid" 2>/dev/null && return 0
+  local now m; now=$(date +%s); m=$(hive_mtime "$HIVE_STATE/usage-snapshot.json" || echo 0)
+  [ $(( now - m )) -ge $(( USAGE_REFRESH_MINUTES * 60 )) ] && [ $(( now - usage_try )) -ge 300 ] || return 0
+  usage_try=$now
+  ( bash "$HIVE_DIR/hive-usage.sh" >/dev/null 2>&1 || echo "$(date '+%F %T %Z') hive-usage.sh failed (see beacon.log)" ) &
+  usage_pid=$!
+}
 nudged=0; idle_nudged=0; relogged=0
 while true; do
+  refresh_usage
   if ! session_up; then
     echo "$(date '+%F %T %Z') starting $SESSION"
     start_session

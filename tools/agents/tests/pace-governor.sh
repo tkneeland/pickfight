@@ -97,6 +97,56 @@ printf '{"rate_limits":{"five_hour":{"resets_at":%s},"seven_day":{"used_percenta
 snap 0 0 $W7 7200;  check "stale snapshot (2h, would be BEHIND) ON_PACE" "$(st)" ON_PACE
 snap 0 0 $W7 600;   check "10 min old snapshot still counts" "$(st)" BEHIND
 snap 0 0 $W7 0; set_mtime "$SNAP" $((now + 600)); check "future mtime is fresh" "$(st)" BEHIND
+# 6b BURN (issue #31): the 7d reset within PACE_BURN_HOURS (24) and the week under pace by more than PACE_BURN_MARGIN (5)
+H=3600
+snap 90 9000 40 $((10 * H));  check "BURN: reset 10h away, used7 40 (5h would be AHEAD)" "$(st)" BURN
+snap 20 9000 40 $((10 * H));  check "BURN: 5h BEHIND also reads BURN" "$(st)" BURN
+snap 50 9000 40 $((10 * H));  check "BURN: 5h ON_PACE also reads BURN" "$(st)" BURN
+snap 0 0 40 $((10 * H));      check "BURN: no 5h window yet" "$(st)" BURN
+snap 90 9000 40 $((30 * H));  check "no BURN: reset 30h away (5h AHEAD stays)" "$(st)" AHEAD
+snap 20 9000 40 $((30 * H));  check "no BURN: reset 30h away (5h BEHIND stays)" "$(st)" BEHIND
+snap 90 9000 85 $((10 * H)); check "BURN: left 15 > 6 + 5" "$(st)" BURN
+snap 90 9000 90 $((10 * H));  check "no BURN: week nearly used (left 10 < 6 + 5)" "$(st)" AHEAD
+snap 90 9000 88 $((10 * H));  check "BURN edge: left 12 > 11" "$(st)" BURN
+snap 90 9000 89 $((10 * H));  check "no BURN edge: left 11 is not > 6 + 5" "$(st)" AHEAD
+snap 90 9000 40 $((24 * H));  check "BURN at exactly 24h" "$(st)" BURN
+snap 90 9000 40 $((24 * H + 60)); check "no BURN just past 24h" "$(st)" AHEAD
+snap 90 9000 40 0;            check "no BURN when the weekly reset is unknown" "$(st)" AHEAD
+snap 90 9000 "?" $((10 * H)); check "no BURN when used7 is unknown" "$(st)" AHEAD
+check "PACE_BURN_HOURS=8 turns it off at 10h" "$(snap 90 9000 40 $((10 * H)); PACE_BURN_HOURS=8 st)" AHEAD
+check "PACE_BURN_MARGIN=70 turns it off" "$(snap 90 9000 40 $((10 * H)); PACE_BURN_MARGIN=70 st)" AHEAD
+# max + 1, cap 4
+snap 90 9000 40 $((10 * H))
+check "max +1 during BURN" "$(bash "$PACE" max)" 4
+check "max 2 -> 3 during BURN" "$(MAX_WORKERS=2 bash "$PACE" max)" 3
+check "max 4 stays 4 during BURN (cap)" "$(MAX_WORKERS=4 bash "$PACE" max)" 4
+check "max 6 is never lowered by BURN" "$(MAX_WORKERS=6 bash "$PACE" max)" 6
+snap 90 9000 40 $((30 * H)); check "no +1 outside BURN" "$(bash "$PACE" max)" 3
+snap 80 9000 40 $((10 * H))
+check "hive_pace_now: BURN with the +1 max" "$( . "$AG/hive-env.sh"; hive_pace_now; echo "$p_state $p_max" )" "BURN 4"
+check "worker target during BURN is the +1 max, not 0" "$( . "$AG/hive-env.sh"; hive_worker_target )" 4
+check "explain shows BURN" "$(bash "$PACE" explain | cut -d' ' -f1)" BURN
+# safeguards: the weekly floor and 100% still win; stale or missing data is never a burst
+# (the weekly stop only binds outside the RESET_GRACE_HOURS, 24 here, so these widen the BURN window to 48h to reach it)
+check "BURN window beyond the grace: reset 30h away reads BURN" "$(snap 90 9000 40 $((30 * H)); PACE_BURN_HOURS=48 st)" BURN
+check "MIN_WEEKLY floor still forces AHEAD in BURN" "$(snap 90 9000 40 $((30 * H)); PACE_BURN_HOURS=48 MIN_WEEKLY_REMAINING_FOR_TICKETS=60 st)" AHEAD
+check "...a floor not yet reached leaves BURN" "$(snap 90 9000 40 $((30 * H)); PACE_BURN_HOURS=48 MIN_WEEKLY_REMAINING_FOR_TICKETS=20 st)" BURN
+check "MIN_WEEKLY_REMAINING 100 forces AHEAD in BURN" "$(snap 90 9000 0 $((30 * H)); PACE_BURN_HOURS=48 MIN_WEEKLY_REMAINING_FOR_TICKETS=100 st)" AHEAD
+snap 90 9000 40 $((10 * H)) 7200; check "stale snapshot with BURN numbers: ON_PACE" "$(st)" ON_PACE
+rm -f "$SNAP"; check "missing snapshot: ON_PACE not BURN" "$(st)" ON_PACE
+# BURN windows are logged and tune ignores them
+rm -f "$S"/pace-*.csv "$S/.pace-window" "$S/pace-tuning.conf"
+ws=$((now - 3600)); we=$((ws + 18000))
+tickb() { HIVE_NOW=$1 bash "$PACE" log 0 0; }
+snap 90 9000 40 $((10 * H)); tickb $((ws + 600))
+check "log row records BURN" "$(sed -n 2p "$S/pace-log.csv" | cut -d, -f7)" BURN
+close_win() { ( HIVE_PACE_LIB=1; HIVE_NOW=$now; . "$PACE" >/dev/null 2>&1; PWIN=$S/pace-windows.csv PLOG=$S/pace-log.csv; close_window "$@" ); }
+close_win "$ws" "$we" 10 3
+check "window with BURN gets a 7th column" "$(tail -n 1 "$S/pace-windows.csv" | awk -F, '{print NF":"$7}')" "7:1"
+{ echo "window_start,final_used5,minutes_to_100,idle_min_with_ready_work,margin,max_workers"; for r in 1000 2000 3000 4000; do echo "$r,100,100,0,10,3,1"; done; } > "$S/pace-windows.csv"
+rm -f "$S/pace-tuning.conf"; bash "$PACE" tune >/dev/null
+check "tune ignores BURN windows (4 early-hit rows, no change)" "$(sed -n 's/^# last change: //p' "$S/pace-tuning.conf")" none
+rm -f "$S"/pace-*.csv "$S/.pace-window" "$S/pace-tuning.conf"
 # 7 margin: PACE_MARGIN and the tuning override
 snap 56 9000 $W7; check "margin 10 mid 56 ON_PACE" "$(st)" ON_PACE
 check "AHEAD margin 5 mid 56 AHEAD" "$(PACE_MARGIN=5 st)" AHEAD
@@ -204,13 +254,19 @@ far=$(iso $((now + 86400)))
   echo "$((now - 9000))|alice|USAGE|10% 20% $far r5=$far agents=2 at=$(iso $((now - 9000))) pace=AHEAD"
   echo "$((now - 7300))|bob|USAGE|80% 30% $far r5=$far agents=1 at=$(iso $((now - 7300))) pace=AHEAD win5=100 idle=0 claude_at=$(iso $((now - 100)))"
   echo "$((now - 60))|carol|USAGE|5% 10% $far r5=$far agents=0 at=$(iso $((now - 60)))"
+  echo "$((now - 2700))|dave|USAGE|5% 10% $far r5=$far agents=0 at=$(iso $((now - 2700)))"
+  echo "$((now - 4800))|erin|USAGE|5% 10% $far r5=$far agents=0 at=$(iso $((now - 4800)))"
   echo "$((now - 60))|carol|HELLO|carol"; } > "$S/msg-inbox.log"
 rep=$(bash "$PACE" report)
 check "report header" "$(echo "$rep" | head -n 1 | tr -s ' ')" "account 5h pace final5 idle_min beacon"
 check "report alice (newest line wins)" "$(echo "$rep" | grep '^alice' | tr -s ' ')" "alice 34% BEHIND 97 45 5m old"
-check "report bob" "$(echo "$rep" | grep '^bob' | tr -s ' ')" "bob 80% AHEAD 100 0 2h old"
+check "report bob" "$(echo "$rep" | grep '^bob' | tr -s ' ')" "bob 80% AHEAD 100 0 2h old STALE"
 check "report carol (no pace fields yet)" "$(echo "$rep" | grep '^carol' | tr -s ' ')" "carol 5% - - - 1m old"
-check "report has one row per account" "$(echo "$rep" | wc -l | tr -d ' ')" 4
+# issue #77: stale = the hourly resend gate + 15 min (75 min), not 30 min
+check "report: 45-min-old beacon is not stale" "$(echo "$rep" | grep '^dave' | tr -s ' ')" "dave 5% - - - 45m old"
+check "report: 80-min-old beacon (shown 1h) is stale" "$(echo "$rep" | grep '^erin' | tr -s ' ')" "erin 5% - - - 1h old STALE"
+check "stale threshold defaults to resend + 15 min" "$(. "$AG/hive-env.sh" && echo "$BEACON_RESEND_SECS $BEACON_STALE_SECS")" "3600 4500"
+check "report has one row per account" "$(echo "$rep" | wc -l | tr -d ' ')" 6
 
 # 13 the beacon carries pace= and the last window; the log tick runs from it
 rm -f "$S"/pace-*.csv "$S"/.usage-last-sent "$S"/.pace-window "$S/msg-inbox.log" "$S/curl.log"; : > "$S/curl.log"

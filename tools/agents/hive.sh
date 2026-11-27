@@ -86,7 +86,7 @@ nfires=$(printf '%s' "$fires" | grep -c . || true)
 
 # row <handle>: its two full lines to $D/row.<handle>, its short line to $D/srow.<handle>. Rows run in parallel.
 row() {
-  local h=$1 ca cidle role on son s last use suse agents claimed ready pr_pass pr_block pr_wait prs srole sprs
+  local h=$1 reason ca cidle role on son s last use suse agents claimed ready pr_pass pr_block pr_wait prs srole sprs
   role=dev; [ "$h" = "$tm" ] && role=triagemaster
   [ "$role" = dev ] && hive_is_reserve "$h" && role=reserve
   # online: this machine by its channel supervisor (msg-status.json, rewritten every minute); a peer by its last message (any type)
@@ -103,12 +103,14 @@ row() {
   if [ "$h" = "$HIVE_ACCOUNT" ]; then ca=$(hive_claude_at); else ca=$(hive_peer_claude_at "$h"); fi
   cidle="claude ?"; [ -n "$ca" ] && [ "$ca" -le "$now" ] && cidle="claude idle $(ago $((now - ca)))"
   hive_beacon "$h"
+  # this machine's pace from the governor (a peer's rides its beacon), so the self line is labelled like the peers' (#34)
+  if [ "$h" = "$HIVE_ACCOUNT" ] && [ "$b_age" -lt 999999 ] && [ -z "$b_pace" ]; then hive_pace_now; b_pace=$p_state; fi
   if [ "$b_age" -ge 999999 ]; then use="usage ?"; suse="?"
   else
     use="5h ${b_p5:-?}%${b_pace:+ $b_pace}"; [ -n "$b_r5" ] && use+=" (r $(iso_et "$b_r5" +%-I:%M%p))"
     use+=" · 7d ${b_used:-?}%"; [ -n "$b_reset" ] && use+=" (r $(iso_et "$b_reset" '+%a %-I:%M%p'))"
     suse="5h${b_p5:-?}% 7d${b_used:-?}%"
-    [ "$b_age" -ge 3600 ] && { use+=" ($(ago "$b_age") old)"; suse+="($(ago "$b_age") old)"; }
+    [ "$b_age" -ge "$BEACON_STALE_SECS" ] && { use+=" ($(ago "$b_age") old)"; suse+="($(ago "$b_age") old)"; }
   fi
   if [ "$h" = "$HIVE_ACCOUNT" ]; then
     while [ ! -f "$D/live.done" ]; do sleep 0.2; done
@@ -116,8 +118,7 @@ row() {
     claimed=$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | sed -nE 's#^branch refs/heads/##p' |
       sed -nE 's/.*issue-([0-9]+).*/\1/p; s#^[a-z]+/([0-9]+)-.*#\1#p')
   else
-    agents=$(awk -F'|' -v p="$h" '$2 == p && $3 == "USAGE" && $1 + 0 >= m { m = $1 + 0; l = $4 } END { print l }' "$INBOX" 2>/dev/null |
-      sed -n 's/.*agents=\([0-9]*\).*/\1/p'); agents=${agents:-?}
+    agents=$(hive_peer_agents "$h")
     claimed=$(awk -F'|' -v p="$h" -v t="$now" '$2 == p { split($4, w, " ")
         if ($3 == "CLAIM" && $1 + 86400 >= t) c[w[1]] = 1; else if ($3 == "RELEASE") delete c[w[1]] }
       END { for (n in c) print n }' "$INBOX" 2>/dev/null)
@@ -130,12 +131,14 @@ $(echo "$per_gh" | awk -v h="$h" '$1 == h')
 EOT
   prs=${prs//_/ }
   [ -n "$gh_ok" ] || { ready="?"; prs="?"; }
-  { printf '%-14s %s · %s · %s · agents %s · %s\n' "$h" "$on" "$role" "$use" "$agents" "$cidle"
+  # why it runs fewer workers than it could or its beacon is stale, in plain words (#34); empty when nothing needs saying
+  reason=$(hive_idle_reason "$h" "$agents" "$ready"); [ -n "$reason" ] && reason=" · $reason"
+  { printf '%-14s %s · %s · %s · agents %s · %s%s\n' "$h" "$on" "$role" "$use" "$agents" "$cidle" "$reason"
     printf '%-14s claimed %s · ready %s · PRs %s\n' "" "${claimed:-none}" "$ready" "${prs:-none}"; } > "$D/row.$h"
   srole=$role; case $role in triagemaster) srole=TM;; esac
   sprs="none"; [ -n "$gh_ok" ] || sprs="?"
   [ -n "$gh_ok" ] && [ $((pr_pass + pr_block + pr_wait)) -gt 0 ] && sprs="${pr_pass} passed/${pr_block} blocked/${pr_wait} waiting"
-  echo "$h: $son · $srole · $suse · agents $agents · $cidle · claimed ${claimed:-none} · ready $ready · PRs $sprs" > "$D/srow.$h"
+  echo "$h: $son · $srole · $suse · agents $agents · $cidle · claimed ${claimed:-none} · ready $ready · PRs $sprs$reason" > "$D/srow.$h"
 }
 for h in $(hive_handles); do row "$h" & done
 

@@ -45,14 +45,14 @@ while read -r b who; do
   [ -z "$t" ] && continue
   agents+=$'\n'"  #$i $t ($who)"
 done <<< "$peer"
-# peers' usage, "<handle> 5h N% 7d N%" with the beacon's age once it is an hour old ("?" = no beacon or unknown)
+# peers' usage, "<handle> 5h N% 7d N%" with the beacon's age once it is stale (BEACON_STALE_SECS) ("?" = no beacon or unknown)
 if [ "$SINGLE_ACCOUNT" != 1 ]; then
   hive_usage_backfill; pu=""
   for h in $(hive_handles); do
     [ "$h" = "$HIVE_ACCOUNT" ] && continue
     hive_beacon "$h"
     if [ "$b_age" -ge 999999 ]; then pu+=" · $h ?"; continue; fi
-    pu+=" · $h 5h ${b_p5:-?}%${b_pace:+ $b_pace} 7d ${b_used:-?}%"; [ "$b_age" -ge 3600 ] && pu+=" ($((b_age / 3600))h old)"
+    pu+=" · $h 5h ${b_p5:-?}%${b_pace:+ $b_pace} 7d ${b_used:-?}%"; [ "$b_age" -ge "$BEACON_STALE_SECS" ] && pu+=" ($((b_age / 3600))h old)"
   done
   [ -n "$pu" ] && agents=$'\n'"peers${pu# ·}$agents"
 fi
