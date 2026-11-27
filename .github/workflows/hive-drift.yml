@@ -1,0 +1,14 @@
+name: hive-drift
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  hive-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tools/agents against MANIFEST
+        run: bash tools/agents/hive-drift.sh
