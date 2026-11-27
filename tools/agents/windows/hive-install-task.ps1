@@ -3,6 +3,8 @@
   Registers (or replaces) two scheduled tasks for the account:
   - "hive AT watchers (<repo>, <Account>)": runs hive-start.ps1 at logon and every 5 minutes, so a dead watcher (above all the
     private-channel listener, `msg`) is back within 5 minutes and the machines in the hive can always reach each other.
+  - "hive AT watchdog (<repo>, <Account>)": runs hive-watchdog.ps1 every minute: reads the studio project stack and runs one
+    automerger per stacked repo while this account is the triagemaster, plus msg and voice (claude-hive #121). Skip with -NoWatchdog.
   - "hive AT session (<repo>, <Account>)": runs hive-keepalive.ps1 at logon and every 5 minutes, which keeps ONE always-on headless
     Claude session running the AT prompt. Nobody needs a terminal open (skip it with -NoSession).
 .PARAMETER Account
@@ -19,7 +21,7 @@
   Check:    Get-ScheduledTask -TaskName "hive AT watchers (<repo>, <handle>)" | Get-ScheduledTaskInfo
             powershell -ExecutionPolicy Bypass -File tools\agents\windows\hive-status.ps1 -Account <handle>
 #>
-param([Parameter(Mandatory = $true)][string]$Account, [switch]$NoSession, [switch]$SkipPermissions)
+param([Parameter(Mandatory = $true)][string]$Account, [switch]$NoSession, [switch]$NoWatchdog, [switch]$SkipPermissions)
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $start = Join-Path $here "hive-start.ps1"
@@ -37,8 +39,22 @@ $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBat
 Register-ScheduledTask -TaskName $name -Action $a -Trigger @($logon, $every5) -Settings $s `
   -Description "AT watchers incl. the private channel listener; restarts any that died (every 5 min)" -Force | Out-Null
 powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+# keep-awake while the hive runs (the display may sleep): a power request override for the bash processes that run the daemons
+try { powercfg /requestsoverride PROCESS bash.exe SYSTEM 2>$null | Out-Null } catch { Write-Host "Note: powercfg /requestsoverride needs an elevated shell; AC sleep is off regardless." }
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $start -Account $Account
 Write-Host "Registered '$name' (logon + every 5 min); AC sleep off."
+
+if (-not $NoWatchdog) {
+  $wd = Join-Path $here "hive-watchdog.ps1"
+  $wname = "hive AT watchdog ($repo, $Account)"
+  $wa = New-ScheduledTaskAction -Execute "conhost.exe" `
+    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$wd`" -Account $Account"
+  $every1 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
+  Register-ScheduledTask -TaskName $wname -Action $wa -Trigger @($logon, $every1) -Settings $s `
+    -Description "Studio-stack watchdog: one automerger per stacked repo (triagemaster only), msg, voice (every minute)" -Force | Out-Null
+  Write-Host "Registered '$wname' (logon + every minute): a repo added to the studio stack gets its automerger on the next run."
+}
 
 if (-not $NoSession) {
   $sname = "hive AT session ($repo, $Account)"
