@@ -153,7 +153,9 @@ check "stream-json" "$(grep -A1 -x -- '--output-format' "$A" | tail -n 1)" strea
 check "partial msgs" "$(grep -cx -- '--include-partial-messages' "$A")" 1
 check "allowed tools" "$(grep -cx 'Bash(gh issue create:\*)' "$A")" 1
 check "voice prompt names the hive" "$(grep -c 'You are Hivey, the one voice of the Test Studio hive' "$A")" 1
-check "voice prompt open tab" "$(grep -c 'open tab tells you which game' "$A")" 1
+check "voice prompt open tab" "$(grep -c 'open tab tells you which project' "$A")" 1
+check "voice prompt hive tab files hive changes" "$(grep -c "Changing the hive itself happens from the hive's own tab" "$A")" 1
+check "voice prompt studio tab company only" "$(grep -c 'the studio tab is for the company only' "$A")" 1
 check "voice prompt never code" "$(grep -c 'Never write code, merge, push or change files' "$A")" 1
 case $(cat "$T/fake/cwd.$N") in "$PWD"|"$AG"*) check "scratch cwd" repo scratch;; *) check "scratch cwd" scratch scratch;; esac
 check "scratch dir removed" "$([ -d "$(cat "$T/fake/cwd.$N")" ] && echo kept || echo removed)" removed

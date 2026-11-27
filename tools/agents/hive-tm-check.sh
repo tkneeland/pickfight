@@ -115,6 +115,27 @@ EOT
   [ -n "$stale" ] && say WARN "review-blocked PR(s) idle 2h+:$stale (rule 12 stale re-check)" || say PASS "no stale review-blocked PRs"
 else say WARN "could not list open PRs"; fi
 
+# 7b. Studio-wide review gate (rules 7, 12, 28): one triagemaster for every stacked repo, so an open non-draft PR in another
+#     stacked repo with no review label 2h+ after it opened is a stall (its own PRs included: it never waits on itself).
+if hive_is_triagemaster && [ -n "$STUDIO_REPO" ]; then
+  now=$(date +%s); late=""
+  while read -r r; do
+    [ -z "$r" ] && continue
+    [ "$(printf '%s' "$r" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "${REPO:-}" | tr '[:upper:]' '[:lower:]')" ] && continue
+    while IFS='|' read -r n created; do
+      [ -z "$n" ] && continue; c=$(hive_iso_to_epoch "$created")
+      [ -n "$c" ] && [ $((now - c)) -ge 7200 ] && late="$late $r#$n"
+    done <<EOT
+$(gh pr list --repo "$r" --state open -L 100 --json number,createdAt,isDraft,labels </dev/null 2>/dev/null |
+  jq -r '.[] | select((.isDraft | not) and ([.labels[].name] | any(. == "review-passed" or . == "review-blocked") | not)) | "\(.number)|\(.createdAt)"' 2>/dev/null)
+EOT
+  done <<EOT
+$(bash "$HIVE_DIR/hive-stack.sh" list 2>/dev/null)
+EOT
+  if [ -n "$late" ]; then say WARN "stacked-repo PR(s) open 2h+ with no review label:$late: review them now with your reviewer subagent (hive-stack.sh review; rules 12, 28)"
+  else say PASS "no stacked-repo PR waits 2h+ for review"; fi
+fi
+
 # 8. Main green (rule 9: main red 30 min+ is a fire): the latest finished run of each workflow on MAIN_BRANCH.
 red=$(gh run list --repo "$REPO" --branch "$MAIN_BRANCH" -L 30 --json conclusion,status,createdAt,workflowName 2>/dev/null |
   jq -r '[.[] | select(.status == "completed")] | group_by(.workflowName) | map(max_by(.createdAt)) |
