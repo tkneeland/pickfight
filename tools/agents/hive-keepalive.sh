@@ -64,12 +64,22 @@ nudge() {
   screen -S "$SESSION" -p 0 -X stuff $'\r'
 }
 [ "${1:-}" = "--nudge" ] && { shift; nudge "$*"; exit 0; }
+# Launch claude in the detached screen session. The prompt goes through a file, never through the shell command line:
+# it has backticks and $(...) in it, and pasting %q output into a string that bash re-parses ran them as command
+# substitutions, so the session died at once and was relaunched forever. bash -c (not -lc) keeps this PATH: a login shell
+# re-runs the profile and can drop ~/.local/bin. claude is called by absolute path for the same reason.
+start_session() {
+  local cl pf; cl=$(command -v claude) || { hive_outbox FIRE "$SESSION not started: claude not found on PATH"; echo "$(date '+%F %T %Z') claude not found; not launching"; return 0; }
+  pf=$HIVE_STATE/session-prompt.txt; build_prompt > "$pf"
+  screen -dmS "$SESSION" bash -c "export HIVE_ACCOUNT=$(printf '%q' "$HIVE_ACCOUNT") HIVE_SESSION=always-on PATH=$(printf '%q' "$PATH"); cd $(printf '%q' "$ROOT") && $(printf '%q' "$cl") \"\$(cat $(printf '%q' "$pf"))\""
+  sleep 10   # smoke check: a session that died at launch is reported, not silently relaunched
+  session_up || { hive_outbox FIRE "$SESSION failed to start (screen session gone 10s after launch)"; echo "$(date '+%F %T %Z') FIRE session failed to start"; }
+}
 nudged=0; idle_nudged=0; relogged=0
 while true; do
   if ! session_up; then
     echo "$(date '+%F %T %Z') starting $SESSION"
-    printf -v q '%q' "$(build_prompt)"
-    screen -dmS "$SESSION" bash -lc "export HIVE_ACCOUNT=$HIVE_ACCOUNT HIVE_SESSION=always-on; cd $(printf '%q' "$ROOT") && claude $q"
+    start_session
   elif hive_login_expired && [ $(( $(date +%s) - relogged )) -ge 1800 ]; then
     # parked on an expired login: nudges do nothing, a fresh claude reads the current login from the keychain
     echo "$(date '+%F %T %Z') $SESSION login expired; restarting it"

@@ -18,7 +18,7 @@ Per-account state and secrets live in `$HIVE_STATE` = `~/.claude/hive/<repo>/<ha
 
 ## Watchers and merging
 - `hive-triage-watch.sh`: zero-token poller; exits with one line when Claude must act: UNTRIAGED, MYTICKET, FEATURES? PR, PEER_BEACON, DEV_IDLE, IDLE_SLOTS, PEER_QUEUE_LOW, MSG, DISCORD_BUG, DISCORD_DEV, DISCORD_APPROVED, HIVE_TAKEOVER, TM_CHECK_FAIL, MODE_MT, or a `WATCH_HOOKS` line. `--functions` sources its helpers for tests.
-- `hive-watch-peers.sh`: triagemaster watcher for peer activity, stale peers and unowned tickets. Never reports a ticket another account claimed in the last 24h (channel CLAIM or `[CLAIM]` comment).
+- `hive-watch-peers.sh`: triagemaster watcher for peer activity, stale peers (judged per peer: an idle peer with ready tickets is reported even while others are active) and unowned tickets. Never reports a ticket another account claimed in the last 24h (channel CLAIM or `[CLAIM]` comment).
 - `hive-automerge.sh`: merges green, mergeable, `review-passed` PRs, comments on conflicting ones once per head; leaves `conflict-risk` PRs to the triagemaster and `review-blocked` PRs alone. Fast-forwards the main checkout only when it is on `MAIN_BRANCH`.
 - `hive-ship.sh <issue> "<title>" "<body>" [repo-name] [--refs]`: merges main into the ticket branch, runs `TEST_CMD` and the fresh-clone boot check, runs the leak check, pushes, opens (or reuses) the PR with a Resource Usage section, waits for CI and merges once reviewed. `--refs` ships a partial fix (`Refs #N.`, the ticket stays open).
 - `hive-wake.sh [--ack]`: the triage wake line in plain bash for a headless session (the twin of `windows/hive-status.ps1`): supervisor states, then `WAKE <line>` with exit 10 while unhandled; `--ack` marks it handled.
@@ -58,6 +58,7 @@ Per-account state and secrets live in `$HIVE_STATE` = `~/.claude/hive/<repo>/<ha
 - `hive-outbox-wait.sh`: main terminal; blocks until the outbox grows, prints the new lines, exits.
 - `hive-atlas.sh`: Atlas bookkeeping (`accept`, `closeout`).
 - `hive-dupe-check.sh "<keywords>"`: run before filing a ticket; exit 1 means something plausible already exists.
+- `hive-stack.sh list|next|triage|review|claim <repo> <n>|checkout <repo>`: the studio's project priority stack (hive.md rule 28, the studio's `hive/projects.conf`, cached by `hive_studio_sync`). `next` names the first ready ticket this account may take in a repo ranked above this game (the hive's own repo first); `claim` takes a self-serve one (a repo with no `hive.conf`: assigns and comments `[CLAIM]`); `checkout` keeps a clone under `~/.claude/hive/checkouts/`; `triage` lists the self-serve repos' untriaged issues and `review` their PRs waiting for review, on the top game's triagemaster only.
 - `launchd/hive-keepalive.plist.template`, `systemd/hive-keepalive.service.template`: run the keepalive at login.
 - `windows/`: Git Bash and PowerShell supervisors that replace `screen` (`hive-start.ps1`, `hive-status.ps1`, `hive-stop.ps1`, `hive-install-task.ps1`, `hive-keepalive.ps1` (the always-on headless AT session, the Windows hive-keepalive.sh), `hive-supervise.sh`); see `windows/README.md`.
 

@@ -2,7 +2,8 @@
 # Zero-token watcher: exits (waking the Claude session that ran it in the background) when a peer needs attention.
 # Meant for the triagemaster. Peers = WATCH_PEERS in the account conf (default: every other account conf).
 #   PEER ACTIVITY  a peer did anything new in the repo.
-#   STALE          a peer has been idle IDLE_HOURS+ while ready-for-agent tickets sit assigned to them: take them over.
+#   STALE          a peer (judged individually, however active the others are) has had no repo activity for IDLE_HOURS+
+#                  while ready-for-agent tickets sit assigned to them: take them over.
 #   UNOWNED        a ready-for-agent ticket has no assignee: claim it.
 # UNOWNED/STALE tickets with a recent CLAIM from another account (channel or [CLAIM] comment) are skipped.
 # One watcher per account per machine: a second window exits at once instead of racing.
@@ -21,6 +22,10 @@ trap 'rm -f "$LOCK"' EXIT
 latest() {  # newest event by any peer
   gh api "repos/$REPO/events?per_page=50" \
     --jq "[.[]|select(.actor.login|IN($(printf '"%s",' $PEERS | sed 's/,$//')))]|sort_by(.created_at)|last|\"\(.id) \(.created_at) \(.type) \(.actor.login) \(.payload.ref // .payload.pull_request.number // .payload.issue.number // \"\")\""
+}
+peer_events() {  # recent events as "<login> <created_at>", one line per event by a peer
+  gh api "repos/$REPO/events?per_page=100" --jq '.[] | "\(.actor.login) \(.created_at)"' | grep -E "^($(echo $PEERS | tr ' ' '|')) "
+  [ "${PIPESTATUS[0]}" -eq 0 ]
 }
 ready() {  # open ready-for-agent issues as "number:assignee" (assignee may be empty)
   gh issue list --repo "$REPO" --state open --label ready-for-agent --limit 100 \
@@ -52,15 +57,21 @@ while true; do
   unowned=$(echo "$list" | grep -E ':$' | cut -d: -f1 | tr '\n' ' ')
   unowned=$(filter_claimed "$unowned")
   if [ -n "${unowned// }" ]; then echo "UNOWNED: #${unowned% }"; exit 0; fi
-  last=$(echo "$now" | awk '{print $2}')
-  last_s=$(hive_iso_to_epoch "$last" || echo "$now_s")
-  theirs=$(echo "$list" | grep -E ":($(echo $PEERS | tr ' ' '|'))" | cut -d: -f1 | tr '\n' ' ')
-  theirs=$(filter_claimed "$theirs")
-  # Once per idle stretch: a STALE already reported for this last-activity time is not reported again.
-  STALE_MARK="$HIVE_STATE/stale-reported"
-  if [ -n "${theirs// }" ] && [ $(( now_s - last_s )) -ge $(( IDLE_HOURS * 3600 )) ] \
-     && [ "$(cat "$STALE_MARK" 2>/dev/null)" != "$last" ]; then
+  # STALE is per peer (issue #4): one active peer must not mask another that has been silent for days with ready tickets
+  # assigned. A peer with no event in the feed window counts as idle since the epoch.
+  events=$(peer_events) || continue
+  for p in $PEERS; do
+    theirs=$(echo "$list" | grep -E ":(.*,)?$p(,.*)?$" | cut -d: -f1 | tr '\n' ' ')
+    [ -n "${theirs// }" ] || continue
+    last=$(echo "$events" | awk -v p="$p" '$1==p && $2>m {m=$2} END {print m ? m : "1970-01-01T00:00:00Z"}')
+    last_s=$(hive_iso_to_epoch "$last" || echo "$now_s")
+    [ $(( now_s - last_s )) -ge $(( IDLE_HOURS * 3600 )) ] || continue
+    # Once per idle stretch: a STALE already reported for this peer's last-activity time is not reported again.
+    STALE_MARK="$HIVE_STATE/stale-reported-$p"
+    [ "$(cat "$STALE_MARK" 2>/dev/null)" != "$last" ] || continue
+    theirs=$(filter_claimed "$theirs")
+    [ -n "${theirs// }" ] || continue
     echo "$last" > "$STALE_MARK"
-    echo "STALE: peer idle since $last UTC; their tickets: #${theirs% }"; exit 0
-  fi
+    echo "STALE: $p idle since $last UTC; their tickets: #${theirs% }"; exit 0
+  done
 done
