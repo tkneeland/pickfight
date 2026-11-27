@@ -2,7 +2,8 @@
 # Offline test for the project priority stack (hive.md rule 28, hive-stack.sh): the studio's hive/projects.conf cached in
 # HIVE_STUDIO_CACHE; `next` walks the repos ranked above this game (a hive game: only tickets assigned to this account; a
 # repo with no hive.conf, the hive's own: unassigned and unclaimed ones too; p1 before p2 before unlabelled, then oldest);
-# `claim` refuses a ticket someone else has; `triage` runs only on the top game's triagemaster. Stub gh, no network.
+# `claim` refuses a ticket someone else has; `triage` and `review` run only on the (studio-wide) triagemaster and cover
+# every stacked repo. Stub gh, no network.
 #   bash tools/agents/tests/stack.sh
 . "$(dirname "$0")/lib.sh"
 T=$(mktemp -d "${TMPDIR:-/tmp}/hive-stack-test.XXXXXX") || exit 1
@@ -79,20 +80,31 @@ check "claim: assigns and comments" "$(grep -c -e 'issue edit 9 -R example/hive 
 check "claim: someone else's: exit 1" "$(stk claim example/hive 4; echo "exit $?")" "exit 1"
 check "claim: bad args: exit 2" "$(stk claim hive x; echo "exit $?")" "exit 2"
 
-# --- triage: only the top hive game's triagemaster, only untriaged issues in the self-serve repos above it
+# --- triage: one studio-wide triagemaster lists untriaged issues in EVERY stacked repo (self-serve and hive games)
 printf 'example/hive\nexample/project\nexample/game2\n' > "$T/studio/projects.conf"
 echo "[$(iss 3 needs-triage - "triage me"),$(iss 5 "" - "unlabelled"),$(iss 9 ready-for-agent - "done"),$(iss 6 wontfix - "no")]" > "$T/gh/example__hive.json"
+echo "[$(iss 11 "" - "game2 new"),$(iss 12 ready-for-human - "game2 human")]" > "$T/gh/example__game2.json"
+echo "[$(iss 13 needs-triage - "own game new"),$(iss 14 needs-info - "own game asked")]" > "$T/gh/example__project.json"
 echo alice > "$T/state/triagemaster"
-check "triage: top game's triagemaster" "$(stk triage | tr '\n' '|')" "example/hive 3 triage me|example/hive 5 unlabelled|"
+check "triage: every stacked repo, in stack order" "$(stk triage | tr '\n' '|')" "example/hive 3 triage me|example/hive 5 unlabelled|example/project 13 own game new|example/game2 11 game2 new|"
 check "triage: anyone else: exit 1" "$(ACCT=bob stk triage; echo "exit $?")" "exit 1"
-printf 'example/hive\nexample/game2\nexample/project\n' > "$T/studio/projects.conf"
-check "triage: not the top game: exit 1" "$(stk triage; echo "exit $?")" "exit 1"
+printf 'example/game2\nexample/hive\nexample/project\n' > "$T/studio/projects.conf"
+check "triage: no top-game distinction" "$(stk triage | tr '\n' '|')" "example/game2 11 game2 new|example/hive 3 triage me|example/hive 5 unlabelled|example/project 13 own game new|"
+echo '[]' > "$T/gh/example__hive.json"; echo '[]' > "$T/gh/example__game2.json"; echo '[]' > "$T/gh/example__project.json"
+check "triage: nothing untriaged: exit 1" "$(stk triage; echo "exit $?")" "exit 1"
 
-# --- review: the same machine lists the self-serve repos' PRs waiting for review
-printf 'example/hive\nexample/project\n' > "$T/studio/projects.conf"
+# --- review: the same TM lists open non-draft unlabelled PRs in every stacked repo, its own PRs included
+printf 'example/hive\nexample/project\nexample/game2\n' > "$T/studio/projects.conf"
 echo '[{"number":40,"title":"waiting","isDraft":false,"labels":[]},{"number":41,"title":"draft","isDraft":true,"labels":[]},{"number":42,"title":"passed","isDraft":false,"labels":[{"name":"review-passed"}]},{"number":43,"title":"blocked","isDraft":false,"labels":[{"name":"review-blocked"}]}]' > "$T/gh/example__hive.prs.json"
-check "review: top game's triagemaster" "$(stk review | tr '\n' '|')" "example/hive 40 waiting|"
+echo '[{"number":50,"title":"game2 pr","isDraft":false,"labels":[{"name":"p2"}]}]' > "$T/gh/example__game2.prs.json"
+echo '[{"number":60,"title":"my own pr","isDraft":false,"labels":[]}]' > "$T/gh/example__project.prs.json"
+check "review: every stacked repo" "$(stk review | tr '\n' '|')" "example/hive 40 waiting|example/project 60 my own pr|example/game2 50 game2 pr|"
 check "review: anyone else: exit 1" "$(ACCT=bob stk review; echo "exit $?")" "exit 1"
+echo '[]' > "$T/gh/example__hive.prs.json"; echo '[]' > "$T/gh/example__game2.prs.json"; echo '[]' > "$T/gh/example__project.prs.json"
+check "review: nothing waiting: exit 1" "$(stk review; echo "exit $?")" "exit 1"
+rm -f "$T/studio/projects.conf"
+echo '[{"number":61,"title":"solo","isDraft":false,"labels":[]}]' > "$T/gh/example__project.prs.json"
+check "review: no stack: this game only" "$(stk review)" "example/project 61 solo"
 
 echo "stack: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

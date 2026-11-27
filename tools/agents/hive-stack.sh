@@ -8,13 +8,13 @@
 #                      triagemaster assigned to this account count (rule 5). In a repo with no hive of its own (the hive's
 #                      own repo, claude-hive) any open ready-for-agent ticket counts that nobody is assigned to or claimed
 #                      in the last 24h. Order: p1, p2, p3, unlabelled, then oldest.
-#   triage             the repos with no hive of their own that ranks above every hive game: their triage falls to the
-#                      triagemaster of the highest-ranked hive game. On that machine it prints "<repo> <n> <title>" for each
-#                      open issue there that is not triaged yet (no ready-for-agent, ready-for-human, needs-info or wontfix
-#                      label, so needs-triage and unlabelled ones), exit 0; on any other machine, or with none, exit 1.
-#   review             on that same machine: "<repo> <n> <title>" for each open, non-draft PR in those repos that is not
-#                      marked review-passed or review-blocked yet (the triagemaster reviews and merges them, rule 28),
-#                      exit 0; on any other machine, or with none, exit 1.
+#   triage             one triagemaster for the whole studio (rule 7): on its machine, "<repo> <n> <title>" for each open
+#                      issue in EVERY repo in the stack (self-serve and hive games alike, this game included) that is not
+#                      triaged yet (no ready-for-agent, ready-for-human, needs-info or wontfix label, so needs-triage and
+#                      unlabelled ones), exit 0; on any other machine, or with none, exit 1.
+#   review             on that same machine: "<repo> <n> <title>" for each open, non-draft PR in every stacked repo that is
+#                      not marked review-passed or review-blocked yet, the triagemaster's own included (it reviews and
+#                      merges them, rules 12 and 28), exit 0; on any other machine, or with none, exit 1.
 #   claim <repo> <n>   take such a self-serve ticket: refuses one already assigned or claimed; assigns this account and
 #                      comments "[CLAIM] <account>". Exit 1 when someone else has it.
 #   checkout <repo>    a clone of the repo for working its tickets, in $HIVE_CHECKOUT_DIR/<repo-name> (default: beside this
@@ -83,23 +83,17 @@ case $cmd in
   triage|review)
     hive_studio_sync
     hive_is_triagemaster || exit 1
-    top=""; selfserve=()
-    while read -r repo; do
-      if has_hive "$repo"; then top=$repo; break; fi
-      selfserve+=("$repo")
-    done < <(stack)
-    [ "$(lc "$top")" = "$(lc "${REPO:-}")" ] && [ ${#selfserve[@]} -gt 0 ] || exit 1
     out=""
-    for repo in "${selfserve[@]}"; do
+    while read -r repo; do
       if [ "$cmd" = triage ]; then
         out+=$(gh issue list -R "$repo" -s open -L 100 --json number,title,labels \
-          -q '.[] | select([.labels[].name] | any(. == "ready-for-agent" or . == "ready-for-human" or . == "needs-info" or . == "wontfix") | not) | "'"$repo"' \(.number) \(.title)"' 2>/dev/null)
+          -q '.[] | select([.labels[].name] | any(. == "ready-for-agent" or . == "ready-for-human" or . == "needs-info" or . == "wontfix") | not) | "'"$repo"' \(.number) \(.title)"' 2>/dev/null </dev/null)
       else
         out+=$(gh pr list -R "$repo" -s open -L 100 --json number,title,labels,isDraft \
-          -q '.[] | select((.isDraft | not) and ([.labels[].name] | any(. == "review-passed" or . == "review-blocked") | not)) | "'"$repo"' \(.number) \(.title)"' 2>/dev/null)
+          -q '.[] | select((.isDraft | not) and ([.labels[].name] | any(. == "review-passed" or . == "review-blocked") | not)) | "'"$repo"' \(.number) \(.title)"' 2>/dev/null </dev/null)
       fi
       out+=$'\n'
-    done
+    done < <(stack)
     out=$(printf '%s' "$out" | sed '/^$/d')
     [ -n "$out" ] && { echo "$out"; exit 0; }
     exit 1 ;;
